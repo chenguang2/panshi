@@ -512,13 +512,32 @@ describe('NodeList.vue batch1 快修', () => {
   })
 
   it('双计数收敛：未筛选时筛选栏无计数，状态筛选时显示「筛出 X 个」（2.5）', async () => {
+    // batch2 3.1 后状态筛选按运行态三元判定：mock 补 nginx 真实形状（一运行一停止）
+    const statusNodes = JSON.parse(JSON.stringify(MOCK_NODES))
+    statusNodes.items[0].status_detail = {
+      last_execution: '2024-01-01T00:00:00+00:00',
+      nginx: { nginx_running: true },
+      statistic: { edge_version: '2.5.0' },
+    }
+    statusNodes.items[1].status_detail = {
+      last_execution: '2024-01-01T00:00:00+00:00',
+      nginx: { nginx_running: false },
+    }
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/nodes') return Promise.resolve({ data: statusNodes })
+      if (url === '/clusters') return Promise.resolve({ data: { total: 2, items: MOCK_CLUSTERS } })
+      if (url.startsWith('/clusters/') && url.endsWith('/stats')) {
+        return Promise.resolve({ data: { routes: 20, upstreams: 10, plugin_configs: 5, global_rules: 2 } })
+      }
+      return Promise.reject(new Error('unknown url: ' + url))
+    })
     const wrapper = await mountPage()
     expect(wrapper.text(), '未筛选时不应在筛选栏显示总数（showTotal 已有）').not.toContain('个节点')
 
     const statusSelect = wrapper.findAll('select').find((s) => s.text().includes('全部状态'))
     expect(statusSelect).toBeDefined()
     const selectEl = statusSelect!.element as HTMLSelectElement
-    selectEl.value = '1'
+    selectEl.value = 'running'
     selectEl.dispatchEvent(new Event('change'))
     await flushPromises()
     await wrapper.vm.$nextTick()
@@ -550,6 +569,434 @@ describe('NodeList.vue batch1 快修', () => {
     await vi.waitFor(() => expect(vm.execResult).toBeTruthy(), { timeout: 5000 })
     expect(vm.execResult.command).toContain('-i inventory')
     expect(vm.execResult.command).not.toContain('/home/qcg')
+    wrapper.unmount()
+  })
+})
+
+// ── node-management-ux-batch2 1.2/1.3：运行态三态徽章（BadgeStatus 接入）────────
+// mock 形状取自真实后端 status_detail（cluster_nodes.py：edge_statistic 成功后写
+// nginx.nginx_running + last_execution；从未检测的节点 status_detail 无 nginx 信息）。
+describe('NodeList.vue batch2 运行态三态徽章', () => {
+  // 状态列专用表格桩：转发 status 列 bodyCell（外层通用桩只转发 ip/actions）
+  const statusStubs = {
+    ...stubs,
+    'a-table': {
+      template:
+        '<table class="mock-a-table"><tbody><tr v-for="r in dataSource" :key="r.id"><td><slot name="bodyCell" :record="r" :column="{ key: \'status\' }" /></td></tr></tbody></table>',
+      props: ['columns', 'dataSource', 'loading', 'rowKey', 'pagination', 'size'],
+    },
+  }
+
+  const nodeWith = (id: number, ip: string, statusDetail: unknown, status = 1) => ({
+    id,
+    cluster_id: 1,
+    cluster_name: '生产集群',
+    ip,
+    service_port: 80,
+    management_port: 9180,
+    edge_path: '/usr/local/edge',
+    status,
+    status_detail: statusDetail,
+    created_at: '2024-01-01T00:00:00Z',
+  })
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/nodes') return Promise.resolve({ data: { total: 0, items: [] } })
+      if (url === '/clusters') return Promise.resolve({ data: { total: 2, items: MOCK_CLUSTERS } })
+      return Promise.reject(new Error('unknown url: ' + url))
+    })
+  })
+
+  async function mountWithNodes(items: unknown[]) {
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/nodes') return Promise.resolve({ data: { total: items.length, items } })
+      if (url === '/clusters') return Promise.resolve({ data: { total: 2, items: MOCK_CLUSTERS } })
+      return Promise.reject(new Error('unknown url: ' + url))
+    })
+    const NodeList = (await import('../NodeList.vue')).default
+    const wrapper = mount(NodeList, { global: { stubs: statusStubs } })
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    return wrapper
+  }
+
+  it('nginx_running=true → 「运行中」online 徽章', async () => {
+    const wrapper = await mountWithNodes([
+      nodeWith(1, '10.0.0.1', { last_execution: '2024-01-01T00:00:00+00:00', nginx: { nginx_running: true } }),
+    ])
+    const badge = wrapper.find('.badge-status')
+    expect(badge.classes()).toContain('badge-online')
+    expect(badge.text()).toBe('运行中')
+    wrapper.unmount()
+  })
+
+  it('nginx_running=false → 「已停止」offline 徽章', async () => {
+    const wrapper = await mountWithNodes([
+      nodeWith(1, '10.0.0.1', { last_execution: '2024-01-01T00:00:00+00:00', nginx: { nginx_running: false } }),
+    ])
+    const badge = wrapper.find('.badge-status')
+    expect(badge.classes()).toContain('badge-offline')
+    expect(badge.text()).toBe('已停止')
+    wrapper.unmount()
+  })
+
+  it('无 nginx 运行态信息（从未检测）→ 「未检测」neutral 徽章，不假绿「运行中」', async () => {
+    const wrapper = await mountWithNodes([nodeWith(1, '10.0.0.1', { statistic: { edge_version: '2.5.0' } })])
+    const badge = wrapper.find('.badge-status')
+    expect(badge.classes()).toContain('badge-neutral')
+    expect(badge.text()).toBe('未检测')
+    const badgeTexts = wrapper.findAll('.badge-status').map((b) => b.text())
+    expect(badgeTexts, '不得出现假绿「运行中」徽章').not.toContain('运行中')
+    wrapper.unmount()
+  })
+
+  it('「已禁用」配置徽章为中性灰（badge-neutral），与运行态徽章并排（SHALL NOT 危险红）（1.3）', async () => {
+    const wrapper = await mountWithNodes([nodeWith(1, '10.0.0.1', { nginx: { nginx_running: false } }, 0)])
+    const badges = wrapper.findAll('.badge-status')
+    expect(badges.length).toBe(2)
+    const disabled = badges.find((b) => b.text() === '已禁用')
+    expect(disabled).toBeDefined()
+    expect(disabled!.classes()).toContain('badge-neutral')
+    expect(disabled!.classes()).not.toContain('badge-danger')
+    const stopped = badges.find((b) => b.text() === '已停止')
+    expect(stopped!.classes()).toContain('badge-offline')
+    wrapper.unmount()
+  })
+
+  it('详情弹窗：运行态三态徽章 + 管理开关（启用/禁用）展示', async () => {
+    const wrapper = await mountWithNodes([
+      nodeWith(1, '10.0.0.1', { statistic: {} }, 1),
+      nodeWith(2, '10.0.0.2', { nginx: { nginx_running: false } }, 0),
+    ])
+    const vm = wrapper.vm as any
+    vm.viewDetail({ ...nodeWith(1, '10.0.0.1', { statistic: {} }, 1) })
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    const grid = wrapper.find('.node-detail-grid')
+    expect(grid.exists()).toBe(true)
+    // 运行态：未检测（neutral），不假绿
+    const badges = grid.findAll('.badge-status')
+    const running = badges.find((b) => ['运行中', '已停止', '未检测'].includes(b.text()))
+    expect(running).toBeDefined()
+    expect(running!.text()).toBe('未检测')
+    expect(running!.classes()).toContain('badge-neutral')
+    // 管理开关：启用
+    expect(grid.text()).toContain('管理开关')
+    expect(grid.text()).toContain('启用')
+
+    vm.viewDetail({ ...nodeWith(2, '10.0.0.2', { nginx: { nginx_running: false } }, 0) })
+    await wrapper.vm.$nextTick()
+    const grid2 = wrapper.find('.node-detail-grid')
+    expect(grid2.text()).toContain('禁用')
+    const disabledBadge = grid2.findAll('.badge-status').find((b) => b.text() === '已禁用')
+    expect(disabledBadge).toBeDefined()
+    expect(disabledBadge!.classes()).toContain('badge-neutral')
+    wrapper.unmount()
+  })
+})
+
+// ── node-management-ux-batch2 2.2：检测时效（徽章下方弱化文字）──────────────
+describe('NodeList.vue batch2 检测时效展示', () => {
+  const statusStubs = {
+    ...stubs,
+    'a-table': {
+      template:
+        '<table class="mock-a-table"><tbody><tr v-for="r in dataSource" :key="r.id"><td><slot name="bodyCell" :record="r" :column="{ key: \'status\' }" /></td></tr></tbody></table>',
+      props: ['columns', 'dataSource', 'loading', 'rowKey', 'pagination', 'size'],
+    },
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/nodes') return Promise.resolve({ data: { total: 0, items: [] } })
+      if (url === '/clusters') return Promise.resolve({ data: { total: 2, items: MOCK_CLUSTERS } })
+      return Promise.reject(new Error('unknown url: ' + url))
+    })
+  })
+
+  /** 后端真实形状：cluster_nodes.py 写 datetime.now(timezone.utc).isoformat()（带 +00:00 后缀） */
+  function nodeWithLastExec(minutesAgo: number | null) {
+    const ts =
+      minutesAgo === null ? null : new Date(Date.now() - minutesAgo * 60_000).toISOString().replace('Z', '+00:00')
+    return {
+      id: 1,
+      cluster_id: 1,
+      cluster_name: '生产集群',
+      ip: '10.0.0.1',
+      service_port: 80,
+      management_port: 9180,
+      edge_path: '/usr/local/edge',
+      status: 1,
+      status_detail: ts ? { last_execution: ts, nginx: { nginx_running: true } } : {},
+      created_at: '2024-01-01T00:00:00Z',
+    }
+  }
+
+  async function mountWithNode(node: unknown) {
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/nodes') return Promise.resolve({ data: { total: 1, items: [node] } })
+      if (url === '/clusters') return Promise.resolve({ data: { total: 2, items: MOCK_CLUSTERS } })
+      return Promise.reject(new Error('unknown url: ' + url))
+    })
+    const NodeList = (await import('../NodeList.vue')).default
+    const wrapper = mount(NodeList, { global: { stubs: statusStubs } })
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    return wrapper
+  }
+
+  it('有 last_execution → 徽章下方弱化文字「N 分钟前检测」', async () => {
+    const wrapper = await mountWithNode(nodeWithLastExec(5.5))
+    const cell = wrapper.find('.node-status-cell')
+    expect(cell.exists()).toBe(true)
+    expect(cell.text()).toContain('运行中')
+    expect(cell.text()).toMatch(/5 分钟前检测/)
+    wrapper.unmount()
+  })
+
+  it('无 last_execution → 不渲染时效文字', async () => {
+    const wrapper = await mountWithNode(nodeWithLastExec(null))
+    const cell = wrapper.find('.node-status-cell')
+    expect(cell.exists()).toBe(true)
+    expect(cell.text()).not.toContain('分钟前')
+    expect(cell.text()).not.toContain('刚刚')
+    wrapper.unmount()
+  })
+})
+
+// ── node-management-ux-batch2 2.3：手动刷新按钮（独立页）──────────────
+describe('NodeList.vue batch2 刷新按钮', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/nodes') return Promise.resolve({ data: { total: 0, items: [] } })
+      if (url === '/clusters') return Promise.resolve({ data: { total: 2, items: MOCK_CLUSTERS } })
+      return Promise.reject(new Error('unknown url: ' + url))
+    })
+  })
+
+  it('点击筛选栏「刷新」→ 重新加载节点列表', async () => {
+    const NodeList = (await import('../NodeList.vue')).default
+    const wrapper = mount(NodeList, { global: { stubs } })
+    await flushPromises()
+    const callsBefore = mockApiGet.mock.calls.filter((c: unknown[]) => c[0] === '/nodes').length
+    const refreshBtn = wrapper.findAll('button').find((b) => b.text().includes('刷新'))
+    expect(refreshBtn).toBeDefined()
+    await refreshBtn!.trigger('click')
+    await flushPromises()
+    const callsAfter = mockApiGet.mock.calls.filter((c: unknown[]) => c[0] === '/nodes').length
+    expect(callsAfter).toBeGreaterThan(callsBefore)
+    wrapper.unmount()
+  })
+})
+
+// ── node-management-ux-batch2 3.1：状态筛选三态 ──────────────────────────────
+describe('NodeList.vue batch2 状态筛选三态', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/nodes') return Promise.resolve({ data: { total: 0, items: [] } })
+      if (url === '/clusters') return Promise.resolve({ data: { total: 2, items: MOCK_CLUSTERS } })
+      return Promise.reject(new Error('unknown url: ' + url))
+    })
+  })
+
+  async function mountPage() {
+    const NodeList = (await import('../NodeList.vue')).default
+    const wrapper = mount(NodeList, { global: { stubs } })
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    return wrapper
+  }
+
+  it('筛选下拉含「未检测」选项（全部状态/运行中/已停止/未检测）', async () => {
+    const wrapper = await mountPage()
+    const statusSelect = wrapper.findAll('select').find((s) => s.text().includes('全部状态'))
+    expect(statusSelect).toBeDefined()
+    const optionTexts = statusSelect!.findAll('option').map((o) => o.text())
+    expect(optionTexts).toEqual(['全部状态', '运行中', '已停止', '未检测'])
+    wrapper.unmount()
+  })
+
+  it('选「未检测」仅显示无运行态信息的节点（按 nginxState 过滤）', async () => {
+    const nodes = {
+      total: 2,
+      page: 1,
+      page_size: 500,
+      items: [
+        {
+          id: 1,
+          cluster_id: 1,
+          cluster_name: '生产集群',
+          ip: '10.0.0.1',
+          service_port: 80,
+          management_port: 9180,
+          edge_path: '/usr/local/edge',
+          status: 1,
+          status_detail: { nginx: { nginx_running: true } },
+          created_at: '2024-01-01T00:00:00Z',
+        },
+        {
+          id: 2,
+          cluster_id: 1,
+          cluster_name: '生产集群',
+          ip: '10.0.0.2',
+          service_port: 80,
+          management_port: 9180,
+          edge_path: '/usr/local/edge',
+          status: 1,
+          status_detail: { statistic: { edge_version: '2.5.0' } },
+          created_at: '2024-01-01T00:00:00Z',
+        },
+      ],
+    }
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/nodes') return Promise.resolve({ data: nodes })
+      if (url === '/clusters') return Promise.resolve({ data: { total: 2, items: MOCK_CLUSTERS } })
+      return Promise.reject(new Error('unknown url: ' + url))
+    })
+    const wrapper = await mountPage()
+    const statusSelect = wrapper.findAll('select').find((s) => s.text().includes('全部状态'))
+    const selectEl = statusSelect!.element as HTMLSelectElement
+    selectEl.value = 'unchecked'
+    selectEl.dispatchEvent(new Event('change'))
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.text()).toContain('筛出 1 个')
+    wrapper.unmount()
+  })
+})
+
+// ── node-management-ux-batch2 4.2：动作确认收敛 showOverlayModal ─────────────
+describe('NodeList.vue batch2 动作确认弹窗', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/nodes') return Promise.resolve({ data: { total: 0, items: [] } })
+      if (url === '/clusters') return Promise.resolve({ data: { total: 2, items: MOCK_CLUSTERS } })
+      return Promise.reject(new Error('unknown url: ' + url))
+    })
+    mockApiPost.mockResolvedValue({ data: { rc: 0, stdout: '', stderr: '', command: 'cmd' } })
+  })
+
+  it('点击「启动」→ showOverlayModal 确认弹窗出现，确认后执行动作', async () => {
+    const NodeList = (await import('../NodeList.vue')).default
+    const wrapper = mount(NodeList, { global: { stubs } })
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.handleStart({ id: 1, cluster_id: 1, ip: '10.0.0.1', management_port: 9180, edge_path: '/e' })
+    await wrapper.vm.$nextTick()
+    const bodyText = document.body.textContent || ''
+    expect(bodyText).toContain('确认启动节点')
+    const okBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      (b.textContent || '').includes('确认启动'),
+    ) as HTMLButtonElement
+    expect(okBtn).toBeDefined()
+    okBtn!.click()
+    await flushPromises()
+    await vi.waitFor(() => expect(mockApiPost).toHaveBeenCalledWith('/clusters/1/nodes/1/start'), { timeout: 5000 })
+    wrapper.unmount()
+  })
+
+  it('停止确认保留危险色语义（btn-danger）', async () => {
+    const NodeList = (await import('../NodeList.vue')).default
+    const wrapper = mount(NodeList, { global: { stubs } })
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.handleStop({ id: 1, cluster_id: 1, ip: '10.0.0.1', management_port: 9180, edge_path: '/e' })
+    await wrapper.vm.$nextTick()
+    const okBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      (b.textContent || '').includes('确认停止'),
+    ) as HTMLButtonElement
+    expect(okBtn).toBeDefined()
+    expect(okBtn!.className).toContain('btn-danger')
+    wrapper.unmount()
+  })
+})
+
+// ── node-management-ux-batch2 5.2：动作流不确定态 + 删除 elapsed/200s 假模型 ────
+describe('NodeList.vue batch2 动作流不确定态', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/nodes') return Promise.resolve({ data: { total: 0, items: [] } })
+      if (url === '/clusters') return Promise.resolve({ data: { total: 2, items: MOCK_CLUSTERS } })
+      return Promise.reject(new Error('unknown url: ' + url))
+    })
+  })
+
+  it('动作执行期间 progress.indeterminate=true（无假百分比），完成后回落 percent=100', async () => {
+    let resolvePost!: (v: unknown) => void
+    mockApiPost.mockImplementation(
+      () =>
+        new Promise((r) => {
+          resolvePost = r
+        }),
+    )
+    const NodeList = (await import('../NodeList.vue')).default
+    const wrapper = mount(NodeList, { global: { stubs } })
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.handleStart({ id: 1, cluster_id: 1, ip: '10.0.0.1', management_port: 9180, edge_path: '/e' })
+    await wrapper.vm.$nextTick()
+    // 确认弹窗 → 点击确认 → executeAction 同步进入执行态
+    const okBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      (b.textContent || '').includes('确认启动'),
+    ) as HTMLButtonElement
+    okBtn!.click()
+    expect(vm.execProgress.indeterminate, '执行期间应为不确定态').toBe(true)
+    expect(vm.execProgress.percent, '不确定态期间不得有假百分比').toBe(0)
+    resolvePost({ data: { rc: 0, stdout: '', stderr: '', command: 'cmd' } })
+    await flushPromises()
+    expect(vm.execProgress.indeterminate, '终态后退出不确定态').toBe(false)
+    expect(vm.execProgress.percent).toBe(100)
+    expect(vm.execProgress.status).toBe('success')
+    wrapper.unmount()
+  })
+
+  it('源码级：elapsed 计时器不再外推百分比（200s 假模型零残留）', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { resolve } = await import('node:path')
+    const s = readFileSync(resolve(process.cwd(), 'src/views/NodeList.vue'), 'utf-8')
+    expect(s, '200s 线性外推假模型应删除').not.toContain('/ 200')
+    expect(s, '取消安装的 60% 假进度应删除').not.toMatch(/execProgress\.percent = 60(?!\d)/)
+    expect(s, '动作起手的 10% 假进度应删除').not.toMatch(/execProgress\.percent = 10(?!\d)/)
+  })
+})
+
+// ── node-management-ux-batch2 6.1：详情弹窗集群统计归属标注 ─────────────────
+describe('NodeList.vue batch2 详情统计归属', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/nodes') return Promise.resolve({ data: { total: 0, items: [] } })
+      if (url === '/clusters') return Promise.resolve({ data: { total: 2, items: MOCK_CLUSTERS } })
+      if (url.startsWith('/clusters/') && url.endsWith('/stats')) {
+        return Promise.resolve({ data: { routes: 20, upstreams: 10, plugin_configs: 5, global_rules: 2 } })
+      }
+      return Promise.reject(new Error('unknown url: ' + url))
+    })
+  })
+
+  it('集群统计卡片区块标注「（集群级）」', async () => {
+    const NodeList = (await import('../NodeList.vue')).default
+    const wrapper = mount(NodeList, { global: { stubs } })
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.viewDetail({ id: 1, cluster_id: 1, ip: '10.0.0.1', status: 1 })
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.text()).toContain('（集群级）')
     wrapper.unmount()
   })
 })

@@ -98,3 +98,47 @@ describe('NodeExecutionResultDrawer mode 分流', () => {
     expect(text).toContain('Edge 版本')
   })
 })
+
+// ── node-management-ux-batch2 5.1 / design D8：进度不确定态 ──────────────────
+// indeterminate 是起始形态而非硬模式：执行中（status=active 且尚未收到任何服务端
+// percent 事件，即 percent===0）渲染动画条 + 已耗时、无百分比数字；一旦 percent>0
+// 自动切换真实百分比；终态（success/exception）回落常规条。
+describe('NodeExecutionResultDrawer indeterminate 不确定态', () => {
+  it('active + indeterminate + percent=0：动画条 + 已耗时，无百分比数字', async () => {
+    await mountDrawer({
+      title: '节点 启动',
+      progress: { percent: 0, status: 'active' as const, indeterminate: true },
+      elapsed: 4,
+    })
+    expect(document.querySelector('.progress-indeterminate'), '应渲染不确定态动画条').not.toBeNull()
+    expect(bodyText()).toContain('已用 4 秒')
+    expect(bodyText(), '不确定态不得渲染百分比数字').not.toContain('%')
+  })
+
+  it('收到首个服务端 percent 事件（percent>0）自动切换真实百分比', async () => {
+    await mountDrawer({
+      title: '安装 OpenResty - 10.0.0.1',
+      progress: { percent: 40, status: 'active' as const, indeterminate: true },
+      elapsed: 9,
+    })
+    expect(document.querySelector('.progress-indeterminate')).toBeNull()
+    expect(bodyText()).toContain('40%')
+  })
+
+  it('终态（success）回落常规条：无动画类、百分比照常', async () => {
+    await mountDrawer({
+      title: '节点 启动',
+      progress: { percent: 100, status: 'success' as const, indeterminate: true },
+      elapsed: 12,
+    })
+    expect(document.querySelector('.progress-indeterminate')).toBeNull()
+    expect(document.querySelector('.progress-bar.progress-success')).not.toBeNull()
+    expect(bodyText()).toContain('100%')
+  })
+
+  it('未传 indeterminate：行为不变（active + percent=0 也渲染 0%）', async () => {
+    await mountDrawer({ title: '节点 启动', progress: { percent: 0, status: 'active' as const }, elapsed: 1 })
+    expect(document.querySelector('.progress-indeterminate')).toBeNull()
+    expect(bodyText()).toContain('0%')
+  })
+})

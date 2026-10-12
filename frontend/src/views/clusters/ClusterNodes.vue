@@ -82,6 +82,7 @@
       </a-popover>
 
       <div class="toolbar-right">
+        <a-button size="small" @click="loadNodes(cluster)"> <ReloadOutlined /> 刷新 </a-button>
         <template v-if="nodeSearchVisible">
           <a-input-search
             v-model:value="cluster.nodesSearch"
@@ -143,10 +144,18 @@
           {{ record.status_detail?.statistic?.edge_version || '-' }}
         </template>
         <template v-if="column.key === 'status'">
-          <BadgeStatus
-            :text="nginxRunning(record) ? '健康' : '离线'"
-            :status="nginxRunning(record) ? 'online' : 'offline'"
-          />
+          <div class="node-status-cell">
+            <!-- 配置态徽章（管理开关，中性灰，batch2 1.3）：与运行态徽章并排，两维度互不替代 -->
+            <BadgeStatus v-if="record.status === 0" text="已禁用" status="neutral" />
+            <!-- 运行态三态徽章（batch2 1.2 / D1-D2）：运行中/已停止/未检测互斥，不假绿 -->
+            <BadgeStatus v-if="nginxState(record) === 'running'" text="运行中" status="online" />
+            <BadgeStatus v-else-if="nginxState(record) === 'stopped'" text="已停止" status="offline" />
+            <BadgeStatus v-else text="未检测" status="neutral" />
+            <!-- 检测时效（batch2 2.2 / D3）：无 last_execution 不渲染 -->
+            <span v-if="record.status_detail?.last_execution" class="status-exec-time"
+              >{{ formatRelativeTime(record.status_detail.last_execution) }}检测</span
+            >
+          </div>
         </template>
         <template v-if="column.key === 'actions'">
           <template v-for="btnKey in nodeActionsSelected" :key="btnKey">
@@ -261,7 +270,7 @@
               </a-form-item>
               <a-form-item label="状态" name="status" :rules="[{ required: true, message: '请选择状态' }]">
                 <a-select v-model:value="nodeForm.status">
-                  <a-select-option :value="1">正常</a-select-option>
+                  <a-select-option :value="1">启用</a-select-option>
                   <a-select-option :value="0">禁用</a-select-option>
                 </a-select>
               </a-form-item>
@@ -387,7 +396,7 @@
                         <td style="padding: 4px 8px"><input v-model="row.openresty_path" style="width: 150px" /></td>
                         <td style="padding: 4px 8px">
                           <select v-model.number="row.status" style="width: 70px">
-                            <option :value="1">正常</option>
+                            <option :value="1">启用</option>
                             <option :value="0">禁用</option>
                           </select>
                         </td>
@@ -486,9 +495,10 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, onMounted, onUnmounted } from 'vue'
-import { DownOutlined } from '@ant-design/icons-vue'
+import { DownOutlined, ReloadOutlined } from '@ant-design/icons-vue'
 import type { Cluster, Node } from '@/types'
 import BadgeStatus from '@/components/BadgeStatus.vue'
+import { formatRelativeTime } from '@/utils/format'
 import ConfigDiff from '@/views/ConfigDiff.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import InstallOpenrestyDialog from '@/components/InstallOpenrestyDialog.vue'
@@ -497,36 +507,25 @@ import NodeExecutionResultDrawer from '@/components/NodeExecutionResultDrawer.vu
 import BatchActionProgressModal from '@/components/BatchActionProgressModal.vue'
 import api from '@/api'
 import { validateNodeImportRow } from '@/utils/nodeImport'
-import { useClusterNodes, allNodeColumns, allNodeActionButtons } from '@/composables/useClusterNodes'
+import { useClusterNodes, allNodeColumns, allNodeActionButtons, nginxState } from '@/composables/useClusterNodes'
 import { useInstallStream } from '@/composables/useInstallStream'
 import { paginationProps } from '@/composables/usePagination'
 import { useFeaturesStore } from '@/stores/features'
 
 const featuresStore = useFeaturesStore()
 
-/** Check whether nginx is actually running by analyzing parsed stdout. */
-function nginxRunning(node: Node): boolean {
-  const sd = node.status_detail
-  // Use nginx.nginx_running parsed from command stdout (more accurate than rc)
-  if (sd?.nginx?.nginx_running !== undefined) return sd.nginx.nginx_running
-  // Fallback: node.status (1=active/healthy, 0=offline)
-  return node.status === 1
-}
+// 运行态判定已收敛到 useClusterNodes.nginxState（batch2 1.1 / D1：三元、不假绿）
 
 const props = defineProps<{
   cluster: Cluster
 }>()
 
-const emit = defineEmits<{
-  refresh: []
-}>()
+// batch2 2.3 / D4：删除 emit('refresh') 接地——CentralList 的 @refresh="loadClusters" 是
+// 禁用的全量刷新（重建 cluster 对象硬编码 activeTab:'nodes'，会踢回首签并卸载面板）。
+// Tab 刷新一律走面板局部 loadNodes(cluster)。
 
 // Wrap single cluster prop into a Ref<Cluster[]> for the composable
 const clusters = computed<Cluster[]>(() => [props.cluster])
-
-const onRefresh = () => {
-  emit('refresh')
-}
 
 const {
   nodeModalVisible,
@@ -585,7 +584,6 @@ const {
   execElapsed,
 } = useClusterNodes({
   clusters,
-  onRefresh,
 })
 
 // ── batch delete selection state ─────────────────────────────
@@ -871,11 +869,11 @@ function onInstallConfirm(payload: { node: any; clusterId: number; openrestyFile
   execProgress.percent = 0
   execProgress.status = 'active'
   execResult.value = { stdout: '', stderr: '', command: '', rc: null }
+  // batch2 5.3 / D8：计时器只负责已耗时；安装流保留服务端真实百分比（不再 200s 外推）
   execElapsed.value = 0
   clearInstallTimer()
   _installTimer = setInterval(() => {
     execElapsed.value = (execElapsed.value ?? 0) + 1
-    execProgress.percent = Math.min(Math.round(((execElapsed.value ?? 0) / 200) * 100), 99)
   }, 1000)
 
   installStream.start(
@@ -892,6 +890,7 @@ function onInstallConfirm(payload: { node: any; clusterId: number; openrestyFile
         clearInstallTimer()
         execProgress.status = rc === 0 ? 'success' : 'exception'
         execProgress.percent = 100
+        execProgress.indeterminate = false
         const prevCmd = execResult.value?.command || ''
         execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: prevCmd, rc }
       },
@@ -919,11 +918,11 @@ function handleInstallEdge() {
       execProgress.percent = 0
       execProgress.status = 'active'
       execResult.value = { stdout: '', stderr: '', command: pendingCommand, rc: null }
+      // batch2 5.3 / D8：计时器只负责已耗时；安装流保留服务端真实百分比（不再 200s 外推）
       execElapsed.value = 0
       clearInstallTimer()
       _installTimer = setInterval(() => {
         execElapsed.value = (execElapsed.value ?? 0) + 1
-        execProgress.percent = Math.min(Math.round(((execElapsed.value ?? 0) / 200) * 100), 99)
       }, 1000)
 
       installStream.start(
@@ -940,6 +939,7 @@ function handleInstallEdge() {
             clearInstallTimer()
             execProgress.status = rc === 0 ? 'success' : 'exception'
             execProgress.percent = 100
+            execProgress.indeterminate = false
             const prevCmd = execResult.value?.command || ''
             execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: prevCmd, rc }
           },
@@ -964,8 +964,10 @@ function handleCancelInstall() {
       cancelling.value = true
       try {
         execLogs.value.push(`[${new Date().toLocaleTimeString()}] 正在取消安装...`)
-        execProgress.percent = 60
+        // batch2 5.3 / D8：取消过程为不确定态（原 60% 为假进度）
+        execProgress.percent = 0
         execProgress.status = 'active'
+        execProgress.indeterminate = true
 
         const res = await api.post(`/clusters/${node.cluster_id}/nodes/${node.id}/cancel-install`)
         const data = res.data
@@ -997,6 +999,7 @@ function handleCancelInstall() {
 
         execProgress.percent = 100
         execProgress.status = 'success'
+        execProgress.indeterminate = false
 
         execResult.value = {
           stdout: execLogs.value.join('\n'),
@@ -1010,6 +1013,7 @@ function handleCancelInstall() {
         execLogs.value.push(`❌ ${detail}`)
         execProgress.percent = 100
         execProgress.status = 'exception'
+        execProgress.indeterminate = false
         execResult.value = { stdout: execLogs.value.join('\n'), stderr: detail, command: '', rc: -1 }
       } finally {
         cancelling.value = false
@@ -1036,12 +1040,13 @@ function handleAssociateNewOpenresty() {
       execLogs.value = []
       execProgress.percent = 0
       execProgress.status = 'active'
+      // batch2 5.3 / D8：动作流（关联新OpenResty）起始形态为不确定态
+      execProgress.indeterminate = true
       execResult.value = { stdout: '', stderr: '', command: '', rc: null }
       execElapsed.value = 0
       clearInstallTimer()
       _installTimer = setInterval(() => {
         execElapsed.value = (execElapsed.value ?? 0) + 1
-        execProgress.percent = Math.min(Math.round(((execElapsed.value ?? 0) / 200) * 100), 99)
       }, 1000)
 
       installStream.start(
@@ -1058,11 +1063,13 @@ function handleAssociateNewOpenresty() {
             clearInstallTimer()
             execProgress.status = rc === 0 ? 'success' : 'exception'
             execProgress.percent = 100
+            execProgress.indeterminate = false
             const prevCmd = execResult.value?.command || ''
             execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: prevCmd, rc }
           },
           onError: () => {
             clearInstallTimer()
+            execProgress.indeterminate = false
           },
         },
       )
@@ -1087,12 +1094,13 @@ function streamEdgeAction(node: any, title: string, url: string, body: Record<st
   execLogs.value = []
   execProgress.percent = 0
   execProgress.status = 'active'
+  // batch2 5.3 / D8：动作流（添加版本包/切换版本）起始形态为不确定态；计时器只负责已耗时
+  execProgress.indeterminate = true
   execResult.value = { stdout: '', stderr: '', command: '', rc: null }
   execElapsed.value = 0
   clearInstallTimer()
   _installTimer = setInterval(() => {
     execElapsed.value = (execElapsed.value ?? 0) + 1
-    execProgress.percent = Math.min(Math.round(((execElapsed.value ?? 0) / 200) * 100), 99)
   }, 1000)
 
   installStream.start(url, body, {
@@ -1106,11 +1114,13 @@ function streamEdgeAction(node: any, title: string, url: string, body: Record<st
       clearInstallTimer()
       execProgress.status = rc === 0 ? 'success' : 'exception'
       execProgress.percent = 100
+      execProgress.indeterminate = false
       const prevCmd = execResult.value?.command || ''
       execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: prevCmd, rc }
     },
     onError: () => {
       clearInstallTimer()
+      execProgress.indeterminate = false
     },
   })
 }
@@ -1153,6 +1163,18 @@ onUnmounted(() => {
 <style scoped>
 .tab-content {
   min-height: 100px;
+}
+
+/* 状态单元格：运行态/配置态徽章并排 + 检测时效弱化文字（batch2 1.2/1.3/2.2） */
+.node-status-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.status-exec-time {
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .node-tab {

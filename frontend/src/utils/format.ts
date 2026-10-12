@@ -136,3 +136,26 @@ export function formatFileSize(bytes: number): string {
   if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
   return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
 }
+
+/**
+ * 相对时间（node-management-ux-batch2 2.1 / design D3）：
+ * <1min「刚刚」/ N 分钟前 / N 小时前 / N 天前（<7 天）/ 更早回落 formatDateOnly。
+ * 差值为负（客户端时钟回拨 / 后端时钟漂移）钳为 0 →「刚刚」。
+ * 解析走 parseBackendDate（naive UTC 按 UTC 解析，#26 语义）。空值返回空串（渲染侧据此不展示）。
+ */
+export function formatRelativeTime(dateStr: string | null | undefined): string {
+  if (!dateStr) return ''
+  try {
+    const diffSec = Math.max(0, Math.floor((Date.now() - parseBackendDate(dateStr).getTime()) / 1000))
+    if (diffSec < 60) return '刚刚'
+    const minutes = Math.floor(diffSec / 60)
+    if (minutes < 60) return `${minutes} 分钟前`
+    const hours = Math.floor(minutes / 60)
+    if (hours < 24) return `${hours} 小时前`
+    const days = Math.floor(hours / 24)
+    if (days < 7) return `${days} 天前`
+    return formatDateOnly(dateStr)
+  } catch {
+    return ''
+  }
+}

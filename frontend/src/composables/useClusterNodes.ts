@@ -67,7 +67,20 @@ export const allNodeActionButtons = [
   { key: 'status', title: '状态查询' },
 ]
 
-export function useClusterNodes(options: { clusters: Ref<Cluster[]>; onRefresh: () => void | Promise<void> }) {
+/** 节点运行态三元（node-management-ux-batch2 1.1 / design D1）：
+ *  status_detail.nginx.nginx_running === true → running；=== false → stopped；
+ *  缺失（含节点无 status_detail / 解析占位 null）→ unchecked。
+ *  禁止回退 status===1 假绿——「启用」的管理开关语义与「检测到 nginx 运行」的运行态语义互不替代。 */
+export type NginxRunState = 'running' | 'stopped' | 'unchecked'
+
+export function nginxState(node: Pick<Node, 'status_detail' | 'status'> | null | undefined): NginxRunState {
+  const running = node?.status_detail?.nginx?.nginx_running
+  if (running === true) return 'running'
+  if (running === false) return 'stopped'
+  return 'unchecked'
+}
+
+export function useClusterNodes(options: { clusters: Ref<Cluster[]>; onRefresh?: () => void | Promise<void> }) {
   const { clusters, onRefresh } = options
 
   const featuresStore = useFeaturesStore()
@@ -91,9 +104,15 @@ export function useClusterNodes(options: { clusters: Ref<Cluster[]>; onRefresh: 
   // ── Execution Drawer state ─────────────────────────────────
   const execDrawerVisible = ref(false)
   const execDrawerTitle = ref('')
-  const execProgress = reactive<{ percent: number; status: 'active' | 'success' | 'exception' }>({
+  // batch2 5.3 / D8：indeterminate 为动作流起始形态（首个服务端 percent 事件或终态自动退出）
+  const execProgress = reactive<{
+    percent: number
+    status: 'active' | 'success' | 'exception'
+    indeterminate: boolean
+  }>({
     percent: 0,
     status: 'active',
+    indeterminate: false,
   })
   const execLogs = ref<string[]>([])
   const execResult = ref<{ stdout: string; stderr: string; command: string; rc: number | null } | null>(null)
@@ -114,33 +133,23 @@ export function useClusterNodes(options: { clusters: Ref<Cluster[]>; onRefresh: 
   >([])
   const batchProgressExpandedIp = ref<string | null>(null)
 
-  let _pulseTimer: ReturnType<typeof setInterval> | null = null
   let _elapsedTimer: ReturnType<typeof setInterval> | null = null
 
-  function startTimers(progressCap: number) {
+  // batch2 5.3 / D8：计时器只负责已耗时展示；假进度脉冲（每 2s +5）已删除，
+  // 执行中形态由 Drawer 的 indeterminate 动画条表达。
+  function startElapsedTimer() {
     execElapsed.value = 0
-    // 进度脉冲：每 2s +5，不超过 cap
-    _pulseTimer = setInterval(() => {
-      if (execProgress.percent < progressCap) {
-        execProgress.percent = Math.min(execProgress.percent + 5, progressCap)
-      }
-    }, 2000)
-    // 秒数计时
+    if (_elapsedTimer) clearInterval(_elapsedTimer)
     _elapsedTimer = setInterval(() => {
       execElapsed.value = (execElapsed.value ?? 0) + 1
     }, 1000)
   }
 
-  function stopTimers(finalPercent: number) {
-    if (_pulseTimer) {
-      clearInterval(_pulseTimer)
-      _pulseTimer = null
-    }
+  function stopElapsedTimer() {
     if (_elapsedTimer) {
       clearInterval(_elapsedTimer)
       _elapsedTimer = null
     }
-    execProgress.percent = finalPercent
   }
 
   const nodeCfg = useColumnConfig({
@@ -343,7 +352,7 @@ export function useClusterNodes(options: { clusters: Ref<Cluster[]>; onRefresh: 
         cluster.nodes = res.data.items
         cluster.node_count = cluster.nodes!.length
       }
-      onRefresh()
+      onRefresh?.()
     } catch (error: unknown) {
       const detail = (error as { response?: { data?: { detail?: unknown } } }).response?.data?.detail
       message.error(typeof detail === 'string' ? detail : '操作失败')
@@ -392,7 +401,7 @@ export function useClusterNodes(options: { clusters: Ref<Cluster[]>; onRefresh: 
       const nodeRes = await api.get(`/clusters/${cluster.id}/nodes`)
       cluster.nodes = nodeRes.data.items
       cluster.node_count = cluster.nodes!.length
-      onRefresh()
+      onRefresh?.()
     } catch (error: unknown) {
       const detail = (error as { response?: { data?: { detail?: unknown } } }).response?.data?.detail
       message.error(typeof detail === 'string' ? detail : '批量创建失败')
@@ -644,6 +653,7 @@ export function useClusterNodes(options: { clusters: Ref<Cluster[]>; onRefresh: 
     execDrawerTitle.value = `节点 ${actionLabel}`
     execProgress.percent = 0
     execProgress.status = 'active'
+    execProgress.indeterminate = true
     execLogs.value = []
     execResult.value = null
     execHighlights.value = []
@@ -655,21 +665,18 @@ export function useClusterNodes(options: { clusters: Ref<Cluster[]>; onRefresh: 
     }
 
     addLog(`开始对节点 ${node.ip} 执行 ${actionLabel} 操作...`)
-    execProgress.percent = 5
     updateDrawer()
 
-    await new Promise((r) => setTimeout(r, 300))
-
-    startTimers(55) // 执行期间脉冲到 55%
+    startElapsedTimer()
 
     try {
-      execProgress.percent = 20
       updateDrawer()
 
       const res = await api.post(`/clusters/${cluster.id}/nodes/${node.id}/${action}`)
-      stopTimers(60)
+      stopElapsedTimer()
       const data = res.data as ExecCommandResult
-      execProgress.percent = 60
+      execProgress.percent = 100
+      execProgress.indeterminate = false
 
       // 1. 显示完整命令（优先用服务端返回的精确命令，回退到本地构建）
       const finalCommand = data.command || pendingCommand
@@ -730,7 +737,7 @@ export function useClusterNodes(options: { clusters: Ref<Cluster[]>; onRefresh: 
         rc: data.rc ?? null,
       }
 
-      stopTimers(100)
+      stopElapsedTimer()
       updateDrawer()
 
       // Refresh node list
@@ -738,8 +745,10 @@ export function useClusterNodes(options: { clusters: Ref<Cluster[]>; onRefresh: 
     } catch (error: unknown) {
       const err = error as { response?: { data?: { detail?: string } }; message?: string }
       const detail = err.response?.data?.detail || err.message || '未知错误'
-      stopTimers(100)
+      stopElapsedTimer()
       execProgress.status = 'exception'
+      execProgress.percent = 100
+      execProgress.indeterminate = false
       addLog('')
       addLog(`❌ 操作失败: ${detail}`)
       // 请求失败时展示本地构建的命令（供排查）
@@ -789,6 +798,7 @@ export function useClusterNodes(options: { clusters: Ref<Cluster[]>; onRefresh: 
     execDrawerTitle.value = '节点状态查询'
     execProgress.percent = 0
     execProgress.status = 'active'
+    execProgress.indeterminate = true
     execLogs.value = []
     execResult.value = null
     execHighlights.value = []
@@ -800,23 +810,21 @@ export function useClusterNodes(options: { clusters: Ref<Cluster[]>; onRefresh: 
     }
 
     addLog(`开始查询节点 ${node.ip} 状态...`)
-    execProgress.percent = 10
     updateDrawer()
-
-    await new Promise((r) => setTimeout(r, 300))
 
     try {
       addLog('正在执行 edge_statistic...')
-      execProgress.percent = 30
       updateDrawer()
 
-      startTimers(65) // 执行期间脉冲到 65%
+      startElapsedTimer()
 
       const res = await api.post(`/clusters/${cluster.id}/nodes/${node.id}/statistic`, {
         ports: String(node.management_port),
       })
       const data = res.data as ExecCommandResult
-      stopTimers(70)
+      stopElapsedTimer()
+      execProgress.percent = 100
+      execProgress.indeterminate = false
 
       // 1. 完整命令（优先用服务端返回的精确命令，回退到本地构建）
       const finalCommand = data.command || pendingCommand
@@ -898,7 +906,7 @@ export function useClusterNodes(options: { clusters: Ref<Cluster[]>; onRefresh: 
         rc: data.rc ?? null,
       }
 
-      stopTimers(100)
+      stopElapsedTimer()
       updateDrawer()
 
       // Refresh node list
@@ -907,8 +915,10 @@ export function useClusterNodes(options: { clusters: Ref<Cluster[]>; onRefresh: 
     } catch (error: unknown) {
       const err = error as { response?: { data?: { detail?: string } }; message?: string }
       const detail = err.response?.data?.detail || err.message || '未知错误'
-      stopTimers(100)
+      stopElapsedTimer()
       execProgress.status = 'exception'
+      execProgress.percent = 100
+      execProgress.indeterminate = false
       addLog('')
       addLog(`❌ 状态查询失败: ${detail}`)
       execResult.value = {

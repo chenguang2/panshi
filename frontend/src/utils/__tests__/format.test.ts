@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import {
   formatDate,
   formatDateTime,
@@ -6,6 +6,7 @@ import {
   formatDateOnly,
   formatPublishDateTime,
   formatFileSize,
+  formatRelativeTime,
 } from '../format'
 
 describe('utils/format', () => {
@@ -77,6 +78,65 @@ describe('utils/format', () => {
       expect(formatFileSize(512)).toBe('512 B')
       expect(formatFileSize(2048)).toBe('2.0 KB')
       expect(formatFileSize(52428800)).toBe('50.0 MB')
+    })
+  })
+
+  // node-management-ux-batch2 2.1：相对时间单点（D3：负差值钳「刚刚」，更早回落日期）
+  describe('formatRelativeTime', () => {
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    function atNow(offsetMs: number): string {
+      // 后端真实形状：datetime.now(timezone.utc).isoformat()（带 +00:00 后缀）
+      return new Date(Date.now() + offsetMs).toISOString().replace('Z', '+00:00')
+    }
+
+    it('空值返回空串（渲染侧据此不展示）', () => {
+      expect(formatRelativeTime(null)).toBe('')
+      expect(formatRelativeTime(undefined)).toBe('')
+      expect(formatRelativeTime('')).toBe('')
+    })
+
+    it('<1 分钟 → 「刚刚」', () => {
+      vi.setSystemTime(new Date('2026-10-12T08:00:00Z'))
+      expect(formatRelativeTime(atNow(-30_000))).toBe('刚刚')
+      expect(formatRelativeTime(atNow(0))).toBe('刚刚')
+    })
+
+    it('负差值（客户端时钟回拨/后端时钟漂移）钳为 0 → 「刚刚」', () => {
+      vi.setSystemTime(new Date('2026-10-12T08:00:00Z'))
+      expect(formatRelativeTime(atNow(5 * 60_000))).toBe('刚刚')
+      expect(formatRelativeTime(atNow(2 * 3600_000))).toBe('刚刚')
+    })
+
+    it('N 分钟前', () => {
+      vi.setSystemTime(new Date('2026-10-12T08:00:00Z'))
+      expect(formatRelativeTime(atNow(-5 * 60_000))).toBe('5 分钟前')
+      expect(formatRelativeTime(atNow(-59 * 60_000))).toBe('59 分钟前')
+    })
+
+    it('N 小时前', () => {
+      vi.setSystemTime(new Date('2026-10-12T08:00:00Z'))
+      expect(formatRelativeTime(atNow(-3 * 3600_000))).toBe('3 小时前')
+      expect(formatRelativeTime(atNow(-23 * 3600_000))).toBe('23 小时前')
+    })
+
+    it('N 天前（<7 天）', () => {
+      vi.setSystemTime(new Date('2026-10-12T08:00:00Z'))
+      expect(formatRelativeTime(atNow(-2 * 24 * 3600_000))).toBe('2 天前')
+      expect(formatRelativeTime(atNow(-6 * 24 * 3600_000))).toBe('6 天前')
+    })
+
+    it('更早（≥7 天）回落 formatDateOnly 日期', () => {
+      vi.setSystemTime(new Date('2026-10-12T08:00:00Z'))
+      expect(formatRelativeTime(atNow(-30 * 24 * 3600_000))).toBe('2026/09/12')
+    })
+
+    it('naive UTC 串（无时区后缀）按 UTC 解析', () => {
+      vi.setSystemTime(new Date('2026-10-12T08:00:00Z'))
+      // 2026-10-12T07:55:00 UTC == 5 分钟前
+      expect(formatRelativeTime('2026-10-12T07:55:00')).toBe('5 分钟前')
     })
   })
 })

@@ -38,9 +38,11 @@ export function showOverlayModal(opts: OverlayModalOptions): OverlayModalHandle 
   const container = document.createElement('div')
   document.body.appendChild(container)
 
-  let state = {
+  const state = {
     content: opts.content,
     okDisabled: !!opts.okDisabled,
+    // batch2 4.1 / D7：onOk 为 Promise 期间的进行中形态（禁用 + 「处理中…」），完成/异常后恢复
+    okLoading: false,
   }
 
   const close = () => {
@@ -62,15 +64,33 @@ export function showOverlayModal(opts: OverlayModalOptions): OverlayModalHandle 
       'button',
       {
         class: opts.okDanger ? 'btn btn-danger' : 'btn btn-primary',
-        disabled: state.okDisabled,
-        style: state.okDisabled ? 'opacity:0.5;cursor:not-allowed;' : '',
+        disabled: state.okDisabled || state.okLoading,
+        style: state.okDisabled || state.okLoading ? 'opacity:0.5;cursor:not-allowed;' : '',
         onClick: async () => {
-          if (state.okDisabled) return
-          if (opts.onOk) await opts.onOk()
-          close()
+          if (state.okDisabled || state.okLoading) return
+          let result: void | Promise<void>
+          try {
+            result = opts.onOk?.()
+          } catch {
+            return // 同步异常：保留弹窗（调用方可自行提示）
+          }
+          if (result && typeof (result as Promise<void>).then === 'function') {
+            state.okLoading = true
+            renderModal()
+            try {
+              await result
+              close()
+            } catch {
+              // 异步异常：恢复可点并保留弹窗（不再静默吞错后关闭）
+              state.okLoading = false
+              renderModal()
+            }
+          } else {
+            close()
+          }
         },
       },
-      opts.okText || '确定',
+      state.okLoading ? '处理中…' : opts.okText || '确定',
     )
 
     const footer: VNode[] = []
@@ -109,7 +129,7 @@ export function showOverlayModal(opts: OverlayModalOptions): OverlayModalHandle 
   return {
     close,
     update: (patch) => {
-      state = { ...state, ...patch }
+      Object.assign(state, patch)
       renderModal()
     },
   }

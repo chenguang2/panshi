@@ -22,9 +22,40 @@ describe('节点表单状态控件', () => {
   })
   it('表格状态列可见节点禁用态（已禁用徽章，与 nginx 运行态并存）', () => {
     const s = src()
-    const block = s.match(/column\.key === 'status'[\s\S]{0,600}?<\/template>/)
+    // batch2 1.2/1.3 后状态列为 BadgeStatus 三态 + 并排配置态徽章（结构变长，放宽窗口到 1200）
+    const block = s.match(/column\.key === 'status'[\s\S]{0,1200}?<\/template>/)
     expect(block, '需存在 status 列模板').toBeTruthy()
     expect(block![0]).toMatch(/record\.status === 0[\s\S]{0,200}已禁用/)
+  })
+})
+
+describe('batch2 3.2 假排序守卫', () => {
+  it('columns 零客户端 sorter（当前页 localeCompare 字符串序是错的；后端已全量数值 IP 排序）', () => {
+    const s = src()
+    expect(s).not.toMatch(/sorter:\s*\(/)
+    expect(s).not.toContain('sorter: true')
+    expect(s).not.toContain('localeCompare')
+  })
+})
+
+describe('batch2 4.2 确认弹窗收敛守卫', () => {
+  it('confirmState/executeConfirm/手写确认模板零残留，动作确认统一 showOverlayModal', () => {
+    const s = src()
+    expect(s, 'confirmState 应删除').not.toContain('confirmState')
+    expect(s, 'executeConfirm 应删除').not.toContain('executeConfirm')
+    expect(s, '页内 showConfirm 函数应删除（删除确认走共享 showNodeDeleteConfirm）').not.toContain(
+      'function showConfirm',
+    )
+    expect(s, '动作确认应走共享 showOverlayModal').toContain('showOverlayModal')
+  })
+
+  it('启动/停止/reload/取消安装确认保留危险色语义与按钮文案', () => {
+    const s = src()
+    for (const text of ['确认启动', '确认停止', '确认reload', '确认取消安装']) {
+      expect(s, `应保留文案 ${text}`).toContain(text)
+    }
+    // okDanger: true 出现在动作确认（原视觉：确认按钮一律危险红）
+    expect(s).toContain('okDanger: true')
   })
 })
 

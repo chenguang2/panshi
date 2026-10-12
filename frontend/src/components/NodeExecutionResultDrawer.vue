@@ -10,10 +10,12 @@
           </div>
         </div>
         <div class="modal-body" style="max-height: 80vh; overflow-y: auto">
-          <!-- Progress bar -->
+          <!-- Progress bar（batch2 5.1 / D8：indeterminate 起始形态 → 首个服务端 percent 事件自动切换真实百分比） -->
           <div style="margin-bottom: 16px">
             <div class="progress-bar-wrap">
+              <div v-if="isIndeterminate" class="progress-bar progress-indeterminate"></div>
               <div
+                v-else
                 class="progress-bar"
                 :class="'progress-' + progress.status"
                 :style="{ width: progress.percent + '%' }"
@@ -28,7 +30,8 @@
                 margin-top: 4px;
               "
             >
-              <span>{{ progress.percent }}%</span>
+              <span v-if="!isIndeterminate">{{ progress.percent }}%</span>
+              <span v-else></span>
               <span>
                 <template v-if="elapsed !== null">已用 {{ elapsed }} 秒</template>
                 <template v-else-if="streamStatus === 'connecting'">连接中...</template>
@@ -222,7 +225,9 @@ import { ansiToHtml, stripAnsi } from '@/utils/ansi'
 const props = defineProps<{
   visible: boolean
   title: string
-  progress: { percent: number; status: 'active' | 'success' | 'exception' }
+  /** batch2 5.1 / D8：indeterminate 为可选起始形态——执行中且尚未收到服务端 percent 事件时
+   *  渲染动画条；一旦 percent>0 自动切换真实百分比（数据驱动，无需按入口穷举分类） */
+  progress: { percent: number; status: 'active' | 'success' | 'exception'; indeterminate?: boolean }
   logs: string[]
   elapsed: number | null
   result: { stdout: string; stderr: string; command: string; rc: number | null } | null
@@ -244,6 +249,12 @@ const emit = defineEmits<{
 
 const activeTab = ref('summary')
 const stdoutLogBox = ref<HTMLElement | null>(null)
+
+/** 不确定态生效条件（D8）：调用方声明 indeterminate 且仍在执行中、且服务端尚未上报任何
+ *  百分比（percent===0）。首 percent 事件或终态到达即自然退出该形态。 */
+const isIndeterminate = computed(
+  () => props.progress.indeterminate === true && props.progress.status === 'active' && props.progress.percent === 0,
+)
 
 /** 摘要形态分流（batch1 3.2 / design D5）：显式 mode 优先；auto 按标题回退
  *  （「安装」前缀 → 安装摘要，其余 → nginx 操作摘要，兼容启动/停止/reload 既有调用方）。 */
@@ -353,6 +364,20 @@ async function copyAll() {
 }
 .progress-bar.progress-exception {
   background: var(--danger);
+}
+/* 不确定态（batch2 5.1 / D8）：执行中动画条（无百分比语义），end */
+.progress-bar.progress-indeterminate {
+  width: 40%;
+  transition: none;
+  animation: indeterminate-slide 1.2s ease-in-out infinite;
+}
+@keyframes indeterminate-slide {
+  0% {
+    margin-left: -40%;
+  }
+  100% {
+    margin-left: 100%;
+  }
 }
 
 /* ── Custom tabs ── */

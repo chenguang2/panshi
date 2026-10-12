@@ -22,12 +22,12 @@
       </select>
       <select v-model="statusFilter" class="form-input" style="width: 130px" @change="onFilterChange">
         <option value="">全部状态</option>
-        <option :value="1">运行中</option>
-        <option :value="0">已停止</option>
+        <option value="running">运行中</option>
+        <option value="stopped">已停止</option>
+        <option value="unchecked">未检测</option>
       </select>
-      <span v-if="statusFilter !== '' && statusFilter !== undefined" class="text-muted text-sm"
-        >筛出 {{ displayedNodes.length }} 个</span
-      >
+      <span v-if="statusFilter" class="text-muted text-sm">筛出 {{ displayedNodes.length }} 个</span>
+      <button class="btn btn-secondary btn-sm refresh-btn" @click="loadNodes"><ReloadOutlined /> 刷新</button>
     </div>
 
     <div class="table-container">
@@ -66,13 +66,18 @@
           </template>
 
           <template v-if="column.key === 'status'">
-            <span v-if="record.status === 0" class="badge badge-danger"
-              ><span class="status-dot offline"></span>已禁用</span
-            >
-            <span v-if="nginxRunning(record)" class="badge badge-success"
-              ><span class="status-dot online"></span>运行中</span
-            >
-            <span v-else class="badge badge-danger"><span class="status-dot offline"></span>已停止</span>
+            <div class="node-status-cell">
+              <!-- 配置态徽章（管理开关，中性灰，batch2 1.3）：与运行态徽章并排，两维度互不替代 -->
+              <BadgeStatus v-if="record.status === 0" text="已禁用" status="neutral" />
+              <!-- 运行态三态徽章（batch2 1.2 / D1-D2）：运行中/已停止/未检测互斥，不假绿 -->
+              <BadgeStatus v-if="nginxState(record) === 'running'" text="运行中" status="online" />
+              <BadgeStatus v-else-if="nginxState(record) === 'stopped'" text="已停止" status="offline" />
+              <BadgeStatus v-else text="未检测" status="neutral" />
+              <!-- 检测时效（batch2 2.2 / D3）：无 last_execution 不渲染 -->
+              <span v-if="record.status_detail?.last_execution" class="status-exec-time"
+                >{{ formatRelativeTime(record.status_detail.last_execution) }}检测</span
+              >
+            </div>
           </template>
 
           <template v-if="column.key === 'edge_version'">
@@ -260,36 +265,48 @@
             <div class="nd-value">{{ detailNode.openresty_path || '（同 Edge 安装路径）' }}</div>
             <div class="nd-label">节点状态</div>
             <div class="nd-value">
-              <span v-if="nginxRunning(detailNode)" class="badge badge-success">运行中</span>
-              <span v-else class="badge badge-danger">已停止</span>
+              <div class="node-status-cell">
+                <BadgeStatus v-if="detailNode.status === 0" text="已禁用" status="neutral" />
+                <BadgeStatus v-if="nginxState(detailNode) === 'running'" text="运行中" status="online" />
+                <BadgeStatus v-else-if="nginxState(detailNode) === 'stopped'" text="已停止" status="offline" />
+                <BadgeStatus v-else text="未检测" status="neutral" />
+                <span v-if="detailNode.status_detail?.last_execution" class="status-exec-time"
+                  >{{ formatRelativeTime(detailNode.status_detail.last_execution) }}检测</span
+                >
+              </div>
             </div>
+            <div class="nd-label">管理开关</div>
+            <div class="nd-value">{{ detailNode.status === 1 ? '启用' : '禁用' }}</div>
             <div class="nd-label">创建时间</div>
             <div class="nd-value">{{ formatDate(detailNode.created_at) }}</div>
           </div>
           <div v-if="clusterStats" class="node-stats">
-            <div class="node-stat-card">
-              <div class="ns-value">{{ clusterStats.routes || 0 }}</div>
-              <div class="ns-label">路由</div>
-            </div>
-            <div class="node-stat-card">
-              <div class="ns-value">{{ clusterStats.upstreams || 0 }}</div>
-              <div class="ns-label">上游</div>
-            </div>
-            <div class="node-stat-card">
-              <div class="ns-value">{{ clusterStats.plugin_configs || 0 }}</div>
-              <div class="ns-label">插件组</div>
-            </div>
-            <div class="node-stat-card">
-              <div class="ns-value">{{ clusterStats.global_rules || 0 }}</div>
-              <div class="ns-label">全局规则</div>
-            </div>
-            <div class="node-stat-card">
-              <div class="ns-value">{{ clusterStats.plugin_metadata || 0 }}</div>
-              <div class="ns-label">插件元数据</div>
-            </div>
-            <div class="node-stat-card">
-              <div class="ns-value">{{ clusterStats.static_resources || 0 }}</div>
-              <div class="ns-label">静态资源</div>
+            <div class="node-stats-label">所在集群统计（集群级）</div>
+            <div class="node-stats-grid">
+              <div class="node-stat-card">
+                <div class="ns-value">{{ clusterStats.routes || 0 }}</div>
+                <div class="ns-label">路由</div>
+              </div>
+              <div class="node-stat-card">
+                <div class="ns-value">{{ clusterStats.upstreams || 0 }}</div>
+                <div class="ns-label">上游</div>
+              </div>
+              <div class="node-stat-card">
+                <div class="ns-value">{{ clusterStats.plugin_configs || 0 }}</div>
+                <div class="ns-label">插件组</div>
+              </div>
+              <div class="node-stat-card">
+                <div class="ns-value">{{ clusterStats.global_rules || 0 }}</div>
+                <div class="ns-label">全局规则</div>
+              </div>
+              <div class="node-stat-card">
+                <div class="ns-value">{{ clusterStats.plugin_metadata || 0 }}</div>
+                <div class="ns-label">插件元数据</div>
+              </div>
+              <div class="node-stat-card">
+                <div class="ns-value">{{ clusterStats.static_resources || 0 }}</div>
+                <div class="ns-label">静态资源</div>
+              </div>
             </div>
           </div>
         </div>
@@ -320,27 +337,6 @@
       @cancel="handleCancelInstall"
     />
 
-    <!-- Custom Confirm Modal -->
-    <Teleport to="body">
-      <div class="modal-overlay" :style="{ display: confirmState.visible ? 'flex' : 'none', zIndex: 2000 }">
-        <div class="modal" style="max-width: 420px">
-          <div class="modal-header">
-            <h2>{{ confirmState.title }}</h2>
-            <button class="modal-close" @click="confirmState.visible = false">&times;</button>
-          </div>
-          <div class="modal-body">
-            <p style="font-size: 13px; color: var(--muted); line-height: 1.6">{{ confirmState.content }}</p>
-          </div>
-          <div class="modal-footer">
-            <button class="btn btn-secondary" @click="confirmState.visible = false">取消</button>
-            <button class="btn btn-danger" :disabled="confirmState.loading" @click="executeConfirm">
-              {{ confirmState.loading ? '处理中...' : confirmState.confirmText }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
-
     <InstallOpenrestyDialog
       :visible="installDialogVisible"
       :node="installTargetNode"
@@ -360,12 +356,14 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
-import { formatDateTime as formatDate } from '@/utils/format'
+import { formatDateTime as formatDate, formatRelativeTime } from '@/utils/format'
 import { message } from 'ant-design-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
 import api from '@/api'
+import { showOverlayModal } from '@/composables/useOverlayModal'
 import { PAGE_SIZE_TABLE, PAGE_SIZE_DROPDOWN } from '@/constants'
 import PageHeader from '@/components/PageHeader.vue'
+import BadgeStatus from '@/components/BadgeStatus.vue'
 import NodeExecutionResultDrawer from '@/components/NodeExecutionResultDrawer.vue'
 import ConfigDiff from '@/views/ConfigDiff.vue'
 import InstallOpenrestyDialog from '@/components/InstallOpenrestyDialog.vue'
@@ -374,6 +372,7 @@ import { useInstallStream } from '@/composables/useInstallStream'
 import { paginationProps } from '@/composables/usePagination'
 import { useFeaturesStore } from '@/stores/features'
 import { listNodes, createNode, updateNode } from '@/api/nodes'
+import { nginxState } from '@/composables/useClusterNodes'
 import { showNodeDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
 import { getApiErrorMessage } from '@/utils/error'
 import { isStructuredSseEvent } from '@/utils/sse'
@@ -400,7 +399,7 @@ const pageSize = ref(PAGE_SIZE_TABLE)
 const { searchText, onSearch: onDebouncedSearch, cancelSearch } = useDebouncedSearch()
 const clusterFilter = ref<string>('')
 const groupFilter = ref('__all__')
-const statusFilter = ref<string | number>('')
+const statusFilter = ref('')
 
 const groupOptions = computed(() => {
   const names = new Set(clusters.value.map((c) => c.group_name || ''))
@@ -420,9 +419,9 @@ function onGroupChange() {
 
 const displayedNodes = computed(() => {
   let list = nodes.value
-  if (statusFilter.value !== '' && statusFilter.value !== undefined) {
-    const wantRunning = Number(statusFilter.value) === 1
-    list = list.filter((n) => nginxRunning(n) === wantRunning)
+  if (statusFilter.value) {
+    // 运行态三元过滤（batch2 3.1 / D5）：按 nginxState 判定，不按管理开关字段
+    list = list.filter((n) => nginxState(n) === statusFilter.value)
   }
   return list
 })
@@ -458,7 +457,12 @@ const execDrawerTitle = ref('')
 /** 结果抽屉摘要形态（batch1 3.2 / design D5）：install=安装摘要、action=动作摘要（无 nginx 进程卡）、
  *  auto=按标题回退（安装 → 安装摘要，其余 → nginx 操作摘要，兼容启动/停止/reload）。 */
 const execDrawerMode = ref<'install' | 'action' | 'auto'>('auto')
-const execProgress = reactive({ percent: 0, status: 'active' as 'active' | 'success' | 'exception' })
+// batch2 5.2 / D8：indeterminate 为动作流起始形态（首个服务端 percent 事件或终态自动退出）
+const execProgress = reactive({
+  percent: 0,
+  status: 'active' as 'active' | 'success' | 'exception',
+  indeterminate: false,
+})
 const execLogs = ref<string[]>([])
 const execElapsed = ref<number | null>(null)
 const execResult = ref<{ stdout: string; stderr: string; command: string; rc: number | null } | null>(null)
@@ -467,53 +471,30 @@ const execStatistics = ref<Record<string, string> | null>(null)
 const execTargetNode = ref<any | null>(null)
 const cancelling = ref(false)
 
-// Custom confirm modal state
-const confirmState = reactive({
-  visible: false,
-  title: '',
-  content: '',
-  confirmText: '',
-  loading: false,
-  onConfirm: null as (() => Promise<void>) | null,
-})
+// batch2 4.2 / D7：动作确认收敛到共享 useOverlayModal（页内手写确认机制已删，删除流程走共享 showNodeDeleteConfirm）。
+// 危险色语义保持原视觉：动作确认按钮一律危险红（okDanger: true）；onOk 为 Promise 期间
+// 由 okLoading 展示「处理中…」并禁用（弹窗关闭时机移至动作完成后）。
+function showDangerConfirm(title: string, content: string, okText: string, onOk: () => Promise<void>) {
+  showOverlayModal({ title, content, okText, okDanger: true, onOk })
+}
 
 // Config diff drawer
 const diffDrawerVisible = ref(false)
 const diffClusterId = ref(0)
 const diffNodeId = ref(0)
 
+// batch2 3.2 / D6：移除全部列客户端排序——当前页字符串比较序是错的（IP 数值序被打乱），
+// 后端 GET /nodes 已全量数值 IP 排序；≤100 节点规模下当前页排序无价值且误导。不做表头排序 UI 替代。
 const columns = [
   { title: '#', key: 'index', width: 45 },
-  { title: 'IP', dataIndex: 'ip', key: 'ip', sorter: (a: any, b: any) => a.ip?.localeCompare(b.ip) },
-  {
-    title: '所属集群',
-    dataIndex: 'cluster_name',
-    key: 'cluster_name',
-    sorter: (a: any, b: any) => (a.cluster_name || '').localeCompare(b.cluster_name || ''),
-  },
-  { title: '服务端口', key: 'service_port', sorter: (a: any, b: any) => (a.service_port || 0) - (b.service_port || 0) },
-  {
-    title: '管理端口',
-    key: 'management_port',
-    sorter: (a: any, b: any) => (a.management_port || 0) - (b.management_port || 0),
-  },
-  {
-    title: 'Edge 安装路径',
-    key: 'edge_path',
-    sorter: (a: any, b: any) => (a.edge_path || '').localeCompare(b.edge_path || ''),
-  },
-  {
-    title: 'OpenResty 安装路径',
-    key: 'openresty_path',
-    sorter: (a: any, b: any) => (a.openresty_path || '').localeCompare(b.openresty_path || ''),
-  },
-  { title: '状态', key: 'status', sorter: (a: any, b: any) => (a.status || 0) - (b.status || 0) },
-  {
-    title: 'Edge 版本',
-    key: 'edge_version',
-    sorter: (a: any, b: any) =>
-      (a.status_detail?.statistic?.edge_version || '').localeCompare(b.status_detail?.statistic?.edge_version || ''),
-  },
+  { title: 'IP', dataIndex: 'ip', key: 'ip' },
+  { title: '所属集群', dataIndex: 'cluster_name', key: 'cluster_name' },
+  { title: '服务端口', key: 'service_port' },
+  { title: '管理端口', key: 'management_port' },
+  { title: 'Edge 安装路径', key: 'edge_path' },
+  { title: 'OpenResty 安装路径', key: 'openresty_path' },
+  { title: '状态', key: 'status' },
+  { title: 'Edge 版本', key: 'edge_version' },
   { title: '操作', key: 'actions', width: 320 },
 ]
 
@@ -522,7 +503,7 @@ const columns = [
 async function loadNodes() {
   loading.value = true
   try {
-    const hasStatus = statusFilter.value !== '' && statusFilter.value !== undefined
+    const hasStatus = !!statusFilter.value
     const loadAll = hasStatus // 仅 statusFilter 触发客户端过滤，group 过滤走服务端
     const res = await listNodes({
       groupName: groupFilter.value,
@@ -705,12 +686,12 @@ function viewDetail(record: any) {
 
 // ── Node Actions ──
 
+// batch2 5.2 / D8：计时器只负责已耗时展示，不再外推假百分比（不确定态由 Drawer 渲染）
 function startElapsedTimer() {
   execElapsed.value = 0
   if (_elapsedTimer) clearInterval(_elapsedTimer)
   _elapsedTimer = setInterval(() => {
     execElapsed.value = (execElapsed.value ?? 0) + 1
-    execProgress.percent = Math.min(Math.round(((execElapsed.value ?? 0) / 200) * 100), 99)
   }, 1000)
 }
 
@@ -726,6 +707,7 @@ async function executeAction(record: any, action: string, actionLabel: string) {
   execDrawerMode.value = 'auto'
   execProgress.percent = 0
   execProgress.status = 'active'
+  execProgress.indeterminate = true
   execLogs.value = []
   stopElapsedTimer()
   execElapsed.value = null
@@ -753,7 +735,6 @@ async function executeAction(record: any, action: string, actionLabel: string) {
   // Set command immediately so command tab shows it from the start
   execResult.value = { stdout: '', stderr: '', command: pendingCommand, rc: null }
   addLog(`开始对节点 ${record.ip} 执行 ${actionLabel} 操作...`)
-  execProgress.percent = 10
   startElapsedTimer()
 
   try {
@@ -773,6 +754,7 @@ async function executeAction(record: any, action: string, actionLabel: string) {
     const data = res?.data || {}
     stopElapsedTimer()
     execProgress.percent = 100
+    execProgress.indeterminate = false
     const finalCommand = data.command || pendingCommand
 
     addLog(`返回码 (rc): ${data.rc}`)
@@ -808,6 +790,7 @@ async function executeAction(record: any, action: string, actionLabel: string) {
     stopElapsedTimer()
     execProgress.status = 'exception'
     execProgress.percent = 100
+    execProgress.indeterminate = false
     const errMsg = getApiErrorMessage(error)
     addLog(`❌ 操作失败: ${errMsg}`)
     execHighlights.value = []
@@ -817,13 +800,18 @@ async function executeAction(record: any, action: string, actionLabel: string) {
 }
 
 function handleStart(record: any) {
-  showConfirm('确认启动节点', `即将对节点 ${record.ip} 执行"启动"操作，确认无误后继续。`, '确认启动', async () => {
-    await executeAction(record, 'start', '启动')
-  })
+  showDangerConfirm(
+    '确认启动节点',
+    `即将对节点 ${record.ip} 执行"启动"操作，确认无误后继续。`,
+    '确认启动',
+    async () => {
+      await executeAction(record, 'start', '启动')
+    },
+  )
 }
 
 function handleStop(record: any) {
-  showConfirm(
+  showDangerConfirm(
     '确认停止节点',
     `即将对节点 ${record.ip} 执行"停止"操作。停止后该节点上的所有流量将中断，请确认操作无误。`,
     '确认停止',
@@ -834,7 +822,7 @@ function handleStop(record: any) {
 }
 
 function handleReload(record: any) {
-  showConfirm(
+  showDangerConfirm(
     '确认重新加载节点',
     `即将对节点 ${record.ip} 执行"reload"操作，重新加载配置，确认继续？`,
     '确认reload',
@@ -927,7 +915,7 @@ function onInstallConfirm(payload: { node: any; clusterId: number; openrestyFile
 }
 
 function handleInstallEdge(record: any) {
-  showConfirm(
+  showDangerConfirm(
     '\u786e\u8ba4\u5b89\u88c5 Edge',
     `\u5373\u5c06\u5728\u8282\u70b9 ${record.ip} \u4e0a\u5b89\u88c5 Edge\uff08${record.edge_path}\uff09\uff0c\u786e\u8ba4\u5f00\u59cb\uff1f`,
     '\u786e\u8ba4\u5b89\u88c5',
@@ -972,7 +960,7 @@ function handleInstallEdge(record: any) {
 
 function handleAssociateNewOpenresty(record: any) {
   const prefix = record.openresty_path || ''
-  showConfirm(
+  showDangerConfirm(
     '关联新OpenResty',
     `即将把节点 ${record.ip} 的 Edge（${record.edge_path}）关联到新 OpenResty（${prefix}），确认开始？`,
     '确认关联',
@@ -984,6 +972,7 @@ function handleAssociateNewOpenresty(record: any) {
       execLogs.value = []
       execProgress.percent = 0
       execProgress.status = 'active'
+      execProgress.indeterminate = true
       const pendingCommand = `manager upgrade ${record.edge_path}`
       execResult.value = { stdout: '', stderr: '', command: pendingCommand, rc: null }
       startElapsedTimer()
@@ -1002,6 +991,7 @@ function handleAssociateNewOpenresty(record: any) {
             stopElapsedTimer()
             execProgress.status = rc === 0 ? 'success' : 'exception'
             execProgress.percent = 100
+            execProgress.indeterminate = false
             const prevCmd = execResult.value?.command || ''
             execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: prevCmd, rc }
           },
@@ -1026,7 +1016,7 @@ function handleCancelInstall() {
   const record = execTargetNode.value
   if (!record || cancelling.value) return
 
-  showConfirm(
+  showDangerConfirm(
     '确认取消安装',
     `即将取消节点 ${record.ip} 的安装操作，终止正在编译的进程。确认？`,
     '确认取消',
@@ -1034,8 +1024,10 @@ function handleCancelInstall() {
       cancelling.value = true
       try {
         execLogs.value.push(`[${new Date().toLocaleTimeString()}] 正在取消安装...`)
-        execProgress.percent = 60
+        // batch2 5.2 / D8：取消过程为不确定态（原 60% 为假进度）
+        execProgress.percent = 0
         execProgress.status = 'active'
+        execProgress.indeterminate = true
 
         const res = await api.post(`/clusters/${record.cluster_id}/nodes/${record.id}/cancel-install`)
         const data = res.data
@@ -1067,6 +1059,7 @@ function handleCancelInstall() {
 
         execProgress.percent = 100
         execProgress.status = 'success'
+        execProgress.indeterminate = false
 
         execResult.value = {
           stdout: execLogs.value.join('\n'),
@@ -1079,6 +1072,7 @@ function handleCancelInstall() {
         execLogs.value.push(`❌ ${detail}`)
         execProgress.percent = 100
         execProgress.status = 'exception'
+        execProgress.indeterminate = false
         execResult.value = { stdout: execLogs.value.join('\n'), stderr: detail, command: '', rc: -1 }
       } finally {
         cancelling.value = false
@@ -1086,27 +1080,6 @@ function handleCancelInstall() {
       }
     },
   )
-}
-
-// ── Custom Confirm ──
-
-function showConfirm(title: string, content: string, confirmText: string, onConfirm: () => Promise<void>) {
-  confirmState.title = title
-  confirmState.content = content
-  confirmState.confirmText = confirmText
-  confirmState.loading = false
-  confirmState.onConfirm = onConfirm
-  confirmState.visible = true
-}
-
-async function executeConfirm() {
-  if (!confirmState.onConfirm) return
-  confirmState.visible = false
-  try {
-    await confirmState.onConfirm()
-  } finally {
-    confirmState.loading = false
-  }
 }
 
 // ── Delete ──
@@ -1141,11 +1114,7 @@ function handleDiff(record: any) {
 
 // ── Utils ──
 
-function nginxRunning(node: any): boolean {
-  const sd = node.status_detail
-  if (sd?.nginx?.nginx_running !== undefined) return sd.nginx.nginx_running
-  return node.status === 1
-}
+// 运行态判定已收敛到 useClusterNodes.nginxState（batch2 1.1 / D1：三元、不假绿）
 
 // ── Lifecycle ──
 
@@ -1175,6 +1144,7 @@ function streamEdgeAction(record: any, title: string, url: string, body: Record<
   execLogs.value = []
   execProgress.percent = 0
   execProgress.status = 'active'
+  execProgress.indeterminate = true
   execResult.value = { stdout: '', stderr: '', command: '', rc: null }
   startElapsedTimer()
 
@@ -1189,6 +1159,7 @@ function streamEdgeAction(record: any, title: string, url: string, body: Record<
       stopElapsedTimer()
       execProgress.status = rc === 0 ? 'success' : 'exception'
       execProgress.percent = 100
+      execProgress.indeterminate = false
       const prevCmd = execResult.value?.command || ''
       execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: prevCmd, rc }
     },
@@ -1197,6 +1168,7 @@ function streamEdgeAction(record: any, title: string, url: string, body: Record<
       stopElapsedTimer()
       execProgress.percent = 100
       execProgress.status = 'exception'
+      execProgress.indeterminate = false
     },
   })
 }
@@ -1328,6 +1300,18 @@ function onEdgePackRebase(e: Event) {
   margin-top: 4px;
 }
 
+/* 状态单元格：运行态/配置态徽章并排 + 检测时效弱化文字（batch2 1.2/1.3/2.2） */
+.node-status-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.status-exec-time {
+  font-size: 12px;
+  color: var(--muted);
+}
+
 /* Detail */
 .node-detail-grid {
   display: grid;
@@ -1345,6 +1329,14 @@ function onEdgePackRebase(e: Event) {
   word-break: break-all;
 }
 .node-stats {
+  margin-bottom: 8px;
+}
+.node-stats-label {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.node-stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
   gap: 8px;

@@ -837,6 +837,109 @@ describe('useClusterNodes ssh_port', () => {
   })
 })
 
+// ── node-management-ux-batch2 1.1：运行态三元判定（P1-2 假绿修复）──────────────
+// 规则（design D1）：status_detail.nginx.nginx_running === true → running；=== false → stopped；
+// 缺失（含节点无 status_detail）→ unchecked。禁止回退 status===1 假绿。
+
+describe('nginxState 运行态三元判定', () => {
+  it('nginx_running=true → running（即使 status=0）', async () => {
+    const { nginxState } = await import('../useClusterNodes')
+    expect(nginxState({ status: 0, status_detail: { nginx: { nginx_running: true } } })).toBe('running')
+  })
+
+  it('nginx_running=false → stopped（不回退 status===1 假绿）', async () => {
+    const { nginxState } = await import('../useClusterNodes')
+    expect(nginxState({ status: 1, status_detail: { nginx: { nginx_running: false } } })).toBe('stopped')
+  })
+
+  it('status_detail 无 nginx 运行态信息 → unchecked（新节点不假绿「运行中」）', async () => {
+    const { nginxState } = await import('../useClusterNodes')
+    expect(nginxState({ status: 1, status_detail: { statistic: { edge_version: '2.5.0' } } })).toBe('unchecked')
+    expect(nginxState({ status: 1, status_detail: { nginx: {} } })).toBe('unchecked')
+  })
+
+  it('无 status_detail 字段 → unchecked', async () => {
+    const { nginxState } = await import('../useClusterNodes')
+    expect(nginxState({ status: 1 })).toBe('unchecked')
+    expect(nginxState({ status: 0 })).toBe('unchecked')
+  })
+
+  it('nginx_running=null（解析失败占位）→ unchecked', async () => {
+    const { nginxState } = await import('../useClusterNodes')
+    expect(nginxState({ status: 1, status_detail: { nginx: { nginx_running: null } } })).toBe('unchecked')
+  })
+})
+
+// ── node-management-ux-batch2 5.3：删除每 2s +5 脉冲，动作流 indeterminate ──────
+
+describe('useClusterNodes 动作流不确定态（batch2 5.3 / D8）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    apiOk(mockApiGet, (u) => /\/nodes$/.test(u), { data: { total: 0, items: [] } })
+  })
+
+  it('executeNodeAction 执行期间 indeterminate=true、无假百分比；终态回落 percent=100', async () => {
+    let resolvePost!: (v: unknown) => void
+    mockApiPost.mockImplementation(
+      () =>
+        new Promise((r) => {
+          resolvePost = r
+        }),
+    )
+    const cluster = makeCluster()
+    const { startNode, execProgress } = await makeComposable(cluster)
+    const p = startNode(makeNode())
+    await flushPromises()
+    // startNode 先弹确认（真实 showOverlayModal 渲染进 document.body），点击确认才进入执行
+    const okBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      (b.textContent || '').includes('确认启动'),
+    ) as HTMLButtonElement
+    expect(okBtn).toBeDefined()
+    okBtn!.click()
+    await flushPromises()
+    expect(execProgress.indeterminate, '执行期间应为不确定态').toBe(true)
+    expect(execProgress.percent, '不确定态期间不得有假百分比').toBe(0)
+    resolvePost({ data: { rc: 0, stdout: '', stderr: '', command: 'cmd' } })
+    await p
+    expect(execProgress.indeterminate, '终态后退出不确定态').toBe(false)
+    expect(execProgress.percent).toBe(100)
+    expect(execProgress.status).toBe('success')
+  })
+
+  it('queryNodeStatus 同款：indeterminate 起始形态 + 终态回落', async () => {
+    let resolvePost!: (v: unknown) => void
+    mockApiPost.mockImplementation(
+      () =>
+        new Promise((r) => {
+          resolvePost = r
+        }),
+    )
+    const cluster = makeCluster()
+    const { queryNodeStatus, execProgress } = await makeComposable(cluster)
+    const p = queryNodeStatus(makeNode())
+    await flushPromises()
+    await flushPromises()
+    expect(execProgress.indeterminate).toBe(true)
+    expect(execProgress.percent).toBe(0)
+    resolvePost({ data: { rc: 0, stdout: '', stderr: '', command: 'cmd', statistic: {} } })
+    await p
+    expect(execProgress.indeterminate).toBe(false)
+    expect(execProgress.percent).toBe(100)
+    expect(execProgress.status).toBe('success')
+  })
+
+  it('源码级：脉冲计时器与 200s 外推假模型零残留', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { resolve } = await import('node:path')
+    const s = readFileSync(resolve(process.cwd(), 'src/composables/useClusterNodes.ts'), 'utf-8')
+    expect(s, '每 2s +5 脉冲应删除').not.toContain('+ 5')
+    expect(s, '_pulseTimer 应删除').not.toContain('_pulseTimer')
+    expect(s, 'progressCap 参数应删除').not.toContain('progressCap')
+    expect(s, '200s 线性外推应删除').not.toContain('/ 200')
+  })
+})
+
 // ── F1-NEW-08：节点表单 IP 校验绑定真实 validateIP（替代 B1 删除的 CentralListValidation 副本） ──
 
 describe('useClusterNodes validateIP（真实实现非法输入分支）', () => {
