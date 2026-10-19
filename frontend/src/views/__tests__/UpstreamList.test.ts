@@ -164,14 +164,14 @@ describe('UpstreamList.vue', () => {
 
   // ── 2.6 列表改版：列集合 / 假排序移除 ──────────────────────────────────
 
-  it('列序为 名称/集群/负载均衡/目标节点/协议/发布状态/操作，无「创建时间」列', async () => {
+  it('列序为 #/名称/集群/负载均衡/目标节点/协议/发布状态/操作，无「创建时间」列', async () => {
     const UpstreamList = (await import('../UpstreamList.vue')).default
     const wrapper = mount(UpstreamList, { global: { stubs } })
     await flushPromises()
     const table = wrapper.findComponent({ name: 'ATableStub' })
     expect(table).toBeTruthy()
     const cols = table!.props('columns') as Array<Record<string, unknown>>
-    expect(cols.map((c) => c.title)).toEqual(['名称', '集群', '负载均衡', '目标节点', '协议', '发布状态', '操作'])
+    expect(cols.map((c) => c.title)).toEqual(['#', '名称', '集群', '负载均衡', '目标节点', '协议', '发布状态', '操作'])
   })
 
   it('移除全部前端 sorter（服务端未支持排序参数）', async () => {
@@ -253,9 +253,9 @@ describe('UpstreamList.vue', () => {
     const wrapper = mount(UpstreamList, { global: { stubs } })
     await flushPromises()
     const rows = wrapper.findAll('tr.ant-table-row')
-    // 列序：展开占位 td + 名称/集群/负载均衡/目标节点/协议/发布状态/操作 → 协议 cell 下标 5
-    expect(rows[0].findAll('td')[5].text()).toBe('http')
-    expect(rows[1].findAll('td')[5].text()).toBe('—')
+    // 列序：展开占位 td + #序号/名称/集群/负载均衡/目标节点/协议/发布状态/操作 → 协议 cell 下标 6
+    expect(rows[0].findAll('td')[6].text()).toBe('http')
+    expect(rows[1].findAll('td')[6].text()).toBe('—')
   })
 
   // ── 2.6 EWMA 展示名统一「延迟最小」（D7） ─────────────────────────────
@@ -532,5 +532,43 @@ describe('UpstreamList.vue - XSS 渲染转义哨兵（SEC-04）', () => {
     expect(wrapper.text()).toContain(payload)
     expect(wrapper.element.querySelectorAll('script')).toHaveLength(0)
     expect(wrapper.element.querySelectorAll('[onerror]')).toHaveLength(0)
+  })
+})
+
+describe('UpstreamList.vue - 序号列跨页计数（upstream-list-index-column）', () => {
+  it('renders index column with continuous cross-page numbering', async () => {
+    const all = Array.from({ length: 25 }, (_, i) => makeItem({ id: i + 1, name: `svc-${i + 1}` }))
+    mockApiGet.mockImplementation((url: string, config?: { params?: Record<string, unknown> }) => {
+      if (url === '/upstreams') {
+        const p = Number(config?.params?.page ?? 1)
+        const size = Number(config?.params?.page_size ?? 20)
+        const start = (p - 1) * size
+        return Promise.resolve({
+          data: { total: all.length, page: p, page_size: size, items: all.slice(start, start + size) },
+        })
+      }
+      if (url === '/clusters') {
+        return Promise.resolve({ data: { items: [{ id: 1, display_name: '生产集群', group_name: '线上' }] } })
+      }
+      return Promise.reject(new Error('unknown url: ' + url))
+    })
+
+    const UpstreamList = (await import('../UpstreamList.vue')).default
+    const wrapper = mount(UpstreamList, { global: { stubs } })
+    await flushPromises()
+
+    const rows = wrapper.findAll('tr.ant-table-row')
+    expect(rows.length).toBe(20)
+    expect(rows[0].findAll('td')[1].text()).toBe('1')
+
+    const page2 = wrapper.findAll('.ant-pagination-item').find((w) => w.text() === '2')
+    expect(page2).toBeTruthy()
+    await page2!.trigger('click')
+    await flushPromises()
+
+    const rows2 = wrapper.findAll('tr.ant-table-row')
+    expect(rows2.length).toBe(5)
+    expect(rows2[0].findAll('td')[1].text()).toBe('21')
+    expect(rows2[0].text()).toContain('svc-21')
   })
 })

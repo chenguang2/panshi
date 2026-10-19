@@ -41,7 +41,10 @@
         class="upstream-table"
         @change="handleTableChange"
       >
-        <template #bodyCell="{ column, record }">
+        <template #bodyCell="{ column, record, index }">
+          <template v-if="column.key === 'index'">
+            <span class="text-muted">{{ (page - 1) * pageSize + index + 1 }}</span>
+          </template>
           <template v-if="column.key === 'name'">
             <div class="cell-primary">{{ record.name }}</div>
             <div class="cell-secondary">{{ record.description || '-' }}</div>
@@ -198,6 +201,7 @@ const publishClusterId = ref(0)
 const publishingRecord = ref<any | null>(null)
 
 const columns = [
+  { title: '#', key: 'index', width: 45 },
   { title: '名称', dataIndex: 'name', key: 'name' },
   { title: '集群', dataIndex: 'cluster_name', key: 'cluster_name' },
   { title: '负载均衡', key: 'load_balance' },
