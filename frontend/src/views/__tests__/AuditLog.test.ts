@@ -93,6 +93,14 @@ describe('AuditLog.vue 详情抽屉', () => {
     return wrapper
   }
 
+  it('序号列解剖与全站一致：首列 { title: "#", key: "index", width: 45 }（table-index-column-consistency）', async () => {
+    const wrapper = await mountPage()
+    const table = wrapper.findComponent(stubs['a-table'])
+    expect(table).toBeTruthy()
+    const cols = table.props('columns') as Array<{ title: string; key: string; width?: number }>
+    expect(cols[0]).toEqual({ title: '#', key: 'index', width: 45 })
+  })
+
   it('点击行打开详情抽屉并显示完整内容', async () => {
     const wrapper = await mountPage()
     expect(wrapper.find('.mock-drawer').exists()).toBe(false)

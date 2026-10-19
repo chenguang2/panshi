@@ -46,7 +46,7 @@
         :data-source="users"
         :columns="columns"
         :row-key="(record: User) => record.id"
-        :pagination="paginationProps"
+        :pagination="paginationProps({ page, pageSize, total: totalCount }, '个用户')"
         :loading="loading"
         size="middle"
         class="user-table"
@@ -55,7 +55,7 @@
         <!-- 用户名列 -->
         <template #bodyCell="{ column, record, index }">
           <template v-if="column.key === 'index'">
-            <span class="text-muted">{{ (currentPage - 1) * pageSize + index + 1 }}</span>
+            <span class="text-muted">{{ (page - 1) * pageSize + index + 1 }}</span>
           </template>
           <template v-if="column.key === 'username'">
             <span class="cell-primary">{{ record.username }}</span>
@@ -335,7 +335,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
-import { paginationProps as buildTablePagination } from '@/composables/usePagination'
+import { paginationProps } from '@/composables/usePagination'
 import { formatDateOnly as formatDate } from '@/utils/format'
 import {
   listUsers,
@@ -373,14 +373,9 @@ const roleFilter = ref('')
 const statusFilter = ref<number | string>('')
 
 // 分页 — 真后端分页（对齐 UpstreamList 范式）：page/pageSize 回写 + total 来自后端
-const currentPage = ref(1)
+const page = ref(1)
 const pageSize = ref(PAGE_SIZE_TABLE)
 const totalCount = ref(0)
-
-// a-table 分页配置（统一走 usePagination 工厂）
-const paginationProps = computed<TablePaginationConfig>(() =>
-  buildTablePagination({ page: currentPage.value, pageSize: pageSize.value, total: totalCount.value }, '个用户'),
-)
 
 // 表格列定义
 const columns = computed(() => {
@@ -415,13 +410,13 @@ const columns = computed(() => {
 })
 
 function handleTableChange(pagination: TablePaginationConfig) {
-  currentPage.value = pagination.current || 1
+  page.value = pagination.current || 1
   if (pagination.pageSize) pageSize.value = pagination.pageSize
   loadUsers()
 }
 
 function onFilterChange() {
-  currentPage.value = 1
+  page.value = 1
   loadUsers()
 }
 
@@ -834,7 +829,7 @@ async function handleResetPassword() {
 // ── Load ──────────────────────────────────────────────────────────────────
 // 组装后端查询参数：空值不传（后端按缺省处理）
 function buildListParams(): ListUsersParams {
-  const params: ListUsersParams = { page: currentPage.value, page_size: pageSize.value }
+  const params: ListUsersParams = { page: page.value, page_size: pageSize.value }
   if (searchText.value) params.keyword = searchText.value
   if (roleFilter.value) params.role = roleFilter.value
   if (statusFilter.value !== '') params.status = Number(statusFilter.value)

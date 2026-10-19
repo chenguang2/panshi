@@ -229,7 +229,7 @@ async function doArchive(): Promise<void> {
 }
 
 const columns = [
-  { title: '#', key: 'index', width: 56 },
+  { title: '#', key: 'index', width: 45 },
   {
     title: '时间',
     key: 'created_at',

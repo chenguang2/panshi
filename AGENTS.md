@@ -203,6 +203,7 @@ openspec/        # 变更工件；openspec/specs/ = main specs
 56. **原生 `<select v-model>` 的模型初值/重置必须与占位 option 的 value 精确匹配** — 2026-10-11 实测（插件元数据添加弹窗）：占位写 `<option value="">请选择插件</option>` 而模型初值/重置用 `null`，Vue 的 select 渲染器遍历 option 找值相等者、找不到即 `selectedIndex = -1` → 下拉框整块空白而非显示占位文案（无报错、DOM 正常、常规断言全绿，表象即「下拉框索引错误」）。两种写法各自合法，不变式是**匹配**：`value=""` 占位 → 模型用 `''`；`:value="null"` 占位（如 ClusterBackupDialog）→ 模型用 `null`。新增表单下拉时核对初值与**所有**重置点；守卫用组件测试断言「弹窗打开后占位 option 被选中」（`selectedIndex === 0`，范例见 `PluginMetadataList.test.ts`）。本轮同款修复两文件三处：PluginMetadataList（插件下拉）+ EdgeClient（集群/节点下拉，后者节点下拉在选完集群后会一直空白）。
 57. **a-table 自定义空态槽名是 `#emptyText`（不是 `#empty`）** — 2026-10-19 实测：RouteList 空态双形态写了 `#empty`，单测桩（渲染所有槽位）全绿但生产环境从未渲染过；同型潜伏于 NodeList/UpstreamList/UserList（已一并修复），正确范例见 `EdgeClient.vue`。凡"单测绿但页面上看不到"先查桩与真实组件的槽名/结构分歧。另：a-input-search 为回车/放大镜触发，Playwright `fill()` 不会触发 `@search`，E2E 须补 `press('Enter')`。
 58. **前端全量单测满并发跑会出现 CPU 争抢型 5s 超时波动** — 失败集合在未改动文件间随机漂移（CentralList/SslGenerateDialog 等轮换）、隔离复跑即绿；全量收口用 `npx vitest run --maxWorkers=4` 稳定全绿（2026-10-19 实测 1704/1704）。定性"波动 vs 回归"先隔离复跑再查代码。
+59. **表格 `#` 序号列解剖全站统一** — 首列 `{ title: '#', key: 'index', width: 45 }`；后端分页表格用跨页连续公式 `(page-1)*pageSize+index+1`，`:pagination="false"`（全量渲染）用 `index+1`；分页绑定无附加逻辑时模板内联调 `usePagination.paginationProps` 工厂（禁本地别名/纯包装 computed）。规范与守卫：`openspec/specs/table-anatomy/spec.md` + `tableAnatomy.source.test.ts`（2026-10-19 收敛，新表格照抄勿再自创宽度/公式）。
 
 ## 新增功能步骤
 
