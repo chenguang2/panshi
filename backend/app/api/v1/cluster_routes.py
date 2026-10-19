@@ -24,7 +24,7 @@ ALLOWED_SEARCH_FIELDS = {"name", "uri", "description", "hosts"}
 
 
 def route_to_response(r: Route, current_version: int | None = None, published_at: str | None = None,
-                       plugins: list | None = None) -> RouteResponse:
+                       plugins: list | None = None, pending_publish: bool = False) -> RouteResponse:
     """Convert Route model to RouteResponse"""
     # edge_uuid may be None for legacy rows; generate fallback to satisfy schema
     edge_uuid = r.edge_uuid or str(uuid.uuid4())
@@ -47,6 +47,9 @@ def route_to_response(r: Route, current_version: int | None = None, published_at
         "enable_websocket": bool(r.enable_websocket) if r.enable_websocket else False,
         "current_version": current_version or r.current_version,
         "published_at": published_at,
+        # 待发布（4.1）：单点推导 = edge_sync.derive_pending_publish（与 upstreams 同款），
+        # 由两个列表端点组装时传入；详情端点有意不传（B1：发布状态展示只走列表）。
+        "pending_publish": pending_publish,
         "created_at": r.created_at.isoformat() if r.created_at else None,
         "plugins": plugins or [],
     }
@@ -106,18 +109,10 @@ async def list_routes(
     result = await db.execute(query)
     routes = result.scalars().all()
 
-    # 批量查询最新发布时间
+    # 发布时间映射 + 待发布推导（4.1）：单点复用 edge_sync.load_publish_time_map /
+    # derive_pending_publish（与 cluster_upstreams.py 同款三参推导）
     route_ids = [r.id for r in routes]
-    pub_result = await db.execute(
-        select(
-            ConfigVersion.resource_id,
-            func.max(ConfigVersion.created_at).label("latest_ts")
-        ).where(
-            ConfigVersion.resource_type == "route",
-            ConfigVersion.resource_id.in_(route_ids) if route_ids else False
-        ).group_by(ConfigVersion.resource_id)
-    )
-    pub_map = {r.resource_id: r.latest_ts for r in pub_result.all()} if route_ids else {}
+    pub_map = await edge_sync.load_publish_time_map(db, "route", route_ids)
 
     # 批量查询插件
     plugin_rows = await db.execute(
@@ -130,8 +125,16 @@ async def list_routes(
         plugin_map[rp.route_id].append({"plugin_name": rp.plugin_name})
 
     items = [
-        route_to_response(r, published_at=pub_map.get(r.id).isoformat() + 'Z' if pub_map.get(r.id) else None,
-                          plugins=plugin_map.get(r.id, []))
+        route_to_response(
+            r,
+            published_at=pub_map.get(r.id).isoformat() + 'Z' if pub_map.get(r.id) else None,
+            plugins=plugin_map.get(r.id, []),
+            pending_publish=edge_sync.derive_pending_publish(
+                current_version=r.current_version,
+                updated_at=r.updated_at,
+                published_at=pub_map.get(r.id),
+            ),
+        )
         for r in routes
     ]
 

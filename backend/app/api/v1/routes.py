@@ -1,6 +1,6 @@
 import json
 from typing import Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, exists
 
@@ -11,6 +11,7 @@ from app.models.user import User, UserCluster
 from app.schemas.route import RouteListResponse, RouteResponse
 from app.api.v1.cluster_routes import route_to_response
 from app.core.deps import require_permission
+from app.services import edge_sync
 
 router = APIRouter(prefix="/routes", tags=["routes"])
 
@@ -78,17 +79,42 @@ async def list_all_routes(
         ]
         query = query.where(or_(*conditions))
 
-    # Publish status filter
-    if publish_status == "published":
-        subq = select(ConfigVersion.resource_id).where(
-            ConfigVersion.resource_type == "route"
-        ).distinct().subquery()
-        query = query.where(Route.id.in_(subq))
-    elif publish_status == "unpublished":
-        subq = select(ConfigVersion.resource_id).where(
-            ConfigVersion.resource_type == "route"
-        ).distinct().subquery()
-        query = query.where(Route.id.notin_(subq))
+    # Publish status filter — 互斥三分区（batch1 组4 4.5，评审裁决 A3）：
+    #   published   = 有 current_version 且非 pending；
+    #   pending     = 有 current_version 且存在未下发修改（updated_at > 最近发布时间，
+    #                 语义与 edge_sync.derive_pending_publish 一致）；
+    #   unpublished = 无 current_version（既有语义不变；历史版本删光的守卫行
+    #                 有 current_version，按分区规则落入 published，不再误入 unpublished）。
+    # 有意的行为变化：旧「published = 存在任意 ConfigVersion」作废。
+    if publish_status:
+        if publish_status not in ("published", "pending", "unpublished"):
+            raise HTTPException(
+                status_code=422,
+                detail="publish_status 仅支持 published/pending/unpublished",
+            )
+        latest_pub_sq = (
+            select(
+                ConfigVersion.resource_id,
+                func.max(ConfigVersion.created_at).label("latest_ts"),
+            )
+            .where(ConfigVersion.resource_type == "route")
+            .group_by(ConfigVersion.resource_id)
+            .subquery()
+        )
+        query = query.outerjoin(latest_pub_sq, Route.id == latest_pub_sq.c.resource_id)
+        is_pending = Route.updated_at > latest_pub_sq.c.latest_ts
+        if publish_status == "unpublished":
+            query = query.where(Route.current_version.is_(None))
+        elif publish_status == "pending":
+            query = query.where(Route.current_version.isnot(None), is_pending)
+        else:  # published
+            query = query.where(
+                Route.current_version.isnot(None),
+                or_(
+                    latest_pub_sq.c.latest_ts.is_(None),
+                    Route.updated_at <= latest_pub_sq.c.latest_ts,
+                ),
+            )
 
     # Plugin filter (EXISTS subquery — only runs when plugin param is provided)
     if plugin:
@@ -140,20 +166,9 @@ async def list_all_routes(
         )
         upstream_map = {r[0]: r[1] for r in u_result.all()}
 
-    # Batch publish time
+    # Batch publish time + 待发布推导（4.1）：单点复用 edge_sync（与 Tab 列表同款）
     route_ids = [r.id for r in routes]
-    pub_map = {}
-    if route_ids:
-        pub_result = await db.execute(
-            select(
-                ConfigVersion.resource_id,
-                func.max(ConfigVersion.created_at).label("latest_ts")
-            ).where(
-                ConfigVersion.resource_type == "route",
-                ConfigVersion.resource_id.in_(route_ids)
-            ).group_by(ConfigVersion.resource_id)
-        )
-        pub_map = {r.resource_id: r.latest_ts for r in pub_result.all()}
+    pub_map = await edge_sync.load_publish_time_map(db, "route", route_ids)
 
     # Batch plugins
     plugin_map: dict[int, list] = {}
@@ -176,6 +191,11 @@ async def list_all_routes(
             r,
             published_at=pub_map.get(r.id).isoformat() + "Z" if pub_map.get(r.id) else None,
             plugins=plugin_map.get(r.id, []),
+            pending_publish=edge_sync.derive_pending_publish(
+                current_version=r.current_version,
+                updated_at=r.updated_at,
+                published_at=pub_map.get(r.id),
+            ),
         )
         item_dict = item.model_dump()
         item_dict["cluster_name"] = cluster_name_map.get(r.cluster_id, "")

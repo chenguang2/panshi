@@ -47,6 +47,9 @@ class RouteResponse(RouteBase):
     upstream_name: Optional[str] = None
     current_version: Optional[int] = None
     published_at: Optional[str] = None
+    # 发布状态语义由后端单点推导（edge_sync.derive_pending_publish），前端不本地推导；
+    # 两个列表端点组装时传入，详情端点有意不推导（B1），默认 False
+    pending_publish: bool = False
     created_at: Optional[str] = None
     plugins: Optional[List[Dict[str, Any]]] = None
     cluster_name: Optional[str] = None

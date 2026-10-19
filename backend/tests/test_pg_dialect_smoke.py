@@ -259,3 +259,74 @@ def test_upstream_publish_status_write_path(global_engine_client, cluster):
     assert item["last_publish_status"] is None, item.get("last_publish_status")
     assert item["pending_publish"] is False, item.get("pending_publish")
     assert item["published_at"], item.get("published_at")
+
+
+def test_route_publish_status_and_partition(global_engine_client, cluster):
+    """路由 pending_publish 推导（4.1）+ publish_status 互斥三分区（4.5）。
+
+    batch1 组4 新读路径（约定 #31）：列表 pending_publish 推导与重写的筛选 SQL
+    （外联最近发布时间子查询 + naive datetime 比较/NULL 三值逻辑）在 asyncpg
+    严格类型下必须成立；三分区 SHALL NOT 重叠。
+    """
+    from unittest.mock import MagicMock, patch
+
+    from app.services.edge_client import EdgeClient
+
+    created = _assert_created(
+        global_engine_client.post(
+            f"/api/v1/clusters/{cluster}/routes", json={"name": "zz-pg-smoke-r-status", "uri": "/zz-r-status/*"}
+        ),
+        "建路由",
+    )
+    route_id = created["id"]
+    _assert_created(
+        global_engine_client.post(
+            f"/api/v1/clusters/{cluster}/nodes",
+            json={
+                "ip": "10.255.255.4",
+                "service_port": 80,
+                "management_port": 9093,
+                "edge_path": "/usr/local/edge",
+                "status": 1,
+            },
+        ),
+        "建节点",
+    )
+
+    def _publish():
+        with patch.object(EdgeClient, "update_route", return_value={"route_id": "x"}), \
+             patch("app.services.edge_sync.get_edge_logger", return_value=MagicMock()):
+            return global_engine_client.post(f"/api/v1/clusters/{cluster}/routes/{route_id}/publish")
+
+    assert _publish().status_code == 200
+
+    # 编辑推进 updated_at → 待发布
+    put = global_engine_client.put(f"/api/v1/clusters/{cluster}/routes/{route_id}", json={"description": "改"})
+    assert put.status_code == 200, put.text
+
+    tab_list = global_engine_client.get(f"/api/v1/clusters/{cluster}/routes")
+    assert tab_list.status_code == 200, tab_list.text
+    item = next(r for r in tab_list.json()["items"] if r["id"] == route_id)
+    assert item["pending_publish"] is True, item.get("pending_publish")
+    assert item["published_at"], item.get("published_at")
+
+    def _ids(status: str) -> set[int]:
+        resp = global_engine_client.get(
+            "/api/v1/routes", params={"publish_status": status, "cluster_id": cluster}
+        )
+        assert resp.status_code == 200, resp.text
+        return {i["id"] for i in resp.json()["items"]}
+
+    # 待发布态：pending 分区命中，published/unpublished 不命中
+    published = _ids("published")
+    pending = _ids("pending")
+    unpublished = _ids("unpublished")
+    assert route_id in pending, {"published": published, "pending": pending, "unpublished": unpublished}
+    assert route_id not in published and route_id not in unpublished
+    assert not (published & pending) and not (published & unpublished) and not (pending & unpublished)
+
+    # 再次发布 → published 分区命中、pending 退出
+    assert _publish().status_code == 200
+    published = _ids("published")
+    pending = _ids("pending")
+    assert route_id in published and route_id not in pending
