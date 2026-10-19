@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mount, flushPromises } from '@vue/test-utils'
 import { ref } from 'vue'
 import { setActivePinia, createPinia } from 'pinia'
 import type { Cluster, Upstream } from '@/types'
@@ -399,6 +399,29 @@ describe('ClusterUpstreams.vue 版本管理发布接线 (1.3)', () => {
     modal.vm.$emit('publish-requested')
     await wrapper.vm.$nextTick()
     expect(mockPublishUpstreamByRecord).not.toHaveBeenCalled()
+  })
+
+  it('出口条发布完成后重开版本管理弹窗（重载版本列表并复位出口条）（组3 A2）', async () => {
+    const u = makeUpstream({ id: 1, name: 'svc' })
+    const cluster = makeCluster({ selectedUpstream: u })
+    const wrapper = await mountClusterUpstreams(cluster)
+    const vm: any = wrapper.vm
+    vm.versionModalVisible = true
+    await wrapper.vm.$nextTick()
+
+    let visibleDuringPublish: boolean | null = null
+    mockPublishUpstreamByRecord.mockImplementation(async () => {
+      visibleDuringPublish = vm.versionModalVisible
+    })
+
+    const modal = wrapper.findComponent({ name: 'VersionManagementModal' })
+    modal.vm.$emit('publish-requested')
+    await flushPromises()
+
+    expect(mockPublishUpstreamByRecord).toHaveBeenCalledWith(cluster, u)
+    // 发布期间版本弹窗让位；发布/取消完成后重开（重开触发既有 open watch 重载版本列表并复位出口条）
+    expect(visibleDuringPublish).toBe(false)
+    expect(vm.versionModalVisible).toBe(true)
   })
 })
 

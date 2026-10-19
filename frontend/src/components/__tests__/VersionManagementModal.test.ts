@@ -126,6 +126,43 @@ beforeEach(() => {
   setupApi()
 })
 
+// ── 版本操作人展示（route-management-ux-batch1 7.4）────────────────────────
+// meta 行补「由 {created_by} 发布」（config-version-management spec）；
+// created_by 缺失静默降级只显时间，不出现「由 发布」残缺文案。
+
+describe('VersionManagementModal.vue - 版本 meta 显示发布人（route-management-ux-batch1 7.4）', () => {
+  it('created_by 非空：meta 行显示「由 {created_by} 发布」，发布时间保留', async () => {
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === HISTORY_URL)
+        return Promise.resolve({
+          data: {
+            items: [{ id: 1, version: 1, config: { a: 1 }, created_at: '2026-05-01T10:00:00Z', created_by: 'admin' }],
+            current_version: 1,
+          },
+        })
+      return Promise.reject(new Error('unexpected GET: ' + url))
+    })
+
+    const w = await mountModal()
+
+    const meta = w.find('.version-item-meta')
+    expect(meta.exists()).toBe(true)
+    expect(meta.text()).toContain('由 admin 发布')
+    expect(meta.text()).toContain('2026')
+  })
+
+  it('created_by 缺失：只显示时间（静默降级，不出现「由 发布」残缺文案）', async () => {
+    const w = await mountModal()
+
+    const metas = w.findAll('.version-item-meta')
+    expect(metas.length).toBe(3)
+    for (const meta of metas) {
+      expect(meta.text()).not.toContain('由')
+      expect(meta.text()).not.toContain('发布')
+    }
+  })
+})
+
 describe('VersionManagementModal.vue - 恢复语义（tasks 1.1-1.4）', () => {
   it('1.1 非当前版本按钮文案为「恢复此版本配置（不会自动发布）」，不再显示「切换到此版本」', async () => {
     const w = await mountModal()

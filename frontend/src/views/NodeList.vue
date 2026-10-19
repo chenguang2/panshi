@@ -176,7 +176,7 @@
           </template>
         </template>
 
-        <template #empty>
+        <template #emptyText>
           <div class="empty-state">
             <div class="empty-state-icon">◎</div>
             <p>暂无节点</p>

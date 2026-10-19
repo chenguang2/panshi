@@ -51,7 +51,7 @@
                       <span v-if="v.version === currentVersion" class="version-current-tag">当前</span>
                     </div>
                     <div class="version-item-meta">
-                      {{ formatDate(v.created_at) }}
+                      {{ formatDate(v.created_at) }}<span v-if="v.created_by"> · 由 {{ v.created_by }} 发布</span>
                     </div>
                   </div>
                 </div>

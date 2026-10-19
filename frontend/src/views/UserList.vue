@@ -145,7 +145,7 @@
         </template>
 
         <!-- 空状态 -->
-        <template #empty>
+        <template #emptyText>
           <div class="empty-state">
             <div class="empty-state-icon">◎</div>
             <p>暂无用户</p>

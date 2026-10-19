@@ -88,6 +88,8 @@
                 min="0"
                 placeholder="0"
               />
+              <!-- 7.5（C6）：优先级语义提示 -->
+              <div class="form-hint">数值越大越优先匹配</div>
               <span class="form-error" v-if="formErrors.priority">{{ formErrors.priority }}</span>
             </div>
           </div>
@@ -200,6 +202,7 @@ import { ref, reactive, watch, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import api from '@/api'
 import { PAGE_SIZE_DROPDOWN } from '@/constants'
+import { getApiErrorMessage } from '@/utils/error'
 import RouteAdvancedMatch from '@/components/RouteAdvancedMatch.vue'
 import PluginSelector from '@/components/PluginSelector.vue'
 import type { RouteVarRule } from '@/types'
@@ -209,6 +212,8 @@ const props = defineProps<{
   editingRoute: any | null
   copyingRoute?: boolean
   clusters: { id: number; name: string; display_name?: string }[]
+  /** 7.6：深链进入时新建表单预选的集群 id；不传/为空不预选 */
+  defaultClusterId?: number | null
 }>()
 
 const emit = defineEmits<{ close: []; saved: [] }>()
@@ -350,7 +355,8 @@ watch(
       form.uri = ''
       form.priority = 0
       form.status = 1
-      form.cluster_id = ''
+      // 7.6：深链场景预选集群；普通入口 defaultClusterId 为空不预选
+      form.cluster_id = props.defaultClusterId ?? ''
       form.description = ''
       form.upstream_id = ''
       form.methods = []
@@ -438,8 +444,9 @@ async function handleSubmit() {
     }
     emit('saved')
     emit('close')
-  } catch {
-    message.error('保存失败')
+  } catch (error) {
+    // 保存失败透因（batch1 组5 5.2）：经 getApiErrorMessage 透出后端 detail（重名冲突等）
+    message.error(getApiErrorMessage(error))
   } finally {
     submitting.value = false
   }

@@ -3,16 +3,33 @@
     <!-- Toolbar -->
     <div class="node-actions">
       <a-button size="small" type="primary" @click="showAddRouteModal(cluster)">添加路由</a-button>
-      <a-button size="small" @click="copyRoute(cluster)" :disabled="!singleOpEnabled">复制路由</a-button>
-      <a-button size="small" @click="editRoute(cluster)" :disabled="!singleOpEnabled">编辑路由</a-button>
-      <a-button size="small" danger :disabled="!deleteEnabled" @click="handleDeleteClick"
-        >删除路由{{ deleteCount > 0 ? `(${deleteCount})` : '' }}</a-button
-      >
+      <!-- 7.9（Tab 对齐）：选中 DNS 行时受限操作禁用 + tooltip 指路（与独立页同文案） -->
+      <a-tooltip :title="dnsSelected ? DNS_ROUTE_HINT : undefined" placement="top">
+        <a-button size="small" @click="copyRoute(cluster)" :disabled="!singleOpEnabled || dnsSelected"
+          >复制路由</a-button
+        >
+      </a-tooltip>
+      <a-tooltip :title="dnsSelected ? DNS_ROUTE_HINT : undefined" placement="top">
+        <a-button size="small" @click="editRoute(cluster)" :disabled="!singleOpEnabled || dnsSelected"
+          >编辑路由</a-button
+        >
+      </a-tooltip>
+      <a-tooltip :title="dnsSelected ? DNS_ROUTE_HINT : undefined" placement="top">
+        <a-button size="small" danger :disabled="!deleteEnabled || dnsSelected" @click="handleDeleteClick"
+          >删除路由{{ deleteCount > 0 ? `(${deleteCount})` : '' }}</a-button
+        >
+      </a-tooltip>
       <a-divider type="vertical" />
-      <a-button size="small" @click="publishRoute(cluster)" :disabled="!singleOpEnabled">发布</a-button>
-      <a-button size="small" @click="openRouteVersionManagement(cluster)" :disabled="!singleOpEnabled"
-        >版本管理</a-button
-      >
+      <a-tooltip :title="dnsSelected ? DNS_ROUTE_HINT : undefined" placement="top">
+        <a-button size="small" @click="publishRoute(cluster)" :disabled="!singleOpEnabled || dnsSelected"
+          >发布</a-button
+        >
+      </a-tooltip>
+      <a-tooltip :title="dnsSelected ? DNS_ROUTE_HINT : undefined" placement="top">
+        <a-button size="small" @click="openRouteVersionManagement(cluster)" :disabled="!singleOpEnabled || dnsSelected"
+          >版本管理</a-button
+        >
+      </a-tooltip>
       <a-divider type="vertical" />
       <ColumnConfigPopover
         v-model:open="routeColumnPopoverVisible"
@@ -70,10 +87,11 @@
       :custom-row="
         (record: any) => ({
           onClick: () => {
-            cluster.selectedRoute = record
+            toggleRouteSelection(record)
           },
         })
       "
+      :row-class-name="routeRowClassName"
       :showSorterTooltip="false"
       size="small"
       row-key="id"
@@ -95,12 +113,23 @@
             :status="record.status === 1 ? 'online' : 'offline'"
           />
         </template>
+        <!-- 发布状态（组4 4.3）：覆盖 composable 的 customRender（三分支），透传 pending 升级为四态 -->
+        <template v-else-if="column.key === 'publish_status'">
+          <PublishStatusTag
+            :version="record.current_version"
+            :published-at="record.published_at"
+            :pending="record.pending_publish === true"
+          />
+        </template>
         <template v-if="column.key === 'actions'">
           <template v-for="btnKey in routeActionsSelected" :key="btnKey">
             <a-divider type="vertical" v-if="btnKey === 'publish'" />
-            <a-button size="small" @click="handleRouteAction(cluster, record, btnKey)">
-              {{ getActionButtonTitle(btnKey) }}
-            </a-button>
+            <!-- 7.9（Tab 对齐）：DNS 行行内操作禁用 + tooltip 指路 -->
+            <a-tooltip :title="isDnsRoute(record) ? DNS_ROUTE_HINT : undefined" placement="top">
+              <a-button size="small" :disabled="isDnsRoute(record)" @click="handleRouteAction(cluster, record, btnKey)">
+                {{ getActionButtonTitle(btnKey) }}
+              </a-button>
+            </a-tooltip>
           </template>
         </template>
       </template>
@@ -271,7 +300,9 @@
       :cluster-id="versionModalClusterId"
       :resource-name="versionModalResourceName"
       :edge-uuid="versionModalEdgeUuid"
+      :can-publish="true"
       @published="onVersionPublished"
+      @publish-requested="handleVmPublishRequested"
     />
   </div>
 </template>
@@ -279,10 +310,11 @@
 <script setup lang="ts">
 import { ref, computed, h, type Ref } from 'vue'
 import { WarningOutlined } from '@ant-design/icons-vue'
-import type { Cluster } from '@/types'
+import type { Cluster, Route } from '@/types'
 import { useClusterRoutes } from '@/composables/useClusterRoutes'
 import { paginationProps } from '@/composables/usePagination'
 import BadgeStatus from '@/components/BadgeStatus.vue'
+import PublishStatusTag from '@/components/PublishStatusTag.vue'
 import RouteAdvancedMatch from '@/components/RouteAdvancedMatch.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PluginMetadata from '@/components/PluginMetadata.vue'
@@ -351,6 +383,7 @@ const {
   deleteRoute,
   deleteRoutes,
   publishRoute,
+  publishRouteByRecord,
   openRouteVersionManagement,
   hasPluginGroupsPermission,
 } = useClusterRoutes({
@@ -381,6 +414,30 @@ const singleOpEnabled = computed(
 const deleteCount = computed(() => (batchCount.value > 0 ? batchCount.value : props.cluster.selectedRoute ? 1 : 0))
 const deleteEnabled = computed(() => deleteCount.value > 0)
 
+// ── 7.9（Tab 对齐独立页）：DNS 行操作禁用 + tooltip 指路 ──
+// 行内按钮与工具栏对「DNS 行 / 选中 DNS 项」禁用（删除 toast 守卫保留兜底）；
+// 文案与独立页 RouteList 同源，指路目标是左侧菜单「DNS 代理」页。
+const DNS_ROUTE_HINT = 'DNS 路由请在「DNS 代理」页管理'
+const dnsSelected = computed(() => (props.cluster.selectedRoute ? isDnsRoute(props.cluster.selectedRoute) : false))
+
+// ── 行点击选中（batch1 组5 5.3，A7 对齐 ClusterUpstreams 4.1/D8）──
+// 行点选与复选框共用同一选中载体：selectedRoute（单选操作/高亮依据）+
+// selectedRouteKeys（工具栏批量计数）。再点已选中行 = 取消选中；DNS 路由仅禁复选框，行点选仍可选中查看。
+function toggleRouteSelection(record: Route) {
+  if (props.cluster.selectedRoute?.id === record.id) {
+    props.cluster.selectedRoute = null
+    props.cluster.selectedRouteKeys = (props.cluster.selectedRouteKeys || []).filter((k) => k !== record.id)
+  } else {
+    props.cluster.selectedRoute = record
+    if (!(props.cluster.selectedRouteKeys || []).some((k) => k === record.id)) {
+      props.cluster.selectedRouteKeys = [...(props.cluster.selectedRouteKeys || []), record.id]
+    }
+  }
+}
+
+// 选中行高亮：跟随 selectedRoute，行点选与勾选（selectMany 单选时同步该载体）均生效
+const routeRowClassName = (record: Route) => (props.cluster.selectedRoute?.id === record.id ? 'row-selected' : '')
+
 function handleDeleteClick() {
   if (batchCount.value > 0) {
     deleteRoutes(props.cluster)
@@ -392,6 +449,21 @@ function handleDeleteClick() {
 // ── Version published callback ──────────────────────────────────────
 function onVersionPublished() {
   loadRoutes(props.cluster)
+}
+
+// ── 组3 3.2：版本恢复出口条 → 以版本弹窗上下文资源（composable 写入的镜像 ref）复用既有发布
+// 链路（publishRouteByRecord：内置发布确认/executePublish/列表刷新）；发布/取消返回后重开版本
+// 弹窗——重开触发组件既有 open watch 重载版本列表并复位出口条（链路为 promise 单出口，取消时
+// 同样回到版本弹窗，恢复本身已落库不丢失）
+async function handleVmPublishRequested() {
+  const resourceId = versionModalResourceId.value
+  const resourceName = versionModalResourceName.value
+  if (resourceId == null || !resourceName) return
+  versionModalVisible.value = false
+  const item = (props.cluster.routes || []).find((r) => r.id === resourceId)
+  if (!item) return
+  await publishRouteByRecord(props.cluster, item)
+  versionModalVisible.value = true
 }
 </script>
 
@@ -417,6 +489,11 @@ function onVersionPublished() {
 
 .node-table {
   margin-top: 8px;
+}
+
+/* ── 选中行高亮（batch1 组5 5.3）：selectedRoute 来源为行点选或勾选均生效，与 ClusterUpstreams 行选中风格一致 ── */
+.node-table :deep(tr.row-selected > td) {
+  background: oklch(56% 0.16 210 / 10%) !important;
 }
 
 .advanced-tab {

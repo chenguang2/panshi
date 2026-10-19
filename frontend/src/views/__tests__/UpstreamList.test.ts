@@ -24,13 +24,22 @@ vi.mock('vue-router', () => ({
   useRoute: () => ({ name: 'UpstreamList', query: {} }),
 }))
 
+// 组3 3.4：发布链路 mock（断言 executePublish 契约与 refreshFn 重开版本弹窗；不渲染真实进度弹窗）
+vi.mock('@/composables/useClusterUtils', () => ({
+  executePublish: vi.fn().mockResolvedValue(undefined),
+  showDeleteConfirm: vi.fn(),
+  executeDeleteWithProgress: vi.fn().mockResolvedValue(undefined),
+}))
+
+import { executePublish } from '@/composables/useClusterUtils'
+
 // a-table 桩：复用仓库共享 aTableStub（真实 Table 在 jsdom 缺 matchMedia 会连挂，约定 #54），
 // 追加 #empty 插槽渲染（真实 a-table 在 dataSource 为空时渲染 empty 插槽，空状态用例依赖）。
 const upstreamTableStub = {
   ...aTableStub,
   template: aTableStub.template.replace(
     '</tbody>',
-    '<tr v-if="pageRows.length === 0" class="ant-table-placeholder-row"><td :colspan="columns.length + 1"><slot name="empty" /></td></tr></tbody>',
+    '<tr v-if="pageRows.length === 0" class="ant-table-placeholder-row"><td :colspan="columns.length + 1"><slot name="emptyText" /></td></tr></tbody>',
   ),
 }
 
@@ -321,6 +330,40 @@ describe('UpstreamList.vue', () => {
     expect((wrapper.vm as any).publishModalVisible).toBe(true)
     expect((wrapper.vm as any).publishingRecord.id).toBe(1)
     expect((wrapper.vm as any).publishClusterId).toBe(1)
+  })
+
+  it('出口条发布成功后重开版本管理弹窗（重载版本列表并复位出口条）（组3 A2）', async () => {
+    const UpstreamList = (await import('../UpstreamList.vue')).default
+    const wrapper = mount(UpstreamList, { global: { stubs } })
+    await flushPromises()
+    const vm: any = wrapper.vm
+
+    let visibleDuringPublish: boolean | null = null
+    vi.mocked(executePublish).mockImplementationOnce(async (opts: any) => {
+      visibleDuringPublish = vm.vmModalVisible
+      await opts.refreshFn()
+    })
+
+    vm.handleAction('version', MOCK_UPSTREAMS.items[0])
+    await wrapper.vm.$nextTick()
+    ;(wrapper.findComponent(vmModalStub)!.vm as any).$emit('publish-requested')
+    await flushPromises()
+
+    // 版本弹窗让位给发布确认弹窗（既有行为）
+    expect(vm.publishModalVisible).toBe(true)
+    // 发布走既有共享实现：PublishConfirmModal confirm → executePublish
+    await vm.onPublishConfirm([7])
+    expect(executePublish).toHaveBeenCalledTimes(1)
+    expect(executePublish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: '发布上游: user-service',
+        apiEndpoint: '/clusters/1/upstreams/1/publish',
+        nodeIds: [7],
+      }),
+    )
+    // 发布期间版本弹窗让位；发布完成后重开（重开触发既有 open watch 重载版本列表并复位出口条）
+    expect(visibleDuringPublish).toBe(false)
+    expect(vm.vmModalVisible).toBe(true)
   })
 
   // ── 4.6 空状态两分支 ─────────────────────────────────────────────────

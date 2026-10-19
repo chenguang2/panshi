@@ -15,6 +15,47 @@ export function routeLabel(route?: 'relay' | 'direct'): string {
   return ''
 }
 
+/** 全量拉取集群节点的单页大小（对齐后端 MAX_PAGE_SIZE=500）。 */
+const NODES_FETCH_PAGE_SIZE = PAGE_SIZE_DROPDOWN
+
+/** 全量拉取返回的节点行最小结构；消费方可用泛型收窄为自己需要的形状。 */
+export interface ClusterNodePageItem {
+  id: number
+  ip: string
+  management_port: number
+  status?: number
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 动态 JSON 结构（schema/config），成员访问按需
+  [key: string]: any
+}
+
+/**
+ * 全量拉取集群节点（route-management-ux-batch1 组2）：删除确认/发布确认/连接测试共用的单一实现。
+ * 后端 page_size 上限 MAX_PAGE_SIZE=500，旧的单页 page_size=500 写法对 >500 节点集群会静默截断——
+ * 本工具分页循环拉取（page=1..N）聚合全部节点：
+ * - 任一页请求失败 → 原样抛错（调用方进各自错误态），绝不返回部分清单；
+ * - 聚合数量与后端 total 不符 → 抛错（防静默截断）；
+ * - 旧响应形状缺 total 时按单页处理（向后兼容，生产端点恒返回 total）。
+ */
+export async function fetchAllClusterNodes<T = ClusterNodePageItem>(clusterId: number): Promise<T[]> {
+  const all: T[] = []
+  let total: number | null = null
+  let page = 1
+  for (;;) {
+    const res = await api.get(`/clusters/${clusterId}/nodes`, {
+      params: { page, page_size: NODES_FETCH_PAGE_SIZE },
+    })
+    const items = (res.data?.items || []) as T[]
+    if (typeof res.data?.total === 'number') total = res.data.total
+    all.push(...items)
+    if (items.length === 0 || total === null || all.length >= total) break
+    page++
+  }
+  if (total !== null && all.length !== total) {
+    throw new Error(`节点清单拉取不完整（期望 ${total} 个，实际 ${all.length} 个），请重试`)
+  }
+  return all
+}
+
 /** 删除确认「仅删平台记录」提示的资源中文名：按 apiEndpoint 资源段映射（cluster 根端点等多资源场景识别不了，走通用文案）。 */
 const endpointResourceLabels: Record<string, string> = {
   upstreams: '上游',
@@ -389,7 +430,10 @@ export function showNodeDeleteConfirm(opts: {
 export function buildDeleteProgressContent(
   progress: { percent: number; status: 'active' | 'success' | 'exception' },
   logs: string[],
+  /** indeterminate：不确定态（7.8）——执行中隐藏百分比数值（bar 停留空态），终态照常显示 100% */
+  opts?: { indeterminate?: boolean },
 ) {
+  const indeterminate = opts?.indeterminate === true && progress.percent < 100
   return h('div', [
     h('div', { style: 'margin-bottom: 8px;' }, [
       h('div', { style: 'display:flex;align-items:center;gap:8px;' }, [
@@ -407,7 +451,7 @@ export function buildDeleteProgressContent(
         h(
           'span',
           { style: 'font-size:11px;color:var(--muted);font-family:var(--font-mono);min-width:32px;text-align:right;' },
-          `${progress.percent}%`,
+          indeterminate ? '执行中...' : `${progress.percent}%`,
         ),
       ]),
     ]),
@@ -437,6 +481,8 @@ function createProgressModal(
   logs: string[],
   /** 传入时，失败/部分成功终态在日志区下方追加操作按钮（全部成功不显示） */
   terminalAction?: ProgressTerminalAction,
+  /** indeterminate：不确定态进度（7.8 发布进度诚实化），执行中隐藏百分比数值 */
+  options?: { indeterminate?: boolean },
 ) {
   const container = document.createElement('div')
   document.body.appendChild(container)
@@ -475,6 +521,7 @@ function createProgressModal(
             buildDeleteProgressContent(
               progress as { percent: number; status: 'active' | 'success' | 'exception' },
               logs,
+              options,
             ),
             actionButton,
           ]),
@@ -746,32 +793,34 @@ export async function executePublish(opts: PublishOptions): Promise<void> {
       status: 'active',
     }
 
-    const modal = createProgressModal(opts.title, progress, logs, {
-      label: '重新发布',
-      onClick: () => {
-        modal.close()
-        void republishWhenFree(opts)
+    const modal = createProgressModal(
+      opts.title,
+      progress,
+      logs,
+      {
+        label: '重新发布',
+        onClick: () => {
+          modal.close()
+          void republishWhenFree(opts)
+        },
       },
-    })
+      { indeterminate: true },
+    )
 
     const updateContent = () => {
       modal.update()
     }
 
     addLog(`开始发布...`)
-    progress.percent = 10
+    // 7.8（裁决 A 诚实文案）：单请求 API 拿不到逐节点完成事件，不伪造分步百分比——
+    // 过程行只报选中节点数（N=selectedNodeIds.length，非集群节点总数），进度呈不确定态，
+    // 完成时一次性出结果（终态逐节点渲染不动）；400ms 人为延迟一并去除
+    addLog(`正在同步 ${opts.nodeIds.length} 个节点...`)
     updateContent()
 
-    await new Promise((r) => setTimeout(r, 400))
-
     try {
-      addLog('正在构建发布配置...')
-      progress.percent = 30
-      updateContent()
-
       const res = await api.post(opts.apiEndpoint, { node_ids: opts.nodeIds }, { timeout: PROGRESS_TASK_TIMEOUT })
       const data = res.data as PublishResultData
-      progress.percent = 70
 
       if (opts.handleResult) {
         opts.handleResult(data, addLog, progress)

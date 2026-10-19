@@ -438,3 +438,87 @@ describe('CentralList.vue - 空状态与 actions 统一（B6）', () => {
     expect(actionsRow.findAll('button')[0].classes()).toContain('btn-secondary')
   })
 })
+
+// ── 组2 2.2：连接测试节点清单走共享全量拉取工具（route-management-ux-batch1 组2）──────
+// showConnectionTest 不再显式 page_size: PAGE_SIZE_DROPDOWN(500) 单页拉取，
+// >500 节点集群的连接测试清单会被静默截断；改经 fetchAllClusterNodes 分页循环取全。
+
+describe('CentralList.vue 连接测试节点清单全量拉取（route-management-ux-batch1 组2）', () => {
+  function newRouter() {
+    return createRouter({
+      history: createWebHistory(),
+      routes: [{ path: '/', name: 'Dashboard', component: { template: '<div />' } }],
+    })
+  }
+
+  const cluster = {
+    id: 1,
+    name: 'demo-cluster',
+    display_name: '演示集群',
+    group_name: '',
+    status: 1,
+    node_count: 501,
+    healthy_node_count: 501,
+    upstream_count: 0,
+    route_count: 0,
+    plugin_config_count: 0,
+    global_rule_count: 0,
+    static_resource_count: 0,
+    plugin_metadata_count: 0,
+    nodes: [],
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    setActivePinia(createPinia())
+    mockLocalStorage()
+    localStorage.setItem('user', JSON.stringify({ id: 1, username: 'admin', role: 'admin' }))
+    localStorage.setItem('token', 'mock-token')
+  })
+
+  it('节点 >500：分页循环续拉 page=2，测试弹窗清单含第 2 页节点', async () => {
+    const page1 = Array.from({ length: 500 }, (_, i) => ({
+      id: i + 1,
+      ip: `10.1.0.${(i % 254) + 1}`,
+      service_port: 16610,
+      management_port: 16620,
+      status: 1,
+    }))
+    const page2 = [{ id: 501, ip: '10.9.9.9', service_port: 16610, management_port: 16999, status: 1 }]
+    // 页片按请求 page 参数切分（CentralList 挂载期 loadClusters 本就会带 page=1 拉一次节点，
+    // 不能按调用次数切分）；按参数切分后无论额外来源，分页循环语义都确定
+    mockApiGet.mockImplementation((url: string, cfg?: { params?: { page?: number } }) => {
+      if (url === '/clusters') return Promise.resolve({ data: { items: [cluster], total: 1 } })
+      if (url.startsWith('/clusters/1/nodes')) {
+        const page = cfg?.params?.page ?? 1
+        return Promise.resolve({ data: { total: 501, items: page === 1 ? page1 : page2 } })
+      }
+      return Promise.resolve({ data: {} })
+    })
+
+    const CentralList = (await import('@/views/CentralList.vue')).default
+    const wrapper = mount(CentralList, { global: { plugins: [newRouter()] } })
+    await flushPromises()
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+
+    const openBtn = wrapper.findAll('button').find((b) => b.text().includes('连接测试'))
+    expect(openBtn).toBeTruthy()
+    await openBtn!.trigger('click')
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+
+    // mock 层：分页循环续拉到 page=2（挂载期 loadClusters 另有 page=1/page_size=20 的既有拉取，
+    // 不属于工具循环）；工具续拉请求必须 page_size=500（对齐后端 MAX_PAGE_SIZE）
+    const nodeCalls = mockApiGet.mock.calls.filter((c) => String(c[0]).startsWith('/clusters/1/nodes'))
+    const pages = nodeCalls.map((c) => (c[1] as { params: { page: number } }).params.page)
+    expect(pages).toContain(2)
+    expect(pages.filter((p) => p === 2)).toHaveLength(1)
+    const toolSecondPage = nodeCalls.find((c) => (c[1] as { params: { page: number } }).params.page === 2)
+    expect((toolSecondPage![1] as { params: { page_size: number } }).params.page_size).toBe(500)
+    // UI 层：清单渲染第 2 页节点（单页 500 会静默截断，10.9.9.9:16999 即铁证）
+    const nodeRows = wrapper.findAll('.test-node-row')
+    expect(nodeRows.length).toBe(501)
+    expect(nodeRows.some((r) => r.text().includes('10.9.9.9:16999'))).toBe(true)
+  })
+})

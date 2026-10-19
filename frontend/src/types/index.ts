@@ -148,6 +148,8 @@ export interface Route {
   enable_websocket?: boolean
   current_version?: number
   published_at?: string
+  /** 待发布（后端经 edge_sync.derive_pending_publish 统一推导，单一事实源） */
+  pending_publish?: boolean
   plugins?: RoutePlugin[]
 }
 

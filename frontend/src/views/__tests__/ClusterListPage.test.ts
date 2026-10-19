@@ -685,3 +685,86 @@ describe('ClusterList.vue - 空状态与入口（B6）', () => {
     expect(dialog.props('mode')).toBe('download')
   })
 })
+
+// ── 组2 2.2：连接测试节点清单走共享全量拉取工具（route-management-ux-batch1 组2）──────
+// showConnectionTest 不再显式 page_size: PAGE_SIZE_DROPDOWN(500) 单页拉取，
+// >500 节点集群的连接测试清单会被静默截断；改经 fetchAllClusterNodes 分页循环取全。
+
+describe('ClusterList.vue 连接测试节点清单全量拉取（route-management-ux-batch1 组2）', () => {
+  function newRouter() {
+    return createRouter({
+      history: createWebHistory(),
+      routes: [{ path: '/', name: 'Dashboard', component: { template: '<div />' } }],
+    })
+  }
+
+  const cluster = {
+    id: 1,
+    name: 'demo-cluster',
+    display_name: '演示集群',
+    group_name: '',
+    status: 1,
+    node_count: 501,
+    healthy_node_count: 501,
+    upstream_count: 0,
+    route_count: 0,
+    plugin_config_count: 0,
+    global_rule_count: 0,
+    static_resource_count: 0,
+    plugin_metadata_count: 0,
+    nodes: [],
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    setActivePinia(createPinia())
+    mockLocalStorage()
+    localStorage.setItem('user', JSON.stringify({ id: 1, username: 'admin', role: 'admin' }))
+    localStorage.setItem('token', 'mock-token')
+    mockListRelayGateways.mockResolvedValue({ data: [] })
+  })
+
+  it('节点 >500：分页循环续拉 page=2，测试弹窗清单含第 2 页节点', async () => {
+    const page1 = Array.from({ length: 500 }, (_, i) => ({
+      id: i + 1,
+      ip: `10.2.0.${(i % 254) + 1}`,
+      service_port: 16610,
+      management_port: 16620,
+      status: 1,
+    }))
+    const page2 = [{ id: 501, ip: '10.8.8.8', service_port: 16610, management_port: 16888, status: 1 }]
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/clusters') return Promise.resolve({ data: { items: [cluster], total: 1 } })
+      if (url.startsWith('/clusters/1/nodes')) {
+        const calls = mockApiGet.mock.calls.filter((c) => String(c[0]).startsWith('/clusters/1/nodes'))
+        return Promise.resolve(
+          calls.length <= 1 ? { data: { total: 501, items: page1 } } : { data: { total: 501, items: page2 } },
+        )
+      }
+      return Promise.resolve({ data: {} })
+    })
+
+    const ClusterList = (await import('@/views/ClusterList.vue')).default
+    const wrapper = mount(ClusterList, { global: { plugins: [newRouter()] } })
+    await flushPromises()
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+
+    const openBtn = wrapper.findAll('button').find((b) => b.text().includes('连接测试'))
+    expect(openBtn).toBeTruthy()
+    await openBtn!.trigger('click')
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+
+    // mock 层：分页循环请求参数（page=1,2；page_size=500）
+    const nodeCalls = mockApiGet.mock.calls.filter((c) => String(c[0]).startsWith('/clusters/1/nodes'))
+    expect(nodeCalls.map((c) => (c[1] as { params: { page: number } }).params.page)).toEqual([1, 2])
+    for (const c of nodeCalls) {
+      expect((c[1] as { params: { page_size: number } }).params.page_size).toBe(500)
+    }
+    // UI 层：清单渲染第 2 页节点（单页 500 会静默截断，10.8.8.8:16888 即铁证）
+    const nodeRows = wrapper.findAll('.test-node-row')
+    expect(nodeRows.length).toBe(501)
+    expect(nodeRows.some((r) => r.text().includes('10.8.8.8:16888'))).toBe(true)
+  })
+})

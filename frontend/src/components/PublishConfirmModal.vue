@@ -81,8 +81,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import api from '@/api'
-import { PAGE_SIZE_DROPDOWN } from '@/constants'
+import { fetchAllClusterNodes } from '@/composables/useClusterUtils'
 
 interface NodeItem {
   id: number
@@ -91,11 +90,6 @@ interface NodeItem {
   management_port: number
   edge_path: string
   status: number
-}
-
-interface NodeListResponse {
-  total: number
-  items: NodeItem[]
 }
 
 const props = defineProps<{
@@ -136,12 +130,12 @@ const fetchNodes = async (): Promise<void> => {
   loading.value = true
   error.value = null
   try {
-    // 全量取数（global-rule-ux-close-loop 5.1，对齐删集群先例 useClusterUtils.deleteClusterWithConfirm）：
-    // 后端默认 page_size=20 会静默截断节点列表；PAGE_SIZE_DROPDOWN(500) 对齐后端 MAX_PAGE_SIZE
-    const res = await api.get<NodeListResponse>(`/clusters/${props.clusterId}/nodes`, {
-      params: { page: 1, page_size: PAGE_SIZE_DROPDOWN },
-    })
-    nodes.value = res.data.items || []
+    // 全量取数统一走共享工具（route-management-ux-batch1 组2）：分页循环拉取，
+    // >500 节点集群不再被单页 500 静默截断；任一页失败整体抛错（进下方错误态 + 重新加载），
+    // 不以部分清单静默继续
+    nodes.value = await fetchAllClusterNodes<NodeItem>(props.clusterId)
+    // 7.1（publish-node-select）：open 默认选中全部在线节点；离线节点保持禁选不勾
+    selectedNodeIds.value = nodes.value.filter((n) => n.status === 1).map((n) => n.id)
   } catch (e: unknown) {
     const err = e as { response?: { data?: { detail?: string } }; message?: string }
     error.value = err?.response?.data?.detail || err?.message || '加载节点列表失败'

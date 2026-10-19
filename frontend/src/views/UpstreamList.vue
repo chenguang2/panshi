@@ -91,7 +91,7 @@
           </template>
         </template>
 
-        <template #empty>
+        <template #emptyText>
           <div class="empty-state">
             <div class="empty-state-icon">◎</div>
             <template v-if="hasActiveFilters">
@@ -248,14 +248,27 @@ function handleAction(action: string, record: any) {
 function openPublishModal(record: any) {
   publishingRecord.value = record
   publishClusterId.value = record.cluster_id
+  // 行内发布默认只刷新列表；版本弹窗出口条发布用「刷新 + 重开版本弹窗」覆盖此默认（组3 A2）
+  publishRefreshFn.value = loadUpstreams
   publishModalVisible.value = true
 }
 
-// 1.3：版本管理弹窗恢复成功后的「立即发布恢复的配置」出口 → 同一行内发布的链路
+// 本次发布完成后的刷新动作（组3 A2）：发布确认弹窗是行内发布与版本弹窗出口条共用的单入口，
+// 出口条链路通过覆盖本刷新函数在发布成功后重开版本弹窗（重开触发既有 open watch 重载版本列表）
+const publishRefreshFn = ref<() => Promise<void>>(loadUpstreams)
+
+// 1.3/组3 A2：版本管理弹窗恢复成功后的「立即发布恢复的配置」出口 → 同一行内发布的链路；
+// 发布成功后刷新列表并重开版本弹窗（重开触发既有 open watch 重载版本列表并复位出口条）
 function onVmPublishRequested() {
+  if (vmResourceId.value == null || vmClusterId.value == null || !vmResourceName.value) return
+  publishingRecord.value = { id: vmResourceId.value, cluster_id: vmClusterId.value, name: vmResourceName.value }
+  publishClusterId.value = vmClusterId.value
+  publishRefreshFn.value = async () => {
+    await loadUpstreams()
+    vmModalVisible.value = true
+  }
   vmModalVisible.value = false
-  const record = upstreams.value.find((u) => u.id === vmResourceId.value)
-  openPublishModal(record || { id: vmResourceId.value, cluster_id: vmClusterId.value, name: vmResourceName.value })
+  publishModalVisible.value = true
 }
 
 // 3.1/3.2：表单保存引导「立即发布」→ 打开该上游的发布弹窗（与行内发布同链路）
@@ -363,8 +376,9 @@ async function onPublishConfirm(nodeIds: number[]) {
     title: `发布上游: ${record.name}`,
     apiEndpoint: `/clusters/${record.cluster_id}/upstreams/${record.id}/publish`,
     nodeIds,
-    refreshFn: loadUpstreams,
+    refreshFn: publishRefreshFn.value,
   })
+  publishRefreshFn.value = loadUpstreams
 }
 
 function onPublishCancel() {

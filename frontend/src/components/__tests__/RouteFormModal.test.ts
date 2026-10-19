@@ -166,6 +166,33 @@ describe('RouteFormModal.vue（组件级提交载荷）', () => {
     expect(body.enable_websocket).toBe(false)
   })
 
+  it('D: 保存失败经 getApiErrorMessage 透出后端 detail（batch1 组5 5.2，不再裸「保存失败」）', async () => {
+    const { message } = await import('ant-design-vue')
+    const w = await mountModal()
+    fillBasics(w.vm)
+    mockApiPost.mockRejectedValueOnce({ response: { data: { detail: '路由名称已存在' } } })
+    await submit(w)
+    const called = vi.mocked(message.error).mock.calls.some((args) => String(args[0]) === '路由名称已存在')
+    expect(called, '应透传后端 detail，而非裸「保存失败」').toBe(true)
+  })
+
+  it('D2: 复制路径钉住（batch1 组1 1.2）：回填字段来自源路由、提交 POST 带 WS/插件组、不改写名称', async () => {
+    const w = await mountModal({ editingRoute: makeEditingRoute({ plugin_config_ids: ['pg-9'] }), copyingRoute: true })
+    const vm: any = w.vm
+    // 回填：名称前缀「复制_」+ WS/插件组来自源路由
+    expect(vm.form.name).toBe('复制_old-route')
+    expect(vm.form.enableWebsocket).toBe(true)
+    expect(vm.pluginConfigIds).toEqual(['pg-9'])
+    await submit(w)
+    // 复制 = 新建（POST，非 PUT），两字段随载荷提交
+    expect(mockApiPost).toHaveBeenCalledTimes(1)
+    expect(mockApiPost).toHaveBeenCalledWith(
+      '/clusters/1/routes',
+      expect.objectContaining({ name: '复制_old-route', enable_websocket: true, plugin_config_ids: ['pg-9'] }),
+    )
+    expect(mockApiPut.mock.calls.every((c: unknown[]) => String(c[0]).endsWith('/plugins'))).toBe(true)
+  })
+
   it('C: 编辑回填带 advanced_match 的路由 → 表单反显，再保存 PUT 往返一致', async () => {
     const w = await mountModal({ editingRoute: makeEditingRoute() })
     const vm: any = w.vm
@@ -242,5 +269,61 @@ describe('RouteFormModal.vue — 插件组 Tab 空态与未发布标注（M2/M3�
     expect(w.text()).toContain('未发布')
     expect(w.text()).toContain('v3')
     expect(w.text()).not.toContain('v0')
+  })
+})
+
+// ── route-management-ux-batch1 组7：优先级语义提示（7.5）与深链预选（7.6）──────
+
+describe('RouteFormModal.vue 优先级提示与深链预选（batch1 7.5/7.6）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/plugins/builtin') return Promise.resolve({ data: { plugins: [] } })
+      if (url.includes('/upstreams')) return Promise.resolve({ data: { items: [] } })
+      if (url.includes('/plugin_configs')) return Promise.resolve({ data: { items: [] } })
+      if (url.endsWith('/plugins')) return Promise.resolve({ data: { plugins: [] } })
+      return Promise.reject(new Error('unexpected GET: ' + url))
+    })
+  })
+
+  it('7.5：优先级输入下方提示「数值越大越优先匹配」', async () => {
+    const RouteFormModal = (await import('../RouteFormModal.vue')).default
+    const wrapper = mount(RouteFormModal, {
+      props: { visible: false, editingRoute: null, clusters: [{ id: 1, name: 'c1' }] },
+      global: { stubs },
+    })
+    await wrapper.setProps({ visible: true })
+    await flushPromises()
+
+    const hints = wrapper.findAll('.form-hint').map((h) => h.text())
+    expect(hints).toContain('数值越大越优先匹配')
+  })
+
+  it('7.6：defaultClusterId 传入时新建表单预选该集群；不传不预选', async () => {
+    const RouteFormModal = (await import('../RouteFormModal.vue')).default
+
+    const withDefault = mount(RouteFormModal, {
+      props: {
+        visible: false,
+        editingRoute: null,
+        clusters: [
+          { id: 1, name: 'c1' },
+          { id: 5, name: 'c5' },
+        ],
+        defaultClusterId: 5,
+      },
+      global: { stubs },
+    })
+    await withDefault.setProps({ visible: true })
+    await flushPromises()
+    expect((withDefault.vm as any).form.cluster_id).toBe(5)
+
+    const withoutDefault = mount(RouteFormModal, {
+      props: { visible: false, editingRoute: null, clusters: [{ id: 1, name: 'c1' }] },
+      global: { stubs },
+    })
+    await withoutDefault.setProps({ visible: true })
+    await flushPromises()
+    expect((withoutDefault.vm as any).form.cluster_id).toBe('')
   })
 })

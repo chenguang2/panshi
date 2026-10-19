@@ -325,7 +325,7 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
   // ── add / edit / copy modal ────────────────────────────────────────
 
   async function showAddRouteModal(cluster: Cluster) {
-    await loadRoutes(cluster)
+    // 7.7（C4）：Tab 开新建弹窗不再前置 await loadRoutes（C2 数据源下新建无列表依赖）
     await loadAvailablePlugins()
     editingRoute.value = null
     copyingRoute.value = false
@@ -342,6 +342,7 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
       advancedMatch: { vars: [] },
       plugins: [],
       plugin_config_ids: [],
+      enableWebsocket: false,
     })
     routeModalActiveTab.value = 'basic'
     if ((cluster.plugin_configs?.length ?? 0) > 0 || !cluster.plugin_configs) {
@@ -357,11 +358,16 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
   }
 
   async function editRouteByRecord(cluster: Cluster, route: Route) {
-    await loadRoutes(cluster)
     await loadAvailablePlugins()
     await loadPluginConfigs(cluster)
 
-    const routeData = cluster.routes?.find((r) => r.id === route.id)
+    // 7.7（C4）：Tab 行编辑不再前置 await loadRoutes——直接用列表现有记录回填；
+    // 仅「列表找不到记录」时重载一次（列表可能滞后），仍找不到才提示。
+    let routeData = cluster.routes?.find((r) => r.id === route.id)
+    if (!routeData) {
+      await loadRoutes(cluster)
+      routeData = cluster.routes?.find((r) => r.id === route.id)
+    }
     if (!routeData) {
       message.warning('路由不存在')
       return
@@ -404,11 +410,20 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
   }
 
   async function copyRouteByRecord(cluster: Cluster, route: Route) {
-    await loadRoutes(cluster)
     await loadAvailablePlugins()
 
-    const routeData = cluster.routes?.find((r) => r.id === route.id)
-    const sourceRoute = routeData || route
+    // 7.7（C4）：与编辑同语义——不再前置 await loadRoutes；仅「列表找不到记录」时
+    // 重载一次，仍找不到不再拿旧 record 兜底（提示后直接返回，宁可不响应也不复制脏数据）。
+    let routeData = cluster.routes?.find((r) => r.id === route.id)
+    if (!routeData) {
+      await loadRoutes(cluster)
+      routeData = cluster.routes?.find((r) => r.id === route.id)
+    }
+    if (!routeData) {
+      message.warning('路由不存在')
+      return
+    }
+    const sourceRoute = routeData
 
     editingRoute.value = null
     copyingRoute.value = true
@@ -422,6 +437,12 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
     routeForm.description = sourceRoute.description || ''
     routeForm.advancedMatch = { vars: sourceRoute.vars || [] }
     routeForm.advancedMatchEnabled = !!(sourceRoute.advanced_match_enabled || routeForm.advancedMatch.vars.length > 0)
+    // 复制表单整体回填（batch1 组1 1.1）：WS/插件组必须来自源路由本身，
+    // 不得残留同会话前一次编辑/复制弹窗的表单脏状态（写法对齐 editRouteByRecord）
+    routeForm.enableWebsocket = !!sourceRoute.enable_websocket
+    routeForm.plugin_config_ids = (sourceRoute as unknown as Record<string, unknown>).plugin_config_ids
+      ? [...((sourceRoute as unknown as Record<string, unknown>).plugin_config_ids as string[])]
+      : []
     routeForm.plugins = []
     routeModalActiveTab.value = 'basic'
 

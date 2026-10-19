@@ -569,12 +569,12 @@ import {
   executeDeleteWithProgress,
   routeLabel,
   deleteClusterWithConfirm,
+  fetchAllClusterNodes,
 } from '@/composables/useClusterUtils'
 import { downloadBlob } from '@/utils/download'
 import api from '@/api'
 import ClusterDetailModal from '@/components/ClusterDetailModal.vue'
 import { useClusterRouteBadge } from '@/composables/useClusterRouteBadge'
-import { PAGE_SIZE_DROPDOWN } from '@/constants'
 import { formatDateTime } from '@/utils/format'
 import type { Cluster, Upstream, Plugin } from '@/types'
 import { useAuthStore } from '@/stores/auth'
@@ -1152,8 +1152,16 @@ async function testCluster(cluster: Cluster) {
   testLogs.value = []
   testRunning.value = false
   try {
-    const res = await api.get(`/clusters/${cluster.id}/nodes`, { params: { page: 1, page_size: PAGE_SIZE_DROPDOWN } })
-    testNodes.value = (res.data.items || []).map((n: any) => ({
+    // 全量拉取统一走共享工具（route-management-ux-batch1 组2）：分页循环取全，
+    // >500 节点集群的连接测试清单不再被单页 500 静默截断；失败维持既有降级（空清单）
+    const items = await fetchAllClusterNodes<{
+      id: number
+      ip: string
+      service_port: number
+      management_port: number
+      status: number
+    }>(cluster.id)
+    testNodes.value = items.map((n) => ({
       id: n.id,
       ip: n.ip,
       service_port: n.service_port,

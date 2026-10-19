@@ -548,6 +548,62 @@ describe('经中继 / 直连 路径标签（发布进度）', () => {
   })
 })
 
+// ── 发布进度诚实化（route-management-ux-batch1 7.8，裁决 A）──────────────────
+// 去固定假步骤（10→30→70→100）与 400ms 人为延迟；过程行「正在同步 N 个节点...」
+// N=选中节点数（C2 钉死，非集群节点总数）；不确定态进度；完成一次性出结果；终态渲染不动。
+
+describe('发布进度诚实化（route-management-ux-batch1 7.8）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+  })
+
+  it('过程行「正在同步 N 个节点...」N=选中节点数（nodeIds.length）', async () => {
+    const { executePublish } = await import('../useClusterUtils')
+    mockApiPost.mockResolvedValue({ data: { status: 'ok', message: '发布完成' } })
+
+    await executePublish({
+      title: '发布路由: r1',
+      apiEndpoint: '/clusters/1/routes/5/publish',
+      nodeIds: [1, 2, 3],
+      refreshFn: vi.fn(),
+    })
+
+    const text = document.body.textContent || ''
+    expect(text).toContain('正在同步 3 个节点')
+    expect(text).not.toContain('正在同步 0 个节点')
+  })
+
+  it('执行中不出现假步骤与假文案（10%/30%/70%、「正在构建发布配置」、100%），完成一次性出结果', async () => {
+    const { executePublish } = await import('../useClusterUtils')
+    let release!: (v: unknown) => void
+    mockApiPost.mockImplementation(() => new Promise((resolve) => (release = resolve)))
+
+    const task = executePublish({
+      title: '发布路由: r1',
+      apiEndpoint: '/clusters/1/routes/5/publish',
+      nodeIds: [1, 2, 3],
+      refreshFn: vi.fn(),
+    })
+    await vi.waitFor(() => expect(mockApiPost).toHaveBeenCalledTimes(1))
+
+    const during = document.body.textContent || ''
+    expect(during).toContain('正在同步 3 个节点')
+    expect(during).not.toContain('正在构建发布配置')
+    expect(during).not.toContain('10%')
+    expect(during).not.toContain('30%')
+    expect(during).not.toContain('70%')
+    expect(during).not.toContain('100%')
+    expect(during).not.toContain('✅')
+
+    release({ data: { status: 'ok', message: '发布完成' } })
+    await task
+
+    const after = document.body.textContent || ''
+    expect(after).toContain('✅ 发布成功!')
+  })
+})
+
 describe('发布/删除 长超时与 in-flight 锁（M7）', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -1357,5 +1413,106 @@ describe('showNodeDeleteConfirm（节点删除确认变体）', () => {
     cancelBtn!.click()
     await vi.waitFor(() => expect(document.body.textContent || '').not.toContain('删除节点 10.0.0.5'))
     expect(onOk).not.toHaveBeenCalled()
+  })
+})
+
+// ── 全量拉取集群节点工具 fetchAllClusterNodes（route-management-ux-batch1 组2）────────
+// 契约：分页循环拉取（page=1..N，page_size=500 封顶）聚合全部节点；任一页失败 → 整体抛错
+// （不返回部分清单）；聚合数量与后端 total 不符 → 抛错（防静默截断）。
+
+describe('fetchAllClusterNodes 全量拉取集群节点（route-management-ux-batch1 组2）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+  })
+
+  function makeNodes(from: number, count: number) {
+    return Array.from({ length: count }, (_, i) => {
+      const id = from + i
+      return {
+        id,
+        ip: `10.${Math.floor(id / 254) % 254}.${(id % 254) + 1}.9`,
+        service_port: 16610,
+        management_port: 16620,
+        status: 1,
+      }
+    })
+  }
+
+  it('单页（total ≤ 500）：一次请求取全，参数 page=1 & page_size=500', async () => {
+    const { fetchAllClusterNodes } = await import('../useClusterUtils')
+    mockApiGet.mockResolvedValue({ data: { total: 3, items: makeNodes(1, 3) } })
+
+    const nodes = await fetchAllClusterNodes(7)
+
+    expect(nodes).toHaveLength(3)
+    expect(nodes.map((n: { id: number }) => n.id)).toEqual([1, 2, 3])
+    expect(mockApiGet).toHaveBeenCalledTimes(1)
+    expect(mockApiGet).toHaveBeenCalledWith('/clusters/7/nodes', { params: { page: 1, page_size: 500 } })
+  })
+
+  it('0 节点（total=0）：返回空数组，不抛错', async () => {
+    const { fetchAllClusterNodes } = await import('../useClusterUtils')
+    mockApiGet.mockResolvedValue({ data: { total: 0, items: [] } })
+
+    const nodes = await fetchAllClusterNodes(7)
+
+    expect(nodes).toEqual([])
+    expect(mockApiGet).toHaveBeenCalledTimes(1)
+  })
+
+  it('多页聚合（total=600 > 500）：续拉 page=2 并按序合并全部节点', async () => {
+    const { fetchAllClusterNodes } = await import('../useClusterUtils')
+    const page1 = makeNodes(1, 500)
+    const page2 = makeNodes(501, 100)
+    mockApiGet.mockImplementation((_url: string, cfg?: { params?: { page?: number } }) =>
+      Promise.resolve({ data: { total: 600, items: cfg?.params?.page === 1 ? page1 : page2 } }),
+    )
+
+    const nodes = await fetchAllClusterNodes(7)
+
+    expect(nodes).toHaveLength(600)
+    expect(nodes[0].id).toBe(1)
+    expect(nodes[499].id).toBe(500)
+    expect(nodes[599].id).toBe(600)
+    const pages = mockApiGet.mock.calls.map((c) => (c[1] as { params: { page: number } }).params.page)
+    expect(pages).toEqual([1, 2])
+    for (const call of mockApiGet.mock.calls) {
+      expect((call[1] as { params: { page_size: number } }).params.page_size).toBe(500)
+    }
+  })
+
+  it('任一页失败（第 2 页）：整体抛错，不返回部分清单', async () => {
+    const { fetchAllClusterNodes } = await import('../useClusterUtils')
+    mockApiGet.mockImplementation((_url: string, cfg?: { params?: { page?: number } }) =>
+      cfg?.params?.page === 1
+        ? Promise.resolve({ data: { total: 600, items: makeNodes(1, 500) } })
+        : Promise.reject(new Error('第 2 页拉取失败')),
+    )
+
+    await expect(fetchAllClusterNodes(7)).rejects.toThrow('第 2 页拉取失败')
+  })
+
+  it('聚合数量与 total 不符：抛错防静默截断', async () => {
+    const { fetchAllClusterNodes } = await import('../useClusterUtils')
+    mockApiGet.mockImplementation((_url: string, cfg?: { params?: { page?: number } }) => {
+      const page = cfg?.params?.page ?? 1
+      if (page === 1) return Promise.resolve({ data: { total: 600, items: makeNodes(1, 500) } })
+      if (page === 2) return Promise.resolve({ data: { total: 600, items: makeNodes(501, 50) } })
+      return Promise.resolve({ data: { total: 600, items: [] } })
+    })
+
+    await expect(fetchAllClusterNodes(7)).rejects.toThrow('节点清单拉取不完整')
+    await expect(fetchAllClusterNodes(7)).rejects.toThrow('期望 600 个，实际 550 个')
+  })
+
+  it('旧响应形状缺 total：按单页处理不抛错（向后兼容）', async () => {
+    const { fetchAllClusterNodes } = await import('../useClusterUtils')
+    mockApiGet.mockResolvedValue({ data: { items: makeNodes(1, 2) } })
+
+    const nodes = await fetchAllClusterNodes(7)
+
+    expect(nodes).toHaveLength(2)
+    expect(mockApiGet).toHaveBeenCalledTimes(1)
   })
 })

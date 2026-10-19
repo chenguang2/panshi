@@ -23,7 +23,7 @@
         <input
           v-model="searchText"
           type="text"
-          placeholder="搜索名称、URI、描述..."
+          placeholder="搜索名称、URI、描述、域名..."
           class="form-input"
           @input="onSearch"
         />
@@ -60,9 +60,15 @@
       <select v-model="publishFilter" class="form-input" style="width: 130px" @change="onFilterChange">
         <option value="">全部状态</option>
         <option value="published">已发布</option>
+        <option value="pending">待发布</option>
         <option value="unpublished">未发布</option>
       </select>
-      <span class="text-muted text-sm">共 {{ totalCount }} 条路由</span>
+      <!-- 7.3：全量「方法」下拉，与上方 chips 同值联动（chips 只放常驻高频项） -->
+      <select v-model="activeMethod" class="form-input method-filter" style="width: 130px" @change="onFilterChange">
+        <option value="">全部方法</option>
+        <option v-for="m in methodOptions" :key="m" :value="m">{{ m }}</option>
+      </select>
+      <span class="filter-count text-muted text-sm">共 {{ totalCount }} 条路由</span>
     </div>
 
     <div class="table-container">
@@ -121,8 +127,12 @@
             <span class="priority-badge">{{ record.priority }}</span>
           </template>
 
-          <template v-if="column.key === 'version'">
-            <span class="text-mono text-sm">v{{ record.current_version || '-' }}</span>
+          <template v-if="column.key === 'publish_status'">
+            <PublishStatusTag
+              :version="record.current_version"
+              :published-at="record.published_at"
+              :pending="record.pending_publish === true"
+            />
           </template>
 
           <template v-if="column.key === 'created_at'">
@@ -131,7 +141,10 @@
 
           <template v-if="column.key === 'actions'">
             <template v-if="hasDnsPlugin(record)">
-              <a-button type="text" size="small" class="action-trigger-btn" @click="alertDnsRoute(record)">⋯</a-button>
+              <!-- 7.9：DNS 路由禁用行内操作 + tooltip 指路（替代 toast 拦截） -->
+              <a-tooltip :title="DNS_ROUTE_HINT" placement="top">
+                <a-button type="text" size="small" class="action-trigger-btn" disabled>⋯</a-button>
+              </a-tooltip>
             </template>
             <template v-else>
               <a-dropdown :trigger="['click']">
@@ -150,10 +163,18 @@
           </template>
         </template>
 
-        <template #empty>
+        <template #emptyText>
           <div class="empty-state">
             <div class="empty-state-icon">◇</div>
-            <p>暂无路由规则</p>
+            <!-- 7.2：空态双形态——无筛选引导新建，有筛选引导清空（含分组重置，C8） -->
+            <template v-if="hasActiveFilters">
+              <p>没有符合条件路由</p>
+              <button class="btn btn-secondary" @click="clearFilters">清空筛选</button>
+            </template>
+            <template v-else>
+              <p>尚未创建路由</p>
+              <button class="btn btn-primary" @click="openCreateModal">新建路由</button>
+            </template>
           </div>
         </template>
       </a-table>
@@ -164,6 +185,7 @@
       :editing-route="editingRoute"
       :copying-route="isCopy"
       :clusters="clusters"
+      :default-cluster-id="defaultClusterId"
       @close="closeFormModal"
       @saved="onSaved"
     />
@@ -173,8 +195,10 @@
       :resource-id="vmId"
       :cluster-id="vmClusterId"
       :resource-name="vmName"
+      :can-publish="true"
       @version-change="loadRoutes"
       @published="loadRoutes"
+      @publish-requested="onVmPublishRequested"
     />
     <PublishConfirmModal
       v-model:visible="publishVisible"
@@ -196,9 +220,15 @@ import api from '@/api'
 import { PAGE_SIZE_TABLE, PAGE_SIZE_DROPDOWN } from '@/constants'
 import PageHeader from '@/components/PageHeader.vue'
 import RouteFormModal from '@/components/RouteFormModal.vue'
+import PublishStatusTag from '@/components/PublishStatusTag.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
-import { executePublish, showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
+import {
+  executePublish,
+  showDeleteConfirm,
+  executeDeleteWithProgress,
+  fetchAllClusterNodes,
+} from '@/composables/useClusterUtils'
 import { paginationProps } from '@/composables/usePagination'
 import { useRoute } from 'vue-router'
 
@@ -248,6 +278,8 @@ const pluginOptions = ref<{ name: string; display_name?: string }[]>([])
 const formModalVisible = ref(false)
 const editingRoute = ref<any | null>(null)
 const isCopy = ref(false)
+// 7.6：深链进入时预选的集群 id（仅新建场景预选；用户手动打开新建时不预选）
+const defaultClusterId = ref<number | null>(null)
 const vmVisible = ref(false)
 const vmId = ref<number | null>(null)
 const vmClusterId = ref<number | null>(null)
@@ -258,35 +290,27 @@ const publishingRecord = ref<any | null>(null)
 
 const columns = [
   { title: '#', key: 'index', width: 45 },
-  { title: '名称', dataIndex: 'name', key: 'name', sorter: (a: any, b: any) => a.name?.localeCompare(b.name) },
-  { title: 'URI', key: 'uri', sorter: (a: any, b: any) => (a.uri || '').localeCompare(b.uri || '') },
+  { title: '名称', dataIndex: 'name', key: 'name', sorter: true },
+  { title: 'URI', key: 'uri', sorter: true },
   { title: '方法', key: 'methods' },
+  { title: '上游', key: 'upstream' },
+  { title: '集群', dataIndex: 'cluster_name', key: 'cluster_name' },
+  { title: '优先级', key: 'priority', sorter: true },
   {
-    title: '上游',
-    key: 'upstream',
-    sorter: (a: any, b: any) => (a.upstream_name || '').localeCompare(b.upstream_name || ''),
-  },
-  {
-    title: '集群',
-    dataIndex: 'cluster_name',
-    key: 'cluster_name',
-    sorter: (a: any, b: any) => (a.cluster_name || '').localeCompare(b.cluster_name || ''),
-  },
-  { title: '优先级', key: 'priority', sorter: (a: any, b: any) => (a.priority || 0) - (b.priority || 0) },
-  {
-    title: '版本',
-    key: 'version',
-    sorter: (a: any, b: any) => ((a.current_version || '') + '').localeCompare((b.current_version || '') + ''),
+    title: '发布状态',
+    key: 'publish_status',
   },
   {
     title: '创建时间',
     dataIndex: 'created_at',
     key: 'created_at',
-    sorter: (a: any, b: any) => (a.created_at || '').localeCompare(b.created_at || ''),
+    sorter: true,
   },
   { title: '操作', key: 'actions', width: 80 },
 ]
 
+// 7.3：chips 收敛为常驻高频项（全部/GET/POST/PUT/DELETE/PATCH）；全量方法入口
+// 收敛到「方法」下拉（methodOptions，与表单方法集一致）
 const methodFilters = [
   { label: '全部', value: '' },
   { label: 'GET', value: 'GET' },
@@ -294,9 +318,39 @@ const methodFilters = [
   { label: 'PUT', value: 'PUT' },
   { label: 'DELETE', value: 'DELETE' },
   { label: 'PATCH', value: 'PATCH' },
-  { label: 'CONNECT', value: 'CONNECT' },
-  { label: 'TRACE', value: 'TRACE' },
 ]
+const methodOptions = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS', 'CONNECT', 'TRACE']
+
+// 7.9：DNS 路由行内操作统一指路文案（独立页 tooltip 与 Tab 页 tooltip 共用语义）
+const DNS_ROUTE_HINT = 'DNS 路由请在「DNS 代理」页管理'
+
+// 7.2：空态双形态判定——任一筛选生效即视为「有筛选」
+const hasActiveFilters = computed(
+  () =>
+    !!searchText.value ||
+    !!clusterFilter.value ||
+    groupFilter.value !== '__all__' ||
+    !!upstreamFilter.value ||
+    !!pluginFilter.value ||
+    !!publishFilter.value ||
+    !!activeMethod.value,
+)
+
+/** 7.2（C8）：清空全部筛选——必须包含分组下拉复位（__all__），并重置回第 1 页重查 */
+function clearFilters() {
+  searchText.value = ''
+  clusterFilter.value = ''
+  groupFilter.value = '__all__'
+  upstreamFilter.value = ''
+  pluginFilter.value = ''
+  publishFilter.value = ''
+  activeMethod.value = ''
+  upstreams.value = []
+  sortBy.value = ''
+  sortOrder.value = ''
+  page.value = 1
+  loadRoutes()
+}
 
 function onFilterChange() {
   page.value = 1
@@ -310,9 +364,37 @@ function onSearch() {
   })
 }
 
-function handleTableChange(pagination: TablePaginationConfig) {
+// ── 服务端排序（batch1 组5 5.1）──
+// A4：可排序收敛 name/uri/priority/created_at（列 sorter: true），值域与后端
+// routes.py ALLOWED_SORT_FIELDS 对齐（后端保留 status 但前端状态列不渲染、不入口）。
+// A5：集群/上游两列移除本地 sorter——本地排序只重排当前页，是排序假象。
+const SORTABLE_COLUMNS = ['name', 'uri', 'priority', 'created_at']
+const sortBy = ref('')
+const sortOrder = ref('')
+
+interface TableSorterEvent {
+  field?: string | string[]
+  column?: { key?: string }
+  order?: 'ascend' | 'descend' | null
+}
+
+function handleTableChange(
+  pagination: TablePaginationConfig,
+  _filters: Record<string, unknown>,
+  sorter: TableSorterEvent | TableSorterEvent[],
+) {
   page.value = pagination.current || 1
   if (pagination.pageSize) pageSize.value = pagination.pageSize
+  // 多列排序时 antdv 传数组，本页单列排序取第一项
+  const s = Array.isArray(sorter) ? sorter[0] : sorter
+  const field = s && !Array.isArray(s.field) ? String(s.field || s.column?.key || '') : ''
+  if (s && s.order && SORTABLE_COLUMNS.includes(field)) {
+    sortBy.value = field
+    sortOrder.value = s.order === 'descend' ? 'desc' : 'asc'
+  } else {
+    sortBy.value = ''
+    sortOrder.value = ''
+  }
   loadRoutes()
 }
 
@@ -326,6 +408,10 @@ async function loadRoutes() {
     if (publishFilter.value) params.publish_status = publishFilter.value
     if (pluginFilter.value) params.plugin = pluginFilter.value
     if (searchText.value) params.search = searchText.value
+    if (sortBy.value) {
+      params.sort_by = sortBy.value
+      params.sort_order = sortOrder.value
+    }
     const res = await api.get('/routes', { params })
     routes.value = res.data.items || []
     totalCount.value = res.data.total || 0
@@ -370,6 +456,7 @@ function onClusterChange() {
 function openCreateModal() {
   editingRoute.value = null
   isCopy.value = false
+  defaultClusterId.value = null
   formModalVisible.value = true
 }
 function editRoute(r: any) {
@@ -379,9 +466,6 @@ function editRoute(r: any) {
 }
 function hasDnsPlugin(r: any): boolean {
   return Array.isArray(r.plugins) && r.plugins.some((p: any) => p.plugin_name === 'dns_upstream')
-}
-function alertDnsRoute(_r: any) {
-  message.warning('这是一条 DNS 查询路由，请在 DNS 查询页面管理')
 }
 function closeFormModal() {
   formModalVisible.value = false
@@ -402,8 +486,15 @@ function copyRoute(r: any) {
 function publishRoute(r: any) {
   publishingRecord.value = r
   publishClusterId.value = r.cluster_id
+  // 行内发布默认只刷新列表；版本弹窗出口条发布会用「刷新 + 重开版本弹窗」覆盖此默认（组3 3.1）
+  publishRefreshFn.value = loadRoutes
   publishVisible.value = true
 }
+
+// 本次发布完成后的刷新动作（组3 3.1）：发布确认弹窗是行内发布与版本弹窗出口条共用的单入口，
+// 出口条链路通过覆盖本刷新函数在发布成功后重开版本弹窗（重开触发既有 open watch 重载版本列表并复位出口条）
+const publishRefreshFn = ref<() => Promise<void>>(loadRoutes)
+
 async function onPublish(nodeIds: number[]) {
   publishVisible.value = false
   const r = publishingRecord.value
@@ -412,15 +503,31 @@ async function onPublish(nodeIds: number[]) {
     title: `发布路由: ${r.name}`,
     apiEndpoint: `/clusters/${r.cluster_id}/routes/${r.id}/publish`,
     nodeIds,
-    refreshFn: loadRoutes,
+    refreshFn: publishRefreshFn.value,
   })
+  publishRefreshFn.value = loadRoutes
+}
+
+// 组3 3.1：版本恢复出口条 → 以版本弹窗上下文资源复用既有发布链路（PublishConfirmModal → executePublish）；
+// 发布成功后刷新列表并重开版本弹窗（取消同样返回版本弹窗——恢复本身已落库，不丢失）
+function onVmPublishRequested() {
+  if (vmId.value == null || vmClusterId.value == null || !vmName.value) return
+  publishingRecord.value = { id: vmId.value, cluster_id: vmClusterId.value, name: vmName.value }
+  publishClusterId.value = vmClusterId.value
+  publishRefreshFn.value = async () => {
+    await loadRoutes()
+    vmVisible.value = true
+  }
+  vmVisible.value = false
+  publishVisible.value = true
 }
 
 async function deleteRoute(r: any) {
   let nodes: { id: number; ip: string; management_port: number }[] = []
   try {
-    const res = await api.get(`/clusters/${r.cluster_id}/nodes`)
-    nodes = res.data?.items || []
+    // 全量拉取统一走共享工具（route-management-ux-batch1 组2）：分页循环取全，
+    // >500 节点集群的删除确认清单不再被单页 500 静默截断；失败维持既有降级（空清单）
+    nodes = await fetchAllClusterNodes<{ id: number; ip: string; management_port: number }>(r.cluster_id)
   } catch {
     /* ignore */
   }
@@ -459,10 +566,31 @@ async function loadPlugins() {
   }
 }
 
+// 7.6：深链 ?cluster_id= —— 进页自动打开新建弹窗并预选该集群；
+// 仅当该集群在授权列表（GET /clusters 用户视角）内才打开，否则忽略深链
+//（列表仍按 cluster_id 过滤，既有行为不变；clusterFilter 同步设置保证首查即带过滤）。
+function resolveDeepLinkClusterId(): number | null {
+  const clusterId = route.query.cluster_id as string | undefined
+  if (!clusterId) return null
+  const numeric = Number(clusterId)
+  const matched = clusters.value.some((c) => c.id === numeric)
+  return matched && Number.isFinite(numeric) ? numeric : null
+}
+
 onMounted(() => {
   const clusterId = route.query.cluster_id as string | undefined
   if (clusterId) clusterFilter.value = clusterId
   loadClusters()
+    .then(() => {
+      const deepClusterId = resolveDeepLinkClusterId()
+      if (deepClusterId != null) {
+        editingRoute.value = null
+        isCopy.value = false
+        defaultClusterId.value = deepClusterId
+        formModalVisible.value = true
+      }
+    })
+    .catch(() => {})
   loadPlugins()
   loadRoutes()
 })
@@ -478,10 +606,15 @@ onUnmounted(() => {
   align-items: center;
   gap: 12px;
   margin-bottom: 20px;
-  flex-wrap: nowrap;
+  /* 7.10：窄屏允许换行，筛选控件不再挤压 */
+  flex-wrap: wrap;
 }
 .text-muted {
   color: var(--muted);
+}
+/* 7.10：计数与（后续的）刷新控制右置同组 */
+.filter-count {
+  margin-left: auto;
 }
 .text-sm {
   font-size: 12px;

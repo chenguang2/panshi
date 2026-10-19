@@ -547,11 +547,15 @@ const upstreamRowClassName = (record: Upstream): string =>
 // 目标节点列：默认展示前 2 个 + +N 折叠（4.2，对齐全局页 target-tag 形态）
 const previewTargets = (record: Upstream) => (record.targets || []).slice(0, 2)
 
-// 版本管理「立即发布恢复的配置」（1.3）：恢复动作针对当前选中的上游
-const publishRestoredUpstream = () => {
+// 版本管理「立即发布恢复的配置」（1.3/组3 A2）：恢复动作针对当前选中的上游；
+// publishUpstreamByRecord 返回后重开版本弹窗——重开触发组件既有 open watch 重载版本列表并
+// 复位出口条（链路为 promise 单出口，取消时同样回到版本弹窗，恢复本身已落库不丢失）
+const publishRestoredUpstream = async () => {
   const selected = props.cluster.selectedUpstream
   if (!selected) return
-  void publishUpstreamByRecord(props.cluster, selected)
+  versionModalVisible.value = false
+  await publishUpstreamByRecord(props.cluster, selected)
+  versionModalVisible.value = true
 }
 
 // Catch native input events from antdv InputNumber to force model update on clear.
