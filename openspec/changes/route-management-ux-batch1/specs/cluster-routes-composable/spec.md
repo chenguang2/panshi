@@ -4,7 +4,7 @@
 
 ### Requirement: useClusterRoutes composable
 
-The system SHALL provide a `useClusterRoutes` composable that encapsulates all route related state and operations, including batch selection and batch delete. 编辑与复制 SHALL 按传入 record 直接填充表单（SHALL NOT 依赖或泄漏前次表单会话状态），SHALL NOT 为打开表单而强制全量重载列表。
+The system SHALL provide a `useClusterRoutes` composable that encapsulates all route related state and operations, including batch selection and batch delete. 新建/编辑/复制 SHALL 按各自初始态或传入 record 完整重置/填充表单（SHALL NOT 依赖或泄漏前次表单会话状态），SHALL NOT 为打开表单而强制全量重载列表。
 
 #### Scenario: Composable returns reactive state
 - **WHEN** `useClusterRoutes(cluster)` is called
@@ -22,10 +22,14 @@ The system SHALL provide a `useClusterRoutes` composable that encapsulates all r
 - **THEN** 前次表单会话残留的 `enableWebsocket`/`plugin_config_ids` SHALL NOT 泄漏进复制表单（先编辑路由 A 再复制路由 B，B 的两字段 SHALL 来自 B）
 - **THEN** 副本 `status` SHALL 沿用源路由（源启用则副本启用，已裁决不改写为禁用）
 
-#### Scenario: Edit/copy opens form without forced list reload
-- **WHEN** 编辑或复制入口以已持有的 record 打开表单
-- **THEN** SHALL 直接按 record 填充并打开弹窗，SHALL NOT 先 `await loadRoutes()` 全量重载列表
-- **THEN** 仅当列表中找不到该记录时 SHALL 兜底重载后再填充
+#### Scenario: Add resets leftover form state
+- **WHEN** `showAddRouteModal(cluster)` 在前次编辑会话（如启用 WebSocket 的路由）之后打开新建表单
+- **THEN** `routeForm.enableWebsocket` SHALL 重置为 false（重置清单 SHALL 覆盖全部表单字段，SHALL NOT 漏 `enableWebsocket`）
+
+#### Scenario: Add/edit/copy open form without forced list reload
+- **WHEN** 新建、编辑或复制入口打开表单
+- **THEN** SHALL 直接按初始态或已持有的 record 填充并打开弹窗，SHALL NOT 先 `await loadRoutes()` 全量重载列表
+- **THEN** 编辑/复制时仅当列表中找不到该记录 SHALL 重载一次列表后重试，仍找不到才提示（新建/编辑/复制三入口兜底行为 SHALL 一致）
 
 #### Scenario: deleteRoutes performs batch delete
 - **WHEN** `deleteRoutes(cluster)` is called with two or more routes checked

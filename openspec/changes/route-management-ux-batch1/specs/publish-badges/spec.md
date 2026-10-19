@@ -26,3 +26,4 @@ The upstream and route tables SHALL display a "发布状态" column rendered by 
 - **WHEN** the route standalone page (`/routes`) renders the list
 - **THEN** the bare version column (`v{current_version}`/`-`) SHALL be replaced by the `PublishStatusTag` column
 - **THEN** the publish status filter SHALL offer a "待发布" option（`publish_status=pending`，基于 pending_publish 过滤）
+- **THEN** 独立页发布状态筛选 SHALL 为互斥三分区（published=有版本且非 pending / pending / unpublished，SHALL NOT 重叠命中，语义见 route-management）

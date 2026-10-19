@@ -8,7 +8,7 @@
 
 #### Scenario: 执行中过程反馈
 - **WHEN** 发布执行中且共 N 个节点
-- **THEN** 过程日志 SHALL 显示「正在同步 N 个节点...」
+- **THEN** 过程日志 SHALL 显示「正在同步 N 个节点...」（N SHALL 为用户勾选的节点数，SHALL NOT 为集群节点总数）
 - **THEN** 进度 SHALL 为不确定态（spinner/无百分比或空进度条），SHALL NOT 显示中间百分比数值
 
 #### Scenario: 终态行为不变
@@ -22,6 +22,10 @@
 #### Scenario: 大集群节点清单完整
 - **WHEN** 集群节点数超过单页上限（20 或 500）并打开删除/发布确认弹窗
 - **THEN** 节点清单 SHALL 列出全部节点（分页循环拉取，多页结果合并）
+
+#### Scenario: 分页拉取中途失败
+- **WHEN** 全量拉取循环中任一页请求失败
+- **THEN** 弹窗 SHALL 进入错误态（复用既有错误展示与重新加载出口），SHALL NOT 以部分节点清单静默继续
 
 #### Scenario: 删除与发布链路共用
 - **WHEN** 独立页删除入口（如 RouteList `deleteRoute`）、Tab 删除链路（`useClusterResourceCore.proceedDelete` 的节点装载）或发布确认（PublishConfirmModal）拉取节点

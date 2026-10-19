@@ -16,12 +16,13 @@ Admins SHALL be able to view, search, filter, create, copy, edit, delete, publis
 #### Scenario: Method filter chips
 - **WHEN** the page loads
 - **THEN** method filter chips SHALL 常驻展示高频方法：全部, GET, POST, PUT, DELETE, PATCH
-- **THEN** 低频方法（OPTIONS/CONNECT/TRACE 等）SHALL 收进方法筛选下拉，SHALL NOT 常驻 chips
+- **THEN** 页面 SHALL 提供方法筛选下拉，选项含全部方法（含低频 OPTIONS/CONNECT/TRACE 等），与 chips 同一选中值双向联动（chips 为高频快捷方式）
+- **THEN** 低频方法（OPTIONS/CONNECT/TRACE 等）SHALL NOT 常驻 chips
 
 #### Scenario: Filter bar
 - **WHEN** the page loads
 - **THEN** a search input SHALL filter by name/URI/description/域名（hosts，对齐后端 ALLOWED_SEARCH_FIELDS），placeholder SHALL 说明可搜字段
-- **THEN** a publish status dropdown SHALL filter (全部/已发布/未发布/待发布)
+- **THEN** a publish status dropdown SHALL filter (全部/已发布/未发布/待发布)；已发布/待发布/未发布 SHALL 为互斥三分区（已发布=已发布且无待发修改、待发布=已发布但存在未下发修改、未发布=从未发布），SHALL NOT 重叠命中
 - **THEN** a plugin dropdown SHALL filter by plugin name (options from `/plugins/builtin`)
 - **THEN** the API SHALL support `method` parameter for method chip filtering
 - **THEN** the API SHALL support `publish_status` parameter (published/unpublished/pending) by checking ConfigVersion records and pending_publish
@@ -36,16 +37,17 @@ Admins SHALL be able to view, search, filter, create, copy, edit, delete, publis
 
 #### Scenario: Table display
 - **WHEN** routes exist
-- **THEN** a table SHALL show columns: name+description, URI, methods, cluster, priority, 发布状态（PublishStatusTag，取代裸版本列）, created time, actions
+- **THEN** a table SHALL show columns: name+description, URI, methods, cluster, 上游, priority, 发布状态（PublishStatusTag，取代裸版本列）, created time, actions
 - **THEN** the status column SHALL NOT appear (replaced by publish status tag)
 - **THEN** pagination SHALL be supported
-- **THEN** name/URI/priority/status/created_at 列的排序 SHALL 走服务端（`sorter: true`，请求透传 `sort_by/sort_order`，值域限后端 `ALLOWED_SORT_FIELDS`），表头排序箭头 SHALL 跨页生效（SHALL NOT 仅当前页本地重排；其中 status 指启停状态）
+- **THEN** name/URI/priority/created_at 列的排序 SHALL 走服务端（`sorter: true`，请求透传 `sort_by/sort_order`，值域限后端 `ALLOWED_SORT_FIELDS`），表头排序箭头 SHALL 跨页生效（SHALL NOT 仅当前页本地重排）
+- **THEN** status 列已不渲染，SHALL NOT 提供表头排序入口；集群/上游列 SHALL NOT 提供排序（SHALL NOT 保留仅当前页生效的本地 sorter）
 - **THEN** 发布状态列（PublishStatusTag，pending 为派生值非表列）SHALL NOT 提供排序
 
 #### Scenario: Empty states are actionable
 - **WHEN** 列表为空
 - **THEN** 无任何筛选时 SHALL 显示「尚未创建路由」并提供「新建路由」按钮
-- **THEN** 存在筛选条件时 SHALL 显示「没有符合条件路由」并提供「清空筛选」按钮（重置 search/集群/发布状态/插件/方法）
+- **THEN** 存在筛选条件时 SHALL 显示「没有符合条件路由」并提供「清空筛选」按钮（重置 search/分组/集群/发布状态/插件/方法）
 
 #### Scenario: Deep link preselects cluster
 - **WHEN** 用户经 `?cluster_id=` 深链进入本页并点击「新建路由」
@@ -74,7 +76,7 @@ Admins SHALL be able to view, search, filter, create, copy, edit, delete, publis
 #### Scenario: Delete route
 - **WHEN** admin clicks "删除"
 - **THEN** the existing delete function from useClusterRoutes SHALL be used
-- **THEN** 删除确认弹窗的节点清单 SHALL 全量拉取（显式 `page_size` 对齐后端 MAX_PAGE_SIZE），SHALL NOT 依赖后端默认 page_size=20 静默截断
+- **THEN** 删除确认弹窗的节点清单 SHALL 经共享「全量拉取集群节点」工具分页循环拉取（SHALL NOT 依赖后端默认 page_size=20 静默截断，也 SHALL NOT 以单页 500 充当全量，语义见 shared-publish-flow）
 
 #### Scenario: Publish route
 - **WHEN** admin clicks "发布"

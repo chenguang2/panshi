@@ -20,3 +20,7 @@ The publish confirm dialog SHALL display all nodes in the cluster with their IP,
 - **WHEN** a node has `status != 1` (offline)
 - **THEN** its checkbox SHALL be disabled and the row SHALL be grayed out
 - **THEN** the row SHALL display "离线" indicator
+
+#### Scenario: 全离线集群默认空选
+- **WHEN** 集群全部节点离线且弹窗打开
+- **THEN** 默认选中集 SHALL 为空，确认键 SHALL 保持禁用（复用既有「请至少选择 1 个节点」守卫）
