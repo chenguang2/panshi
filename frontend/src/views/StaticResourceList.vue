@@ -344,6 +344,8 @@ const vmName = ref('')
 const publishVisible = ref(false)
 const publishClusterId = ref(0)
 const publishingRecord = ref<any | null>(null)
+// 版本弹窗出口链：发布完成后的刷新回调可注入「重开版本弹窗」（RouteList 同款范式）
+const publishRefreshFn = ref<() => Promise<void>>(loadResources)
 // static-resources-ux-close-loop 7.3：失败态预选（其余场景为空数组=默认全选在线）
 const publishPreselected = ref<number[]>([])
 // 7.3：配置异常态 tooltip 指路文案（两入口同文案）
@@ -573,7 +575,7 @@ async function handleSubmit() {
   }
 }
 
-function publishResource(sr: any) {
+function applyPublishContext(sr: any) {
   publishingRecord.value = sr
   publishClusterId.value = sr.cluster_id
   // static-resources-ux-close-loop 7.3：失败态「重发失败节点」——以持久化 failed_nodes 预选
@@ -583,14 +585,27 @@ function publishResource(sr: any) {
           .map((n: { node_id?: number }) => n.node_id)
           .filter((id: number | undefined): id is number => typeof id === 'number')
       : []
+}
+
+function publishResource(sr: any) {
+  publishRefreshFn.value = loadResources
+  applyPublishContext(sr)
   publishVisible.value = true
 }
 
-// 版本弹窗「立即发布恢复的配置」出口（共享 VersionManagementModal canPublish 接线，
-// 与路由/上游等域同款；恢复成功后经此打开本页发布确认弹窗）
+// 版本弹窗「立即发布恢复的配置」出口（共享 VersionManagementModal canPublish 接线）：
+// 先关版本弹窗再打开发布确认弹窗（两 overlay 不同屏——版本弹窗 Teleport 到 body 末尾，
+// 同 z-index 下恒压住视图内发布框），发布完成后经 publishRefreshFn 刷新并重开版本弹窗
 function onVmPublishRequested() {
   const sr = resources.value.find((r: { id: number | null }) => r.id === vmId.value)
-  if (sr) publishResource(sr)
+  if (!sr) return
+  publishRefreshFn.value = async () => {
+    await loadResources()
+    vmVisible.value = true
+  }
+  vmVisible.value = false
+  applyPublishContext(sr)
+  publishVisible.value = true
 }
 
 // static-resources-ux-close-loop 9.1：发布确认资源摘要（与 composable 同文案；
@@ -614,7 +629,7 @@ async function onPublishConfirm(nodeIds: number[]) {
     title: `发布静态资源「${sr.name}」`,
     apiEndpoint: `/clusters/${sr.cluster_id}/static-resources/${sr.id}/publish`,
     nodeIds,
-    refreshFn: loadResources,
+    refreshFn: publishRefreshFn.value,
     handleResult: (data: any, addLog: (msg: string) => void, progress: { percent: number; status: string }) => {
       if (data.current_version !== undefined) addLog(`当前版本: v${data.current_version}`)
       if (data.results && data.results.length > 0) {
@@ -637,6 +652,7 @@ async function onPublishConfirm(nodeIds: number[]) {
       }
     },
   })
+  publishRefreshFn.value = loadResources
 }
 
 async function deleteResource(sr: any) {

@@ -367,10 +367,14 @@ function onVersionPublished() {
 }
 
 // 版本弹窗「立即发布恢复的配置」出口（共享 VersionManagementModal canPublish 接线，
-// 与独立页/其它资源域同款）：恢复成功后走本 Tab 既有发布链路（父级共享发布弹窗）
+// ClusterRoutes Tab 同款范式）：先关版本弹窗再走本 Tab 发布链路（父级共享发布弹窗，
+// 两 overlay 不同屏），发布/取消返回后重开版本弹窗（open watch 重载版本列表并复位出口条）
 async function onVmPublishRequested() {
   const sr = props.cluster.static_resources?.find((r) => r.id === versionModalResourceId.value)
-  if (sr) await publishStaticResource(props.cluster, sr)
+  if (!sr) return
+  versionModalVisible.value = false
+  await publishStaticResource(props.cluster, sr)
+  versionModalVisible.value = true
 }
 </script>
 

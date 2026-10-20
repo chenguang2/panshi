@@ -46,7 +46,7 @@ const antStubs: Record<string, any> = {
   'a-tag': { template: '<span class="ant-tag"><slot /></span>' },
   VersionManagementModal: {
     name: 'VersionManagementModal',
-    props: ['canPublish', 'resourceId', 'resourceName'],
+    props: ['open', 'canPublish', 'resourceId', 'resourceName'],
     template: '<div class="vmm-stub" />',
   },
   PublishStatusTag: {
@@ -284,7 +284,7 @@ describe('ClusterStaticResources.vue（Tab）· 版本弹窗「立即发布恢�
     expect(vmm.props('canPublish')).toBe(true)
   })
 
-  it('publish-requested → 走本 Tab 发布链路（openPublishModal 带资源名与摘要）', async () => {
+  it('publish-requested → 先关版本弹窗，发布链路返回后重开（ClusterRoutes Tab 同款）', async () => {
     const { wrapper, openPublishModal } = await mountTabWithPublishSpy()
     // 点 portal 卡片「版本管理」→ 弹窗 resource 上下文就位
     const card = wrapper.findAll('.plugin-config-card').find((c) => c.text().includes('portal'))!
@@ -294,10 +294,15 @@ describe('ClusterStaticResources.vue（Tab）· 版本弹窗「立即发布恢�
     const vmm = wrapper.findComponent({ name: 'VersionManagementModal' })
     expect(vmm.props('resourceId')).toBe(1)
     vmm.vm.$emit('publish-requested')
-    await flushPromises()
+    await wrapper.vm.$nextTick()
+    // 版本弹窗先关闭（不同屏），发布确认走父级共享弹窗
+    expect(vmm.props('open')).toBe(false)
     expect(openPublishModal).toHaveBeenCalledTimes(1)
     const [title, clusterId] = openPublishModal.mock.calls[0]
     expect(String(title)).toBe('发布静态资源「portal」')
     expect(clusterId).toBe(7)
+    // 发布链路（取消/完成）返回后重开版本弹窗（open watch 重载版本列表并复位出口条）
+    await flushPromises()
+    expect(vmm.props('open')).toBe(true)
   })
 })

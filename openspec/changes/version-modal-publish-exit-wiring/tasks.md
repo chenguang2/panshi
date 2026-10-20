@@ -16,6 +16,7 @@
 - [x] 3.1 `StreamProxyList.vue`：`:can-publish="true"` + `@publish-requested` → `proxies` 按 `vmId` 回查 → `publishProxyAction(p)`；测试断言接线与发布确认弹窗上下文
 - [x] 3.2 `DnsUdpProxyList.vue`：同款（列表 ref 以实现为准）→ `publishProxyAction(p)`；同款测试
 - [x] 3.3 `SslList.vue`：`:can-publish="true"` + `@publish-requested` → `certs` 按 `vmId` 回查 → `publishCert(c)`；同款测试
+- [x] 3.4 实页反馈修复：出口链补「先关版本弹窗再开发布框，发布完成后重开」——版本弹窗 Teleport 到 body 末尾、发布框视图内同 z-index，两者同屏时发布框恒被压住（用户实测报告；RouteList/ClusterRoutes 范式本就先关再开）。六入口统一接线 close→publish→reopen，测试断言 close + 静态两入口 reopen
 
 ## 4. spec 同步与收口
 

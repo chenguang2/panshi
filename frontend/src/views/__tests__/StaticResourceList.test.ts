@@ -205,7 +205,7 @@ describe('StaticResourceList.vue · 版本弹窗「立即发布恢复的配置�
     ...stubs,
     VersionManagementModal: {
       name: 'VersionManagementModal',
-      props: ['canPublish', 'resourceId', 'resourceName'],
+      props: ['open', 'canPublish', 'resourceId', 'resourceName'],
       template: '<div class="vmm-stub" />',
     },
     PublishConfirmModal: {
@@ -214,6 +214,17 @@ describe('StaticResourceList.vue · 版本弹窗「立即发布恢复的配置�
       props: ['visible', 'title', 'clusterId', 'resourceSummary', 'overwriteWarning'],
     },
   }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/static_resources') return Promise.resolve({ data: MOCK_DATA })
+      if (url === '/clusters')
+        return Promise.resolve({ data: { items: [{ id: 1, display_name: '生产集群', group_name: '线上' }] } })
+      return Promise.resolve({ data: { items: [], total: 0 } })
+    })
+  })
 
   async function mountAndOpenVm() {
     const StaticResourceList = (await import('../StaticResourceList.vue')).default
@@ -231,7 +242,7 @@ describe('StaticResourceList.vue · 版本弹窗「立即发布恢复的配置�
     expect(wrapper.findComponent({ name: 'VersionManagementModal' }).props('canPublish')).toBe(true)
   })
 
-  it('publish-requested → 打开本页发布确认弹窗（资源上下文正确）', async () => {
+  it('publish-requested → 先关版本弹窗再开发布确认弹窗（不同屏，资源上下文正确）', async () => {
     const wrapper = await mountAndOpenVm()
     const vmm = wrapper.findComponent({ name: 'VersionManagementModal' })
     expect(vmm.props('resourceId')).toBe(1)
@@ -240,6 +251,22 @@ describe('StaticResourceList.vue · 版本弹窗「立即发布恢复的配置�
     const pm = wrapper.findComponent({ name: 'PublishConfirmModal' })
     expect(pm.props('visible')).toBe(true)
     expect(String(pm.props('title'))).toContain('static-files')
+    // 版本弹窗必须先关闭（否则 Teleport 到 body 末尾的版本弹窗恒压住视图内发布框）
+    expect(vmm.props('open')).toBe(false)
+  })
+
+  it('发布完成后重开版本弹窗（刷新列表 + 复位出口条）', async () => {
+    const { executePublish } = await import('@/composables/useClusterUtils')
+    vi.mocked(executePublish).mockImplementation(async (opts: any) => {
+      await opts?.refreshFn?.()
+    })
+    const wrapper = await mountAndOpenVm()
+    const vmm = wrapper.findComponent({ name: 'VersionManagementModal' })
+    vmm.vm.$emit('publish-requested')
+    await wrapper.vm.$nextTick()
+    wrapper.findComponent({ name: 'PublishConfirmModal' }).vm.$emit('confirm', [1])
+    await flushPromises()
+    expect(vmm.props('open')).toBe(true)
   })
 })
 

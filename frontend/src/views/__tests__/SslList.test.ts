@@ -144,7 +144,7 @@ describe('SslList · 版本弹窗发布出口接线', () => {
     ...stubs,
     VersionManagementModal: {
       name: 'VersionManagementModal',
-      props: ['canPublish', 'resourceId', 'resourceName'],
+      props: ['open', 'canPublish', 'resourceId', 'resourceName'],
       template: '<div class="mock-version-modal" />',
     },
     PublishConfirmModal: {
@@ -174,5 +174,7 @@ describe('SslList · 版本弹窗发布出口接线', () => {
     const pm = wrapper.findComponent({ name: 'PublishConfirmModal' })
     expect(pm.props('visible')).toBe(true)
     expect(pm.props('clusterId')).toBe(1)
+    // 版本弹窗必须先关闭（Teleport 到 body 末尾的版本弹窗恒压住视图内发布框）
+    expect(vmm.props('open')).toBe(false)
   })
 })

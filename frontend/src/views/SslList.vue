@@ -288,6 +288,8 @@ const viewingCert = ref<any | null>(null)
 const publishVisible = ref(false)
 const publishClusterId = ref(0)
 const publishingCert = ref<any | null>(null)
+// 版本弹窗出口链：发布完成后的刷新回调可注入「重开版本弹窗」（RouteList 同款范式）
+const publishRefreshFn = ref<() => Promise<void>>(loadCerts)
 const caCreateVisible = ref(false)
 
 function onSearch() {
@@ -426,13 +428,23 @@ async function deleteCert(cert: any) {
 function publishCert(cert: any) {
   publishingCert.value = cert
   publishClusterId.value = cert.cluster_id
+  publishRefreshFn.value = loadCerts
   publishVisible.value = true
 }
 
-// 版本弹窗「立即发布恢复的配置」出口（共享 VersionManagementModal canPublish 接线）
+// 版本弹窗「立即发布恢复的配置」出口：先关版本弹窗再打开发布确认弹窗（不同屏），
+// 发布完成后经 publishRefreshFn 刷新并重开版本弹窗
 function onVmPublishRequested() {
   const cert = certs.value.find((c: { id: number | null }) => c.id === vmId.value)
-  if (cert) publishCert(cert)
+  if (!cert) return
+  publishingCert.value = cert
+  publishClusterId.value = cert.cluster_id
+  publishRefreshFn.value = async () => {
+    await loadCerts()
+    vmVisible.value = true
+  }
+  vmVisible.value = false
+  publishVisible.value = true
 }
 
 async function onPublishConfirm(nodeIds: number[]) {
@@ -443,8 +455,9 @@ async function onPublishConfirm(nodeIds: number[]) {
     title: `发布 SSL 证书: ${cert.name}`,
     apiEndpoint: `/clusters/${cert.cluster_id}/ssl/${cert.id}/publish`,
     nodeIds,
-    refreshFn: loadCerts,
+    refreshFn: publishRefreshFn.value,
   })
+  publishRefreshFn.value = loadCerts
 }
 
 function openVersionManagement(cert: any) {

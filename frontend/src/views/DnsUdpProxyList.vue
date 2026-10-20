@@ -236,6 +236,8 @@ const vmName = ref('')
 const publishVisible = ref(false)
 const publishClusterId = ref(0)
 const publishingProxy = ref<StreamProxy | null>(null)
+// 版本弹窗出口链：发布完成后的刷新回调可注入「重开版本弹窗」（RouteList 同款范式）
+const publishRefreshFn = ref<() => Promise<void>>(loadProxies)
 
 // ── Helpers ──
 
@@ -367,13 +369,23 @@ function batchDelete() {
 function publishProxyAction(p: StreamProxy) {
   publishingProxy.value = p
   publishClusterId.value = p.cluster_id
+  publishRefreshFn.value = loadProxies
   publishVisible.value = true
 }
 
-// 版本弹窗「立即发布恢复的配置」出口（共享 VersionManagementModal canPublish 接线）
+// 版本弹窗「立即发布恢复的配置」出口：先关版本弹窗再打开发布确认弹窗（不同屏），
+// 发布完成后经 publishRefreshFn 刷新并重开版本弹窗
 function onVmPublishRequested() {
   const p = proxies.value.find((x: StreamProxy) => x.id === vmId.value)
-  if (p) publishProxyAction(p)
+  if (!p) return
+  publishingProxy.value = p
+  publishClusterId.value = p.cluster_id
+  publishRefreshFn.value = async () => {
+    await loadProxies()
+    vmVisible.value = true
+  }
+  vmVisible.value = false
+  publishVisible.value = true
 }
 
 async function onPublishConfirm(nodeIds: number[]) {
@@ -384,7 +396,7 @@ async function onPublishConfirm(nodeIds: number[]) {
     title: `发布 DNS 代理: ${p.name}`,
     apiEndpoint: dnsApiPath(p.cluster_id, p.id, '/publish'),
     nodeIds,
-    refreshFn: loadProxies,
+    refreshFn: publishRefreshFn.value,
     handleResult: (data, addLog, progress) => {
       addLog(`状态: ${data.status || '-'}`)
       addLog(`消息: ${data.message || '-'}`)
@@ -424,6 +436,7 @@ async function onPublishConfirm(nodeIds: number[]) {
       }
     },
   })
+  publishRefreshFn.value = loadProxies
 }
 
 function openVersionManagement(p: StreamProxy) {
