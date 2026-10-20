@@ -111,6 +111,9 @@ const props = defineProps<{
   resourceSummary?: string
   /** 覆盖预警（可选；danger 色一行，确认键上方，9.2） */
   overwriteWarning?: string
+  /** static-resources-ux-close-loop 7.3：重发失败节点预选（节点 id 集合）；
+   * 不传/空数组 = 默认全选在线节点（行为不变） */
+  preselectedNodeIds?: number[]
 }>()
 
 const emit = defineEmits<{
@@ -151,8 +154,13 @@ const fetchNodes = async (): Promise<void> => {
     // >500 节点集群不再被单页 500 静默截断；任一页失败整体抛错（进下方错误态 + 重新加载），
     // 不以部分清单静默继续
     nodes.value = await fetchAllClusterNodes<NodeItem>(props.clusterId)
-    // 7.1（publish-node-select）：open 默认选中全部在线节点；离线节点保持禁选不勾
-    selectedNodeIds.value = nodes.value.filter((n) => n.status === 1).map((n) => n.id)
+    // 7.1（publish-node-select）：open 默认选中全部在线节点；离线节点保持禁选不勾。
+    // static-resources-ux-close-loop 7.3：传 preselectedNodeIds 时仅预选集合内的在线节点
+    // （重发失败节点）；不传/空数组保持默认全选在线，其它域行为不变
+    const pre = props.preselectedNodeIds
+    selectedNodeIds.value = nodes.value
+      .filter((n) => n.status === 1 && (!pre || pre.length === 0 || pre.includes(n.id)))
+      .map((n) => n.id)
   } catch (e: unknown) {
     const err = e as { response?: { data?: { detail?: string } }; message?: string }
     error.value = err?.response?.data?.detail || err?.message || '加载节点列表失败'

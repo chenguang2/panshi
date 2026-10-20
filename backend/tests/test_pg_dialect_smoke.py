@@ -330,3 +330,192 @@ def test_route_publish_status_and_partition(global_engine_client, cluster):
     published = _ids("published")
     pending = _ids("pending")
     assert route_id in published and route_id not in pending
+
+
+def test_static_resource_publish_write_path(global_engine_client, cluster):
+    """静态资源发布三列回写（static-resources-ux-close-loop 组 5，约定 #31）。
+
+    last_publish_ok（BOOLEAN）+ last_publish_detail（TEXT 存 JSON，#48：漏 json.dumps 在
+    asyncpg 下报 expected str, got dict）+ last_published_at（DATETIME naive）；
+    端点为「读事务 commit → 节点 IO → 第二事务写回」，PG 下第二事务 UPDATE 绑定须成立。
+    """
+    import io
+    import json
+    import zipfile
+    from unittest.mock import patch
+
+    from app.core.database import AsyncSessionLocal
+    from app.models.cluster import Route, RoutePlugin
+    from app.models.static_resource import StaticResource
+    from app.services.edge_client import EdgeClient
+    from sqlalchemy import select
+
+    # 路由 + static_resource 插件（发布资格三条件中的两条件由 ORM 直造，模拟「已发布」）
+    created = _assert_created(
+        global_engine_client.post(
+            f"/api/v1/clusters/{cluster}/routes",
+            json={"name": "zz-pg-smoke-sr", "uri": "/zz-pg-smoke-sr/*"},
+        ),
+        "建路由",
+    )
+    route_id = created["id"]
+
+    async def _qualify():
+        async with AsyncSessionLocal() as session:
+            route = (
+                await session.execute(select(Route).where(Route.id == route_id))
+            ).scalar_one()
+            route.current_version = 1
+            session.add(RoutePlugin(route_id=route_id, plugin_name="static_resource", config="{}"))
+            await session.commit()
+
+    # TestClient 事件循环内不能直接 await——用独立事件循环执行 ORM 准备
+    # （隔离库 + NullPool，无跨 loop 连接复用风险）
+    import asyncio
+    _loop = asyncio.new_event_loop()
+    try:
+        _loop.run_until_complete(_qualify())
+    finally:
+        _loop.close()
+
+    # 创建资源 + 上传 zip（先建活跃节点：publish 端点要求至少一个在线节点）
+    _assert_created(
+        global_engine_client.post(
+            f"/api/v1/clusters/{cluster}/nodes",
+            json={
+                "ip": "10.255.255.3",
+                "service_port": 80,
+                "management_port": 9092,
+                "edge_path": "/usr/local/edge",
+                "status": 1,
+            },
+        ),
+        "建节点",
+    )
+    created = _assert_created(
+        global_engine_client.post(
+            f"/api/v1/clusters/{cluster}/static-resources", json={"route_id": route_id}
+        ),
+        "建静态资源",
+    )
+    sr_id = created["id"]
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("index.html", "<h1>pg smoke</h1>")
+    buf.seek(0)
+    up = global_engine_client.post(
+        f"/api/v1/clusters/{cluster}/static-resources/{sr_id}/upload",
+        files={"file": ("pg-smoke.zip", buf.getvalue(), "application/zip")},
+    )
+    assert up.status_code == 200, up.text
+    assert up.json()["current_version"] == 1, up.text
+
+    # 发布（mock Edge 节点成功）：读事务已 commit + 第二事务写回三列
+    with patch.object(EdgeClient, "raw_put", return_value={"status": "ok"}):
+        pub = global_engine_client.post(f"/api/v1/clusters/{cluster}/static-resources/{sr_id}/publish")
+    assert pub.status_code == 200, pub.text
+    body = pub.json()
+    assert body["success"] is True, body
+
+    # 列表端点读回：BOOLEAN/TEXT JSON/DATETIME 三列均须成立（PG 严格类型）
+    listed = global_engine_client.get(f"/api/v1/clusters/{cluster}/static-resources")
+    assert listed.status_code == 200, listed.text
+    item = next(i for i in listed.json()["items"] if i["id"] == sr_id)
+    assert item["last_publish_ok"] is True, item.get("last_publish_ok")
+    assert item["last_published_at"], item.get("last_published_at")
+    assert item["route_exists"] is True, item.get("route_exists")
+    detail = item["last_publish_detail"]
+    assert isinstance(detail, dict) and detail["total"] >= 1 and detail["failed"] == 0, detail
+
+    # ORM 直读核对三列类型（asyncpg 回读：bool/datetime/str JSON）
+    async def _verify():
+        async with AsyncSessionLocal() as session:
+            row = (
+                await session.execute(select(StaticResource).where(StaticResource.id == sr_id))
+            ).scalar_one()
+            assert row.last_publish_ok is True
+            assert row.last_published_at is not None and row.last_published_at.tzinfo is None
+            assert json.loads(row.last_publish_detail)["success"] == detail["success"]
+
+    _loop = asyncio.new_event_loop()
+    try:
+        _loop.run_until_complete(_verify())
+    finally:
+        _loop.close()
+
+    # 清理资源（路由随集群清理）
+    deleted = global_engine_client.request(
+        "DELETE",
+        f"/api/v1/clusters/{cluster}/static-resources/{sr_id}",
+        json={"delete_db": True, "delete_edge": False},
+    )
+    assert deleted.status_code in (200, 204), deleted.text
+
+
+def test_static_resource_rebind_write_path(global_engine_client, cluster):
+    """静态资源 PUT 换绑（static-resources-ux-close-loop 8.1/8.2，约定 #31）。
+
+    换绑写路径为普通 str 列（route_id/edge_uuid/name/url_path），PG 严格类型下
+    str 绑定 + Optional[int] None 语义（不换绑）须成立；他绑 409 带既有资源名。
+    """
+    import asyncio
+
+    from app.core.database import AsyncSessionLocal
+    from app.models.cluster import Route, RoutePlugin
+    from sqlalchemy import select
+
+    async def _qualify(name):
+        async with AsyncSessionLocal() as session:
+            route = (await session.execute(select(Route).where(Route.cluster_id == cluster, Route.name == name))).scalar_one()
+            route.current_version = 1
+            session.add(RoutePlugin(route_id=route.id, plugin_name="static_resource", config="{}"))
+            await session.commit()
+            return route.id
+
+    _assert_created(global_engine_client.post(
+        f"/api/v1/clusters/{cluster}/routes", json={"name": "zz-rebind-a", "uri": "/rebind-a/*"}
+    ), "建路由A")
+    _assert_created(global_engine_client.post(
+        f"/api/v1/clusters/{cluster}/routes", json={"name": "zz-rebind-b", "uri": "/rebind-b/*"}
+    ), "建路由B")
+    _assert_created(global_engine_client.post(
+        f"/api/v1/clusters/{cluster}/nodes",
+        json={"ip": "10.255.255.4", "service_port": 80, "management_port": 9093, "edge_path": "/e", "status": 1},
+    ), "建节点")
+
+    loop = asyncio.new_event_loop()
+    try:
+        route_a = loop.run_until_complete(_qualify("zz-rebind-a"))
+        route_b = loop.run_until_complete(_qualify("zz-rebind-b"))
+    finally:
+        loop.close()
+
+    created = _assert_created(
+        global_engine_client.post(f"/api/v1/clusters/{cluster}/static-resources", json={"route_id": route_a}),
+        "建静态资源",
+    )
+    sr_id = created["id"]
+    assert created["name"] == "zz-rebind-a" and created["url_path"] == "/rebind-a/*"
+
+    # 换绑到 B：四字段同步
+    put = global_engine_client.put(
+        f"/api/v1/clusters/{cluster}/static-resources/{sr_id}", json={"route_id": route_b}
+    )
+    assert put.status_code == 200, put.text
+    body = put.json()
+    assert body["route_id"] == route_b, body
+    assert body["name"] == "zz-rebind-b" and body["url_path"] == "/rebind-b/*", body
+
+    # 换回已被自己占用的 A 自身（幂等）+ 描述更新不受影响
+    put2 = global_engine_client.put(
+        f"/api/v1/clusters/{cluster}/static-resources/{sr_id}", json={"route_id": route_b, "description": "d"}
+    )
+    assert put2.status_code == 200 and put2.json()["description"] == "d", put2.text
+
+    deleted = global_engine_client.request(
+        "DELETE",
+        f"/api/v1/clusters/{cluster}/static-resources/{sr_id}",
+        json={"delete_db": True, "delete_edge": False},
+    )
+    assert deleted.status_code in (200, 204), deleted.text

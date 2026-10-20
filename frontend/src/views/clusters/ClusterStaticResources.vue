@@ -19,13 +19,17 @@
           </div>
           <div class="pcc-meta">
             <div class="pcc-status-row">
-              <a-tag v-if="sr.current_version" color="default">已上传 v{{ sr.current_version }}</a-tag>
-              <a-tag v-else color="orange">未发布</a-tag>
+              <StaticResourceStateTag
+                :current-version="sr.current_version"
+                :last-publish-ok="sr.last_publish_ok ?? null"
+                :route-exists="sr.route_exists ?? null"
+                :updated-at="sr.updated_at"
+                :last-published-at="sr.last_published_at"
+                :publish-detail="sr.last_publish_detail"
+              />
             </div>
             <div class="pcc-version">
-              <template v-if="sr.current_version">
-                <PublishStatusTag :version="sr.current_version" :published-at="sr.updated_at" time-label="最近变更" />
-              </template>
+              <template v-if="sr.current_version">上传时间: {{ formatDateTime(sr.updated_at) }}</template>
               <template v-else>&nbsp;</template>
             </div>
           </div>
@@ -33,46 +37,75 @@
         <div v-if="sr.description" class="pcc-desc">{{ sr.description }}</div>
         <div v-if="sr.file_size" class="sr-size">大小: {{ formatFileSize(sr.file_size) }}</div>
         <div class="pcc-actions" style="flex-wrap: wrap">
-          <button class="btn btn-ghost btn-sm" @click.stop="editStaticResource(cluster, sr)" title="编辑">编辑</button>
-          <button
-            class="btn btn-ghost btn-sm"
-            @click.stop="uploadStaticResourceZip(sr)"
-            :disabled="srUploading || !sr.id"
-          >
-            上传 ZIP
-          </button>
-          <button
-            class="btn btn-secondary btn-sm"
-            @click.stop="publishStaticResource(cluster, sr)"
-            :disabled="!sr.file_size"
-            :title="!sr.file_size ? '暂未上传 ZIP 文件' : ''"
-          >
-            发布
-          </button>
-          <button
-            class="btn btn-ghost btn-sm"
-            @click.stop="openStaticResourceVersionManagement(cluster, sr)"
-            :disabled="!sr.current_version"
-          >
-            版本管理
-          </button>
-          <button
-            class="btn btn-ghost btn-sm"
-            @click.stop="viewZipContents(sr)"
-            :disabled="!sr.file_size"
-            :title="!sr.file_size ? '暂未上传 ZIP 文件' : '查看 ZIP 内容'"
-          >
-            查看 ZIP
-          </button>
-          <span style="flex: 1"></span>
-          <button
-            class="btn btn-ghost btn-sm"
-            style="color: var(--danger)"
-            @click.stop="deleteStaticResource(cluster, sr)"
-            title="删除"
-          >
-            删除
-          </button>
+          <template v-if="staticResourceState(sr) === 'broken'">
+            <!-- static-resources-ux-close-loop 7.3：配置异常态操作收敛为删除，其余禁用 + 指路 -->
+            <button class="btn btn-ghost btn-sm" disabled :title="BROKEN_ROUTE_TIP">编辑</button>
+            <button class="btn btn-ghost btn-sm" disabled :title="BROKEN_ROUTE_TIP">上传 ZIP</button>
+            <button class="btn btn-secondary btn-sm" disabled :title="BROKEN_ROUTE_TIP">发布</button>
+            <button class="btn btn-ghost btn-sm" disabled :title="BROKEN_ROUTE_TIP">版本管理</button>
+            <button class="btn btn-ghost btn-sm" disabled :title="BROKEN_ROUTE_TIP">查看 ZIP</button>
+            <span style="flex: 1"></span>
+            <button
+              class="btn btn-ghost btn-sm"
+              style="color: var(--danger)"
+              @click.stop="deleteStaticResource(cluster, sr)"
+              title="删除"
+            >
+              删除
+            </button>
+          </template>
+          <template v-else>
+            <button class="btn btn-ghost btn-sm" @click.stop="editStaticResource(cluster, sr)" title="编辑">
+              编辑
+            </button>
+            <button
+              class="btn btn-ghost btn-sm"
+              @click.stop="uploadStaticResourceZip(sr)"
+              :disabled="srUploading || !sr.id"
+            >
+              上传 ZIP
+            </button>
+            <button
+              v-if="staticResourceState(sr) === 'failed'"
+              class="btn btn-secondary btn-sm"
+              @click.stop="publishStaticResource(cluster, sr)"
+              title="仅重发上次分发失败的节点"
+            >
+              重发失败节点
+            </button>
+            <button
+              class="btn btn-secondary btn-sm"
+              @click.stop="publishStaticResource(cluster, sr)"
+              :disabled="!sr.file_size"
+              :title="!sr.file_size ? '暂未上传 ZIP 文件' : ''"
+            >
+              发布
+            </button>
+            <button
+              class="btn btn-ghost btn-sm"
+              @click.stop="openStaticResourceVersionManagement(cluster, sr)"
+              :disabled="!sr.current_version"
+            >
+              版本管理
+            </button>
+            <button
+              class="btn btn-ghost btn-sm"
+              @click.stop="viewZipContents(sr)"
+              :disabled="!sr.file_size"
+              :title="!sr.file_size ? '暂未上传 ZIP 文件' : '查看 ZIP 内容'"
+            >
+              查看 ZIP
+            </button>
+            <span style="flex: 1"></span>
+            <button
+              class="btn btn-ghost btn-sm"
+              style="color: var(--danger)"
+              @click.stop="deleteStaticResource(cluster, sr)"
+              title="删除"
+            >
+              删除
+            </button>
+          </template>
         </div>
       </div>
       <div v-if="!cluster.static_resources || cluster.static_resources.length === 0" class="empty-hint">
@@ -90,7 +123,7 @@
           </div>
           <div class="modal-body">
             <a-form :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-              <a-form-item v-if="staticResourceFormMode === 'add'" label="选择路由" required>
+              <a-form-item :label="staticResourceFormMode === 'add' ? '选择路由' : '关联路由（可换绑）'" required>
                 <a-select
                   v-model:value="staticResourceFormData.route_id"
                   placeholder="请选择路由"
@@ -121,10 +154,10 @@
                   <div :style="{ color: !pluginValid ? '#ff4d4f' : '#52c41a' }">
                     {{ pluginValid ? '✅' : '❌' }} 路由必须挂载 static_resource 插件
                   </div>
+                  <div v-if="staticResourceRouteChanged" style="color: #fa8c16">
+                    ⚠ 换绑路由后需重新上传并发布到 Edge 节点
+                  </div>
                 </div>
-              </a-form-item>
-              <a-form-item v-else label="关联路由">
-                <span>{{ staticResourceFormData.name }} ({{ staticResourceFormData.url_path }})</span>
               </a-form-item>
               <a-form-item label="描述" name="description">
                 <a-textarea v-model:value="staticResourceFormData.description" :rows="2" placeholder="可选描述" />
@@ -219,9 +252,13 @@ import type { Cluster } from '@/types'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import { useClusterStaticResources } from '@/composables/useClusterStaticResources'
 import type { VersionModalState } from '@/composables/useClusterPluginConfigs'
-import { formatDate, formatFileSize } from '@/utils/format'
-import { staticResourceRouteEligibility, routeEligibilitySuffix } from '@/utils/staticResourceRoute'
-import PublishStatusTag from '@/components/PublishStatusTag.vue'
+import { formatDate, formatDateTime, formatFileSize } from '@/utils/format'
+import {
+  staticResourceRouteEligibility,
+  routeEligibilitySuffix,
+  staticResourceState,
+} from '@/utils/staticResourceRoute'
+import StaticResourceStateTag from '@/components/StaticResourceStateTag.vue'
 
 const props = defineProps<{
   cluster: Cluster
@@ -258,6 +295,7 @@ const {
   staticResourceFormMode,
   staticResourceEditingCluster,
   staticResourceFormValid,
+  staticResourceRouteChanged,
   uriValid,
   publishedValid,
   pluginValid,
@@ -276,6 +314,9 @@ const {
   openPublishModal: props.openPublishModal,
   loadRoutes: props.loadRoutes,
 })
+
+// static-resources-ux-close-loop 7.3：配置异常态 tooltip 指路文案（两入口同文案）
+const BROKEN_ROUTE_TIP = '关联路由不存在，请删除该资源或重建路由'
 
 // Alias to match template usage from original ClusterList.vue
 const uploadStaticResourceZip = uploadStaticResource

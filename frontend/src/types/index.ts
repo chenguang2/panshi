@@ -269,9 +269,21 @@ export interface StaticResource {
   url_path?: string
   description?: string
   route_id?: number
+  edge_uuid?: string | null
   storage_path?: string
   file_size?: number
   current_version?: number | null
+  /** static-resources-ux-close-loop 组 5：发布结果持久化读回 */
+  last_publish_ok?: boolean | null
+  last_published_at?: string | null
+  route_exists?: boolean | null
+  last_publish_detail?: {
+    total?: number
+    success?: number
+    failed?: number
+    failed_nodes?: { node: string; node_id?: number; error?: string }[]
+    route?: string | null
+  } | null
   updated_at?: string | null
 }
 

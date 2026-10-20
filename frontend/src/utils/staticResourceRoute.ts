@@ -36,3 +36,24 @@ export function routeEligibilitySuffix(route: StaticResourceRouteLike): string {
   const { reasons } = staticResourceRouteEligibility(route)
   return reasons.length > 0 ? `（${reasons.join('、')}）` : ''
 }
+
+/* ── 分发状态五态判定（static-resources-ux-close-loop 7.1/7.3）────────────────
+ * 配置异常 > 待上传 > 待分发/已分发/失败（按 last_publish_ok 三态）；
+ * 徽章组件（StaticResourceStateTag）与两入口按钮禁用逻辑同源消费，勿复制判定。
+ */
+
+export type StaticResourceState = 'broken' | 'pending_upload' | 'pending_dispatch' | 'dispatched' | 'failed'
+
+export interface StaticResourceStateLike {
+  current_version?: number | null
+  last_publish_ok?: boolean | null
+  route_exists?: boolean | null
+}
+
+export function staticResourceState(sr: StaticResourceStateLike): StaticResourceState {
+  if (sr.route_exists === false) return 'broken'
+  if (!sr.current_version) return 'pending_upload'
+  if (sr.last_publish_ok === true) return 'dispatched'
+  if (sr.last_publish_ok === false) return 'failed'
+  return 'pending_dispatch'
+}

@@ -107,6 +107,7 @@ describe('静态资源发布 · openPublishModal 第三参透传', () => {
     expect(deps.openPublishModal).toHaveBeenCalledWith('发布静态资源「site.zip」', 7, {
       resourceSummary: '将把「site.zip」v3（200.0 KB，/docs/*）分发到所选节点',
       overwriteWarning: '发布将覆盖所选节点上的现有静态资源文件',
+      preselectedNodeIds: [],
     })
   })
 })
@@ -168,5 +169,72 @@ describe('静态资源上传 · 预检与结果行', () => {
       expect.any(FormData),
       expect.objectContaining({ headers: expect.any(Object) }),
     )
+  })
+})
+
+describe('静态资源编辑换绑（static-resources-ux-close-loop 8.3）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+  })
+
+  it('editStaticResource 预选当前路由并记录原绑定；提交换绑先弹确认，确认后 PUT 带 route_id', async () => {
+    mockApiPost.mockResolvedValue({ data: { success: true, results: [] } })
+    const { useClusterStaticResources } = await import('../useClusterStaticResources')
+    const c = {
+      ...cluster,
+      routes: [
+        { id: 11, name: 'a', uri: '/a/*', current_version: 1, plugins: [{ plugin_name: 'static_resource' }] },
+        { id: 12, name: 'b', uri: '/b/*', current_version: 1, plugins: [{ plugin_name: 'static_resource' }] },
+      ],
+    } as unknown as Cluster
+    const deps = makeDeps()
+    const {
+      editStaticResource,
+      handleStaticResourceSubmit,
+      staticResourceFormData,
+      staticResourceModalVisible,
+      onStaticResourceRouteChange,
+    } = useClusterStaticResources(deps)
+
+    const resource = { ...sr, route_id: 11 } as StaticResource
+    editStaticResource(c, resource)
+    expect(staticResourceFormData.route_id).toBe(11)
+
+    // 换到路由 12 → routeChanged（先触发资格校验，routeInfo.valid 就绪）
+    staticResourceFormData.route_id = 12
+    onStaticResourceRouteChange(12)
+    const putSpy = (await import('@/api')).default.put as ReturnType<typeof vi.fn>
+    putSpy.mockResolvedValue({ data: {} })
+    await handleStaticResourceSubmit()
+
+    // 确认弹窗出现，PUT 尚未发生
+    expect(putSpy).not.toHaveBeenCalled()
+    const okBtn = [...document.querySelectorAll('button')].find((b) => b.textContent?.includes('确认换绑'))
+    expect(okBtn).toBeTruthy()
+
+    ;(okBtn as HTMLButtonElement).click()
+    await new Promise((r) => setTimeout(r, 0))
+    await new Promise((r) => setTimeout(r, 0))
+
+    expect(putSpy).toHaveBeenCalledWith('/clusters/7/static-resources/3', expect.objectContaining({ route_id: 12 }))
+    expect(staticResourceModalVisible.value).toBe(false)
+  })
+
+  it('仅改描述（未换绑）：PUT 不带 route_id，无确认弹窗', async () => {
+    const { useClusterStaticResources } = await import('../useClusterStaticResources')
+    const c = { ...cluster } as Cluster
+    const deps = makeDeps()
+    const { editStaticResource, handleStaticResourceSubmit, staticResourceFormData } = useClusterStaticResources(deps)
+
+    editStaticResource(c, { ...sr, route_id: 11 } as StaticResource)
+    expect(staticResourceFormData.route_id).toBe(11)
+    staticResourceFormData.description = '仅描述'
+    const putSpy = (await import('@/api')).default.put as ReturnType<typeof vi.fn>
+    putSpy.mockResolvedValue({ data: {} })
+    await handleStaticResourceSubmit()
+
+    expect(putSpy).toHaveBeenCalledWith('/clusters/7/static-resources/3', { description: '仅描述' })
+    expect([...document.querySelectorAll('button')].some((b) => b.textContent?.includes('确认换绑'))).toBe(false)
   })
 })

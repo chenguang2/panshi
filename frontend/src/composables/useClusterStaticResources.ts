@@ -12,7 +12,9 @@ import {
   routeLabel,
   resultStatusLabel,
 } from './useClusterUtils'
+import { showDangerConfirm } from './useOverlayModal'
 import { formatFileSize, formatDateTime } from '@/utils/format'
+import { staticResourceState } from '@/utils/staticResourceRoute'
 import { getApiErrorMessage } from '@/utils/error'
 import { showOverlayModal } from './useOverlayModal'
 
@@ -42,6 +44,14 @@ export function useClusterStaticResources(deps: StaticResourceDeps) {
   const staticResourceFormMode = ref<'add' | 'edit'>('add')
   const staticResourceEditingId = ref<number | null>(null)
   const staticResourceEditingCluster = ref<Cluster | null>(null)
+  /** static-resources-ux-close-loop 8.3：编辑打开时的原路由绑定（换绑检测基准） */
+  const staticResourceOriginalRouteId = ref<number | null>(null)
+  /** 8.3：编辑态选择的路由与原绑定是否不同（换绑提示/提交 route_id 的依据） */
+  const staticResourceRouteChanged = computed(
+    () =>
+      staticResourceFormMode.value === 'edit' &&
+      staticResourceFormData.route_id !== staticResourceOriginalRouteId.value,
+  )
   /** 上传进行中（1.2：两入口据此禁用上传按钮） */
   const uploading = ref(false)
 
@@ -117,10 +127,16 @@ export function useClusterStaticResources(deps: StaticResourceDeps) {
     staticResourceFormMode.value = 'edit'
     staticResourceEditingCluster.value = cluster
     staticResourceEditingId.value = sr.id
+    // static-resources-ux-close-loop 8.3：编辑态启用换绑——预选当前路由并记录原绑定
+    staticResourceFormData.route_id = sr.route_id ?? null
+    staticResourceOriginalRouteId.value = sr.route_id ?? null
     staticResourceFormData.name = sr.name
     staticResourceFormData.url_path = sr.url_path || ''
     staticResourceFormData.description = sr.description || ''
     staticResourceRouteInfo.value = null
+    if (!cluster.routes || cluster.routes.length === 0) {
+      void loadRoutes(cluster)
+    }
     staticResourceModalVisible.value = true
   }
 
@@ -147,17 +163,51 @@ export function useClusterStaticResources(deps: StaticResourceDeps) {
         }
         await api.post(`/clusters/${cluster.id}/static-resources`, payload)
         message.success('静态资源已创建')
+        staticResourceModalVisible.value = false
+        await loadStaticResources(cluster)
       } else {
+        // static-resources-ux-close-loop 8.3：编辑换绑——变更时校验资格并二次确认
+        const routeChanged =
+          staticResourceFormData.route_id !== staticResourceOriginalRouteId.value &&
+          staticResourceOriginalRouteId.value !== null
+        if (routeChanged) {
+          if (!staticResourceFormData.route_id) {
+            message.warning('请选择路由')
+            return
+          }
+          if (!staticResourceRouteInfo.value?.valid) {
+            message.warning('请选择符合条件（已发布到 Edge 节点且路径以 /* 结尾）的路由')
+            return
+          }
+        }
         const payload: Record<string, unknown> = {}
         if (staticResourceFormData.description !== undefined) {
           payload.description = staticResourceFormData.description || undefined
         }
-        await api.put(`/clusters/${cluster.id}/static-resources/${staticResourceEditingId.value}`, payload)
-        message.success('静态资源已更新')
-      }
+        if (routeChanged) {
+          payload.route_id = staticResourceFormData.route_id
+        }
 
-      staticResourceModalVisible.value = false
-      await loadStaticResources(cluster)
+        const doUpdate = async () => {
+          await api.put(`/clusters/${cluster.id}/static-resources/${staticResourceEditingId.value}`, payload)
+          message.success(routeChanged ? '静态资源已换绑，请重新上传并发布' : '静态资源已更新')
+          staticResourceModalVisible.value = false
+          await loadStaticResources(cluster)
+        }
+
+        if (routeChanged) {
+          // 8.3：换绑提交前确认（取消即中止，不触发改动）
+          showDangerConfirm('换绑路由', '换绑路由后需重新上传并发布到 Edge 节点。确定换绑？', '确认换绑', async () => {
+            try {
+              await doUpdate()
+            } catch (error: unknown) {
+              message.error(getApiErrorMessage(error))
+            }
+          })
+          return
+        }
+        await doUpdate()
+      }
     } catch (error: unknown) {
       message.error(getApiErrorMessage(error))
     }
@@ -293,9 +343,17 @@ export function useClusterStaticResources(deps: StaticResourceDeps) {
     const resourceSummary = `将把「${sr.name}」v${sr.current_version ?? '-'}（${formatFileSize(
       sr.file_size || 0,
     )}，${sr.url_path || ''}）分发到所选节点`
+    // static-resources-ux-close-loop 7.3：失败态「重发失败节点」——以持久化 failed_nodes 预选
+    const preselectFailed =
+      staticResourceState(sr) === 'failed'
+        ? (sr.last_publish_detail?.failed_nodes || [])
+            .map((n) => n.node_id)
+            .filter((id): id is number => typeof id === 'number')
+        : []
     const nodeIds = await openPublishModal(`发布静态资源「${sr.name}」`, cluster.id, {
       resourceSummary,
       overwriteWarning: '发布将覆盖所选节点上的现有静态资源文件',
+      preselectedNodeIds: preselectFailed,
     })
     if (!nodeIds.length) return
 
@@ -347,6 +405,7 @@ export function useClusterStaticResources(deps: StaticResourceDeps) {
     staticResourceEditingId,
     staticResourceEditingCluster,
     staticResourceFormValid,
+    staticResourceRouteChanged,
     selectedRoute,
     uriValid,
     publishedValid,

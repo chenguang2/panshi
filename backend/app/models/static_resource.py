@@ -1,4 +1,4 @@
-from sqlalchemy import String, Integer, DateTime, Text, BigInteger, ForeignKey, Column, UniqueConstraint
+from sqlalchemy import String, Integer, DateTime, Text, BigInteger, Boolean, ForeignKey, Column, UniqueConstraint
 from datetime import datetime
 from app.core.database import Base
 
@@ -19,5 +19,9 @@ class StaticResource(Base):
     file_size = Column(BigInteger, nullable=True)
     storage_path = Column(String(500), nullable=True)
     current_version = Column(Integer, nullable=True)
+    # static-resources-ux-close-loop 组 5：发布结果持久化（null=从未发布）
+    last_publish_ok = Column(Boolean, nullable=True)
+    last_publish_detail = Column(Text, nullable=True)  # JSON: {total, success, failed, failed_nodes, route}
+    last_published_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

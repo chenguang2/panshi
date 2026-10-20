@@ -72,12 +72,19 @@ async def list_all_static_resources(
             cluster_name_map[row[0]] = row[1] or row[2]
             cluster_group_map[row[0]] = row[3] or ""
 
+    # static-resources-ux-close-loop 组 5：route_exists（孤儿路由=false）与发布三列读回
+    from app.api.v1.cluster_static_resources import _route_exists_map, _parse_publish_detail
+
+    exists_map = await _route_exists_map(db, resources)
+
     items = []
     for r in resources:
         resp = StaticResourceResponse.model_validate(r)
         d = resp.model_dump()
         d["cluster_name"] = cluster_name_map.get(r.cluster_id, "")
         d["cluster_group_name"] = cluster_group_map.get(r.cluster_id, "")
+        d["route_exists"] = exists_map.get(r.route_id, False)
+        d["last_publish_detail"] = _parse_publish_detail(r.last_publish_detail)
         if d.get("file_size"):
             d["file_size_kb"] = round(d["file_size"] / 1024, 1)
         items.append(d)

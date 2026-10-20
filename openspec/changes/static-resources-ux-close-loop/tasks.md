@@ -46,33 +46,33 @@
 
 ## 6. 批2·发布结果持久化（P0 后端）
 
-- [ ] 6.1 RED：迁移测试——`StaticResource` 新列 `last_publish_ok`/`last_publish_detail`/`last_published_at` 全部注册 `COLUMN_MIGRATIONS`（#118）；旧库（无列）启动自动补列不崩溃 → GREEN：models + core/migrate.py
-- [ ] 6.2 RED：publish 端点——节点 IO 执行瞬间 `db.in_transaction() is False`（#29 回归断言，当前读事务横跨 IO 必红）+ 全成功/部分失败/全失败三场景后三列均落库（detail JSON 含 total/success/failed/failed_nodes）→ GREEN：循环前 commit（字段预取本地变量防 expire_on_commit）+ 循环后第二事务写结果
-- [ ] 6.3 **PG 方言冒烟**：`cd backend && TEST_DB_BACKEND=pg uv run pytest tests/test_pg_dialect_smoke.py -q`（#31：新列 + 写路径强制；如冒烟套含静态资源写路径则同步补用例）
-- [ ] 6.4 RED：两个列表端点响应 SHALL 含 `last_publish_ok`/`last_published_at`/`route_exists`（孤儿路由=false）→ GREEN（全局列表 static_resources.py + Tab 列表序列化单点）
-- [ ] 6.5 `pytest -k "static"` 全绿（含 6.2 三场景回归；覆盖式样对照 relay_init 范式）
+- [x] 6.1 RED：迁移测试——`StaticResource` 新列 `last_publish_ok`/`last_publish_detail`/`last_published_at` 全部注册 `COLUMN_MIGRATIONS`（#118）；旧库（无列）启动自动补列不崩溃 → GREEN：models + core/migrate.py
+- [x] 6.2 RED：publish 端点——节点 IO 执行瞬间 `db.in_transaction() is False`（#29 回归断言，当前读事务横跨 IO 必红）+ 全成功/部分失败/全失败三场景后三列均落库（detail JSON 含 total/success/failed/failed_nodes）→ GREEN：循环前 commit（字段预取本地变量防 expire_on_commit）+ 循环后第二事务写结果【实施核正：逐节点结果加 `node_id`（7.3 失败预选需要）；响应加 `detail` 键（total/success/failed/failed_nodes/route）；audit 依赖 `getattr(getattr(request,"state",None),"audit",None)` 防直接调用 None 崩（原 `request.state` 直取）】【实施核正（detail 累积合并，来源 10.3 实页验收）：detail 按节点累积——第二事务 `{**旧映射, **本次映射}` 合并（旧映射经 `_rebuild_node_results` 重建，新增 `node_results` 键随发布持久化；旧 detail 无该键时从 total/success/failed_nodes 尽力重建，空=首次发布纯覆盖）；total/success/failed/failed_nodes 由合并映射派生（键名/形状不变）；`last_publish_ok=合并后无失败`，响应 `success` 保持本次运行语义；旧 detail 预取在首次 commit 前（#29）。回归 test_static_resource_publish_persistence.py 5 新用例（重发单节点合并/失败保留/翻白/占位计数）+ 前端 StaticResourceStateTag 合并 detail 2 用例】
+- [x] 6.3 **PG 方言冒烟**：`cd backend && TEST_DB_BACKEND=pg uv run pytest tests/test_pg_dialect_smoke.py -q`（#31：新列 + 写路径强制；如冒烟套含静态资源写路径则同步补用例）【实施记录：补 test_static_resource_publish_write_path + test_static_resource_rebind_write_path（8.2）；SQLite 模式 11 passed / PG 模式（PG_DSN=localhost test_panshi）11 passed；首轮 PG 一次 test_route_publish_status_and_partition 轮换失败，隔离复跑绿（波动，#58 同型）】
+- [x] 6.4 RED：两个列表端点响应 SHALL 含 `last_publish_ok`/`last_published_at`/`route_exists`（孤儿路由=false）→ GREEN（全局列表 static_resources.py + Tab 列表序列化单点）【实施核正：Tab `resource_to_response(r, route_exists=)` 经 `_route_exists_map` 批量 IN 查询；全局列表同 map 补 route_exists/解析 detail；`StaticResourceResponse` 加 last_publish_ok/last_published_at(Z)/route_exists/last_publish_detail(解析 dict)】
+- [x] 6.5 `pytest -k "static"` 全绿（含 6.2 三场景回归；覆盖式样对照 relay_init 范式）【实施记录：新增 test_static_resource_publish_persistence.py 10 用例，141 passed / 3 skipped】
 
 ## 7. 批2·分发状态徽章五态（P0 前端）
 
-- [ ] 7.1 RED：`StaticResourceStateTag` 组件测试——六行判定表（配置异常/待上传/待分发/已分发 M/N/失败 N·M）逐态断言颜色、文案、tooltip 内容 → GREEN：新组件（视觉对齐 PublishStatusTag）
-- [ ] 7.2 RED：两入口卡片接五态徽章（替换 4.1「已上传 vX」临时断言）；时间语义拆分：版本行「上传时间」（updated_at）+ tooltip「最近分发」（last_published_at）→ GREEN
-- [ ] 7.3 RED：失败态卡片 SHALL 出现「重发失败节点」操作——以 failed_nodes 预选打开发布确认弹窗 → GREEN；「配置异常」态操作收敛为「删除」（发布/上传禁用 + tooltip 指路）
-- [ ] 7.4 既有静态资源组件测试回归（徽章断言全量更新）
+- [x] 7.1 RED：`StaticResourceStateTag` 组件测试——六行判定表（配置异常/待上传/待分发/已分发 M/N/失败 N·M）逐态断言颜色、文案、tooltip 内容 → GREEN：新组件（视觉对齐 PublishStatusTag）【实施核正：判定函数 `staticResourceState` 落 `utils/staticResourceRoute.ts`（7.3/8.3 复用）；失败态带计数文案为「{success}/{total} 节点失败」（无计数回退「分发失败」），已分发为「已分发 M/N 节点」】
+- [x] 7.2 RED：两入口卡片接五态徽章（替换 4.1「已上传 vX」临时断言）；时间语义拆分：版本行「上传时间」（updated_at）+ tooltip「最近分发」（last_published_at）→ GREEN【实施核正：全局页 PublishStatusTag import 移除；Tab a-tag 徽章移除；Tab zip 表日期保持 formatDate（zip 条目 modified 为 zip 本地时间，非 naive UTC，不走 formatDateTime）】
+- [x] 7.3 RED：失败态卡片 SHALL 出现「重发失败节点」操作——以 failed_nodes 预选打开发布确认弹窗 → GREEN；「配置异常」态操作收敛为「删除」（发布/上传禁用 + tooltip 指路）【实施核正：`PublishConfirmModal` 加可选 `preselectedNodeIds?: number[]`（不传/空数组=默认全选在线，其它域零变化）+ `PublishModalOptions` 扩展 + CentralList 透传；composable 与全局页各自按 failed_nodes.node_id 预选；tooltip 文案常量「关联路由不存在，请删除该资源或重建路由」两入口一致】
+- [x] 7.4 既有静态资源组件测试回归（徽章断言全量更新）【实施核正：Tab「已上传 vX/未发布」断言改为五态（待分发/待上传）；PublishStatusTag 桩断言改为「组件不再渲染」；查看 ZIP/发布按钮计数随 4 卡片夹具更新】
 
 ## 8. 批2·编辑换绑路由（P1-3）
 
-- [ ] 8.1 RED：后端 PUT 测试——route_id 变更：目标路由不合格（未发布/URI 不符/无插件）分别 400 带既有文案；他绑 409 带既有资源名；成功换绑更新 `route_id/edge_uuid/name/url_path` 四字段 → GREEN：`StaticResourceUpdate` 加 `route_id` + PUT 扩展（复用 `_get_route_with_plugins`）
-- [ ] 8.2 **PG 方言冒烟**（#31：schema/写路径改动）
-- [ ] 8.3 RED：编辑弹窗路由选择启用 + 三条资格检查即时反馈（两入口）+ 换绑提交前提示「换绑路由后需重新上传并发布到 Edge 节点」→ GREEN
-- [ ] 8.4 `pytest -k "static"` 回归（PUT 既有 description-only 用例不破）
+- [x] 8.1 RED：后端 PUT 测试——route_id 变更：目标路由不合格（未发布/URI 不符/无插件）分别 400 带既有文案；他绑 409 带既有资源名；成功换绑更新 `route_id/edge_uuid/name/url_path` 四字段 → GREEN：`StaticResourceUpdate` 加 `route_id` + PUT 扩展（复用 `_get_route_with_plugins`）【实施记录：test_static_resource_rebind.py 7 用例（含同路由幂等 noop、description-only 回归）；PUT audit 依赖同 6.2 None 安全化】
+- [x] 8.2 **PG 方言冒烟**（#31：schema/写路径改动）
+- [x] 8.3 RED：编辑弹窗路由选择启用 + 三条资格检查即时反馈（两入口）+ 换绑提交前提示「换绑路由后需重新上传并发布到 Edge 节点」→ GREEN【实施核正：全局页编辑态由只读「关联路由」块改为与添加同款下拉（编辑时 loadRoutes），换绑提示行在 routeChanged 时显示；composable 加 `staticResourceOriginalRouteId`/`staticResourceRouteChanged`，提交走 showDangerConfirm 确认后 PUT；同路由幂等路径（original=null 的孤儿除外）不带 route_id】
+- [x] 8.4 `pytest -k "static"` 回归（PUT 既有 description-only 用例不破）【实施记录：141 passed / 3 skipped】
 
 ## 9. 批2·发布确认摘要与覆盖预警（P1-4）
 
-- [ ] 9.1 RED：`PublishConfirmModal` 可选 `resourceSummary`/`overwriteWarning` props——静态资源入口打开时顶部显示资源摘要行 + 确认键上方 danger 覆盖提示；不传时 DOM 无此两行（其它域零变化，既有共享弹窗用例回归）→ GREEN
-- [ ] 9.2 RED：静态资源两入口传摘要「将把「{name}」v{N}（{size}，{url_path}）分发到所选节点」+「发布将覆盖所选节点上的现有静态资源文件」→ GREEN（不得复用 currentVersion 版本提示行——静态资源发布不产生新版本）
+- [x] 9.1（已随批1落地并实页验证 44/44）`PublishConfirmModal` 可选 `resourceSummary`/`overwriteWarning` props——静态资源入口打开时顶部显示资源摘要行 + 确认键上方 danger 覆盖提示；不传时 DOM 无此两行（其它域零变化，既有共享弹窗用例回归）→ GREEN
+- [x] 9.2（已随批1落地并实页验证）静态资源两入口传摘要「将把「{name}」v{N}（{size}，{url_path}）分发到所选节点」+「发布将覆盖所选节点上的现有静态资源文件」→ GREEN（不得复用 currentVersion 版本提示行——静态资源发布不产生新版本）
 
 ## 10. 批2·回归与实页验收
 
-- [ ] 10.1 前端三连：触碰文件 vitest → `vue-tsc -b` → 全量 `--maxWorkers=4`
-- [ ] 10.2 后端：`pytest -k "static"` + PG 冒烟复跑 + 迁移启动回归（6.1 用例）
-- [ ] 10.3 实页验收：五态徽章全态走查（待上传/待分发/已分发/部分失败→重发失败节点/配置异常）+ 换绑全流程 + 摘要/覆盖预警 + 双入口一致性；step 0 预清理、验收后归零（#222）
+- [x] 10.1 前端三连：触碰文件 vitest → `vue-tsc -b` → 全量 `--maxWorkers=4`【实施记录：触碰 6 件 57+9 passed；vue-tsc -b 零错误；全量 1748 passed / 1748（中途一轮 1 例为徽章文案断言未同步，属回归非波动，修正后复绿）】
+- [x] 10.2 后端：`pytest -k "static"` + PG 冒烟复跑 + 迁移启动回归（6.1 用例）【实施记录：static 141 passed / 3 skipped；PG 冒烟（PG_DSN localhost:5432/test_panshi）11 passed；迁移注册断言含于 test_static_resource_publish_persistence.py::TestStaticResourcePublishColumnMigrations】
+- [x] 10.3 实页验收：五态徽章全态走查（待上传/待分发/已分发/部分失败→重发失败节点/配置异常）+ 换绑全流程 + 摘要/覆盖预警 + 双入口一致性；step 0 预清理、验收后归零（#222）【实施记录（主会话 Playwright 24/24，截图 /tmp/opencode/sr-batch2-shots/）：待上传→待分发→已分发 3/3→改不可达 IP 发布→「2/3 节点失败」+「重发失败节点」→仅预选失败节点（1/4 勾选框）→恢复 IP 重发→合并后「已分发 3/3」；换绑：路由下拉可改+⚠提示+确认弹窗+名称/url_path 同步更新；删绑定路由→「配置异常」+发布禁用；Tab 入口同显。验收抓到并修复两缺陷：① 全局列表 500（static_resources.py model_validate 先于 detail 解析，TEXT 串撞 dict 字段——schema 边界 field_validator str→dict 容错，回归 test_global_list_parses_persisted_detail）；② 重发失败节点后 detail 被子集覆盖徽章跳「已分发 1/1」——detail 按节点累积合并（见 6.2 核正注记）。脚本自愈：step0 清理 DELETE 带 JSON body（#60）且 delete_edge=false（Edge 文件不存在时 delete_edge:true 会 404 且不删库行）+ 节点 IP 残留自动还原】

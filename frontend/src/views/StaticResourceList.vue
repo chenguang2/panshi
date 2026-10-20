@@ -51,38 +51,64 @@
             <div class="sr-card-path">{{ sr.url_path }}</div>
           </div>
           <div class="sr-card-meta">
-            <span v-if="sr.current_version" class="badge badge-neutral">已上传 v{{ sr.current_version }}</span>
-            <span v-else class="badge badge-neutral">未发布</span>
-            <div class="sr-version-text">
-              <template v-if="sr.current_version">
-                <PublishStatusTag :version="sr.current_version" :published-at="sr.updated_at" time-label="最近变更" />
-              </template>
-            </div>
+            <StaticResourceStateTag
+              :current-version="sr.current_version"
+              :last-publish-ok="sr.last_publish_ok ?? null"
+              :route-exists="sr.route_exists ?? null"
+              :updated-at="sr.updated_at"
+              :last-published-at="sr.last_published_at"
+              :publish-detail="sr.last_publish_detail"
+            />
+            <div v-if="sr.current_version" class="sr-version-text">上传时间: {{ formatDateTime(sr.updated_at) }}</div>
           </div>
         </div>
         <div v-if="sr.description" class="sr-card-desc">{{ sr.description }}</div>
         <div v-if="sr.file_size" class="sr-size">大小: {{ formatFileSize(sr.file_size) }}</div>
         <div class="sr-card-actions">
-          <button
-            class="btn btn-ghost btn-sm"
-            @click="viewZipContents(sr)"
-            :disabled="!sr.file_size"
-            :title="!sr.file_size ? '暂未上传 ZIP 文件' : '查看 ZIP 内容'"
-          >
-            查看
-          </button>
-          <button class="btn btn-ghost btn-sm" @click="editResource(sr)" title="编辑">编辑</button>
-          <button class="btn btn-ghost btn-sm" @click="uploadStaticResource(sr)" :disabled="srUploading || !sr.id">
-            上传 ZIP
-          </button>
-          <button class="btn btn-ghost btn-sm" style="color: var(--danger)" @click="deleteResource(sr)" title="删除">
-            删除
-          </button>
-          <span style="flex: 1"></span>
-          <button class="btn btn-secondary btn-sm" @click="publishResource(sr)" :disabled="!sr.file_size">发布</button>
-          <button class="btn btn-secondary btn-sm" @click="openVersionManagement(sr)" :disabled="!sr.current_version">
-            版本管理
-          </button>
+          <template v-if="staticResourceState(sr) === 'broken'">
+            <!-- static-resources-ux-close-loop 7.3：配置异常态操作收敛为删除，其余禁用 + 指路 -->
+            <button class="btn btn-ghost btn-sm" disabled :title="BROKEN_ROUTE_TIP">查看</button>
+            <button class="btn btn-ghost btn-sm" disabled :title="BROKEN_ROUTE_TIP">编辑</button>
+            <button class="btn btn-ghost btn-sm" disabled :title="BROKEN_ROUTE_TIP">上传 ZIP</button>
+            <button class="btn btn-ghost btn-sm" style="color: var(--danger)" @click="deleteResource(sr)" title="删除">
+              删除
+            </button>
+            <span style="flex: 1"></span>
+            <button class="btn btn-secondary btn-sm" disabled :title="BROKEN_ROUTE_TIP">发布</button>
+            <button class="btn btn-secondary btn-sm" disabled :title="BROKEN_ROUTE_TIP">版本管理</button>
+          </template>
+          <template v-else>
+            <button
+              class="btn btn-ghost btn-sm"
+              @click="viewZipContents(sr)"
+              :disabled="!sr.file_size"
+              :title="!sr.file_size ? '暂未上传 ZIP 文件' : '查看 ZIP 内容'"
+            >
+              查看
+            </button>
+            <button class="btn btn-ghost btn-sm" @click="editResource(sr)" title="编辑">编辑</button>
+            <button class="btn btn-ghost btn-sm" @click="uploadStaticResource(sr)" :disabled="srUploading || !sr.id">
+              上传 ZIP
+            </button>
+            <button class="btn btn-ghost btn-sm" style="color: var(--danger)" @click="deleteResource(sr)" title="删除">
+              删除
+            </button>
+            <span style="flex: 1"></span>
+            <button
+              v-if="staticResourceState(sr) === 'failed'"
+              class="btn btn-secondary btn-sm"
+              @click="publishResource(sr)"
+              title="仅重发上次分发失败的节点"
+            >
+              重发失败节点
+            </button>
+            <button class="btn btn-secondary btn-sm" @click="publishResource(sr)" :disabled="!sr.file_size">
+              发布
+            </button>
+            <button class="btn btn-secondary btn-sm" @click="openVersionManagement(sr)" :disabled="!sr.current_version">
+              版本管理
+            </button>
+          </template>
         </div>
       </div>
       <!-- 4.8：单页全量加载触顶提示（PAGE_SIZE_CARD_GRID=500） -->
@@ -110,8 +136,10 @@
               <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
             </select>
           </div>
-          <div v-if="formMode === 'add'" class="form-group">
-            <label class="form-label">选择路由 <span class="required">*</span></label>
+          <div class="form-group">
+            <label class="form-label"
+              >{{ formMode === 'add' ? '选择路由' : '关联路由（可换绑）' }} <span class="required">*</span></label
+            >
             <select v-model="formData.route_id" class="form-input" @change="onRouteChange">
               <option value="">请选择路由</option>
               <option
@@ -134,11 +162,10 @@
               <div class="route-validation-item" :class="pluginValid ? 'valid' : 'invalid'">
                 {{ pluginValid ? '✅' : '❌' }} 路由必须挂载 static_resource 插件
               </div>
+              <div v-if="editRouteChanged" class="route-validation-item" style="color: #fa8c16">
+                ⚠ 换绑路由后需重新上传并发布到 Edge 节点
+              </div>
             </div>
-          </div>
-          <div v-else class="form-group">
-            <label class="form-label">关联路由</label>
-            <div class="form-value">{{ formData.name }} ({{ formData.url_path }})</div>
           </div>
           <div class="form-group">
             <label class="form-label">描述</label>
@@ -160,6 +187,7 @@
       :cluster-id="publishClusterId"
       :resource-summary="publishSummary"
       overwrite-warning="发布将覆盖所选节点上的现有静态资源文件"
+      :preselected-node-ids="publishPreselected"
       @confirm="onPublishConfirm"
       @cancel="publishVisible = false"
     />
@@ -235,8 +263,12 @@
 <script setup lang="ts">
 import { ref, computed, reactive, watch, onMounted, onUnmounted, type Ref } from 'vue'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
-import { formatFileSize, formatDate } from '@/utils/format'
-import { staticResourceRouteEligibility, routeEligibilitySuffix } from '@/utils/staticResourceRoute'
+import { formatFileSize, formatDate, formatDateTime } from '@/utils/format'
+import {
+  staticResourceRouteEligibility,
+  routeEligibilitySuffix,
+  staticResourceState,
+} from '@/utils/staticResourceRoute'
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
@@ -248,6 +280,8 @@ import type { Cluster } from '@/types'
 import PageHeader from '@/components/PageHeader.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
+import StaticResourceStateTag from '@/components/StaticResourceStateTag.vue'
+import type { StaticResource } from '@/types'
 import {
   executePublish,
   showDeleteConfirm,
@@ -256,7 +290,7 @@ import {
   resultStatusLabel,
 } from '@/composables/useClusterUtils'
 import { getGroupColorStyle, getCardBorderStyle } from '@/composables/useGroupColors'
-import PublishStatusTag from '@/components/PublishStatusTag.vue'
+import { showDangerConfirm } from '@/composables/useOverlayModal'
 import { useClusterStaticResources } from '@/composables/useClusterStaticResources'
 import type { VersionModalState } from '@/composables/useClusterPluginConfigs'
 
@@ -308,6 +342,10 @@ const vmName = ref('')
 const publishVisible = ref(false)
 const publishClusterId = ref(0)
 const publishingRecord = ref<any | null>(null)
+// static-resources-ux-close-loop 7.3：失败态预选（其余场景为空数组=默认全选在线）
+const publishPreselected = ref<number[]>([])
+// 7.3：配置异常态 tooltip 指路文案（两入口同文案）
+const BROKEN_ROUTE_TIP = '关联路由不存在，请删除该资源或重建路由'
 const formVisible = ref(false)
 const formMode = ref<'add' | 'edit'>('add')
 const formData = reactive({
@@ -320,6 +358,9 @@ const formData = reactive({
 })
 const editingResource = ref<any | null>(null)
 const availableRoutes = ref<any[]>([])
+// static-resources-ux-close-loop 8.3：编辑打开时的原路由绑定（换绑检测基准）
+const editingOriginalRouteId = ref<number | null>(null)
+const editRouteChanged = computed(() => formMode.value === 'edit' && formData.route_id !== editingOriginalRouteId.value)
 
 const uriValid = computed(() => {
   const route = availableRoutes.value.find((r: any) => r.id === formData.route_id)
@@ -442,10 +483,13 @@ function editResource(sr: any) {
   formMode.value = 'edit'
   formData.cluster_id = sr.cluster_id
   formData.route_id = sr.route_id
+  editingOriginalRouteId.value = sr.route_id ?? null
   formData.name = sr.name
   formData.url_path = sr.url_path || ''
   formData.description = sr.description || ''
   editingResource.value = sr
+  // 8.3：换绑下拉需要该集群路由清单（不合格项 disabled + 标注）
+  if (sr.cluster_id) void loadRoutes(sr.cluster_id)
   formVisible.value = true
 }
 
@@ -489,13 +533,38 @@ async function handleSubmit() {
       message.error(e?.response?.data?.detail || '创建失败')
     }
   } else if (editingResource.value) {
-    try {
-      await api.put(`/clusters/${editingResource.value.cluster_id}/static-resources/${editingResource.value.id}`, {
-        description: formData.description,
-      })
-      message.success('静态资源已更新')
+    // static-resources-ux-close-loop 8.3：编辑换绑——变更时校验资格并二次确认
+    const routeChanged = editRouteChanged.value && editingOriginalRouteId.value !== null && !!formData.route_id
+    if (routeChanged && !formValid.value) {
+      message.warning('请选择符合条件（已发布到 Edge 节点且路径以 /* 结尾）的路由')
+      return
+    }
+
+    const doUpdate = async () => {
+      const payload: Record<string, unknown> = { description: formData.description }
+      if (routeChanged) payload.route_id = formData.route_id
+      await api.put(
+        `/clusters/${editingResource.value.cluster_id}/static-resources/${editingResource.value.id}`,
+        payload,
+      )
+      message.success(routeChanged ? '静态资源已换绑，请重新上传并发布' : '静态资源已更新')
       formVisible.value = false
       loadResources()
+    }
+
+    if (routeChanged) {
+      showDangerConfirm('换绑路由', '换绑路由后需重新上传并发布到 Edge 节点。确定换绑？', '确认换绑', async () => {
+        try {
+          await doUpdate()
+        } catch (e: any) {
+          message.error(e?.response?.data?.detail || '更新失败')
+        }
+      })
+      return
+    }
+
+    try {
+      await doUpdate()
     } catch (e: any) {
       message.error(e?.response?.data?.detail || '更新失败')
     }
@@ -505,6 +574,13 @@ async function handleSubmit() {
 function publishResource(sr: any) {
   publishingRecord.value = sr
   publishClusterId.value = sr.cluster_id
+  // static-resources-ux-close-loop 7.3：失败态「重发失败节点」——以持久化 failed_nodes 预选
+  publishPreselected.value =
+    staticResourceState(sr) === 'failed'
+      ? (sr.last_publish_detail?.failed_nodes || [])
+          .map((n: { node_id?: number }) => n.node_id)
+          .filter((id: number | undefined): id is number => typeof id === 'number')
+      : []
   publishVisible.value = true
 }
 

@@ -159,6 +159,34 @@ describe('PublishConfirmModal.vue - 节点清单全量拉取（route-management-
 // 「全选/取消全选」保留；全离线集群 = 0 选中 + 既有「请至少选择 1 个节点」守卫。
 // 已裁决全域统一：共享弹窗一处实现，8 个资源域一起生效。
 
+describe('PublishConfirmModal.vue - 重发失败节点预选（static-resources-ux-close-loop 7.3）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('传 preselectedNodeIds：仅预选集合内的在线节点被勾选，其余在线节点不勾', async () => {
+    setupNodesApi([
+      { id: 1, ip: '10.0.0.1', service_port: 8080, management_port: 9180, edge_path: '/edge', status: 1 },
+      { id: 2, ip: '10.0.0.2', service_port: 8080, management_port: 9181, edge_path: '/edge', status: 1 },
+      { id: 3, ip: '10.0.0.3', service_port: 8080, management_port: 9182, edge_path: '/edge', status: 1 },
+    ])
+
+    const w = await openModal({ preselectedNodeIds: [2, 3] })
+
+    expect(w.text()).toContain('已选择 2 个在线节点')
+    const checkboxes = w.findAll('.node-row input[type="checkbox"]')
+    expect((checkboxes[0].element as HTMLInputElement).checked).toBe(false)
+    expect((checkboxes[1].element as HTMLInputElement).checked).toBe(true)
+    expect((checkboxes[2].element as HTMLInputElement).checked).toBe(true)
+  })
+
+  it('不传 preselectedNodeIds：行为不变（默认全选在线）', async () => {
+    setupNodesApi(nodesFixture)
+    const w = await openModal()
+    expect(w.text()).toContain('已选择 1 个在线节点')
+  })
+})
+
 describe('PublishConfirmModal.vue - 默认选中全部在线节点（route-management-ux-batch1 7.1）', () => {
   beforeEach(() => {
     vi.clearAllMocks()

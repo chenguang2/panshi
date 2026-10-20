@@ -500,6 +500,7 @@
       :current-version="publishModalCurrentVersion"
       :resource-summary="publishModalResourceSummary"
       :overwrite-warning="publishModalOverwriteWarning"
+      :preselected-node-ids="publishModalPreselectedNodeIds"
       @confirm="handlePublishConfirm"
       @cancel="handlePublishCancel"
     />
@@ -630,6 +631,7 @@ const publishModalCurrentVersion = ref<number | null>(null)
 // static-resources-ux-close-loop 9.1/9.2：资源摘要行 + 覆盖预警（静态资源域传入；其余域为空不显示）
 const publishModalResourceSummary = ref('')
 const publishModalOverwriteWarning = ref('')
+const publishModalPreselectedNodeIds = ref<number[]>([])
 let publishModalResolve: ((nodeIds: number[]) => void) | null = null
 
 function openPublishModal(title: string, clusterId: number, opts?: PublishModalOptions): Promise<number[]> {
@@ -638,6 +640,7 @@ function openPublishModal(title: string, clusterId: number, opts?: PublishModalO
   publishModalCurrentVersion.value = opts?.currentVersion ?? null
   publishModalResourceSummary.value = opts?.resourceSummary ?? ''
   publishModalOverwriteWarning.value = opts?.overwriteWarning ?? ''
+  publishModalPreselectedNodeIds.value = opts?.preselectedNodeIds ?? []
   publishModalVisible.value = true
   return new Promise((resolve) => {
     publishModalResolve = resolve

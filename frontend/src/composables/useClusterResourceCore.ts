@@ -24,6 +24,8 @@ export interface PublishModalOptions {
   resourceSummary?: string
   /** static-resources-ux-close-loop 9.2：覆盖预警，显示于确认键上方（静态资源域传） */
   overwriteWarning?: string
+  /** static-resources-ux-close-loop 7.3：重发失败节点预选（节点 id 集合；不传=默认全选在线） */
+  preselectedNodeIds?: number[]
 }
 
 export interface ResourceCoreDeps {

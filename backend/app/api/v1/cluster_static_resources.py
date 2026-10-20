@@ -48,7 +48,45 @@ def _get_storage_path(edge_uuid: str, version: int) -> str:
     return os.path.join(BASE_STORAGE_DIR, edge_uuid, f"{version}.zip")
 
 
-def resource_to_response(r: StaticResource) -> StaticResourceResponse:
+def _parse_publish_detail(raw: Optional[str]) -> Optional[dict]:
+    """last_publish_detail TEXT 列（JSON 字符串）→ 解析对象；损坏/为空返回 None。"""
+    if not raw:
+        return None
+    try:
+        parsed = json.loads(raw)
+        return parsed if isinstance(parsed, dict) else None
+    except (ValueError, TypeError):
+        return None
+
+
+def _rebuild_node_results(detail: Optional[dict]) -> dict:
+    """从旧 detail 重建按节点累积映射（static-resources-ux-close-loop 10.3 缺口修正）。
+
+    优先取 detail["node_results"]（本次修复起每次发布都会写入）；旧 detail 无该键时
+    从 total/success/failed_nodes 尽力重建——失败节点按 node_id（缺则按 node 串）落败，
+    历史成功节点身份不可考，以 legacy-ok-* 占位键保持计数；重建为空视为首次发布（纯覆盖）。
+    """
+    if not isinstance(detail, dict):
+        return {}
+    stored = detail.get("node_results")
+    if isinstance(stored, dict) and stored:
+        return dict(stored)
+    total = detail.get("total") or 0
+    if not total:
+        return {}
+    results: dict = {}
+    for fn in detail.get("failed_nodes") or []:
+        if not isinstance(fn, dict):
+            continue
+        key = str(fn.get("node_id") if fn.get("node_id") is not None else fn.get("node"))
+        results[key] = {"node": fn.get("node"), "ok": False, "error": fn.get("error") or ""}
+    success_count = int(detail.get("success") or 0)
+    for i in range(success_count):
+        results[f"legacy-ok-{i}"] = {"node": "（历史节点）", "ok": True, "error": ""}
+    return results
+
+
+def resource_to_response(r: StaticResource, route_exists: Optional[bool] = None) -> StaticResourceResponse:
     return StaticResourceResponse(
         id=r.id,
         cluster_id=r.cluster_id,
@@ -60,6 +98,10 @@ def resource_to_response(r: StaticResource) -> StaticResourceResponse:
         file_size=r.file_size,
         storage_path=r.storage_path,
         current_version=r.current_version,
+        last_publish_ok=r.last_publish_ok,
+        last_published_at=r.last_published_at.isoformat() + "Z" if r.last_published_at else None,
+        route_exists=route_exists,
+        last_publish_detail=_parse_publish_detail(r.last_publish_detail),
         created_at=r.created_at.isoformat() + "Z" if r.created_at else None,
         updated_at=r.updated_at.isoformat() + "Z" if r.updated_at else None,
     )
@@ -91,6 +133,16 @@ async def _get_route_with_plugins(db: AsyncSession, cluster_id: int, route_id: i
         raise HTTPException(status_code=400, detail="静态资源路由必须加载 static_resource 插件")
 
     return route
+
+
+async def _route_exists_map(db: AsyncSession, resources: list[StaticResource]) -> dict[int, bool]:
+    """route_id → EXISTS(路由行) 映射（static-resources-ux-close-loop 组 5：孤儿路由=false）。"""
+    route_ids = {r.route_id for r in resources if r.route_id is not None}
+    if not route_ids:
+        return {}
+    rows = await db.execute(select(Route.id).where(Route.id.in_(route_ids)))
+    existing = {row[0] for row in rows.all()}
+    return {rid: rid in existing for rid in route_ids}
 
 
 @router.get("", response_model=StaticResourceListResponse)
@@ -134,9 +186,11 @@ async def list_static_resources(
     result = await db.execute(query)
     resources = result.scalars().all()
 
+    exists_map = await _route_exists_map(db, resources)
+
     return StaticResourceListResponse(
         total=total,
-        items=[resource_to_response(r) for r in resources],
+        items=[resource_to_response(r, route_exists=exists_map.get(r.route_id, False)) for r in resources],
     )
 
 
@@ -269,10 +323,34 @@ async def update_static_resource(
     if not resource:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="静态资源不存在")
 
+    # static-resources-ux-close-loop 组 7（8.1）：route_id 换绑
+    # 目标资格复用 _get_route_with_plugins（400 三态），他绑 409，成功四字段同步
+    if body.route_id is not None and body.route_id != resource.route_id:
+        target_route = await _get_route_with_plugins(db, cluster_id, body.route_id)
+
+        bound_result = await db.execute(
+            select(StaticResource).where(
+                StaticResource.cluster_id == cluster_id,
+                StaticResource.route_id == body.route_id,
+                StaticResource.id != resource_id,
+            )
+        )
+        bound = bound_result.scalar_one_or_none()
+        if bound:
+            raise HTTPException(
+                status_code=409,
+                detail=f"该路由已关联静态资源「{bound.name}」，请先删除该资源或更换路由",
+            )
+
+        resource.route_id = target_route.id
+        resource.edge_uuid = target_route.edge_uuid
+        resource.name = target_route.name
+        resource.url_path = target_route.uri
+
     if body.description is not None:
         resource.description = body.description
 
-    audit = getattr(request.state, "audit", None)
+    audit = getattr(getattr(request, "state", None), "audit", None)
     if audit is not None:
         audit.detail = f"更新静态资源 {resource.name}"
     await db.commit()
@@ -471,22 +549,40 @@ async def publish_static_resource(
     if not nodes:
         raise HTTPException(status_code=400, detail="没有活跃的 Edge 节点")
 
-    with open(resource.storage_path, "rb") as f:
+    # static-resources-ux-close-loop 组 5（#29 同型修复）：节点 IO 是 30s 级外部调用，
+    # 读事务不得横跨 IO——commit 前把循环所需字段全部取本地变量（expire_on_commit 下
+    # 访问过期 ORM 属性会触发隐式 refresh，既慢又重开事务）
+    rid = resource.id
+    storage_path = resource.storage_path
+    resource_name = resource.name
+    current_version = resource.current_version
+    edge_uuid = resource.edge_uuid or ""
+    cluster_name = cluster.name if cluster else str(cluster_id)
+    node_infos = [{"id": n.id, "ip": n.ip, "port": n.management_port} for n in nodes]
+    # 10.3 缺口修正：旧 detail 必须在首次 commit 前预取（expire_on_commit 下 commit 后
+    # 访问 ORM 属性会隐式 refresh 重开事务，#29 范式）
+    old_detail_raw = resource.last_publish_detail
+    with open(storage_path, "rb") as f:
         zip_data = f.read()
+
+    await db.commit()  # 结束事务 + 落审计骨架；此后到第二事务前不再触碰 ORM 属性
 
     results = []
     all_success = True
     edge_logger = get_edge_logger()
-    edge_uuid = resource.edge_uuid or ""
     path = f"/edge/panshi/admin_static_resources?edge_uuid={edge_uuid}"
 
-    for node in nodes:
-        node_result: dict = {"node": f"{node.ip}:{node.management_port}", "status": "pending"}
+    for node in node_infos:
+        node_result: dict = {
+            "node": f"{node['ip']}:{node['port']}",
+            "node_id": node["id"],
+            "status": "pending",
+        }
         try:
             client = EdgeClient(
                 cluster_id=cluster_id,
-                node_ip=node.ip,
-                node_port=node.management_port,
+                node_ip=node["ip"],
+                node_port=node["port"],
             )
             edge_sync.mark_route(node_result, client)
             # zip 上传经中继可达 32m，raw_put 内层 timeout=30s——卸载到线程，
@@ -499,9 +595,9 @@ async def publish_static_resource(
             edge_logger.log_publish_result(
                 resource_type="static_resource",
                 cluster_id=cluster_id,
-                cluster_name=cluster.name if cluster else str(cluster_id),
-                resource_id=resource.id,
-                resource_name=resource.name,
+                cluster_name=cluster_name,
+                resource_id=rid,
+                resource_name=resource_name,
                 method="PUT",
                 path=path,
                 request_body=None,
@@ -519,9 +615,9 @@ async def publish_static_resource(
             edge_logger.log_publish_result(
                 resource_type="static_resource",
                 cluster_id=cluster_id,
-                cluster_name=cluster.name if cluster else str(cluster_id),
-                resource_id=resource.id,
-                resource_name=resource.name,
+                cluster_name=cluster_name,
+                resource_id=rid,
+                resource_name=resource_name,
                 method="PUT",
                 path=path,
                 request_body=None,
@@ -531,10 +627,54 @@ async def publish_static_resource(
                 error=e,
             )
 
+    # 第二事务写回发布结果（static-resources-ux-close-loop 组 5 + 10.3 修正）：
+    # 全成功/部分失败/全失败均落三列；detail 为 TEXT 存 JSON（#48：必须 json.dumps）。
+    # detail 按节点累积合并：本次运行覆盖其涉及的节点，未涉及的节点保留旧判定——
+    # 「重发失败节点」后其余节点计数不丢（否则徽章会从 2/3 失败跳成已分发 1/1）。
+    run_map = {
+        str(r.get("node_id")): {"node": r["node"], "ok": r["status"] == "success", "error": r.get("error", "")}
+        for r in results
+    }
+    merged_results = {**_rebuild_node_results(_parse_publish_detail(old_detail_raw)), **run_map}
+    merged_failed = [
+        {
+            "node": v.get("node"),
+            "node_id": int(k) if str(k).isdigit() else None,
+            "error": v.get("error") or "",
+        }
+        for k, v in merged_results.items()
+        if not v.get("ok")
+    ]
+    merged_ok_count = sum(1 for v in merged_results.values() if v.get("ok"))
+    detail = {
+        "total": len(merged_results),
+        "success": merged_ok_count,
+        "failed": len(merged_failed),
+        "failed_nodes": merged_failed,
+        "route": next((r.get("route") for r in results if r.get("route")), None),
+        "node_results": merged_results,
+    }
+    persisted_ok = len(merged_failed) == 0
+    from datetime import datetime as _dt
+
+    from sqlalchemy import update as _update
+
+    await db.execute(
+        _update(StaticResource)
+        .where(StaticResource.id == rid)
+        .values(
+            last_publish_ok=persisted_ok,
+            last_publish_detail=json.dumps(detail, ensure_ascii=False),
+            last_published_at=_dt.utcnow(),
+        )
+    )
+    await db.commit()
+
     return {
-        "success": all_success,
-        "current_version": resource.current_version,
+        "success": all_success,  # 语义=本次运行全部成功（日志/结果行）；徽章看持久化的 accumulated 状态
+        "current_version": current_version,
         "results": results,
+        "detail": detail,
     }
 
 

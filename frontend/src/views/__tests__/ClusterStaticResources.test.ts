@@ -77,6 +77,32 @@ function mkCluster() {
         cluster_id: 7,
       },
       {
+        id: 3,
+        name: 'orphan',
+        url_path: '/o/*',
+        current_version: 1,
+        route_exists: false,
+        cluster_id: 7,
+      },
+      {
+        id: 4,
+        name: 'partial',
+        url_path: '/p/*',
+        current_version: 2,
+        last_publish_ok: false,
+        last_published_at: '2026-10-19T09:00:00',
+        last_publish_detail: {
+          total: 3,
+          success: 1,
+          failed: 2,
+          failed_nodes: [
+            { node: '10.0.0.2', node_id: 22, error: 'boom' },
+            { node: '10.0.0.3', node_id: 23, error: 'timeout' },
+          ],
+        },
+        cluster_id: 7,
+      },
+      {
         id: 2,
         name: 'empty',
         url_path: '/z/*',
@@ -113,17 +139,48 @@ beforeEach(() => {
 })
 
 describe('ClusterStaticResources.vue（Tab）· static-resources-ux-close-loop 批 1', () => {
-  it('徽章一致：「已上传 vX」+「未发布」，不再出现「已发布」徽章', async () => {
+  it('五态徽章（7.2）：待上传/待分发按 last_publish_ok 判定，无版本=待上传', async () => {
     const w = await mountTab()
-    const tags = w.findAll('.ant-tag').map((t) => t.text())
-    expect(tags).toContain('已上传 v2')
-    expect(tags).toContain('未发布')
-    expect(tags.every((t) => !t.startsWith('已发布'))).toBe(true)
+    // portal：current_version=2、无 last_publish_ok → 待分发；empty：无版本 → 待上传
+    expect(w.text()).toContain('待分发')
+    expect(w.text()).toContain('待上传')
+    // 徽章不再出现「已发布」语义（4.1 失真文案，五态取代）
+    const badgeTexts = w.findAll('.srs-tag').map((t) => t.text())
+    expect(badgeTexts.every((t) => !t.startsWith('已发布'))).toBe(true)
+    // 时间语义拆分（7.2）：版本行「上传时间」
+    expect(w.text()).toContain('上传时间:')
   })
 
-  it('PublishStatusTag 传 timeLabel「最近变更」（铁律 8）', async () => {
+  it('PublishStatusTag 已被五态徽章取代（7.2），Tab 不再渲染该组件', async () => {
     const w = await mountTab()
-    expect(w.find('.pst-stub').text()).toBe('最近变更')
+    expect(w.find('.pst-stub').exists()).toBe(false)
+  })
+
+  it('失败态（7.3）：徽章显示 N/M 节点失败 + tooltip 列出失败节点，出现「重发失败节点」', async () => {
+    const w = await mountTab()
+    expect(w.text()).toContain('1/3 节点失败')
+    const partialCard = w.findAll('.plugin-config-card').find((c) => c.text().includes('partial'))!
+    const tip = partialCard.find('.srs-tag').attributes('title') || ''
+    expect(tip).toContain('最近分发')
+    expect(tip).toContain('10.0.0.2')
+    expect(tip).toContain('boom')
+    expect([...partialCard.findAll('button')].some((b) => b.text().includes('重发失败节点'))).toBe(true)
+  })
+
+  it('配置异常态（7.3）：操作收敛为删除——其余禁用带指路 tooltip', async () => {
+    const w = await mountTab()
+    const orphanCard = w.findAll('.plugin-config-card').find((c) => c.text().includes('orphan'))!
+    const tip = '关联路由不存在，请删除该资源或重建路由'
+    const byText = (t: string) => [...orphanCard.findAll('button')].find((b) => b.text().trim() === t)!
+    expect(byText('编辑').attributes('disabled')).toBeDefined()
+    expect(byText('上传 ZIP').attributes('disabled')).toBeDefined()
+    expect(byText('发布').attributes('disabled')).toBeDefined()
+    expect(byText('版本管理').attributes('disabled')).toBeDefined()
+    expect(byText('编辑').attributes('title')).toBe(tip)
+    expect(byText('删除').attributes('disabled')).toBeUndefined()
+    expect([...orphanCard.findAll('button')].some((b) => b.text().includes('重发失败节点'))).toBe(false)
+    // 徽章=配置异常
+    expect(orphanCard.find('.srs-tag').text()).toBe('配置异常')
   })
 
   it('卡片体积走 formatFileSize（#26 收敛，无本地 toFixed）', async () => {
@@ -160,9 +217,11 @@ describe('ClusterStaticResources.vue（Tab）· static-resources-ux-close-loop �
     const w = await mountTab()
     const buttons = w.findAll('button')
     const viewBtns = buttons.filter((b) => b.text().includes('查看 ZIP'))
-    expect(viewBtns.length).toBe(2)
-    // 无文件卡片置灰
+    expect(viewBtns.length).toBe(4)
+    // 无文件卡片置灰（orphan/partial/empty）
     expect(viewBtns[1].attributes('disabled')).toBeDefined()
+    expect(viewBtns[2].attributes('disabled')).toBeDefined()
+    expect(viewBtns[3].attributes('disabled')).toBeDefined()
     // 有文件卡片点击 → 弹窗渲染内容行
     await viewBtns[0].trigger('click')
     await flushPromises()
@@ -174,10 +233,16 @@ describe('ClusterStaticResources.vue（Tab）· static-resources-ux-close-loop �
   it('「发布」未上传时置灰并带 title 提示（与全局页一致）', async () => {
     const w = await mountTab()
     const publishBtns = w.findAll('button').filter((b) => b.text().trim() === '发布')
-    expect(publishBtns.length).toBe(2)
-    expect(publishBtns[1].attributes('disabled')).toBeDefined()
-    expect(publishBtns[1].attributes('title')).toBe('暂未上传 ZIP 文件')
+    expect(publishBtns.length).toBe(4)
+    // portal（有文件）可发布
     expect(publishBtns[0].attributes('disabled')).toBeUndefined()
+    // orphan：配置异常态禁用 + 指路 tooltip（7.3）
+    expect(publishBtns[1].attributes('disabled')).toBeDefined()
+    expect(publishBtns[1].attributes('title')).toBe('关联路由不存在，请删除该资源或重建路由')
+    // partial / empty：无文件置灰
+    expect(publishBtns[2].attributes('disabled')).toBeDefined()
+    expect(publishBtns[2].attributes('title')).toBe('暂未上传 ZIP 文件')
+    expect(publishBtns[3].attributes('disabled')).toBeDefined()
   })
 
   it('操作按钮为原生按钮体系（btn btn-ghost/btn-secondary，无 a-button 两字插空格）', async () => {
