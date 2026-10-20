@@ -4,9 +4,13 @@ import { setActivePinia, createPinia } from 'pinia'
 import { itGroupFilterSuite } from './helpers/groupFilterSuite'
 
 const mockApiGet = vi.fn()
+const mockApiPost = vi.fn()
 
 vi.mock('@/api', () => ({
-  default: { get: (...args: any[]) => mockApiGet(...args) },
+  default: {
+    get: (...args: any[]) => mockApiGet(...args),
+    post: (...args: any[]) => mockApiPost(...args),
+  },
 }))
 
 vi.mock('vue-router', () => ({
@@ -191,9 +195,8 @@ describe('StaticResourceList.vue', () => {
     await flushPromises()
     await wrapper.vm.$nextTick()
 
-    // Should show server total (99) not displayedResources.length (1)
-    expect(wrapper.text()).toContain('共 99 个静态资源')
-    expect(wrapper.text()).not.toContain('共 1 个静态资源')
+    // 过滤激活：X = 服务器过滤后总数（99）；Y = 并行无过滤请求基线（2）
+    expect(wrapper.text()).toContain('匹配 99 / 共 2 个静态资源')
   })
 })
 
@@ -203,7 +206,7 @@ describe('StaticResourceList.vue 发布日志 · 经中继 / 直连 标注', () 
     PublishConfirmModal: {
       name: 'PublishConfirmModal',
       template: '<div class="mock-publish-modal" />',
-      props: ['visible', 'title', 'clusterId'],
+      props: ['visible', 'title', 'clusterId', 'resourceSummary', 'overwriteWarning'],
     },
   }
 
@@ -231,7 +234,7 @@ describe('StaticResourceList.vue 发布日志 · 经中继 / 直连 标注', () 
     return vi.mocked(executePublish).mock.calls.at(-1)![0]
   }
 
-  it('route=relay → 节点行尾（经中继）', async () => {
+  it('route=relay → 节点行尾（经中继），状态出中文（2.2 resultStatusLabel）', async () => {
     const opts = await mountAndOpenPublish()
     const logs: string[] = []
     opts.handleResult!(
@@ -239,7 +242,7 @@ describe('StaticResourceList.vue 发布日志 · 经中继 / 直连 标注', () 
       (m: string) => logs.push(m),
       { percent: 0, status: 'active' },
     )
-    expect(logs.join('\n')).toContain('10.0.0.1:9180: success（经中继）')
+    expect(logs.join('\n')).toContain('10.0.0.1:9180: 成功（经中继）')
   })
 
   it('route=direct → 节点行尾（直连）', async () => {
@@ -250,7 +253,7 @@ describe('StaticResourceList.vue 发布日志 · 经中继 / 直连 标注', () 
       (m: string) => logs.push(m),
       { percent: 0, status: 'active' },
     )
-    expect(logs.join('\n')).toContain('10.0.0.2:9180: success（直连）')
+    expect(logs.join('\n')).toContain('10.0.0.2:9180: 成功（直连）')
   })
 
   it('无 route 字段 → 不显示任何路径标注（向后兼容）', async () => {
@@ -261,8 +264,102 @@ describe('StaticResourceList.vue 发布日志 · 经中继 / 直连 标注', () 
       status: 'active',
     })
     const text = logs.join('\n')
-    expect(text).toContain('10.0.0.9:9180: success')
+    expect(text).toContain('10.0.0.9:9180: 成功')
     expect(text).not.toContain('（经中继）')
     expect(text).not.toContain('（直连）')
+  })
+})
+
+describe('StaticResourceList.vue 添加弹窗 · #204 路由下拉占位守卫', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/static_resources') return Promise.resolve({ data: MOCK_DATA })
+      if (url === '/clusters')
+        return Promise.resolve({ data: { items: [{ id: 1, display_name: '生产集群', group_name: '线上' }] } })
+      if (url === '/clusters/1/routes') return Promise.resolve({ data: [] })
+      return Promise.reject(new Error('unknown url'))
+    })
+  })
+
+  // 约束 #204：原生 select 的模型初值/重置点必须与占位 option value='' 精确匹配——
+  // null 会被 select 渲染器判为无匹配 option → selectedIndex=-1 → 下拉框整块空白（非占位文案）
+  it('add modal shows route select placeholder (selectedIndex=0, not blank)', async () => {
+    const StaticResourceList = (await import('../StaticResourceList.vue')).default
+    const wrapper = mount(StaticResourceList, { global: { stubs } })
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text().includes('添加静态资源'))!
+      .trigger('click')
+    await wrapper.vm.$nextTick()
+    const overlay = wrapper.findAll('.modal-overlay').find((o) => o.text().includes('所属集群'))!
+    const selects = overlay.findAll('select')
+    expect(selects.length).toBe(2)
+    const routeSelect = selects[1]
+    expect(routeSelect.element.selectedIndex).toBe(0)
+    expect((routeSelect.element.selectedOptions[0]?.textContent || '').trim()).toBe('请选择路由')
+    // 重置点守卫：选完集群后路由下拉仍回落到占位（watch 重置 route_id=''）
+    await selects[0].setValue(1)
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    expect(routeSelect.element.selectedIndex).toBe(0)
+    expect((routeSelect.element.selectedOptions[0]?.textContent || '').trim()).toBe('请选择路由')
+  })
+})
+
+describe('StaticResourceList.vue 上传走共享流（static-resources-ux-close-loop 1.2）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/static_resources') return Promise.resolve({ data: MOCK_DATA })
+      if (url === '/clusters')
+        return Promise.resolve({ data: { items: [{ id: 1, display_name: '生产集群', group_name: '线上' }] } })
+      if (url === '/clusters/1/routes') return Promise.resolve({ data: [] })
+      if (url === '/clusters/1/static-resources') return Promise.resolve({ data: { items: [] } })
+      return Promise.reject(new Error('unknown url'))
+    })
+    mockApiPost.mockResolvedValue({ data: { current_version: 4, file_size: 204800 } })
+  })
+
+  // 全局页上传不再裸 api.post：点「上传 ZIP」→ 共享流接管（composable 预检 + 进度弹窗 + 结果行）
+  it('clicking 上传 ZIP opens shared stream (progress modal with result lines, not bare api.post at click time)', async () => {
+    const StaticResourceList = (await import('../StaticResourceList.vue')).default
+    const wrapper = mount(StaticResourceList, { global: { stubs } })
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+
+    // 拦 file input click：模拟用户选择小 zip（≤32MB）
+    const clickSpy = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(function (
+      this: HTMLInputElement,
+    ) {
+      const file = new File(['PK'], 'demo.zip')
+      Object.defineProperty(this, 'files', { value: [file] })
+      this.dispatchEvent(new Event('change'))
+    })
+    try {
+      const uploadBtn = wrapper.findAll('button').find((b) => b.text().includes('上传 ZIP'))
+      expect(uploadBtn).toBeTruthy()
+      await uploadBtn!.trigger('click')
+      // 共享流内有 200ms 启动延时（真实计时器），等待其走完再断言
+      await new Promise((r) => setTimeout(r, 300))
+      await flushPromises()
+      await wrapper.vm.$nextTick()
+
+      // 点击时不发裸请求（预检通过后才发 upload）
+      expect(mockApiPost).toHaveBeenCalledTimes(1)
+      expect(mockApiPost.mock.calls[0][0]).toBe('/clusters/1/static-resources/1/upload')
+      // 进度弹窗（共享流）渲染于 body：标题 + 上传结果行（1.3 新文案）
+      const bodyText = document.body.textContent || ''
+      expect(bodyText).toContain('上传静态资源: static-files')
+      expect(bodyText).toContain('已保存到管理端（版本 v4，200.0 KB）')
+      expect(bodyText).toContain('发布后才会更新节点文件')
+      expect(bodyText).not.toContain('/data/')
+    } finally {
+      clickSpy.mockRestore()
+    }
   })
 })

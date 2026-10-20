@@ -23,6 +23,8 @@
         <template v-else>
           <!-- M5：当前已有版本时说明本次发布将创建新版本（可选参数，未传/未发布不显示该行） -->
           <div v-if="versionHintText" class="version-hint">{{ versionHintText }}</div>
+          <!-- static-resources-ux-close-loop 9.1：资源摘要行（可选，静态资源域传入；不复用 version-hint 行） -->
+          <div v-if="resourceSummary" class="resource-summary">{{ resourceSummary }}</div>
           <!-- global-rule-ux-close-loop 5.2：全量取数成功但集群无节点 → 指路文案（不再只留空列表 + 永久禁用确认键） -->
           <div v-if="nodes.length === 0" class="modal-state">
             <p class="state-text">该集群暂无节点，无法发布；请先在「节点管理」添加节点</p>
@@ -34,7 +36,11 @@
                 <span class="divider-vertical">|</span>
                 <a class="action-link" @click="clearAll">取消全选</a>
               </span>
-              <span class="selection-count">已选择 {{ selectedNodeIds.length }} / {{ nodes.length }} 个节点</span>
+              <span class="selection-count">
+                已选择 {{ selectedNodeIds.length }} 个在线节点<template v-if="offlineCount > 0"
+                  >（{{ offlineCount }} 个离线不可选）</template
+                >
+              </span>
             </div>
 
             <div class="node-list">
@@ -67,6 +73,9 @@
             <div v-if="selectedNodeIds.length === 0 && nodes.length > 0" class="hint-text">请至少选择 1 个节点</div>
           </template>
         </template>
+
+        <!-- static-resources-ux-close-loop 9.2：覆盖预警（可选，确认键上方） -->
+        <div v-if="overwriteWarning" class="overwrite-warning">{{ overwriteWarning }}</div>
       </div>
 
       <div class="modal-footer">
@@ -98,6 +107,10 @@ const props = defineProps<{
   clusterId: number
   /** 当前已发布版本号：非空正数时显示「本次发布将创建新版本 v(N+1)」；未发布不传/传 null（M5 可选参数） */
   currentVersion?: number | null
+  /** 资源摘要行（可选；传入时显示在节点列表上方，static-resources-ux-close-loop 9.1） */
+  resourceSummary?: string
+  /** 覆盖预警（可选；danger 色一行，确认键上方，9.2） */
+  overwriteWarning?: string
 }>()
 
 const emit = defineEmits<{
@@ -114,6 +127,10 @@ const error = ref<string | null>(null)
 const versionHintText = computed(() =>
   props.currentVersion && props.currentVersion > 0 ? `本次发布将创建新版本 v${props.currentVersion + 1}` : '',
 )
+
+// static-resources-ux-close-loop 4.4：计数改为「已选择 N 个在线节点（M 个离线不可选）」，
+// M = 离线节点数（禁选不勾，selectedNodeIds 恒不含离线节点）
+const offlineCount = computed(() => nodes.value.filter((n) => n.status !== 1).length)
 
 watch(
   () => props.visible,
@@ -265,6 +282,24 @@ const handleOpenChange = (open: boolean): void => {
   border-radius: var(--radius-md);
   font-size: 12px;
   color: var(--fg);
+}
+
+/* static-resources-ux-close-loop 9.1：资源摘要行（样式与 version-hint 同族） */
+.resource-summary {
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  color: var(--fg);
+}
+
+/* static-resources-ux-close-loop 9.2：覆盖预警（确认键上方） */
+.overwrite-warning {
+  margin-top: 8px;
+  color: var(--danger);
+  font-size: 13px;
 }
 
 .selection-bar {

@@ -1,10 +1,10 @@
 <template>
   <div class="tab-content">
     <div class="node-actions">
-      <a-button size="small" type="primary" @click="showAddStaticResource(cluster)">添加静态资源</a-button>
+      <button class="btn btn-primary" @click="showAddStaticResource(cluster)">+ 添加静态资源</button>
     </div>
     <div v-if="loading" class="loading-state">加载中...</div>
-    <div v-if="!loading" style="display: flex; flex-wrap: wrap; gap: 16px; padding: 16px 0;">
+    <div v-if="!loading" style="display: flex; flex-wrap: wrap; gap: 16px; padding: 16px 0">
       <div
         v-for="sr in cluster.static_resources"
         :key="sr.id"
@@ -19,24 +19,60 @@
           </div>
           <div class="pcc-meta">
             <div class="pcc-status-row">
-              <a-tag v-if="sr.current_version" color="green" size="small">已发布</a-tag>
-              <a-tag v-else color="orange" size="small">未发布</a-tag>
+              <a-tag v-if="sr.current_version" color="default">已上传 v{{ sr.current_version }}</a-tag>
+              <a-tag v-else color="orange">未发布</a-tag>
             </div>
             <div class="pcc-version">
-              <template v-if="sr.current_version"><PublishStatusTag :version="sr.current_version" :published-at="sr.updated_at" /></template>
+              <template v-if="sr.current_version">
+                <PublishStatusTag :version="sr.current_version" :published-at="sr.updated_at" time-label="最近变更" />
+              </template>
               <template v-else>&nbsp;</template>
             </div>
           </div>
         </div>
         <div v-if="sr.description" class="pcc-desc">{{ sr.description }}</div>
-        <div v-if="sr.file_size" class="sr-size">大小: {{ (sr.file_size / 1024).toFixed(1) }} KB</div>
-        <div class="pcc-actions" style="flex-wrap: wrap;">
-          <a-button size="small" @click.stop="editStaticResource(cluster, sr)" title="编辑"><EditOutlined /></a-button>
-          <a-button size="small" @click.stop="uploadStaticResourceZip(sr)" :disabled="!sr.id">上传 ZIP</a-button>
-          <a-button size="small" @click.stop="publishStaticResource(cluster, sr)" :disabled="!sr.file_size">发布</a-button>
-          <a-button size="small" @click.stop="openStaticResourceVersionManagement(cluster, sr)" :disabled="!sr.current_version">版本管理</a-button>
-          <span style="flex:1"></span>
-          <a-button size="small" danger @click.stop="deleteStaticResource(cluster, sr)" title="删除"><DeleteOutlined /></a-button>
+        <div v-if="sr.file_size" class="sr-size">大小: {{ formatFileSize(sr.file_size) }}</div>
+        <div class="pcc-actions" style="flex-wrap: wrap">
+          <button class="btn btn-ghost btn-sm" @click.stop="editStaticResource(cluster, sr)" title="编辑">编辑</button>
+          <button
+            class="btn btn-ghost btn-sm"
+            @click.stop="uploadStaticResourceZip(sr)"
+            :disabled="srUploading || !sr.id"
+          >
+            上传 ZIP
+          </button>
+          <button
+            class="btn btn-secondary btn-sm"
+            @click.stop="publishStaticResource(cluster, sr)"
+            :disabled="!sr.file_size"
+            :title="!sr.file_size ? '暂未上传 ZIP 文件' : ''"
+          >
+            发布
+          </button>
+          <button
+            class="btn btn-ghost btn-sm"
+            @click.stop="openStaticResourceVersionManagement(cluster, sr)"
+            :disabled="!sr.current_version"
+          >
+            版本管理
+          </button>
+          <button
+            class="btn btn-ghost btn-sm"
+            @click.stop="viewZipContents(sr)"
+            :disabled="!sr.file_size"
+            :title="!sr.file_size ? '暂未上传 ZIP 文件' : '查看 ZIP 内容'"
+          >
+            查看 ZIP
+          </button>
+          <span style="flex: 1"></span>
+          <button
+            class="btn btn-ghost btn-sm"
+            style="color: var(--danger)"
+            @click.stop="deleteStaticResource(cluster, sr)"
+            title="删除"
+          >
+            删除
+          </button>
         </div>
       </div>
       <div v-if="!cluster.static_resources || cluster.static_resources.length === 0" class="empty-hint">
@@ -46,53 +82,67 @@
 
     <!-- Static Resource Modal -->
     <Teleport to="body">
-    <div class="modal-overlay" :style="{ display: staticResourceModalVisible ? 'flex' : 'none' }">
-      <div class="modal" style="max-width:600px;">
-        <div class="modal-header">
-          <h2>{{ staticResourceFormMode === 'add' ? '添加静态资源' : '编辑静态资源' }}</h2>
-          <button class="modal-close" @click="staticResourceModalVisible = false">&times;</button>
-        </div>
-        <div class="modal-body">
-          <a-form :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-            <a-form-item v-if="staticResourceFormMode === 'add'" label="选择路由">
-              <a-select
-                v-model:value="staticResourceFormData.route_id"
-                placeholder="请选择路由"
-                show-search
-                :filter-option="(input: string, option: { value: string; label: string }) => (option.label || '').toLowerCase().includes(input.toLowerCase())"
-                @change="onStaticResourceRouteChange"
-              >
-                <a-select-option v-for="r in staticResourceEditingCluster?.routes || []" :key="r.id" :value="r.id">
-                  {{ r.name }} ({{ r.uri }})
-                </a-select-option>
-              </a-select>
-              <div style="margin-top: 6px; font-size: 12px;">
-                <div style="color: #999;">选择路由的要求：</div>
-                <div :style="{ color: !uriValid ? '#ff4d4f' : '#52c41a' }">
-                  {{ uriValid ? '✅' : '❌' }} 路由路径必须以 /* 结尾
+      <div class="modal-overlay" :style="{ display: staticResourceModalVisible ? 'flex' : 'none' }">
+        <div class="modal" style="max-width: 600px">
+          <div class="modal-header">
+            <h2>{{ staticResourceFormMode === 'add' ? '添加静态资源' : '编辑静态资源' }}</h2>
+            <button class="modal-close" @click="staticResourceModalVisible = false">&times;</button>
+          </div>
+          <div class="modal-body">
+            <a-form :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
+              <a-form-item v-if="staticResourceFormMode === 'add'" label="选择路由" required>
+                <a-select
+                  v-model:value="staticResourceFormData.route_id"
+                  placeholder="请选择路由"
+                  show-search
+                  :filter-option="
+                    (input: string, option: { value: string; label: string }) =>
+                      (option.label || '').toLowerCase().includes(input.toLowerCase())
+                  "
+                  @change="onStaticResourceRouteChange"
+                >
+                  <a-select-option
+                    v-for="r in staticResourceEditingCluster?.routes || []"
+                    :key="r.id"
+                    :value="r.id"
+                    :disabled="!staticResourceRouteEligibility(r).eligible"
+                  >
+                    {{ r.name }} ({{ r.uri }}){{ routeEligibilitySuffix(r) }}
+                  </a-select-option>
+                </a-select>
+                <div style="margin-top: 6px; font-size: 12px">
+                  <div style="color: #999">选择路由的要求：</div>
+                  <div :style="{ color: !uriValid ? '#ff4d4f' : '#52c41a' }">
+                    {{ uriValid ? '✅' : '❌' }} 路由路径必须以 /* 结尾
+                  </div>
+                  <div :style="{ color: !publishedValid ? '#ff4d4f' : '#52c41a' }">
+                    {{ publishedValid ? '✅' : '❌' }} 路由必须已发布到 Edge 节点
+                  </div>
+                  <div :style="{ color: !pluginValid ? '#ff4d4f' : '#52c41a' }">
+                    {{ pluginValid ? '✅' : '❌' }} 路由必须挂载 static_resource 插件
+                  </div>
                 </div>
-                <div :style="{ color: !publishedValid ? '#ff4d4f' : '#52c41a' }">
-                  {{ publishedValid ? '✅' : '❌' }} 路由必须已发布到 Edge 节点
-                </div>
-                <div :style="{ color: !pluginValid ? '#ff4d4f' : '#52c41a' }">
-                  {{ pluginValid ? '✅' : '❌' }} 路由必须挂载 static_resource 插件
-                </div>
-              </div>
-            </a-form-item>
-            <a-form-item v-else label="关联路由">
-              <span>{{ staticResourceFormData.name }} ({{ staticResourceFormData.url_path }})</span>
-            </a-form-item>
-            <a-form-item label="描述" name="description">
-              <a-textarea v-model:value="staticResourceFormData.description" :rows="2" placeholder="可选描述" />
-            </a-form-item>
-          </a-form>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" @click="staticResourceModalVisible = false">取消</button>
-          <button class="btn btn-primary" @click="handleStaticResourceSubmit" :disabled="staticResourceFormMode === 'add' && !staticResourceFormValid">{{ staticResourceFormMode === 'add' ? '创建' : '保存' }}</button>
+              </a-form-item>
+              <a-form-item v-else label="关联路由">
+                <span>{{ staticResourceFormData.name }} ({{ staticResourceFormData.url_path }})</span>
+              </a-form-item>
+              <a-form-item label="描述" name="description">
+                <a-textarea v-model:value="staticResourceFormData.description" :rows="2" placeholder="可选描述" />
+              </a-form-item>
+            </a-form>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" @click="staticResourceModalVisible = false">取消</button>
+            <button
+              class="btn btn-primary"
+              @click="handleStaticResourceSubmit"
+              :disabled="staticResourceFormMode === 'add' && !staticResourceFormValid"
+            >
+              {{ staticResourceFormMode === 'add' ? '创建' : '保存' }}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
     </Teleport>
 
     <!-- Version Management Modal -->
@@ -103,21 +153,74 @@
       :cluster-id="versionModalClusterId"
       :resource-name="versionModalResourceName"
       :edge-uuid="versionModalEdgeUuid"
+      :hide-config-keys="['file_path', 'route_id', 'edge_uuid']"
       @published="onVersionPublished"
     />
 
+    <!-- ZIP 内容弹窗（static-resources-ux-close-loop 3.4：Tab 卡片「查看 ZIP」，与全局页同款） -->
+    <Teleport to="body">
+      <div class="modal-overlay" :style="{ display: zipContentsModalVisible ? 'flex' : 'none' }">
+        <div class="modal" style="max-width: 800px">
+          <div class="modal-header">
+            <h2>ZIP 内容 — {{ zipContentsResource?.name || '' }}</h2>
+            <button class="modal-close" @click="closeZipContents">&times;</button>
+          </div>
+          <div class="modal-body" style="max-height: 60vh; overflow: auto">
+            <div v-if="zipContentsLoading" class="loading-state">加载中...</div>
+            <div v-else-if="zipContentsError" class="empty-hint" style="color: var(--danger)">
+              {{ zipContentsError }}
+            </div>
+            <div v-else-if="zipContentsItems.length === 0" class="empty-hint">
+              {{ zipContentsMessage || 'ZIP 包内无文件' }}
+            </div>
+            <template v-else>
+              <div
+                v-if="zipContentsItems.length < zipContentsTotal"
+                style="margin-bottom: 8px; font-size: 12px; color: var(--muted)"
+              >
+                仅显示前 {{ zipContentsItems.length }} 个 / 共 {{ zipContentsTotal }} 个文件
+              </div>
+              <table class="zip-table">
+                <thead>
+                  <tr>
+                    <th style="width: 50%">文件名</th>
+                    <th style="width: 15%; text-align: right">文件大小</th>
+                    <th style="width: 15%; text-align: right">压缩后</th>
+                    <th style="width: 20%; text-align: right">修改时间</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(item, idx) in zipContentsItems" :key="idx">
+                    <td style="font-family: var(--font-mono); font-size: 12px">{{ item.name }}</td>
+                    <td style="text-align: right; font-family: var(--font-mono); font-size: 12px">
+                      {{ formatFileSize(item.file_size) }}
+                    </td>
+                    <td style="text-align: right; font-family: var(--font-mono); font-size: 12px">
+                      {{ formatFileSize(item.compressed_size) }}
+                    </td>
+                    <td style="text-align: right; font-family: var(--font-mono); font-size: 12px">
+                      {{ formatDate(item.modified) }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </template>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { EditOutlined, DeleteOutlined } from '@ant-design/icons-vue'
 import api from '@/api'
 import type { Cluster } from '@/types'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import { useClusterStaticResources } from '@/composables/useClusterStaticResources'
 import type { VersionModalState } from '@/composables/useClusterPluginConfigs'
-import { formatDate } from '@/utils/format'
+import { formatDate, formatFileSize } from '@/utils/format'
+import { staticResourceRouteEligibility, routeEligibilitySuffix } from '@/utils/staticResourceRoute'
 import PublishStatusTag from '@/components/PublishStatusTag.vue'
 
 const props = defineProps<{
@@ -163,6 +266,7 @@ const {
   handleStaticResourceSubmit,
   deleteStaticResource,
   uploadStaticResource,
+  uploading: srUploading,
   publishStaticResource,
   openStaticResourceVersionManagement,
   onStaticResourceRouteChange,
@@ -176,10 +280,48 @@ const {
 // Alias to match template usage from original ClusterList.vue
 const uploadStaticResourceZip = uploadStaticResource
 
+// ── ZIP 内容弹窗（static-resources-ux-close-loop 3.4）──────────────────────
+interface ZipItem {
+  name: string
+  file_size: number
+  compressed_size: number
+  modified: string
+}
+const zipContentsModalVisible = ref(false)
+const zipContentsLoading = ref(false)
+const zipContentsError = ref('')
+const zipContentsMessage = ref('')
+const zipContentsItems = ref<ZipItem[]>([])
+const zipContentsTotal = ref(0)
+const zipContentsResource = ref<{ id: number; name: string } | null>(null)
+
+async function viewZipContents(sr: { id: number; name: string; file_size?: number | null }) {
+  if (!sr.id) return
+  zipContentsResource.value = { id: sr.id, name: sr.name }
+  zipContentsModalVisible.value = true
+  zipContentsLoading.value = true
+  zipContentsError.value = ''
+  zipContentsMessage.value = ''
+  try {
+    const res = await api.get(`/clusters/${props.cluster.id}/static-resources/${sr.id}/zip-contents`)
+    zipContentsItems.value = res.data.items || []
+    zipContentsTotal.value = res.data.total_count || 0
+    zipContentsMessage.value = res.data.message || ''
+  } catch {
+    zipContentsError.value = '获取 ZIP 内容失败'
+  } finally {
+    zipContentsLoading.value = false
+  }
+}
+
+function closeZipContents() {
+  zipContentsModalVisible.value = false
+  zipContentsResource.value = null
+}
+
 function onVersionPublished() {
   emit('refresh')
 }
-
 </script>
 
 <style scoped>
@@ -282,5 +424,28 @@ function onVersionPublished() {
   padding: 40px;
   color: var(--muted);
 }
-.loading-state { text-align: center; padding: 48px 0; color: var(--muted); font-size: 14px; }
+.loading-state {
+  text-align: center;
+  padding: 48px 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+.zip-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.zip-table th,
+.zip-table td {
+  border-bottom: 1px solid var(--border);
+  padding: 6px 8px;
+  text-align: left;
+}
+.zip-table th {
+  color: var(--muted);
+  font-weight: 600;
+}
+.zip-table tbody tr:hover {
+  background: var(--bg);
+}
 </style>

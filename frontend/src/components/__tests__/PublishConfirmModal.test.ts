@@ -118,8 +118,9 @@ describe('PublishConfirmModal.vue - 节点清单全量拉取（route-management-
     const w = await openModal()
 
     expect(w.findAll('.node-row').length).toBe(600)
-    // 7.1 反转：600 个节点全部在线 → 默认全选（原「已选择 0 / 600」断言已反转）
-    expect(w.text()).toContain('已选择 600 / 600 个节点')
+    // 7.1 反转：600 个节点全部在线 → 默认全选；4.4 计数改「N 个在线节点」（无离线不带后缀）
+    expect(w.text()).toContain('已选择 600 个在线节点')
+    expect(w.text()).not.toContain('离线不可选')
     const pages = mockApiGet.mock.calls.map((c) => (c[1] as { params: { page: number } }).params.page)
     expect(pages).toEqual([1, 2])
     for (const call of mockApiGet.mock.calls) {
@@ -168,7 +169,7 @@ describe('PublishConfirmModal.vue - 默认选中全部在线节点（route-manag
 
     const w = await openModal()
 
-    expect(w.text()).toContain('已选择 1 / 2 个节点')
+    expect(w.text()).toContain('已选择 1 个在线节点（1 个离线不可选）')
     const checkboxes = w.findAll('.node-row input[type="checkbox"]')
     expect((checkboxes[0].element as HTMLInputElement).checked).toBe(true)
     expect((checkboxes[0].element as HTMLInputElement).disabled).toBe(false)
@@ -183,9 +184,21 @@ describe('PublishConfirmModal.vue - 默认选中全部在线节点（route-manag
 
     const w = await openModal()
 
-    expect(w.text()).toContain('已选择 0 / 1 个节点')
+    expect(w.text()).toContain('已选择 0 个在线节点（1 个离线不可选）')
     expect(w.find('.modal-footer .btn-primary').attributes('disabled')).toBeDefined()
     expect(w.text()).toContain('请至少选择 1 个节点')
+  })
+
+  it('全在线集群：计数不带「（M 个离线不可选）」括号段（4.4）', async () => {
+    setupNodesApi([
+      { id: 4, ip: '10.0.0.4', service_port: 8080, management_port: 9180, edge_path: '/edge', status: 1 },
+      { id: 5, ip: '10.0.0.5', service_port: 8080, management_port: 9180, edge_path: '/edge', status: 1 },
+    ])
+
+    const w = await openModal()
+
+    expect(w.text()).toContain('已选择 2 个在线节点')
+    expect(w.text()).not.toContain('个离线不可选')
   })
 
   it('「全选/取消全选」保留：取消后归零禁用；再全选仅勾在线节点', async () => {
@@ -197,11 +210,56 @@ describe('PublishConfirmModal.vue - 默认选中全部在线节点（route-manag
     expect(links.map((l) => l.text())).toEqual(['全选', '取消全选'])
     // 取消全选：0 选中 → 确认键禁用 + 守卫文案
     await links[1].trigger('click')
-    expect(w.text()).toContain('已选择 0 / 2 个节点')
+    expect(w.text()).toContain('已选择 0 个在线节点（1 个离线不可选）')
     expect(w.find('.modal-footer .btn-primary').attributes('disabled')).toBeDefined()
     // 再全选：仅在线节点（1 个）
     await links[0].trigger('click')
-    expect(w.text()).toContain('已选择 1 / 2 个节点')
+    expect(w.text()).toContain('已选择 1 个在线节点（1 个离线不可选）')
     expect(w.find('.modal-footer .btn-primary').attributes('disabled')).toBeUndefined()
+  })
+})
+
+// ── 可选 props：resourceSummary / overwriteWarning（static-resources-ux-close-loop 9.1/9.2）──
+// 跨域共享组件：新能力一律可选 props，未传时其它域零变化；静态资源发布不产生新版本，
+// 摘要/覆盖预警不复用 currentVersion 版本提示行。
+
+describe('PublishConfirmModal.vue - resourceSummary / overwriteWarning 可选 props（static-resources-ux-close-loop）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('未传两个 props：不渲染摘要行与覆盖预警（其它域零变化）', async () => {
+    setupNodesApi(nodesFixture)
+
+    const w = await openModal()
+
+    expect(w.find('.resource-summary').exists()).toBe(false)
+    expect(w.find('.overwrite-warning').exists()).toBe(false)
+  })
+
+  it('传入 resourceSummary + overwriteWarning：分别渲染摘要行与确认键上方预警，不渲染 version-hint', async () => {
+    setupNodesApi(nodesFixture)
+
+    const w = await openModal({
+      resourceSummary: '将把「docs」v3（200.0 KB，/docs/*）分发到所选节点',
+      overwriteWarning: '发布将覆盖所选节点上的现有静态资源文件',
+    })
+
+    expect(w.find('.resource-summary').text()).toBe('将把「docs」v3（200.0 KB，/docs/*）分发到所选节点')
+    expect(w.find('.overwrite-warning').text()).toBe('发布将覆盖所选节点上的现有静态资源文件')
+    // 版本提示行与摘要行互不复用（铁律 7：静态资源发布不产生新版本）
+    expect(w.find('.version-hint').exists()).toBe(false)
+  })
+
+  it('currentVersion 与 resourceSummary 并存时各行独立（共享弹窗双 prop 兼容）', async () => {
+    setupNodesApi(nodesFixture)
+
+    const w = await openModal({
+      currentVersion: 2,
+      resourceSummary: '将把「docs」v3（200.0 KB，/docs/*）分发到所选节点',
+    })
+
+    expect(w.find('.version-hint').text()).toBe('本次发布将创建新版本 v3')
+    expect(w.find('.resource-summary').exists()).toBe(true)
   })
 })

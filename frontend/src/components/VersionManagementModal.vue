@@ -159,6 +159,9 @@ const props = defineProps<{
   edgeUuid?: string
   /** 恢复成功后是否显示「立即发布恢复的配置」出口（默认 false；仅已接线发布链路的资源域传 true） */
   canPublish?: boolean
+  /** 序列化版本 config 时剔除 config_keys 键（可选；static-resources-ux-close-loop 5.2，静态资源域传入） */
+  /** static-resources-ux-close-loop 4.10：版本详情 JSON 剔除的键列表（可选；静态资源传 ['file_path','route_id','edge_uuid']） */
+  hideConfigKeys?: string[]
 }>()
 
 const emit = defineEmits<{
@@ -232,13 +235,23 @@ const formattedConfig = computed(() => {
   }
   try {
     if (typeof rawData === 'string') {
-      return JSON.stringify(JSON.parse(rawData), null, 2)
+      return JSON.stringify(stripConfigKeys(JSON.parse(rawData)), null, 2)
     }
-    return JSON.stringify(rawData, null, 2)
+    return JSON.stringify(stripConfigKeys(rawData), null, 2)
   } catch {
     return typeof rawData === 'string' ? rawData : JSON.stringify(rawData, null, 2)
   }
 })
+
+// static-resources-ux-close-loop 4.10：hideConfigKeys 时序列化前「浅拷贝剔除」指定键
+// （不改动版本数据本体，DB 保留 file_path 供回滚；非对象原样返回）
+const stripConfigKeys = (data: unknown): unknown => {
+  const keys = props.hideConfigKeys
+  if (!keys || keys.length === 0 || !data || typeof data !== 'object' || Array.isArray(data)) return data
+  const copy: Record<string, unknown> = { ...(data as Record<string, unknown>) }
+  for (const k of keys) delete copy[k]
+  return copy
+}
 
 const copyConfig = async () => {
   if (!selectedVersionData.value) return

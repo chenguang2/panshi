@@ -3,26 +3,33 @@ import { message } from 'ant-design-vue'
 import api from '@/api'
 import type { Cluster, Route, RoutePlugin, StaticResource } from '@/types'
 import type { VersionModalState } from './useClusterPluginConfigs'
+import type { PublishModalOptions } from './useClusterResourceCore'
 import {
   showDeleteConfirm,
   executePublish,
   executeDeleteWithProgress,
   buildDeleteProgressContent,
   routeLabel,
+  resultStatusLabel,
 } from './useClusterUtils'
-import { formatFileSize } from '@/utils/format'
+import { formatFileSize, formatDateTime } from '@/utils/format'
 import { getApiErrorMessage } from '@/utils/error'
 import { showOverlayModal } from './useOverlayModal'
+
+/** zip 体积上限（32MB，与后端 MAX_ZIP_SIZE 一致；static-resources-ux-close-loop 1.1 上传预检单点） */
+export const STATIC_ZIP_MAX_BYTES = 32 * 1024 * 1024
 
 interface StaticResourceDeps {
   clusters: Ref<Cluster[]>
   versionModal: VersionModalState
-  openPublishModal: (title: string, clusterId: number) => Promise<number[]>
+  openPublishModal: (title: string, clusterId: number, opts?: PublishModalOptions) => Promise<number[]>
   loadRoutes: (cluster: Cluster) => Promise<void>
+  /** 上传成功后的附加刷新（全局页刷新自身 /static_resources 列表；Tab 不传，可选） */
+  afterUpload?: () => void | Promise<void>
 }
 
 export function useClusterStaticResources(deps: StaticResourceDeps) {
-  const { clusters, versionModal, openPublishModal, loadRoutes } = deps
+  const { clusters, versionModal, openPublishModal, loadRoutes, afterUpload } = deps
 
   const staticResourceFormData = reactive({
     route_id: null as number | null,
@@ -35,6 +42,8 @@ export function useClusterStaticResources(deps: StaticResourceDeps) {
   const staticResourceFormMode = ref<'add' | 'edit'>('add')
   const staticResourceEditingId = ref<number | null>(null)
   const staticResourceEditingCluster = ref<Cluster | null>(null)
+  /** 上传进行中（1.2：两入口据此禁用上传按钮） */
+  const uploading = ref(false)
 
   const selectedRoute = computed(() => {
     if (!staticResourceFormData.route_id || !staticResourceEditingCluster.value) return null
@@ -183,91 +192,115 @@ export function useClusterStaticResources(deps: StaticResourceDeps) {
     input.onchange = async () => {
       const file = input.files?.[0]
       if (!file) return
+      // static-resources-ux-close-loop 1.1：预检单点——超限（32MB）即时拒绝，不发请求；
+      // 文案与后端同款
+      if (file.size > STATIC_ZIP_MAX_BYTES) {
+        message.error('zip 文件过大：上限 32MB')
+        return
+      }
 
-      const cluster = clusters.value.find((c) => c.static_resources?.some((s) => s.id === sr.id))
+      const cluster =
+        clusters.value.find((c) => c.static_resources?.some((s) => s.id === sr.id)) ||
+        (sr.cluster_id ? clusters.value.find((c) => c.id === sr.cluster_id) : undefined)
       if (!cluster) return
 
-      const logs: string[] = []
-      const addLog = (text: string) => {
-        logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
-      }
-      const progress = { percent: 0, status: 'active' as 'active' | 'success' | 'exception' }
-      const totalSize = file.size
-
-      const modal = showOverlayModal({
-        title: `上传静态资源: ${sr.name}`,
-        width: 600,
-        content: buildDeleteProgressContent(progress, logs),
-        okText: '确定',
-        okDisabled: true,
-        showCancel: false,
-      })
-      const updateContent = () => modal.update({ content: buildDeleteProgressContent(progress, logs) })
-
-      addLog(`文件: ${file.name} (${formatFileSize(totalSize)})`)
-      progress.percent = 5
-      updateContent()
-
-      await new Promise((r) => setTimeout(r, 200))
-
+      // static-resources-ux-close-loop 1.2：上传中标记（两入口据此禁用上传按钮）
+      uploading.value = true
       try {
-        const formData = new FormData()
-        formData.append('file', file)
+        const logs: string[] = []
+        const addLog = (text: string) => {
+          logs.push(`[${formatDateTime(new Date().toISOString())}] ${text}`)
+        }
+        const progress = { percent: 0, status: 'active' as 'active' | 'success' | 'exception' }
+        const totalSize = file.size
 
-        addLog('正在上传...')
-        progress.percent = 20
-        updateContent()
-
-        const res = await api.post(`/clusters/${cluster.id}/static-resources/${sr.id}/upload`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-          onUploadProgress: (e: { loaded: number; total?: number }) => {
-            if (e.total) {
-              const pct = Math.round(20 + (e.loaded / e.total) * 50)
-              progress.percent = pct
-              addLog(`上传进度: ${formatFileSize(e.loaded)} / ${formatFileSize(e.total)}`)
-              updateContent()
-            }
-          },
+        const modal = showOverlayModal({
+          title: `上传静态资源: ${sr.name}`,
+          width: 600,
+          content: buildDeleteProgressContent(progress, logs),
+          okText: '确定',
+          okDisabled: true,
+          showCancel: false,
         })
+        const updateContent = () => modal.update({ content: buildDeleteProgressContent(progress, logs) })
 
-        progress.percent = 80
-        addLog('上传完成')
-        addLog('')
-        const ver = res.data.current_version || '?'
-        const serverHost = window.location.hostname
-        addLog('── 上传结果 ──')
-        addLog(`管理端服务器: ${serverHost}`)
-        addLog(`管理端文件: ${res.data.storage_path || '未知'}`)
-        addLog(`文件大小: ${res.data.file_size ? formatFileSize(res.data.file_size) : '—'}`)
-        addLog(`当前版本: v${ver}`)
-        addLog(`路由: ${sr.name} (${sr.url_path})`)
-        progress.percent = 100
-        progress.status = 'success'
-        addLog('')
-        addLog('✅ 上传成功')
+        addLog(`文件: ${file.name} (${formatFileSize(totalSize)})`)
+        progress.percent = 5
         updateContent()
-        modal.update({ okDisabled: false })
 
-        await loadStaticResources(cluster)
-      } catch (error: unknown) {
-        const errMsg = getApiErrorMessage(error)
-        progress.percent = 100
-        progress.status = 'exception'
-        addLog('')
-        addLog(`❌ 上传失败: ${errMsg}`)
-        updateContent()
-        modal.update({ okDisabled: false })
+        await new Promise((r) => setTimeout(r, 200))
+
+        try {
+          const formData = new FormData()
+          formData.append('file', file)
+
+          addLog('正在上传...')
+          progress.percent = 20
+          updateContent()
+
+          const res = await api.post(`/clusters/${cluster.id}/static-resources/${sr.id}/upload`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+            onUploadProgress: (e: { loaded: number; total?: number }) => {
+              if (e.total) {
+                const pct = Math.round(20 + (e.loaded / e.total) * 50)
+                progress.percent = pct
+                addLog(`上传进度: ${formatFileSize(e.loaded)} / ${formatFileSize(e.total)}`)
+                updateContent()
+              }
+            },
+          })
+
+          progress.percent = 80
+          addLog('上传完成')
+          addLog('')
+          // static-resources-ux-close-loop 1.3：结果行不再暴露 storage_path 绝对路径，
+          // 改为「已保存到管理端（版本 vN，大小）」+ 发布时机说明
+          const ver = res.data.current_version || '?'
+          const sizeText = res.data.file_size ? `，${formatFileSize(res.data.file_size)}` : ''
+          addLog('── 上传结果 ──')
+          addLog(`已保存到管理端（版本 v${ver}${sizeText}）`)
+          addLog('发布后才会更新节点文件')
+          addLog(`路由: ${sr.name} (${sr.url_path})`)
+          progress.percent = 100
+          progress.status = 'success'
+          addLog('')
+          addLog('✅ 上传成功')
+          updateContent()
+          modal.update({ okDisabled: false })
+
+          await loadStaticResources(cluster)
+          // static-resources-ux-close-loop 1.2：全局页复用共享流时同步刷新自身列表
+          if (afterUpload) await afterUpload()
+        } catch (error: unknown) {
+          const errMsg = getApiErrorMessage(error)
+          progress.percent = 100
+          progress.status = 'exception'
+          addLog('')
+          addLog(`❌ 上传失败: ${errMsg}`)
+          updateContent()
+          modal.update({ okDisabled: false })
+        }
+      } finally {
+        uploading.value = false
       }
     }
     input.click()
   }
 
   const publishStaticResource = async (cluster: Cluster, sr: StaticResource) => {
-    const nodeIds = await openPublishModal(`发布静态资源: ${sr.name}`, cluster.id)
+    // static-resources-ux-close-loop 9.1/9.2：发布确认弹窗资源摘要 + 覆盖预警
+    // （静态资源发布不产生新版本，不复用 currentVersion 版本提示行）
+    const resourceSummary = `将把「${sr.name}」v${sr.current_version ?? '-'}（${formatFileSize(
+      sr.file_size || 0,
+    )}，${sr.url_path || ''}）分发到所选节点`
+    const nodeIds = await openPublishModal(`发布静态资源「${sr.name}」`, cluster.id, {
+      resourceSummary,
+      overwriteWarning: '发布将覆盖所选节点上的现有静态资源文件',
+    })
     if (!nodeIds.length) return
 
     await executePublish({
-      title: `发布静态资源: ${sr.name}`,
+      title: `发布静态资源「${sr.name}」`,
       apiEndpoint: `/clusters/${cluster.id}/static-resources/${sr.id}/publish`,
       nodeIds,
       refreshFn: () => loadStaticResources(cluster),
@@ -278,7 +311,10 @@ export function useClusterStaticResources(deps: StaticResourceDeps) {
           addLog('节点同步结果:')
           for (const r of data.results) {
             const rl = routeLabel(r.route)
-            addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}${rl ? `（${rl}）` : ''}`)
+            // static-resources-ux-close-loop 2.2：状态经 resultStatusLabel 出中文
+            addLog(
+              `  ${r.node}: ${resultStatusLabel(r.status)}${r.error ? ' - ' + r.error : ''}${rl ? `（${rl}）` : ''}`,
+            )
           }
         }
         progress.percent = 100
@@ -323,6 +359,7 @@ export function useClusterStaticResources(deps: StaticResourceDeps) {
     handleStaticResourceSubmit,
     deleteStaticResource,
     uploadStaticResource,
+    uploading,
     publishStaticResource,
     openStaticResourceVersionManagement,
   }

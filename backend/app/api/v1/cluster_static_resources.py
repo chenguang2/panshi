@@ -153,14 +153,18 @@ async def create_static_resource(
 
     route = await _get_route_with_plugins(db, cluster_id, body.route_id)
 
-    existing = await db.execute(
+    existing_result = await db.execute(
         select(StaticResource).where(
             StaticResource.cluster_id == cluster_id,
             StaticResource.route_id == body.route_id,
         )
     )
-    if existing.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail="该路由已关联静态资源")
+    existing_row = existing_result.scalar_one_or_none()
+    if existing_row:
+        raise HTTPException(
+            status_code=409,
+            detail=f"该路由已关联静态资源「{existing_row.name}」，请先删除该资源或更换路由",
+        )
 
     resource = StaticResource(
         cluster_id=cluster_id,

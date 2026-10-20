@@ -498,6 +498,8 @@
       :title="publishModalTitle"
       :cluster-id="publishModalClusterId"
       :current-version="publishModalCurrentVersion"
+      :resource-summary="publishModalResourceSummary"
+      :overwrite-warning="publishModalOverwriteWarning"
       @confirm="handlePublishConfirm"
       @cancel="handlePublishCancel"
     />
@@ -585,6 +587,7 @@ import ClusterCard from '@/components/ClusterCard.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import ClusterBackupDialog from '@/components/ClusterBackupDialog.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
+import type { PublishModalOptions } from '@/composables/useClusterResourceCore'
 import ConfigDiff from '@/views/ConfigDiff.vue'
 import { useClusterNodes, allNodeColumns, allNodeActionButtons } from '@/composables/useClusterNodes'
 import { useClusterUpstreams } from '@/composables/useClusterUpstreams'
@@ -624,16 +627,17 @@ const publishModalTitle = ref('')
 const publishModalClusterId = ref(0)
 // M5：发布确认弹窗「将创建新版本 v(N+1)」说明（opt-in 资源经第三参传入；其余资源 undefined 不显示）
 const publishModalCurrentVersion = ref<number | null>(null)
+// static-resources-ux-close-loop 9.1/9.2：资源摘要行 + 覆盖预警（静态资源域传入；其余域为空不显示）
+const publishModalResourceSummary = ref('')
+const publishModalOverwriteWarning = ref('')
 let publishModalResolve: ((nodeIds: number[]) => void) | null = null
 
-function openPublishModal(
-  title: string,
-  clusterId: number,
-  opts?: { currentVersion?: number | null },
-): Promise<number[]> {
+function openPublishModal(title: string, clusterId: number, opts?: PublishModalOptions): Promise<number[]> {
   publishModalTitle.value = title
   publishModalClusterId.value = clusterId
   publishModalCurrentVersion.value = opts?.currentVersion ?? null
+  publishModalResourceSummary.value = opts?.resourceSummary ?? ''
+  publishModalOverwriteWarning.value = opts?.overwriteWarning ?? ''
   publishModalVisible.value = true
   return new Promise((resolve) => {
     publishModalResolve = resolve

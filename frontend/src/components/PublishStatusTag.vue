@@ -12,10 +12,12 @@ const props = withDefaults(
     pending?: boolean
     /** 上次发布状态（'partial' = 发布未完全生效） */
     lastPublishStatus?: string | null
+    /** 时间标题前缀（可选，默认「发布时间」；静态资源域传「最近变更」） */
+    timeLabel?: string
   }>(),
   // 关键：Boolean 类型 prop 缺省时 Vue 会强转为 false（boolean casting），
   // 显式 default: undefined 关闭该行为，保住「未传 = undefined」的兼容判定
-  { pending: undefined },
+  { pending: undefined, timeLabel: '发布时间' },
 )
 
 const published = computed(() => props.version !== null && props.version !== undefined)
@@ -34,11 +36,11 @@ const dateText = computed(() => formatPublishDateTime(props.publishedAt ?? null)
   <span v-else-if="pendingAware && pending" class="ps-tag ps-pending" title="配置已修改，发布后生效">待发布</span>
   <span v-else-if="pendingAware" class="publish-status">
     <span class="ps-tag ps-published">v{{ version }}</span>
-    <span v-if="publishedAt" class="ps-date" :title="`发布时间: ${dateText}`">{{ dateText }}</span>
+    <span v-if="publishedAt" class="ps-date" :title="`${timeLabel}: ${dateText}`">{{ dateText }}</span>
   </span>
   <span v-else-if="publishedAt" class="publish-status">
     <span class="ps-tag ps-published">v{{ version }}</span>
-    <span class="ps-date" :title="`发布时间: ${dateText}`">{{ dateText }}</span>
+    <span class="ps-date" :title="`${timeLabel}: ${dateText}`">{{ dateText }}</span>
   </span>
   <span v-else class="ps-tag ps-published">v{{ version }} · 未同步</span>
 </template>

@@ -329,3 +329,58 @@ describe('VersionManagementModal.vue - 资源名词表与 edge_uuid（global-rul
     expect(title).not.toContain('edge-abc-123')
   })
 })
+
+// ── hideConfigKeys（static-resources-ux-close-loop 4.10）──────────────────────
+// 可选 prop（键名数组）：静态资源版本详情 JSON 不含 file_path/route_id/edge_uuid 等内部键，
+// DB 保留供回滚；未传时其它域零变化。序列化前浅拷贝剔除。
+
+describe('VersionManagementModal.vue - hideConfigKeys（static-resources-ux-close-loop 4.10）', () => {
+  const STATIC_URL = '/clusters/1/static-resources/9/history'
+  const SR_CONFIG = {
+    uri: '/docs/*',
+    auto_index: 'on',
+    file_path: '/data/static/docs',
+    route_id: 12,
+    edge_uuid: 'edge-1',
+  }
+
+  function setupStaticApi() {
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === STATIC_URL)
+        return Promise.resolve({
+          data: {
+            items: [{ id: 1, version: 1, config: JSON.stringify(SR_CONFIG), created_at: '2026-05-01T10:00:00Z' }],
+            current_version: 1,
+          },
+        })
+      return Promise.reject(new Error('unexpected GET: ' + url))
+    })
+  }
+
+  it('未传 hideConfigKeys：内部键原样显示（其它域/既有行为零变化）', async () => {
+    setupStaticApi()
+    const w = await mountModal({ resourceType: 'static_resource' })
+    await selectVersion(w, 1)
+
+    const text = w.find('.json-textarea').element as HTMLTextAreaElement
+    expect(text.value).toContain('file_path')
+    expect(text.value).toContain('route_id')
+    expect(text.value).toContain('edge_uuid')
+  })
+
+  it('传 hideConfigKeys 键数组：指定键被剔除，其余键保留（浅拷贝，不改本体）', async () => {
+    setupStaticApi()
+    const w = await mountModal({
+      resourceType: 'static_resource',
+      hideConfigKeys: ['file_path', 'route_id', 'edge_uuid'],
+    })
+    await selectVersion(w, 1)
+
+    const text = w.find('.json-textarea').element as HTMLTextAreaElement
+    const parsed = JSON.parse(text.value)
+    expect(parsed).toEqual({ uri: '/docs/*', auto_index: 'on' })
+    expect(text.value).not.toContain('file_path')
+    expect(text.value).not.toContain('route_id')
+    expect(text.value).not.toContain('edge_uuid')
+  })
+})

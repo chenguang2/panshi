@@ -20,6 +20,10 @@ export interface VersionModalState {
 export interface PublishModalOptions {
   /** 当前已发布版本号：非空时弹窗显示「本次发布将创建新版本 v(N+1)」；未发布不传 */
   currentVersion?: number | null
+  /** static-resources-ux-close-loop 9.1：资源摘要行（静态资源域传；不复用 currentVersion 版本提示行） */
+  resourceSummary?: string
+  /** static-resources-ux-close-loop 9.2：覆盖预警，显示于确认键上方（静态资源域传） */
+  overwriteWarning?: string
 }
 
 export interface ResourceCoreDeps {

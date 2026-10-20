@@ -111,3 +111,18 @@ describe('PublishStatusTag.vue - 四态（pendingAware）', () => {
     expect(wrapper.text()).not.toContain('未同步')
   })
 })
+
+describe('PublishStatusTag.vue - timeLabel（static-resources-ux-close-loop 4.2）', () => {
+  it('默认 timeLabel=「发布时间」：title 前缀不变（其它域零变化）', () => {
+    const wrapper = renderTag(3, '2026-05-14T02:30:00Z')
+    expect(wrapper.find('.ps-date').attributes('title')).toBe('发布时间: 2026/05/14 10:30:00')
+  })
+
+  it('传入 timeLabel=「最近变更」：title 前缀替换，正文时间不变', () => {
+    const wrapper = mount(PublishStatusTag, {
+      props: { version: 3, publishedAt: '2026-05-14T02:30:00Z', timeLabel: '最近变更' },
+    })
+    expect(wrapper.find('.ps-date').attributes('title')).toBe('最近变更: 2026/05/14 10:30:00')
+    expect(wrapper.find('.ps-date').text()).toBe('2026/05/14 10:30:00')
+  })
+})

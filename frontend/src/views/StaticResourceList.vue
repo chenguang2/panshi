@@ -9,7 +9,8 @@
     <div class="sr-header-actions">
       <div class="search-input-wrap">
         <input v-model="searchText" type="text" placeholder="搜索名称..." class="form-input" @input="onSearch" />
-        <span class="search-icon">🔍</span>
+        <button v-if="searchText" class="search-clear" title="清空搜索" @click="clearSearch">&times;</button>
+        <span v-else class="search-icon">🔍</span>
       </div>
       <select v-model="groupFilter" class="form-input" style="width: 140px; flex-shrink: 0" @change="onGroupChange">
         <option value="__all__">全部分组</option>
@@ -20,11 +21,11 @@
         <option value="">全部集群</option>
         <option v-for="c in filteredClusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
       </select>
-      <span class="text-sm text-muted">共 {{ totalCount }} 个静态资源</span>
-    </div>
-
-    <div class="text-sm text-muted" style="margin-bottom: 20px">
-      经中继发布时由网关转发，网关对请求体有上限（当前部署 32MB），超出会返回 413，请缩小 zip 后重试。
+      <!-- 4.7：过滤激活时并行无过滤 count 请求取 Y；无过滤保持「共 X 个静态资源」 -->
+      <span class="text-sm text-muted">
+        <template v-if="filterActive">匹配 {{ totalCount }} / 共 {{ unfilteredTotal }} 个静态资源</template>
+        <template v-else>共 {{ totalCount }} 个静态资源</template>
+      </span>
     </div>
 
     <div v-if="loading" class="loading-state">加载中...</div>
@@ -50,19 +51,17 @@
             <div class="sr-card-path">{{ sr.url_path }}</div>
           </div>
           <div class="sr-card-meta">
-            <span v-if="sr.current_version" class="badge badge-success"
-              ><span class="status-dot online"></span>已发布</span
-            >
+            <span v-if="sr.current_version" class="badge badge-neutral">已上传 v{{ sr.current_version }}</span>
             <span v-else class="badge badge-neutral">未发布</span>
             <div class="sr-version-text">
-              <template v-if="sr.current_version"
-                ><PublishStatusTag :version="sr.current_version" :published-at="sr.updated_at"
-              /></template>
+              <template v-if="sr.current_version">
+                <PublishStatusTag :version="sr.current_version" :published-at="sr.updated_at" time-label="最近变更" />
+              </template>
             </div>
           </div>
         </div>
         <div v-if="sr.description" class="sr-card-desc">{{ sr.description }}</div>
-        <div v-if="sr.file_size" class="sr-size">大小: {{ (sr.file_size / 1024).toFixed(1) }} KB</div>
+        <div v-if="sr.file_size" class="sr-size">大小: {{ formatFileSize(sr.file_size) }}</div>
         <div class="sr-card-actions">
           <button
             class="btn btn-ghost btn-sm"
@@ -73,7 +72,9 @@
             查看
           </button>
           <button class="btn btn-ghost btn-sm" @click="editResource(sr)" title="编辑">编辑</button>
-          <button class="btn btn-ghost btn-sm" @click="uploadZip(sr)" :disabled="!sr.id">上传 ZIP</button>
+          <button class="btn btn-ghost btn-sm" @click="uploadStaticResource(sr)" :disabled="srUploading || !sr.id">
+            上传 ZIP
+          </button>
           <button class="btn btn-ghost btn-sm" style="color: var(--danger)" @click="deleteResource(sr)" title="删除">
             删除
           </button>
@@ -83,6 +84,14 @@
             版本管理
           </button>
         </div>
+      </div>
+      <!-- 4.8：单页全量加载触顶提示（PAGE_SIZE_CARD_GRID=500） -->
+      <div
+        v-if="totalCount >= PAGE_SIZE_CARD_GRID"
+        class="text-sm text-muted"
+        style="width: 100%; text-align: center; padding: 12px 0"
+      >
+        仅显示前 {{ PAGE_SIZE_CARD_GRID }} 个静态资源，请使用搜索缩小范围
       </div>
     </div>
 
@@ -102,10 +111,17 @@
             </select>
           </div>
           <div v-if="formMode === 'add'" class="form-group">
-            <label class="form-label">选择路由</label>
+            <label class="form-label">选择路由 <span class="required">*</span></label>
             <select v-model="formData.route_id" class="form-input" @change="onRouteChange">
               <option value="">请选择路由</option>
-              <option v-for="r in availableRoutes" :key="r.id" :value="r.id">{{ r.name }} ({{ r.uri }})</option>
+              <option
+                v-for="r in availableRoutes"
+                :key="r.id"
+                :value="r.id"
+                :disabled="!staticResourceRouteEligibility(r).eligible"
+              >
+                {{ r.name }} ({{ r.uri }}){{ routeEligibilitySuffix(r) }}
+              </option>
             </select>
             <div class="route-validation">
               <div class="form-hint">选择路由的要求：</div>
@@ -140,8 +156,10 @@
 
     <PublishConfirmModal
       v-model:visible="publishVisible"
-      title="发布静态资源"
+      :title="publishTitle"
       :cluster-id="publishClusterId"
+      :resource-summary="publishSummary"
+      overwrite-warning="发布将覆盖所选节点上的现有静态资源文件"
       @confirm="onPublishConfirm"
       @cancel="publishVisible = false"
     />
@@ -151,6 +169,7 @@
       :resource-id="vmId"
       :cluster-id="vmClusterId"
       :resource-name="vmName"
+      :hide-config-keys="['file_path', 'route_id', 'edge_uuid']"
       @version-change="loadResources"
       @published="loadResources"
     />
@@ -173,8 +192,11 @@
             <div class="sr-empty-text">{{ zipContentsMessage || 'ZIP 包内无文件' }}</div>
           </div>
           <div v-else>
-            <div style="margin-bottom: 8px; font-size: 12px; color: var(--muted)">
-              显示前 {{ zipContentsData.items.length }} 个 / 共 {{ zipContentsData.total_count }} 个文件
+            <div
+              v-if="zipContentsData.items.length < zipContentsData.total_count"
+              style="margin-bottom: 8px; font-size: 12px; color: var(--muted)"
+            >
+              仅显示前 {{ zipContentsData.items.length }} 个 / 共 {{ zipContentsData.total_count }} 个文件
             </div>
             <table class="zip-table">
               <thead>
@@ -189,13 +211,13 @@
                 <tr v-for="(item, idx) in zipContentsData.items" :key="idx">
                   <td style="font-family: var(--font-mono); font-size: 12px">{{ item.name }}</td>
                   <td style="text-align: right; font-family: var(--font-mono); font-size: 12px">
-                    {{ formatSize(item.file_size) }}
+                    {{ formatFileSize(item.file_size) }}
                   </td>
                   <td style="text-align: right; font-family: var(--font-mono); font-size: 12px">
-                    {{ formatSize(item.compressed_size) }}
+                    {{ formatFileSize(item.compressed_size) }}
                   </td>
                   <td style="text-align: right; font-family: var(--font-mono); font-size: 12px">
-                    {{ formatZipModified(item.modified) }}
+                    {{ formatDate(item.modified) }}
                   </td>
                 </tr>
               </tbody>
@@ -211,9 +233,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, reactive, watch, onMounted, onUnmounted, type Ref } from 'vue'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
-import { formatMonthDayTime as formatDate } from '@/utils/format'
+import { formatFileSize, formatDate } from '@/utils/format'
+import { staticResourceRouteEligibility, routeEligibilitySuffix } from '@/utils/staticResourceRoute'
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
@@ -221,18 +244,35 @@ import { message } from 'ant-design-vue'
 import { PAGE_SIZE_CARD_GRID, PAGE_SIZE_DROPDOWN } from '@/constants'
 
 import api from '@/api'
+import type { Cluster } from '@/types'
 import PageHeader from '@/components/PageHeader.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
-import { executePublish, showDeleteConfirm, executeDeleteWithProgress, routeLabel } from '@/composables/useClusterUtils'
+import {
+  executePublish,
+  showDeleteConfirm,
+  executeDeleteWithProgress,
+  routeLabel,
+  resultStatusLabel,
+} from '@/composables/useClusterUtils'
 import { getGroupColorStyle, getCardBorderStyle } from '@/composables/useGroupColors'
 import PublishStatusTag from '@/components/PublishStatusTag.vue'
+import { useClusterStaticResources } from '@/composables/useClusterStaticResources'
+import type { VersionModalState } from '@/composables/useClusterPluginConfigs'
 
 const resources = ref<any[]>([])
 const clusters = ref<any[]>([])
 const totalCount = ref(0)
 const loading = ref(false)
 const { searchText, onSearch: onDebouncedSearch, cancelSearch } = useDebouncedSearch()
+// 4.7：无过滤全量总数（并行 count 请求）+ 过滤激活判定（搜索/分组/集群任一；__all__ 哨兵不算激活）
+const unfilteredTotal = ref(0)
+const filterActive = computed(
+  () =>
+    Boolean(searchText.value) ||
+    Boolean(clusterFilter.value) ||
+    (Boolean(groupFilter.value) && groupFilter.value !== '__all__'),
+)
 const clusterFilter = ref('')
 const groupFilter = ref('__all__')
 
@@ -272,7 +312,8 @@ const formVisible = ref(false)
 const formMode = ref<'add' | 'edit'>('add')
 const formData = reactive({
   cluster_id: '' as number | string,
-  route_id: null as number | null,
+  // 铁律（约束 #204 派生）：原生 select 的模型初值/重置点必须与占位 option value='' 精确匹配
+  route_id: '' as number | string,
   name: '',
   url_path: '',
   description: '',
@@ -325,27 +366,34 @@ function closeZipContents() {
   zipContentsResource.value = null
 }
 
-function formatSize(bytes: number): string {
-  if (bytes === 0) return '-'
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+// ── 上传走共享流（static-resources-ux-close-loop 1.2）────────────────────────
+// 本地 input+api.post 直传实现已删除，改用 useClusterStaticResources.uploadStaticResource
+// （预检 + 进度弹窗 + 结果行，与集群统一管理 Tab 同款）；上传中禁用全部上传按钮。
+const versionModal: VersionModalState = {
+  type: ref<'static_resource'>('static_resource'),
+  visible: vmVisible,
+  resourceId: vmId,
+  clusterId: vmClusterId,
+  resourceName: vmName,
+  edgeUuid: ref(''),
 }
-
-function formatZipModified(dt: string): string {
-  if (!dt) return '-'
-  try {
-    // Format: YYYY-MM-DDTHH:mm:ss → YYYY-MM-DD HH:mm
-    return dt.replace('T', ' ')
-  } catch {
-    return dt
-  }
-}
+const { uploadStaticResource, uploading: srUploading } = useClusterStaticResources({
+  clusters: clusters as Ref<Cluster[]>,
+  versionModal,
+  openPublishModal: async () => [],
+  loadRoutes: async () => {},
+  afterUpload: () => loadResources(),
+})
 
 function onSearch() {
   onDebouncedSearch(() => {
     loadResources()
   })
+}
+
+function clearSearch() {
+  searchText.value = ''
+  loadResources()
 }
 
 async function loadResources() {
@@ -354,9 +402,14 @@ async function loadResources() {
     const params: any = { page_size: PAGE_SIZE_CARD_GRID, group_name: groupFilter.value }
     if (clusterFilter.value) params.cluster_id = clusterFilter.value
     if (searchText.value) params.search = searchText.value
-    const res = await api.get('/static_resources', { params })
+    // 4.7：并行无过滤 count 请求（仅取 total），供「匹配 X / 共 Y」的 Y
+    const [res, allRes] = await Promise.all([
+      api.get('/static_resources', { params }),
+      api.get('/static_resources', { params: { page_size: 1 } }),
+    ])
     resources.value = res.data.items || []
     totalCount.value = res.data.total || 0
+    unfilteredTotal.value = allRes.data.total || 0
   } catch {
     message.error('加载静态资源失败')
   } finally {
@@ -376,7 +429,7 @@ async function loadClusters() {
 async function openAddModal() {
   formMode.value = 'add'
   formData.cluster_id = ''
-  formData.route_id = null
+  formData.route_id = ''
   formData.name = ''
   formData.url_path = ''
   formData.description = ''
@@ -411,7 +464,7 @@ watch(
   () => formData.cluster_id,
   (cid) => {
     if (cid && formMode.value === 'add') {
-      formData.route_id = null
+      formData.route_id = ''
       loadRoutes(cid)
     }
   },
@@ -449,40 +502,31 @@ async function handleSubmit() {
   }
 }
 
-function uploadZip(sr: any) {
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.accept = '.zip'
-  input.onchange = async () => {
-    const file = input.files?.[0]
-    if (!file) return
-    const form = new FormData()
-    form.append('file', file)
-    try {
-      await api.post(`/clusters/${sr.cluster_id}/static-resources/${sr.id}/upload`, form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
-      message.success('上传成功')
-      loadResources()
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail || '上传失败')
-    }
-  }
-  input.click()
-}
-
 function publishResource(sr: any) {
   publishingRecord.value = sr
   publishClusterId.value = sr.cluster_id
   publishVisible.value = true
 }
 
+// static-resources-ux-close-loop 9.1：发布确认资源摘要（与 composable 同文案；
+// 静态资源发布不产生新版本，不复用 currentVersion 版本提示行）
+const publishSummary = computed(() => {
+  const sr = publishingRecord.value
+  if (!sr) return ''
+  return `将把「${sr.name}」v${sr.current_version ?? '-'}（${formatFileSize(sr.file_size || 0)}，${sr.url_path || ''}）分发到所选节点`
+})
+
+// 确认/进度标题统一「发布静态资源「{name}」」（static-resources-ux-close-loop 4.4，双入口一致）
+const publishTitle = computed(() =>
+  publishingRecord.value ? `发布静态资源「${publishingRecord.value.name}」` : '发布静态资源',
+)
+
 async function onPublishConfirm(nodeIds: number[]) {
   publishVisible.value = false
   const sr = publishingRecord.value
   if (!sr) return
   await executePublish({
-    title: `发布静态资源: ${sr.name}`,
+    title: `发布静态资源「${sr.name}」`,
     apiEndpoint: `/clusters/${sr.cluster_id}/static-resources/${sr.id}/publish`,
     nodeIds,
     refreshFn: loadResources,
@@ -493,7 +537,8 @@ async function onPublishConfirm(nodeIds: number[]) {
         addLog('节点同步结果:')
         for (const r of data.results) {
           const rl = routeLabel(r.route)
-          addLog(`  ${r.node}: ${r.status}${r.error ? ' - ' + r.error : ''}${rl ? `（${rl}）` : ''}`)
+          // static-resources-ux-close-loop 2.2：状态经 resultStatusLabel 出中文
+          addLog(`  ${r.node}: ${resultStatusLabel(r.status)}${r.error ? ' - ' + r.error : ''}${rl ? `（${rl}）` : ''}`)
         }
       }
       progress.percent = 100
@@ -569,6 +614,22 @@ onUnmounted(() => {
   padding: 60px 0;
   color: var(--muted);
   font-size: 14px;
+}
+.search-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+.search-clear:hover {
+  color: var(--fg);
 }
 .sr-empty {
   display: flex;
