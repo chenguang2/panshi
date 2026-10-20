@@ -204,6 +204,7 @@ openspec/        # 变更工件；openspec/specs/ = main specs
 57. **a-table 自定义空态槽名是 `#emptyText`（不是 `#empty`）** — 2026-10-19 实测：RouteList 空态双形态写了 `#empty`，单测桩（渲染所有槽位）全绿但生产环境从未渲染过；同型潜伏于 NodeList/UpstreamList/UserList（已一并修复），正确范例见 `EdgeClient.vue`。凡"单测绿但页面上看不到"先查桩与真实组件的槽名/结构分歧。另：a-input-search 为回车/放大镜触发，Playwright `fill()` 不会触发 `@search`，E2E 须补 `press('Enter')`。
 58. **前端全量单测满并发跑会出现 CPU 争抢型 5s 超时波动** — 失败集合在未改动文件间随机漂移（CentralList/SslGenerateDialog 等轮换）、隔离复跑即绿；全量收口用 `npx vitest run --maxWorkers=4` 稳定全绿（2026-10-19 实测 1704/1704）。定性"波动 vs 回归"先隔离复跑再查代码。
 59. **表格 `#` 序号列解剖全站统一** — 首列 `{ title: '#', key: 'index', width: 45 }`；后端分页表格用跨页连续公式 `(page-1)*pageSize+index+1`，`:pagination="false"`（全量渲染）用 `index+1`；分页绑定无附加逻辑时模板内联调 `usePagination.paginationProps` 工厂（禁本地别名/纯包装 computed）。规范与守卫：`openspec/specs/table-anatomy/spec.md` + `tableAnatomy.source.test.ts`（2026-10-19 收敛，新表格照抄勿再自创宽度/公式）。
+60. **集群域 DELETE 端点要求 JSON body** — 删除路由/静态资源等统一收 `DeleteClusterRequest`（`{"delete_db": bool, "delete_edge": bool}`，至少一项 true），裸 DELETE（无 body）返回 422 `Field required` 而非 405/400 语义错误——自动化脚本/验收清理调删除必须带 body，否则静默误判「删除失败」（2026-10-20 实测：静态资源验收脚本 step0 预清理两轮空转）。
 
 ## 新增功能步骤
 
