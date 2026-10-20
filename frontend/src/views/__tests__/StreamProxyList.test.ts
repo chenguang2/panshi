@@ -419,3 +419,48 @@ describe('StreamProxyList.vue 发布日志 · 经中继 / 直连 标注', () => 
     expect(text).not.toContain('节点: database（')
   })
 })
+
+// ── 版本弹窗「立即发布恢复的配置」出口接线（version-modal-publish-exit-wiring 3.1）──
+describe('StreamProxyList.vue · 版本弹窗发布出口接线', () => {
+  const vmStubs = {
+    ...stubs,
+    VersionManagementModal: {
+      name: 'VersionManagementModal',
+      props: ['canPublish', 'resourceId', 'resourceName'],
+      template: '<div class="mock-version-modal" />',
+    },
+    PublishConfirmModal: {
+      name: 'PublishConfirmModal',
+      template: '<div class="mock-publish-modal" />',
+      props: ['visible', 'title', 'clusterId'],
+    },
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url.includes('/stream-proxies')) return Promise.resolve({ data: MOCK_PROXIES })
+      if (url === '/clusters')
+        return Promise.resolve({ data: { items: [{ id: 1, display_name: '生产集群', group_name: '线上' }] } })
+      return Promise.reject(new Error('unknown url: ' + url))
+    })
+  })
+
+  it('版本弹窗接收 canPublish=true，publish-requested → 打开本页发布确认弹窗（上下文正确）', async () => {
+    const StreamProxyList = (await import('../StreamProxyList.vue')).default
+    const wrapper = mount(StreamProxyList, { global: { stubs: vmStubs } })
+    await flushPromises()
+    const vmBtn = wrapper.findAll('button').find((b) => b.text().trim() === '版本管理')
+    expect(vmBtn).toBeTruthy()
+    await vmBtn!.trigger('click')
+    const vmm = wrapper.findComponent({ name: 'VersionManagementModal' })
+    expect(vmm.props('canPublish')).toBe(true)
+    expect(vmm.props('resourceId')).toBe(1)
+    vmm.vm.$emit('publish-requested')
+    await wrapper.vm.$nextTick()
+    const pm = wrapper.findComponent({ name: 'PublishConfirmModal' })
+    expect(pm.props('visible')).toBe(true)
+    expect(pm.props('clusterId')).toBe(1)
+  })
+})

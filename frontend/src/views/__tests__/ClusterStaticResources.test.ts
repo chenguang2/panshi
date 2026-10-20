@@ -44,7 +44,11 @@ const antStubs: Record<string, any> = {
     template: '<textarea :value="value" @input="$emit(\'update:value\', $event.target.value)" />',
   },
   'a-tag': { template: '<span class="ant-tag"><slot /></span>' },
-  VersionManagementModal: { template: '<div class="vmm-stub" />' },
+  VersionManagementModal: {
+    name: 'VersionManagementModal',
+    props: ['canPublish', 'resourceId', 'resourceName'],
+    template: '<div class="vmm-stub" />',
+  },
   PublishStatusTag: {
     props: ['version', 'publishedAt', 'timeLabel'],
     template: '<span class="pst-stub">{{ timeLabel }}</span>',
@@ -251,5 +255,49 @@ describe('ClusterStaticResources.vue（Tab）· static-resources-ux-close-loop �
     expect(actions.findAll('button .ant-btn').length).toBe(0)
     expect(actions.find('button.btn-secondary').exists()).toBe(true)
     expect(actions.findAll('button.btn-ghost').length).toBeGreaterThanOrEqual(4)
+  })
+})
+
+describe('ClusterStaticResources.vue（Tab）· 版本弹窗「立即发布恢复的配置」出口接线', () => {
+  async function mountTabWithPublishSpy() {
+    const openPublishModal = vi.fn(async () => [1])
+    const ClusterStaticResources = (await import('../clusters/ClusterStaticResources.vue')).default
+    const wrapper = mount(ClusterStaticResources, {
+      props: {
+        cluster: mkCluster(),
+        clusters: [mkCluster()],
+        loading: false,
+        openPublishModal,
+        loadRoutes: async () => {},
+      },
+      global: { stubs: { ...antStubs, teleport: true } },
+    })
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    return { wrapper, openPublishModal }
+  }
+
+  it('版本弹窗接收 canPublish=true（共享「立即发布恢复的配置」出口）', async () => {
+    const { wrapper } = await mountTabWithPublishSpy()
+    const vmm = wrapper.findComponent({ name: 'VersionManagementModal' })
+    expect(vmm.exists()).toBe(true)
+    expect(vmm.props('canPublish')).toBe(true)
+  })
+
+  it('publish-requested → 走本 Tab 发布链路（openPublishModal 带资源名与摘要）', async () => {
+    const { wrapper, openPublishModal } = await mountTabWithPublishSpy()
+    // 点 portal 卡片「版本管理」→ 弹窗 resource 上下文就位
+    const card = wrapper.findAll('.plugin-config-card').find((c) => c.text().includes('portal'))!
+    const vmBtn = card.findAll('button').find((b) => b.text().trim() === '版本管理')!
+    expect(vmBtn).toBeTruthy()
+    await vmBtn.trigger('click')
+    const vmm = wrapper.findComponent({ name: 'VersionManagementModal' })
+    expect(vmm.props('resourceId')).toBe(1)
+    vmm.vm.$emit('publish-requested')
+    await flushPromises()
+    expect(openPublishModal).toHaveBeenCalledTimes(1)
+    const [title, clusterId] = openPublishModal.mock.calls[0]
+    expect(String(title)).toBe('发布静态资源「portal」')
+    expect(clusterId).toBe(7)
   })
 })

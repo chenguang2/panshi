@@ -384,3 +384,62 @@ describe('VersionManagementModal.vue - hideConfigKeys（static-resources-ux-clos
     expect(text.value).not.toContain('edge_uuid')
   })
 })
+
+// ── rollback 端点精确路由（version-modal-publish-exit-wiring 2.1-2.2）────────
+// history 端点链含 stream_proxy 分支、rollback 链曾漏配——stream_proxy 恢复会落到
+// else = routes 的 rollback 端点（拿流代理 id 调路由回滚）。守卫：端点必须含
+// /stream-proxies/ 段且 MUST NOT 含 /routes/。
+describe('VersionManagementModal.vue - rollback 端点精确路由（version-modal-publish-exit-wiring）', () => {
+  const STREAM_HISTORY_URL = '/clusters/1/stream-proxies/9/history'
+  const STREAM_ROLLBACK_V2_URL = '/clusters/1/stream-proxies/9/rollback/2'
+  const STREAM_DELETE_V2_URL = '/clusters/1/stream-proxies/9/history/2'
+
+  it('stream_proxy 恢复调用自身 rollback 端点（/stream-proxies/ 段，MUST NOT 含 /routes/）', async () => {
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === STREAM_HISTORY_URL) return Promise.resolve({ data: { items: versionsFixture, current_version: 3 } })
+      return Promise.reject(new Error('unexpected GET: ' + url))
+    })
+    mockApiPost.mockImplementation((url: string) => {
+      if (url === STREAM_ROLLBACK_V2_URL) return Promise.resolve({ data: {} })
+      return Promise.reject(new Error('unexpected POST: ' + url))
+    })
+    mockApiDelete.mockImplementation((url: string) => {
+      if (url === STREAM_DELETE_V2_URL) return Promise.resolve({ data: {} })
+      return Promise.reject(new Error('unexpected DELETE: ' + url))
+    })
+
+    const wrapper = await mountModal({ resourceType: 'stream_proxy', resourceName: 'tcp-3306' })
+    await selectVersion(wrapper, 2)
+    await confirmRestore(wrapper)
+
+    const postCalls = mockApiPost.mock.calls.map((c) => c[0])
+    expect(postCalls).toContain(STREAM_ROLLBACK_V2_URL)
+    expect(postCalls.every((u: string) => !u.includes('/routes/'))).toBe(true)
+  })
+
+  it('dns_proxy 恢复端点分支保持独立（/dns-proxies/ 段，MUST NOT 含 /routes/）', async () => {
+    const DNS_HISTORY_URL = '/clusters/1/dns-proxies/9/history'
+    const DNS_ROLLBACK_V2_URL = '/clusters/1/dns-proxies/9/rollback/2'
+    const DNS_DELETE_V2_URL = '/clusters/1/dns-proxies/9/history/2'
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === DNS_HISTORY_URL) return Promise.resolve({ data: { items: versionsFixture, current_version: 3 } })
+      return Promise.reject(new Error('unexpected GET: ' + url))
+    })
+    mockApiPost.mockImplementation((url: string) => {
+      if (url === DNS_ROLLBACK_V2_URL) return Promise.resolve({ data: {} })
+      return Promise.reject(new Error('unexpected POST: ' + url))
+    })
+    mockApiDelete.mockImplementation((url: string) => {
+      if (url === DNS_DELETE_V2_URL) return Promise.resolve({ data: {} })
+      return Promise.reject(new Error('unexpected DELETE: ' + url))
+    })
+
+    const wrapper = await mountModal({ resourceType: 'dns_proxy', resourceName: 'dns-53' })
+    await selectVersion(wrapper, 2)
+    await confirmRestore(wrapper)
+
+    const postCalls = mockApiPost.mock.calls.map((c) => c[0])
+    expect(postCalls).toContain(DNS_ROLLBACK_V2_URL)
+    expect(postCalls.every((u: string) => !u.includes('/routes/'))).toBe(true)
+  })
+})

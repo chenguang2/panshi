@@ -137,3 +137,42 @@ describe('SslList 类型信息行分行（ux-review M5）', () => {
     expect(typeRow?.text()).not.toContain('国际 RSA')
   })
 })
+
+// ── 版本弹窗「立即发布恢复的配置」出口接线（version-modal-publish-exit-wiring 3.3）──
+describe('SslList · 版本弹窗发布出口接线', () => {
+  const vmStubs = {
+    ...stubs,
+    VersionManagementModal: {
+      name: 'VersionManagementModal',
+      props: ['canPublish', 'resourceId', 'resourceName'],
+      template: '<div class="mock-version-modal" />',
+    },
+    PublishConfirmModal: {
+      name: 'PublishConfirmModal',
+      template: '<div class="mock-publish-modal" />',
+      props: ['visible', 'title', 'clusterId'],
+    },
+  }
+
+  it('版本弹窗接收 canPublish=true，publish-requested → 打开本页发布确认弹窗（上下文正确）', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/clusters') return Promise.resolve({ data: { items: [] } })
+      if (url === '/ssl') return Promise.resolve({ data: { items: [mockCert()] } })
+      return Promise.resolve({ data: {} })
+    })
+    const SslList = (await import('../SslList.vue')).default
+    const wrapper = mount(SslList, { global: { stubs: vmStubs } })
+    await flushPromises()
+    const vmBtn = wrapper.findAll('button').find((b) => b.text().trim() === '版本管理')
+    expect(vmBtn).toBeTruthy()
+    await vmBtn!.trigger('click')
+    const vmm = wrapper.findComponent({ name: 'VersionManagementModal' })
+    expect(vmm.props('canPublish')).toBe(true)
+    expect(vmm.props('resourceId')).toBe(1)
+    vmm.vm.$emit('publish-requested')
+    await wrapper.vm.$nextTick()
+    const pm = wrapper.findComponent({ name: 'PublishConfirmModal' })
+    expect(pm.props('visible')).toBe(true)
+    expect(pm.props('clusterId')).toBe(1)
+  })
+})

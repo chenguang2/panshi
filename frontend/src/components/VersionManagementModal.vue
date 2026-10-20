@@ -666,11 +666,13 @@ const performRollback = async () => {
             ? `/clusters/${props.clusterId}/global_rules/${props.resourceId}/rollback/${selectedVersion.value}`
             : props.resourceType === 'static_resource'
               ? `/clusters/${props.clusterId}/static-resources/${props.resourceId}/rollback/${selectedVersion.value}`
-              : props.resourceType === 'ssl'
-                ? `/clusters/${props.clusterId}/ssl/${props.resourceId}/rollback/${selectedVersion.value}`
-                : props.resourceType === 'dns_proxy'
-                  ? `/clusters/${props.clusterId}/dns-proxies/${props.resourceId}/rollback/${selectedVersion.value}`
-                  : `/clusters/${props.clusterId}/routes/${props.resourceId}/rollback/${selectedVersion.value}`
+              : props.resourceType === 'stream_proxy'
+                ? `/clusters/${props.clusterId}/stream-proxies/${props.resourceId}/rollback/${selectedVersion.value}`
+                : props.resourceType === 'ssl'
+                  ? `/clusters/${props.clusterId}/ssl/${props.resourceId}/rollback/${selectedVersion.value}`
+                  : props.resourceType === 'dns_proxy'
+                    ? `/clusters/${props.clusterId}/dns-proxies/${props.resourceId}/rollback/${selectedVersion.value}`
+                    : `/clusters/${props.clusterId}/routes/${props.resourceId}/rollback/${selectedVersion.value}`
     await api.post(endpoint)
     message.success(`已恢复到 v${versionToSelect}（平台侧）。请发布以推送到 Edge 节点`)
     restoredVersion.value = versionToSelect

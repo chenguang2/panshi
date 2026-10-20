@@ -170,8 +170,10 @@
       :resource-id="vmId"
       :cluster-id="vmClusterId"
       :resource-name="vmName"
+      :can-publish="true"
       @version-change="loadProxies"
       @published="loadProxies"
+      @publish-requested="onVmPublishRequested"
     />
 
     <!-- Publish -->
@@ -370,6 +372,12 @@ function publishProxyAction(p: StreamProxy) {
   publishingProxy.value = p
   publishClusterId.value = p.cluster_id
   publishVisible.value = true
+}
+
+// 版本弹窗「立即发布恢复的配置」出口（共享 VersionManagementModal canPublish 接线）
+function onVmPublishRequested() {
+  const p = proxies.value.find((x: StreamProxy) => x.id === vmId.value)
+  if (p) publishProxyAction(p)
 }
 
 function batchDelete() {

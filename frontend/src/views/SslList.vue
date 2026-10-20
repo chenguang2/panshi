@@ -191,8 +191,10 @@
       :resource-id="vmId"
       :cluster-id="vmClusterId"
       :resource-name="vmName"
+      :can-publish="true"
       @version-change="loadCerts"
       @published="loadCerts"
+      @publish-requested="onVmPublishRequested"
     />
 
     <PublishConfirmModal
@@ -425,6 +427,12 @@ function publishCert(cert: any) {
   publishingCert.value = cert
   publishClusterId.value = cert.cluster_id
   publishVisible.value = true
+}
+
+// 版本弹窗「立即发布恢复的配置」出口（共享 VersionManagementModal canPublish 接线）
+function onVmPublishRequested() {
+  const cert = certs.value.find((c: { id: number | null }) => c.id === vmId.value)
+  if (cert) publishCert(cert)
 }
 
 async function onPublishConfirm(nodeIds: number[]) {

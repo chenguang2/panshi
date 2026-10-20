@@ -198,8 +198,10 @@
       :cluster-id="vmClusterId"
       :resource-name="vmName"
       :hide-config-keys="['file_path', 'route_id', 'edge_uuid']"
+      :can-publish="true"
       @version-change="loadResources"
       @published="loadResources"
+      @publish-requested="onVmPublishRequested"
     />
 
     <!-- ZIP Contents Modal -->
@@ -582,6 +584,13 @@ function publishResource(sr: any) {
           .filter((id: number | undefined): id is number => typeof id === 'number')
       : []
   publishVisible.value = true
+}
+
+// 版本弹窗「立即发布恢复的配置」出口（共享 VersionManagementModal canPublish 接线，
+// 与路由/上游等域同款；恢复成功后经此打开本页发布确认弹窗）
+function onVmPublishRequested() {
+  const sr = resources.value.find((r: { id: number | null }) => r.id === vmId.value)
+  if (sr) publishResource(sr)
 }
 
 // static-resources-ux-close-loop 9.1：发布确认资源摘要（与 composable 同文案；

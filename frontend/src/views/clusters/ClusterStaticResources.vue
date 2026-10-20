@@ -187,7 +187,9 @@
       :resource-name="versionModalResourceName"
       :edge-uuid="versionModalEdgeUuid"
       :hide-config-keys="['file_path', 'route_id', 'edge_uuid']"
+      :can-publish="true"
       @published="onVersionPublished"
+      @publish-requested="onVmPublishRequested"
     />
 
     <!-- ZIP 内容弹窗（static-resources-ux-close-loop 3.4：Tab 卡片「查看 ZIP」，与全局页同款） -->
@@ -362,6 +364,13 @@ function closeZipContents() {
 
 function onVersionPublished() {
   emit('refresh')
+}
+
+// 版本弹窗「立即发布恢复的配置」出口（共享 VersionManagementModal canPublish 接线，
+// 与独立页/其它资源域同款）：恢复成功后走本 Tab 既有发布链路（父级共享发布弹窗）
+async function onVmPublishRequested() {
+  const sr = props.cluster.static_resources?.find((r) => r.id === versionModalResourceId.value)
+  if (sr) await publishStaticResource(props.cluster, sr)
 }
 </script>
 

@@ -200,6 +200,49 @@ describe('StaticResourceList.vue', () => {
   })
 })
 
+describe('StaticResourceList.vue · 版本弹窗「立即发布恢复的配置」出口接线', () => {
+  const vmStubs = {
+    ...stubs,
+    VersionManagementModal: {
+      name: 'VersionManagementModal',
+      props: ['canPublish', 'resourceId', 'resourceName'],
+      template: '<div class="vmm-stub" />',
+    },
+    PublishConfirmModal: {
+      name: 'PublishConfirmModal',
+      template: '<div class="mock-publish-modal" />',
+      props: ['visible', 'title', 'clusterId', 'resourceSummary', 'overwriteWarning'],
+    },
+  }
+
+  async function mountAndOpenVm() {
+    const StaticResourceList = (await import('../StaticResourceList.vue')).default
+    const wrapper = mount(StaticResourceList, { global: { stubs: vmStubs } })
+    await flushPromises()
+    const card = wrapper.findAll('.sr-card').find((c) => c.text().includes('static-files'))!
+    const vmBtn = card.findAll('button').find((b) => b.text().trim() === '版本管理')!
+    expect(vmBtn).toBeTruthy()
+    await vmBtn.trigger('click')
+    return wrapper
+  }
+
+  it('版本弹窗接收 canPublish=true（共享「立即发布恢复的配置」出口）', async () => {
+    const wrapper = await mountAndOpenVm()
+    expect(wrapper.findComponent({ name: 'VersionManagementModal' }).props('canPublish')).toBe(true)
+  })
+
+  it('publish-requested → 打开本页发布确认弹窗（资源上下文正确）', async () => {
+    const wrapper = await mountAndOpenVm()
+    const vmm = wrapper.findComponent({ name: 'VersionManagementModal' })
+    expect(vmm.props('resourceId')).toBe(1)
+    vmm.vm.$emit('publish-requested')
+    await wrapper.vm.$nextTick()
+    const pm = wrapper.findComponent({ name: 'PublishConfirmModal' })
+    expect(pm.props('visible')).toBe(true)
+    expect(String(pm.props('title'))).toContain('static-files')
+  })
+})
+
 describe('StaticResourceList.vue 发布日志 · 经中继 / 直连 标注', () => {
   const publishStubs = {
     ...stubs,
