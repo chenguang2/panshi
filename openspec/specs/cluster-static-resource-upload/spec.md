@@ -35,6 +35,24 @@
 - **THEN** 前端 SHALL 在选择期即提示超限；后端 SHALL 校验体积并拒绝
 - **AND** 双防线任一被绕过时另一道仍生效
 
+#### Scenario: 客户端预检单点两入口一致
+- **WHEN** 任一入口（独立页 / 集群子页 Tab）触发上传
+- **THEN** 体积预检 SHALL 收敛在共享上传流单点（共享 composable 入口），两入口行为一致
+- **AND** 超限文件 SHALL 即时拒绝且 SHALL NOT 发出网络请求
+
+#### Scenario: 上传过程进度反馈
+- **WHEN** 任一入口触发上传
+- **THEN** 共享上传流 SHALL 呈现进度反馈（进度与逐行日志），上传期间触发按钮 SHALL 禁用
+- **AND** 独立页与 Tab SHALL 呈现同款上传体验
+
+#### Scenario: 上传结果不暴露服务器路径
+- **WHEN** 上传成功并输出结果日志
+- **THEN** 结果 SHALL NOT 包含 `storage_path` 等服务器文件系统路径
+- **AND** SHALL 显示「已保存到管理端（版本 vN，大小）」，并提示「发布后才会更新节点文件」
+
+#### Scenario: 路由冲突 409 文案可行动
+- **WHEN** 创建时所选路由已关联其它静态资源
+- **THEN** 后端 SHALL 返回 409，detail SHALL 为「该路由已关联静态资源「{existing_name}」，请先删除该资源或更换路由」
 ### Requirement: zip 文件存储
 
 上传的 zip 文件 SHALL 存储在管理端本地文件系统固定目录下。
