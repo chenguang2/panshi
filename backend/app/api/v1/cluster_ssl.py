@@ -11,13 +11,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from app.core.database import get_db
-from app.services.audit import enrich_audit
+from app.core.deps import require_permission, get_current_user
+from app.models.user import User
+from app.services.audit import enrich_audit, log_audit
 from app.models.ssl import SslCertificate
 from app.schemas.ssl import (
     SslCertificateCreate, SslCertificateUpdate, SslCertificateResponse,
     SslCertificateGenerateRequest, SslCertificateGenerateResponse,
     CaCertificateGenerateRequest, CommandLogEntry,
+    SslPemPreviewRequest, SslPemPreviewResponse, SslPemCertPreview, SslPemKeyPreview,
 )
+from app.services.ssl_pem import parse_cert_pem, parse_key_pem, keys_match
 from app.models.cluster import Cluster, ConfigVersion, Node
 from app.schemas.cluster import PublishRequest, DeleteClusterRequest
 from app.services import edge_sync
@@ -33,6 +37,20 @@ global_router = APIRouter(prefix="/ssl", tags=["ssl"], dependencies=[Depends(req
 # 系统保留域名：Edge 网关内部管理/健康检查的默认访问域名。
 # 生成/更新/回滚 server 证书时强制合并进 DNS SAN 与 sni 字段，不可被用户移除。
 RESERVED_SNIS = ("edge.local",)
+
+
+def _masked_ssl_response(cert) -> "SslCertificateResponse":
+    """ssl-ux-review-fixes 9.1：列表/详情等常规响应统一掩码出口（单实现，#18）。
+
+    private_key/sign_key 无条件置空，是否在.HasKey 布尔表达；
+    /generate 的一次性响应不走此处（前端据以下载客户端证书包）。
+    """
+    resp = SslCertificateResponse.model_validate(cert)
+    resp.has_private_key = bool((cert.private_key or "").strip())
+    resp.has_sign_key = bool((cert.sign_key or "").strip())
+    resp.private_key = ""
+    resp.sign_key = ""
+    return resp
 
 
 def merge_reserved_dns(dns_sans: list[str] | None) -> list[str]:
@@ -144,21 +162,41 @@ async def create_ca_certificate(
     enrich_audit(request, resource_id=cert.id, detail=f"创建CA证书 {cert.name}")
     await db.commit()
     await db.refresh(cert)
-    return SslCertificateResponse.model_validate(cert)
+    return _masked_ssl_response(cert)
 
 
-@global_router.get("/{cert_id}/ca-key")
-async def download_ca_private_key(
+@router.get("/{cert_id}/key")
+async def download_ssl_private_key(
+    cluster_id: int,
     cert_id: int,
     db: AsyncSession = Depends(get_db),
+    request: Request = None,
+    current_user: User = Depends(get_current_user),
 ):
-    """Download CA private key (confirmation required from frontend)."""
-    cert = await db.get(SslCertificate, cert_id)
-    if not cert or not cert.is_ca:
-        raise HTTPException(status_code=404, detail="CA 证书不存在")
-    if not cert.private_key:
-        raise HTTPException(status_code=400, detail="CA 私钥不可用")
-    return {"private_key": cert.private_key}
+    """按需取回私钥（ssl-ux-review-fixes 9.2，替代已删除的 /ca-key 单一端点）。
+
+    - 全证书类型生效（含 CA）；
+    - 国密双证书返回加密+签名双私钥；
+    - 高风险操作：log_audit 记「下载/查看私钥」。
+    """
+    cert = await edge_sync.get_or_404(db, SslCertificate, id=cert_id, cluster_id=cluster_id, detail="SSL 证书不存在")
+    if not (cert.private_key or "").strip() and not (cert.sign_key or "").strip():
+        raise HTTPException(status_code=400, detail="私钥不可用")
+    result = {"private_key": cert.private_key or ""}
+    if (cert.sign_key or "").strip():
+        result["sign_key"] = cert.sign_key
+    audit_obj = getattr(request.state, "audit", None) if request is not None else None
+    log_audit(
+        db,
+        user=current_user,
+        action="download_key",
+        resource="ssl",
+        resource_id=cert.id,
+        detail=f"下载/查看私钥 {cert.name}",
+        audit_obj=audit_obj,
+    )
+    await db.commit()
+    return result
 
 
 @global_router.get("")
@@ -197,9 +235,14 @@ async def list_all_ssl_certificates(
     pub_map = await _build_publish_map(db, [c.id for c in items], "ssl")
     payload = []
     for c in items:
-        resp = SslCertificateResponse.model_validate(c)
+        resp = _masked_ssl_response(c)
         ts = pub_map.get(c.id)
         resp.published_at = ts.isoformat() + "Z" if ts else None
+        resp.pending_publish = edge_sync.derive_pending_publish(
+            current_version=c.current_version,
+            updated_at=c.updated_at,
+            published_at=ts,
+        )
         payload.append(resp.model_dump())
     return {
         "total": total,
@@ -221,14 +264,43 @@ async def list_ssl_certificates(
     pub_map = await _build_publish_map(db, [c.id for c in items], "ssl")
     payload = []
     for c in items:
-        resp = SslCertificateResponse.model_validate(c)
+        resp = _masked_ssl_response(c)
         ts = pub_map.get(c.id)
         resp.published_at = ts.isoformat() + "Z" if ts else None
+        resp.pending_publish = edge_sync.derive_pending_publish(
+            current_version=c.current_version,
+            updated_at=c.updated_at,
+            published_at=ts,
+        )
         payload.append(resp.model_dump())
     return {
         "total": len(items),
         "items": payload,
     }
+
+
+@router.post("/preview", response_model=SslPemPreviewResponse)
+async def preview_ssl_pem(
+    cluster_id: int,
+    body: SslPemPreviewRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """ssl-ux-review-fixes 10.1：PEM 即时预览（纯解析，不落库）。
+
+    解析逻辑与 SslCertificateResponse.derive_expiry 共用 services/ssl_pem。
+    """
+    # 集群存在性校验（与其他端点一致的 404 语义）
+    await edge_sync.get_or_404(db, Cluster, id=cluster_id, detail="集群不存在")
+    cert_info = parse_cert_pem(body.cert) if body.cert else None
+    key_ok = parse_key_pem(body.key) if body.key else None
+    match = None
+    if cert_info is not None and key_ok is not None:
+        match = keys_match(body.cert, body.key)
+    return SslPemPreviewResponse(
+        cert=SslPemCertPreview(**cert_info) if cert_info else None,
+        key=SslPemKeyPreview(ok=key_ok) if key_ok is not None else None,
+        key_match=match,
+    )
 
 
 @router.post("", response_model=SslCertificateResponse, status_code=status.HTTP_201_CREATED)
@@ -238,6 +310,9 @@ async def create_ssl_certificate(
     db: AsyncSession = Depends(get_db),
     request: Request = None,
 ):
+    # ssl-ux-review-fixes 8.1：URL 中的 cluster_id 是唯一权威来源；body 值仅作一致性校验
+    if data.cluster_id is not None and data.cluster_id != cluster_id:
+        raise HTTPException(status_code=422, detail="cluster_id 与 URL 中的集群不一致")
     cert_data = data.model_dump()
     cert_data["edge_uuid"] = str(uuid.uuid4())
     cert_data["cluster_id"] = cluster_id
@@ -247,7 +322,7 @@ async def create_ssl_certificate(
     enrich_audit(request, resource_id=cert.id, detail=f"创建SSL证书 {cert.name}")
     await db.commit()
     await db.refresh(cert)
-    return SslCertificateResponse.model_validate(cert)
+    return _masked_ssl_response(cert)
 
 
 @router.get("/{cert_id}", response_model=SslCertificateResponse)
@@ -257,7 +332,17 @@ async def get_ssl_certificate(
     db: AsyncSession = Depends(get_db),
 ):
     cert = await edge_sync.get_or_404(db, SslCertificate, id=cert_id, cluster_id=cluster_id, detail="SSL 证书不存在")
-    return SslCertificateResponse.model_validate(cert)
+    resp = _masked_ssl_response(cert)
+    # 详情端点同样回填发布时间与待发布态（ssl-ux-review-fixes D1：三端点单点推导）
+    pub_map = await _build_publish_map(db, [cert.id], "ssl")
+    ts = pub_map.get(cert.id)
+    resp.published_at = ts.isoformat() + "Z" if ts else None
+    resp.pending_publish = edge_sync.derive_pending_publish(
+        current_version=cert.current_version,
+        updated_at=cert.updated_at,
+        published_at=ts,
+    )
+    return resp
 
 
 @router.put("/{cert_id}", response_model=SslCertificateResponse)
@@ -271,6 +356,10 @@ async def update_ssl_certificate(
     cert = await edge_sync.get_or_404(db, SslCertificate, id=cert_id, cluster_id=cluster_id, detail="SSL 证书不存在")
     update_data = data.model_dump(exclude_unset=True)
     for k, v in update_data.items():
+        # ssl-ux-review-fixes 9.4：private_key 为 None/空串 SHALL 跳过更新（仅此字段单跳，
+        # 勿全字段一刀切——client_ca 手动清空 textarea 依赖发空串生效）
+        if k == "private_key" and not (v or "").strip():
+            continue
         setattr(cert, k, v)
     # 取消国密时清空签名证书数据
     if "gm" in update_data and not update_data["gm"]:
@@ -284,7 +373,7 @@ async def update_ssl_certificate(
     enrich_audit(request, detail=f"更新SSL证书 {cert.name}")
     await db.commit()
     await db.refresh(cert)
-    return SslCertificateResponse.model_validate(cert)
+    return _masked_ssl_response(cert)
 
 
 @router.delete("/{cert_id}")
@@ -525,7 +614,7 @@ async def _generate_local(
         else:
             raise HTTPException(
                 status_code=400,
-                detail="该集群没有 CA 根证书，请先创建 CA (POST /clusters/{id}/ssl/ca)",
+                detail="该集群没有 CA 根证书，请先在「CA 根证书」页签创建",
             )
 
     ca_record = await db.get(SslCertificate, req.ca_cert_id)

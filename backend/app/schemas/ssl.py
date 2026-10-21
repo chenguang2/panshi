@@ -19,7 +19,6 @@ class CommandLogEntry(BaseModel):
 
 class SslCertificateBase(BaseModel):
     name: str = ""
-    cluster_id: int = Field(..., ge=1)
     cert_type: str = Field(default="server")
     sni: str = ""
     cert: str = ""
@@ -48,6 +47,8 @@ class SslCertificateCreate(SslCertificateBase):
     sni: str = Field(..., min_length=1)
     cert: str = Field(..., min_length=1)
     private_key: str = Field(..., min_length=1, alias="key")
+    # ssl-ux-review-fixes 8.1：URL 中的 cluster_id 为权威来源；body 值仅用于一致性校验（不一致 422），可不传
+    cluster_id: Optional[int] = Field(default=None, ge=1)
 
     @field_validator("sign_cert", "sign_key")
     @classmethod
@@ -100,6 +101,9 @@ class SslCertificateResponse(SslCertificateBase):
     current_version: Optional[int] = None
     # 最近发布时间（ConfigVersion 回查回填，非模型列；None=从未发布）
     published_at: Optional[str] = None
+    # 待发布（ssl-ux-review-fixes D1：经 edge_sync.derive_pending_publish 单点推导，端点回填；
+    # 前端 MUST NOT 按时间戳自行实现）
+    pending_publish: bool = False
     status: int = 1
     generate_log: Optional[list[CommandLogEntry]] = None
     created_at: Optional[str] = None
@@ -107,6 +111,9 @@ class SslCertificateResponse(SslCertificateBase):
     # 证书到期信息（ux-review H2：序列化期从 cert PEM 解析，非模型列；None=解析失败如国密双证书）
     expire_at: Optional[str] = None
     expire_days: Optional[int] = None
+    # 私钥在位布尔（ssl-ux-review-fixes 9.1：响应掩码后由布尔表达「是否有私钥」）
+    has_private_key: bool = False
+    has_sign_key: bool = False
 
     @field_validator("created_at", "updated_at", mode="before")
     @classmethod
@@ -137,31 +144,52 @@ class SslCertificateResponse(SslCertificateBase):
         """ux-review H2：从 cert PEM 解析 notAfter，输出 expire_at/expire_days。
 
         解析失败（国密双证书等非标准 PEM）优雅降级为 None，不影响响应。
+        ssl-ux-review-fixes 10.1：解析逻辑收敛到 services/ssl_pem.parse_cert_pem
+        （与 POST /ssl/preview 共用，禁止两份 x509 解析）。
         """
         if self.expire_at is not None:
             return self
-        pem = getattr(self, "cert", None)
-        if not isinstance(pem, str) or "BEGIN CERTIFICATE" not in pem:
-            return self
-        try:
-            from cryptography import x509
+        from app.services.ssl_pem import parse_cert_pem
 
-            parsed = x509.load_pem_x509_certificate(pem.encode())
-            not_after = getattr(parsed, "not_valid_after_utc", None)
-            if not_after is not None:
-                not_after = not_after.replace(tzinfo=None)
-            else:
-                # cryptography<42 只有 naive UTC 版本
-                not_after = parsed.not_valid_after
-            self.expire_at = not_after.strftime("%Y-%m-%dT%H:%M:%SZ")
-            self.expire_days = (not_after - datetime.utcnow()).days
-        except Exception:
-            self.expire_at = None
-            self.expire_days = None
+        info = parse_cert_pem(getattr(self, "cert", None))
+        if info is None:
+            return self
+        self.expire_at = info["not_after"]
+        self.expire_days = info["expire_days"]
         return self
 
     class Config:
         from_attributes = True
+
+
+class SslPemCertPreview(BaseModel):
+    """ssl-ux-review-fixes 10.1：证书 PEM 预览项（非法输入不会出现在响应里，见 Response）。"""
+
+    ok: bool = True
+    subject_cn: Optional[str] = None
+    san: list[str] = []
+    not_after: Optional[str] = None
+    algorithm: Optional[str] = None
+    expire_days: Optional[int] = None
+
+
+class SslPemKeyPreview(BaseModel):
+    ok: bool
+
+
+class SslPemPreviewRequest(BaseModel):
+    """POST /clusters/{id}/ssl/preview 请求体；cert/key 均可选。"""
+
+    cert: Optional[str] = None
+    key: Optional[str] = None
+
+
+class SslPemPreviewResponse(BaseModel):
+    """分字段预览：非法/缺失 → cert=None；key 缺失=None、非法=ok:false；key_match 仅双 ok 时返回。"""
+
+    cert: Optional[SslPemCertPreview] = None
+    key: Optional[SslPemKeyPreview] = None
+    key_match: Optional[bool] = None
 
 
 class CaCertificateGenerateRequest(BaseModel):
@@ -169,8 +197,8 @@ class CaCertificateGenerateRequest(BaseModel):
 
     name: str = Field(..., min_length=1, max_length=100, description="CA 证书显示名称")
     common_name: Optional[str] = Field(default=None, description="CA 证书 CN，默认取 name")
-    organization: Optional[str] = Field(default=None, description="组织 (O)，默认 CUN")
-    organizational_unit: Optional[str] = Field(default=None, description="组织单位 (OU)，默认 BB")
+    organization: Optional[str] = Field(default=None, description="组织 (O)，默认 EMBRACE")
+    organizational_unit: Optional[str] = Field(default=None, description="组织单位 (OU)，默认 EDGE")
     validity_days: int = Field(default=3650, ge=1, le=36500, description="CA 有效期（天）")
     algorithm: str = Field(default="sm2", pattern=r"^(sm2|rsa|ecc)$", description="证书算法")
 

@@ -34,9 +34,15 @@
     </div>
 
     <div v-if="loading" class="loading-state">加载中...</div>
+    <!-- ssl-ux-review-fixes 6.5：激活筛选且无匹配的专属空态（优先于 Tab 空态） -->
+    <div v-else-if="hasActiveFilter && displayedCerts.length === 0" class="ssl-empty">
+      <div class="ssl-empty-icon">🔒</div>
+      <div class="ssl-empty-text">未找到匹配的证书</div>
+      <button class="btn btn-secondary" style="margin-top: 12px" @click="clearFilters">清除筛选</button>
+    </div>
     <div v-else-if="activeTab === 'ca' && certs.length === 0" class="ssl-empty">
       <div class="ssl-empty-icon">🔑</div>
-      <div class="ssl-empty-text">该集群还没有 CA 根证书</div>
+      <div class="ssl-empty-text">当前范围还没有 CA 根证书</div>
       <button class="btn btn-primary" style="margin-top: 12px" @click="openCaCreateDialog">创建 CA 根证书</button>
     </div>
     <div v-else-if="certs.length === 0" class="ssl-empty">
@@ -74,19 +80,17 @@
           </div>
           <div class="ssl-card-meta">
             <span v-if="cert.is_ca" class="badge badge-success">CA 根证书</span>
-            <span v-else-if="cert.current_version" class="badge badge-success"
-              ><span class="status-dot online"></span>已发布</span
-            >
-            <span v-else class="badge badge-neutral"><span class="status-dot"></span>未发布</span>
-            <div class="ssl-version-text">
-              <template v-if="cert.current_version"
-                ><PublishStatusTag :version="cert.current_version" :published-at="cert.published_at"
-              /></template>
-            </div>
+            <!-- ssl-ux-review-fixes 组 2：单一 PublishStatusTag 呈现四态，去掉「● 已发布」双徽章冗余 -->
+            <PublishStatusTag
+              v-else
+              :version="cert.current_version"
+              :published-at="cert.published_at"
+              :pending="cert.pending_publish"
+            />
           </div>
         </div>
         <div class="ssl-card-body">
-          <div class="ssl-card-row">
+          <div class="ssl-card-row" v-if="!cert.is_ca">
             <label>SNI</label
             ><span class="ssl-sni-tags">
               <template v-for="s in splitSniString(cert.sni)" :key="s">
@@ -97,10 +101,14 @@
               <span v-if="!cert.sni" class="text-muted">-</span>
             </span>
           </div>
-          <div class="ssl-card-row">
+          <!-- ssl-ux-review-fixes 4.3：CA 的 sni 字段存 CN，直译 SNI 语义错位 → 显示 CN 行 -->
+          <div class="ssl-card-row" v-if="cert.is_ca">
+            <label>CN</label><span>{{ cert.sni || '-' }}</span>
+          </div>
+          <div class="ssl-card-row" v-if="!cert.is_ca">
             <label>类型</label
             ><span
-              >{{ cert.cert_type
+              >{{ certTypeLabel(cert.cert_type)
               }}<span
                 v-if="cert.create_method === 'local_generate'"
                 class="badge badge-secondary"
@@ -125,12 +133,12 @@
             >
           </div>
           <div class="ssl-card-row" v-if="cert.ssl_protocols">
-            <label>协议</label><span>{{ cert.ssl_protocols }}</span>
+            <label>协议</label><span>{{ formatSslProtocols(cert.ssl_protocols) }}</span>
           </div>
           <div class="ssl-card-row" v-if="cert.expire_at">
             <label>有效期</label
             ><span class="ssl-expire-text"
-              >{{ fmtDateOnly(cert.expire_at)
+              >{{ formatDateOnly(cert.expire_at)
               }}<span
                 v-if="cert.expire_days !== null && cert.expire_days !== undefined"
                 class="ssl-expire-badge"
@@ -157,20 +165,31 @@
           >
             发布
           </button>
-          <button v-if="!cert.is_ca" class="btn btn-secondary btn-sm" @click="openVersionManagement(cert)">
+          <button
+            v-if="!cert.is_ca && cert.cert_type !== 'client'"
+            class="btn btn-secondary btn-sm"
+            @click="openVersionManagement(cert)"
+          >
             版本管理
           </button>
         </div>
       </div>
     </div>
 
-    <SslFormDrawer :visible="formVisible" :clusters="clusters" :editing-cert="editingCert" @close="closeForm" />
+    <SslFormDrawer
+      :visible="formVisible"
+      :clusters="clusters"
+      :editing-cert="editingCert"
+      :initial-cluster-id="clusterFilter"
+      @close="closeForm"
+    />
 
     <SslViewDrawer v-model:visible="viewDrawerVisible" :cert="viewingCert" />
 
     <SslGenerateDialog
       :visible="generateVisible"
       :clusters="clusters"
+      :initial-cluster-id="clusterFilter"
       @close="generateVisible = false"
       @success="onGenerateSuccess"
       @open-ca-create="openCaCreateDialog"
@@ -223,7 +242,8 @@ import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import { executePublish, showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
 import { getGroupColorStyle, getCardBorderStyle } from '@/composables/useGroupColors'
 import { isReservedSni, splitSniString } from '@/utils/sniTags'
-import { formatDateTime as formatDate, formatDate as fmtDateOnly } from '@/utils/format'
+import { certTypeLabel, formatSslProtocols, expireBadgeClass, expireBadgeText } from '@/utils/sslLabel'
+import { formatDateOnly } from '@/utils/format'
 import PublishStatusTag from '@/components/PublishStatusTag.vue'
 
 const certs = ref<any[]>([])
@@ -301,17 +321,19 @@ function onGroupChange() {
   loadCerts()
 }
 
-// ux-review H2：证书到期徽章（<0 已过期 / ≤30 天临期 / 其余正常）
-function expireBadgeClass(days: number): string {
-  if (days < 0) return 'danger'
-  if (days <= 30) return 'warn'
-  return 'neutral'
+// ssl-ux-review-fixes 6.5：激活筛选（搜索/分组/集群任一）判定与一键清除
+const hasActiveFilter = computed(
+  () => !!(searchText.value || clusterFilter.value || (groupFilter.value && groupFilter.value !== '__all__')),
+)
+
+function clearFilters() {
+  searchText.value = ''
+  clusterFilter.value = ''
+  groupFilter.value = '__all__'
+  loadCerts()
 }
 
-function expireBadgeText(days: number): string {
-  if (days < 0) return '已过期'
-  return `剩余 ${days} 天`
-}
+// ssl-ux-review-fixes 6.1：到期徽章语义收敛到 utils/sslLabel（与查看抽屉共用），本地副本删除
 
 async function loadCerts() {
   loading.value = true
@@ -375,6 +397,8 @@ function openDownloadDialog(cert: any) {
   downloadVisible.value = true
 }
 function onGenerateSuccess(cert: any) {
+  // ssl-ux-review-fixes 6.3：生成的是叶子证书，CA Tab 下自动切回「全部证书」（对齐 onCaCreateSuccess 反向）
+  if (activeTab.value === 'ca') activeTab.value = 'all'
   loadCerts()
   if (cert?.id) {
     const algoLabel: Record<string, string> = { sm2: '国密', rsa: 'RSA', ecc: 'ECC' }
@@ -410,6 +434,8 @@ async function deleteCert(cert: any) {
     title: `确定要删除 SSL 证书 "${cert.name}" 吗？`,
     apiEndpoint: `/clusters/${cert.cluster_id}/ssl/${cert.id}`,
     nodes,
+    // ssl-ux-review-fixes 6.8：勾选 Edge 删除时的具体业务后果（仅 SSL 域传入）
+    edgeConsequenceHint: '将从所选节点移除该证书，使用它的 HTTPS 域名将无法建立 TLS 连接',
     onOk: async (deleteDb, deleteEdge, nodeIds) => {
       await executeDeleteWithProgress({
         title: `删除 SSL 证书: ${cert.name}`,
@@ -563,13 +589,6 @@ onMounted(() => {
   text-align: right;
   flex-shrink: 0;
   margin-left: 12px;
-}
-.ssl-version-text {
-  white-space: nowrap;
-  font-size: 11px;
-  color: var(--muted);
-  margin-top: 4px;
-  font-family: var(--font-mono);
 }
 .ssl-card-topbar {
   padding: 4px 16px;

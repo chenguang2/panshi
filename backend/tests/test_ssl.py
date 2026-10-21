@@ -155,6 +155,23 @@ class TestSslApi:
         for r in matches:
             assert "POST" in r.methods, f"generate route {r.path} methods: {r.methods}"
 
+    def test_generate_without_ca_detail_is_actionable(self, isolated_app):
+        """组1.2（ssl-ux-review-fixes）：无 CA 时 400 detail 指引页签创建，不含 API 路径。"""
+        resp = isolated_app.post(
+            "/api/v1/clusters/1/ssl/generate",
+            json={
+                "name": "no-ca-cert",
+                "common_name": "no-ca.example.com",
+                "dns_sans": ["no-ca.example.com"],
+                "algorithm": "rsa",
+            },
+        )
+        assert resp.status_code == 400, resp.text
+        detail = resp.json()["detail"]
+        assert "该集群没有 CA 根证书" in detail
+        assert "「CA 根证书」页签" in detail
+        assert "POST /clusters" not in detail
+
     def test_generate_endpoint_smoke_with_ca(self, isolated_app):
         """真实 API 冒烟：POST /clusters/{id}/ssl/ca → POST /clusters/{id}/ssl/generate。
 
@@ -664,7 +681,9 @@ class TestSslMtlsUpdateEndpoint:
 
         assert resp.gm is False
         assert resp.sign_cert is None
-        assert resp.sign_key is None
+        # ssl-ux-review-fixes 9.1：响应统一掩码——sign_key 恒空串，清除与否经 has_sign_key 表达
+        assert resp.sign_key == ""
+        assert resp.has_sign_key is False
         assert resp.client_ca is None
         assert resp.client_depth is None
         assert resp.skip_mtls_uri_regex is None

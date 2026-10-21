@@ -18,11 +18,23 @@
                 <a-descriptions-item label="算法">
                   <a-tag :color="algorithmTagColor">{{ algorithmLabel }}</a-tag>
                 </a-descriptions-item>
+                <a-descriptions-item label="有效期">
+                  <span v-if="cert.expire_at" class="view-expire-text"
+                    >{{ formatDateOnly(cert.expire_at)
+                    }}<span
+                      v-if="cert.expire_days !== null && cert.expire_days !== undefined"
+                      class="view-expire-badge"
+                      :class="expireBadgeClass(cert.expire_days)"
+                      >{{ expireBadgeText(cert.expire_days) }}</span
+                    ></span
+                  >
+                  <span v-else class="view-expire-unparsed">{{ EXPIRE_UNPARSED_LABEL }}</span>
+                </a-descriptions-item>
                 <a-descriptions-item label="创建方式">{{
                   cert.create_method === 'local_generate' ? '本地生成' : cert.create_method
                 }}</a-descriptions-item>
                 <a-descriptions-item label="描述">{{ cert.description || '-' }}</a-descriptions-item>
-                <a-descriptions-item label="状态">
+                <a-descriptions-item label="类型">
                   <a-tag color="purple">CA 根证书</a-tag>
                 </a-descriptions-item>
               </a-descriptions>
@@ -64,10 +76,34 @@
             <template v-else>
               <a-descriptions :column="1" bordered :label-style="{ width: '140px' }">
                 <a-descriptions-item label="名称">{{ cert.name }}</a-descriptions-item>
-                <a-descriptions-item label="SNI">{{ cert.sni }}</a-descriptions-item>
-                <a-descriptions-item label="证书类型">{{ cert.cert_type }}</a-descriptions-item>
+                <a-descriptions-item label="SNI">
+                  <span class="ssl-sni-tags">
+                    <template v-for="s in splitSniString(cert.sni)" :key="s">
+                      <span class="sni-tag" :class="{ 'sni-tag-locked': isReservedSni(s) }"
+                        >{{ s }}<span v-if="isReservedSni(s)" class="sni-tag-reserved">系统保留</span></span
+                      >
+                    </template>
+                    <span v-if="!cert.sni">-</span>
+                  </span>
+                </a-descriptions-item>
+                <a-descriptions-item label="证书类型">{{ certTypeLabel(cert.cert_type) }}</a-descriptions-item>
                 <a-descriptions-item label="所属集群">{{ cert.cluster_name || cert.cluster_id }}</a-descriptions-item>
-                <a-descriptions-item label="SSL 协议">{{ cert.ssl_protocols || '-' }}</a-descriptions-item>
+                <a-descriptions-item label="算法">
+                  <a-tag :color="algorithmTagColor">{{ algorithmLabel }}</a-tag>
+                </a-descriptions-item>
+                <a-descriptions-item label="SSL 协议">{{ formatSslProtocols(cert.ssl_protocols) }}</a-descriptions-item>
+                <a-descriptions-item label="有效期">
+                  <span v-if="cert.expire_at" class="view-expire-text"
+                    >{{ formatDateOnly(cert.expire_at)
+                    }}<span
+                      v-if="cert.expire_days !== null && cert.expire_days !== undefined"
+                      class="view-expire-badge"
+                      :class="expireBadgeClass(cert.expire_days)"
+                      >{{ expireBadgeText(cert.expire_days) }}</span
+                    ></span
+                  >
+                  <span v-else class="view-expire-unparsed">{{ EXPIRE_UNPARSED_LABEL }}</span>
+                </a-descriptions-item>
                 <a-descriptions-item label="描述">{{ cert.description || '-' }}</a-descriptions-item>
                 <a-descriptions-item label="状态">
                   <a-tag v-if="cert.current_version" color="green">已发布</a-tag>
@@ -122,20 +158,17 @@
               </button>
             </div>
             <pre class="cert-preview">{{ cert.cert }}</pre>
-            <div v-if="!cert.is_ca" class="section-header">
+            <div v-if="!cert.is_ca && cert.has_private_key" class="section-header">
               <a-divider style="flex: 1; min-width: 0">私钥内容 (PEM)</a-divider>
-              <button class="btn btn-ghost btn-sm download-btn" @click="showPrivateKey = !showPrivateKey">
+              <button class="btn btn-ghost btn-sm download-btn" @click="togglePrivateKey">
                 {{ showPrivateKey ? '🙈 隐藏' : '👁 显示' }}
               </button>
-              <button
-                class="btn btn-ghost btn-sm download-btn"
-                @click="downloadCert('key', cert.key || cert.private_key, `${cert.name}_key.pem`)"
-              >
+              <button class="btn btn-ghost btn-sm download-btn" @click="downloadPrivateKey(`${cert.name}_key.pem`)">
                 📥 下载
               </button>
             </div>
-            <pre v-if="!cert.is_ca" class="cert-preview">{{
-              showPrivateKey ? cert.key || cert.private_key : '••••••••••••••••'
+            <pre v-if="!cert.is_ca && cert.has_private_key" class="cert-preview">{{
+              showPrivateKey ? liveKeys.private_key || '私钥获取中…' : '••••••••••••••••'
             }}</pre>
             <template v-if="cert.algorithm === 'sm2' && cert.sign_cert">
               <div class="section-header">
@@ -149,20 +182,22 @@
               </div>
               <pre class="cert-preview">{{ cert.sign_cert }}</pre>
             </template>
-            <template v-if="cert.algorithm === 'sm2' && cert.sign_key">
+            <template v-if="cert.algorithm === 'sm2' && cert.has_sign_key">
               <div class="section-header">
                 <a-divider style="flex: 1; min-width: 0">签名私钥 (sign_key)</a-divider>
-                <button class="btn btn-ghost btn-sm download-btn" @click="showSignKey = !showSignKey">
+                <button class="btn btn-ghost btn-sm download-btn" @click="toggleSignKey">
                   {{ showSignKey ? '🙈 隐藏' : '👁 显示' }}
                 </button>
                 <button
                   class="btn btn-ghost btn-sm download-btn"
-                  @click="downloadCert('sign_key', cert.sign_key, `${cert.name}_sign_key.pem`)"
+                  @click="downloadPrivateKey(`${cert.name}_sign_key.pem`)"
                 >
                   📥 下载
                 </button>
               </div>
-              <pre class="cert-preview">{{ showSignKey ? cert.sign_key : '••••••••••••••••' }}</pre>
+              <pre class="cert-preview">{{
+                showSignKey ? liveKeys.sign_key || '私钥获取中…' : '••••••••••••••••'
+              }}</pre>
             </template>
             <!-- 生成命令日志 -->
             <template
@@ -217,12 +252,23 @@
 import { ref, watch, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import { downloadPem, buildCertZip, downloadBlob } from '@/utils/download'
-import api from '@/api'
+import { formatDateOnly } from '@/utils/format'
+import {
+  expireBadgeClass,
+  expireBadgeText,
+  EXPIRE_UNPARSED_LABEL,
+  certTypeLabel,
+  formatSslProtocols,
+} from '@/utils/sslLabel'
+import { isReservedSni, splitSniString } from '@/utils/sniTags'
+import { sslAlgorithmLabel } from '@/utils/sslLabel'
+import { fetchSslPrivateKey } from '@/api/ssl'
 
-const ALGO_META: Record<string, { label: string; color: string }> = {
-  sm2: { label: 'SM2 国密', color: 'purple' },
-  rsa: { label: 'RSA', color: 'green' },
-  ecc: { label: 'ECC', color: 'blue' },
+// 标签文字统一走 sslLabel.sslAlgorithmLabel；此处仅保留标签配色
+const ALGO_META: Record<string, { color: string }> = {
+  sm2: { color: 'purple' },
+  rsa: { color: 'green' },
+  ecc: { color: 'blue' },
 }
 
 const props = defineProps<{
@@ -234,10 +280,7 @@ defineEmits<{
   'update:visible': [value: boolean]
 }>()
 
-const algorithmLabel = computed(() => {
-  const algo = props.cert?.algorithm
-  return (algo && ALGO_META[algo]?.label) || algo || '-'
-})
+const algorithmLabel = computed(() => sslAlgorithmLabel(props.cert?.algorithm))
 
 const algorithmTagColor = computed(() => {
   const algo = props.cert?.algorithm
@@ -251,6 +294,35 @@ const showSignKey = ref(false)
 const caKeyConfirmVisible = ref(false)
 const caKeyDownloading = ref(false)
 const caKeyError = ref('')
+// ssl-ux-review-fixes 9.3：私钥经按需端点取回后缓存展示（响应已掩码，本地无明文）
+const liveKeys = ref<{ private_key: string; sign_key: string }>({ private_key: '', sign_key: '' })
+const liveKeysLoading = ref(false)
+
+async function ensureLiveKeys() {
+  if (!props.cert || liveKeys.value.private_key || liveKeys.value.sign_key) return
+  liveKeysLoading.value = true
+  try {
+    const res = await fetchSslPrivateKey(Number(props.cert.cluster_id), Number(props.cert.id))
+    liveKeys.value = {
+      private_key: res.data?.private_key || '',
+      sign_key: res.data?.sign_key || '',
+    }
+  } catch {
+    message.error('私钥获取失败')
+  } finally {
+    liveKeysLoading.value = false
+  }
+}
+
+watch(
+  () => props.cert,
+  () => {
+    // 换证书即弃缓存，防串钥
+    liveKeys.value = { private_key: '', sign_key: '' }
+    showPrivateKey.value = false
+    showSignKey.value = false
+  },
+)
 
 watch(
   () => props.cert,
@@ -275,6 +347,27 @@ function downloadCert(_type: string, content: string, filename: string) {
   if (content) downloadPem(content, filename)
 }
 
+// ssl-ux-review-fixes 9.3：👁/📥 经按需端点取钥（单实现：ensureLiveKeys + liveKeys 缓存）
+async function togglePrivateKey() {
+  if (!showPrivateKey.value) await ensureLiveKeys()
+  showPrivateKey.value = !showPrivateKey.value
+}
+
+async function toggleSignKey() {
+  if (!showSignKey.value) await ensureLiveKeys()
+  showSignKey.value = !showSignKey.value
+}
+
+async function downloadPrivateKey(filename: string) {
+  await ensureLiveKeys()
+  const content = filename.endsWith('_sign_key.pem') ? liveKeys.value.sign_key : liveKeys.value.private_key
+  if (content) {
+    downloadPem(content, filename)
+  } else if (!liveKeysLoading.value) {
+    message.error('私钥不可用')
+  }
+}
+
 function downloadCaCert(cert: any) {
   if (cert.cert) downloadPem(cert.cert, `${cert.name}_ca.crt`)
 }
@@ -284,7 +377,8 @@ async function doDownloadCaKey() {
   caKeyDownloading.value = true
   caKeyError.value = ''
   try {
-    const res = await api.get(`/ssl/${props.cert.id}/ca-key`)
+    // ssl-ux-review-fixes 9.2：统一按需私钥端点（/ca-key 已删除）
+    const res = await fetchSslPrivateKey(Number(props.cert.cluster_id), Number(props.cert.id))
     const keyPem = res.data?.private_key
     if (keyPem) {
       downloadPem(keyPem, `${props.cert.name}_ca_key.pem`)
@@ -302,7 +396,10 @@ async function doDownloadCaKey() {
 
 async function downloadClientBundle(cert: any) {
   try {
-    const blob = await buildCertZip(cert, ['sign_cert', 'sign_key', 'cert', 'key'])
+    // ssl-ux-review-fixes 9.3：客户端证书包含私钥，先经按需端点取回再打包
+    const res = await fetchSslPrivateKey(Number(cert.cluster_id), Number(cert.id))
+    const merged = { ...cert, key: res.data?.private_key || '', sign_key: res.data?.sign_key || '' }
+    const blob = await buildCertZip(merged, ['sign_cert', 'sign_key', 'cert', 'key'])
     downloadBlob(blob, `${cert.name}_client_bundle.zip`)
     message.success('客户端证书包已下载')
   } catch {
@@ -312,6 +409,54 @@ async function downloadClientBundle(cert: any) {
 </script>
 
 <style scoped>
+/* ssl-ux-review-fixes 组 3：查看抽屉有效期徽章（语义与列表卡片一致） */
+.view-expire-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.view-expire-badge {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+.view-expire-badge.danger {
+  background: oklch(65% 0.2 25 / 15%);
+  color: oklch(50% 0.2 25);
+}
+.view-expire-badge.warn {
+  background: oklch(75% 0.15 85 / 18%);
+  color: oklch(50% 0.12 70);
+}
+.view-expire-badge.neutral {
+  background: oklch(65% 0.2 150 / 15%);
+  color: oklch(45% 0.18 150);
+}
+.view-expire-unparsed {
+  color: var(--muted);
+}
+/* ssl-ux-review-fixes 4.4：SNI 标签化（与列表卡片/表单抽屉同款芯片形态） */
+.ssl-sni-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.sni-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: oklch(65% 0.2 240 / 12%);
+  color: oklch(45% 0.15 240);
+  font-family: var(--font-mono);
+}
+.sni-tag-reserved {
+  font-size: 10px;
+  color: var(--muted);
+}
 .section-header {
   display: flex;
   align-items: center;

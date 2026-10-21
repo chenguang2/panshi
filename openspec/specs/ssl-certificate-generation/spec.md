@@ -109,7 +109,7 @@
 
 ### Requirement: 证书生成 API 端点
 
-系统 SHALL 提供 REST API 端点用于生成证书，支持 SM2、RSA、ECDSA 三种算法。生成过程中执行的所有 openssl 命令 SHALL 被记录并返回。
+系统 SHALL 提供 REST API 端点用于生成证书，支持 SM2、RSA、ECDSA 三种算法。所有算法的证书均 SHALL 由集群内 CA 签发（`ca_cert_id` 全算法必填）。生成过程中执行的所有 openssl 命令 SHALL 被记录并返回。
 
 #### Scenario: 生成端点参数
 
@@ -118,7 +118,7 @@
   - `name`（必填）
   - `common_name`（必填）
   - `algorithm`（可选，默认 sm2）
-  - `ca_cert_id`（SM2 时必填，RSA/ECC 忽略）
+  - `ca_cert_id`（必填，所有算法——证书均由 CA 签发；缺失返回 400）
   - `generate_client_certs`（可选 bool，默认 false，仅 SM2 有效）
   - `dns_sans`（可选数组）
   - `ip_sans`（可选数组）
@@ -145,6 +145,12 @@
 - **WHEN** 用户通过 `GET /api/v1/clusters/{cluster_id}/ssl/{cert_id}` 查询证书
 - **THEN** 如果该证书有 `generate_log` 数据
 - **AND** 响应中的 `generate_log` SHALL 包含该证书生成时的命令记录
+
+#### Scenario: 缺失 CA 时报错可读
+- **WHEN** 请求未携带 `ca_cert_id`
+- **AND** 该集群没有任何 CA 根证书
+- **THEN** 系统 SHALL 返回 400，detail 说明原因与解决方式
+- **AND** detail SHALL NOT 包含 API 路径等技术细节（如 `(POST /clusters/{id}/ssl/ca)`）
 
 ### Requirement: 生成 API 根据 algorithm 分发
 

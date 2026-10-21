@@ -1516,3 +1516,38 @@ describe('fetchAllClusterNodes 全量拉取集群节点（route-management-ux-ba
     expect(mockApiGet).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('删除确认 Edge 后果行 edgeConsequenceHint（ssl-ux-review-fixes 6.8）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+  })
+
+  it('未传 edgeConsequenceHint：勾选 Edge 后无后果行（其它域 DOM 不变）', async () => {
+    const { showDeleteConfirm } = await import('../useClusterUtils')
+    showDeleteConfirm({
+      title: '确定要删除上游 "u1" 吗？',
+      apiEndpoint: '/clusters/1/upstreams/5',
+      nodes: [{ id: 1, ip: '10.0.0.1', management_port: 9180 }],
+      onOk: vi.fn(),
+    })
+    const edgeCheckbox = document.querySelectorAll('input[type="checkbox"]')[1] as HTMLInputElement
+    edgeCheckbox.click()
+    expect(document.body.textContent || '').not.toContain('无法建立 TLS 连接')
+  })
+
+  it('SSL 传入后果文案：勾选 Edge 后显示后果行，未勾选不显示', async () => {
+    const { showDeleteConfirm } = await import('../useClusterUtils')
+    showDeleteConfirm({
+      title: '确定要删除 SSL 证书 "srv" 吗？',
+      apiEndpoint: '/clusters/1/ssl/3',
+      nodes: [{ id: 1, ip: '10.0.0.1', management_port: 9180 }],
+      edgeConsequenceHint: '将从所选节点移除该证书，使用它的 HTTPS 域名将无法建立 TLS 连接',
+      onOk: vi.fn(),
+    })
+    expect(document.body.textContent || '').not.toContain('无法建立 TLS 连接')
+    const edgeCheckbox = document.querySelectorAll('input[type="checkbox"]')[1] as HTMLInputElement
+    edgeCheckbox.click()
+    expect(document.body.textContent || '').toContain('将从所选节点移除该证书，使用它的 HTTPS 域名将无法建立 TLS 连接')
+  })
+})

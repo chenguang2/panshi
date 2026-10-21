@@ -37,6 +37,36 @@ export interface SslCertificate {
   client_ca?: string
   client_depth?: number
   skip_mtls_uri_regex?: string
+  /** ssl-ux-review-fixes 组 2：发布状态四态——发布后被修改（列表端点派生下发） */
+  pending_publish?: boolean
+  /** ssl-ux-review-fixes 组 9：私钥掩码后由布尔表达「是否在位」（private_key/sign_key 恒空串） */
+  has_private_key?: boolean
+  has_sign_key?: boolean
+  /** ssl-ux-review-fixes 组 3：到期信息（后端 derive_expiry 派生；解析失败为 null） */
+  expire_at?: string | null
+  expire_days?: number | null
+}
+
+/** ssl-ux-review-fixes 9.2：GET /clusters/{id}/ssl/{cert_id}/key 按需取响应（国密含 sign_key） */
+export interface SslPrivateKeyResponse {
+  private_key: string
+  sign_key?: string
+}
+
+/** ssl-ux-review-fixes 10.1：POST /clusters/{id}/ssl/preview 响应（非法/缺失按字段 null） */
+export interface SslPemCertPreview {
+  ok: boolean
+  subject_cn?: string | null
+  san: string[]
+  not_after?: string | null
+  algorithm?: string | null
+  expire_days?: number | null
+}
+
+export interface SslPemPreviewResponse {
+  cert: SslPemCertPreview | null
+  key: { ok: boolean } | null
+  key_match: boolean | null
 }
 
 export interface SslCertificateGenerateRequest {

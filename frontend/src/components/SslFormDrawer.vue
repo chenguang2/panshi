@@ -30,6 +30,8 @@
               <option value="">请选择集群</option>
               <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
             </select>
+            <!-- ssl-ux-review-fixes 6.7：禁用原因说明 -->
+            <div v-if="editingCert" class="form-hint">证书归属集群创建后不可更改</div>
             <div v-if="formErrors.cluster_id" class="form-error">{{ formErrors.cluster_id }}</div>
           </div>
         </div>
@@ -76,9 +78,10 @@
               v-model="sniInputValue"
               type="text"
               class="sni-input-inline"
-              placeholder="输入域名后按 Enter 添加"
+              placeholder="Enter 或逗号添加，支持粘贴多个"
               @keydown.enter.prevent="addSniTag"
               @keydown.space.prevent="addSniTag"
+              @keydown="onSniKeydown"
               @keydown.backspace="onSniBackspace"
             />
           </div>
@@ -144,6 +147,11 @@
               style="width: 100%"
               :class="{ 'has-error': formErrors.cert }"
             />
+            <!-- ssl-ux-review-fixes 5.1：文件读取反馈 + 一键切粘贴模式查看内容 -->
+            <div v-if="certInputMode === 'file' && certFileName" class="form-hint file-loaded-hint">
+              <span>已读取 {{ certFileName }}</span>
+              <button class="btn btn-ghost btn-sm" type="button" @click="certInputMode = 'text'">查看内容</button>
+            </div>
             <textarea
               v-else
               v-model="form.cert"
@@ -180,16 +188,41 @@
               style="width: 100%"
               :class="{ 'has-error': formErrors.key }"
             />
+            <!-- ssl-ux-review-fixes 5.1：同款读取反馈 -->
+            <div v-if="keyInputMode === 'file' && keyFileName" class="form-hint file-loaded-hint">
+              <span>已读取 {{ keyFileName }}</span>
+              <button class="btn btn-ghost btn-sm" type="button" @click="keyInputMode = 'text'">查看内容</button>
+            </div>
             <textarea
               v-else
               v-model="form.key"
               class="form-input"
               :class="{ 'has-error': formErrors.key }"
               rows="8"
-              placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"
+              :placeholder="editingKeyPlaceholder"
             ></textarea>
             <div v-if="formErrors.key" class="form-error">{{ formErrors.key }}</div>
           </div>
+        </div>
+
+        <!-- ssl-ux-review-fixes 10.2：PEM 即时预览（CN/有效期/算法/配对；不配对红色警示） -->
+        <div
+          v-if="pemPreview"
+          class="pem-preview-row"
+          :class="{ 'pem-preview-mismatch': pemPreview.key_match === false }"
+        >
+          <template v-if="pemPreview.cert">
+            <span>证书 CN：{{ pemPreview.cert.subject_cn || '（无 CN）' }}</span>
+            <span v-if="pemPreview.cert.not_after">有效期至 {{ formatDateOnly(pemPreview.cert.not_after) }}</span>
+            <span>{{ sslAlgorithmLabel(pemPreview.cert.algorithm) }}</span>
+            <span v-if="pemPreview.key_match === true" class="pem-preview-match-ok">✓ 证书与私钥配对</span>
+            <span v-else-if="pemPreview.key_match === false" class="pem-preview-match-bad"
+              >✗ 证书与私钥不配对，请检查</span
+            >
+          </template>
+          <template v-else>
+            <span class="pem-preview-invalid">证书内容无法解析，请检查粘贴/上传的内容</span>
+          </template>
         </div>
 
         <div v-if="showGmCheckbox" class="form-group">
@@ -268,7 +301,7 @@
                 class="form-input"
                 :class="{ 'has-error': formErrors.sign_key }"
                 rows="6"
-                placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"
+                :placeholder="editingKeyPlaceholder"
               ></textarea>
               <div v-if="formErrors.sign_key" class="form-error">{{ formErrors.sign_key }}</div>
             </div>
@@ -368,20 +401,29 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch, computed } from 'vue'
+import { ref, reactive, watch, computed, onScopeDispose } from 'vue'
 import { message } from 'ant-design-vue'
-import { createSslCertificate, updateSslCertificate } from '@/api/ssl'
-import { isReservedSni } from '@/utils/sniTags'
+import { createSslCertificate, updateSslCertificate, previewSslPem } from '@/api/ssl'
+import { isReservedSni, splitSniTags } from '@/utils/sniTags'
 import { isIpAddress } from '@/utils/ip'
-import type { SslCertificate } from '@/types/ssl'
+import { sslAlgorithmLabel } from '@/utils/sslLabel'
+import { formatDateOnly } from '@/utils/format'
+import type { SslCertificate, SslPemPreviewResponse } from '@/types/ssl'
 
 const props = defineProps<{
   visible: boolean
   clusters: any[]
   editingCert?: SslCertificate | null
+  /** ssl-ux-review-fixes 6.6：列表集群筛选非空时预选该集群（仅创建模式） */
+  initialClusterId?: string | null
 }>()
 
 const emit = defineEmits<{ close: [] }>()
+
+// ssl-ux-review-fixes 9.3：编辑模式私钥不回填明文，占位符提示留空语义
+const editingKeyPlaceholder = computed(() =>
+  props.editingCert ? '已保存，留空表示不修改' : '-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----',
+)
 
 const SSL_PROTOCOLS = ['TLSv1.1', 'TLSv1.2', 'TLSv1.3']
 
@@ -394,6 +436,9 @@ const submitting = ref(false)
 const sniTags = ref<string[]>([])
 const sniInputValue = ref('')
 const sniInputRef = ref<HTMLInputElement | null>(null)
+// ssl-ux-review-fixes 5.1：文件读取反馈（文件名 + 一键查看内容）
+const certFileName = ref('')
+const keyFileName = ref('')
 
 // 编辑模式只读展示：DNS/IP 分组
 const dnsTags = ref<string[]>([])
@@ -410,14 +455,20 @@ const mtlsSkipTags = ref<string[]>([])
 const mtlsSkipInputValue = ref('')
 
 function addSniTag() {
-  const val = sniInputValue.value.trim()
-  if (!val) return
-  if (sniTags.value.includes(val)) {
-    sniInputValue.value = ''
-    return
+  // ssl-ux-review-fixes 5.2：粘贴 a.com,b.com 一次拆为多标签（与生成弹窗同语义）
+  const tokens = splitSniTags(sniInputValue.value)
+  if (tokens.length === 0) return
+  for (const t of tokens) {
+    if (!sniTags.value.includes(t)) sniTags.value.push(t)
   }
-  sniTags.value.push(val)
   sniInputValue.value = ''
+}
+
+function onSniKeydown(e: KeyboardEvent) {
+  if (e.key === ',' || e.key === '，') {
+    e.preventDefault()
+    addSniTag()
+  }
 }
 
 function removeSniTag(index: number) {
@@ -464,6 +515,30 @@ const form = reactive({
   skip_mtls_uri_regex: [] as string[],
 })
 
+// ssl-ux-review-fixes 10.2：PEM 即时预览（防抖 500ms；证书为空不预览；置于 form 声明后避免 TDZ）
+const pemPreview = ref<SslPemPreviewResponse | null>(null)
+let pemPreviewTimer: ReturnType<typeof setTimeout> | null = null
+// 卸载时清理挂起的防抖定时器（不清理会跨组件生命周期在测试/快速开关中误触发）
+onScopeDispose(() => {
+  if (pemPreviewTimer) clearTimeout(pemPreviewTimer)
+})
+
+watch([() => form.cert, () => form.key, () => form.cluster_id], ([cert, key]) => {
+  if (pemPreviewTimer) clearTimeout(pemPreviewTimer)
+  if (!cert || !form.cluster_id) {
+    pemPreview.value = null
+    return
+  }
+  pemPreviewTimer = setTimeout(async () => {
+    try {
+      const res = await previewSslPem(Number(form.cluster_id), { cert, key: key || undefined })
+      pemPreview.value = res.data ?? null
+    } catch {
+      pemPreview.value = null
+    }
+  }, 500)
+})
+
 const showGmCheckbox = computed(() => {
   if (!props.editingCert) return true
   const algo = props.editingCert.algorithm
@@ -495,7 +570,8 @@ function validate(): boolean {
     formErrors.cert = '请上传或粘贴证书文件'
     valid = false
   }
-  if (!form.key.trim()) {
+  // ssl-ux-review-fixes 9.3/9.4：编辑模式私钥留空=不修改（响应已掩码，不回填明文），校验放行
+  if (!props.editingCert && !form.key.trim()) {
     formErrors.key = '请上传或粘贴私钥文件'
     valid = false
   }
@@ -524,6 +600,7 @@ watch(
   (v) => {
     if (!v) return
     clearErrors()
+    pemPreview.value = null
     certInputMode.value = 'file'
     keyInputMode.value = 'file'
     signCertInputMode.value = 'file'
@@ -574,7 +651,8 @@ watch(
       mtlsExpanded.value = mtlsEnabled.value
     } else {
       form.name = ''
-      form.cluster_id = ''
+      // ssl-ux-review-fixes 6.6：预选列表当前集群筛选
+      form.cluster_id = props.initialClusterId ? Number(props.initialClusterId) : ''
       form.cert_type = 'server'
       sniTags.value = []
       splitSniByType([])
@@ -602,6 +680,7 @@ function onCertFileChange(e: Event) {
   const reader = new FileReader()
   reader.onload = () => {
     form.cert = reader.result as string
+    certFileName.value = file.name
   }
   reader.readAsText(file)
 }
@@ -612,6 +691,7 @@ function onKeyFileChange(e: Event) {
   const reader = new FileReader()
   reader.onload = () => {
     form.key = reader.result as string
+    keyFileName.value = file.name
   }
   reader.readAsText(file)
 }
@@ -651,13 +731,20 @@ async function handleSubmit() {
       organization: form.organization.trim() || undefined,
       organizational_unit: form.organizational_unit.trim() || undefined,
     }
+    // ssl-ux-review-fixes 9.4：编辑模式留空私钥不进 payload（留空=不修改；后端 9.4 同款单字段跳过双防）
+    if (props.editingCert && !form.key.trim()) {
+      delete data.private_key
+    }
     // 创建/导入时提交 sni；编辑时 SNI 只读，不提交（后端 exclude_unset 不会改动它）
     if (!props.editingCert) {
       data.sni = sniTags.value.join(',')
     }
     if (form.gm) {
       data.sign_cert = form.sign_cert
-      data.sign_key = form.sign_key
+      // ssl-ux-review-fixes 9.4：编辑模式留空签名私钥不进 payload（掩码空串严禁回写清库）
+      if (!props.editingCert || form.sign_key.trim()) {
+        data.sign_key = form.sign_key
+      }
     }
     if (form.ssl_protocols.length > 0) {
       data.ssl_protocols = JSON.stringify(form.ssl_protocols)
@@ -669,14 +756,21 @@ async function handleSubmit() {
     }
     if (props.editingCert) {
       await updateSslCertificate(Number(form.cluster_id), props.editingCert.id, data)
-      message.success('已更新')
+      // ssl-ux-review-fixes 组 2.4：已发布证书的修改仅平台侧生效，提示重新发布
+      message.success(props.editingCert.pending_publish ? '已更新（平台侧），重新发布后 Edge 生效' : '已更新')
     } else {
       await createSslCertificate(Number(form.cluster_id), data)
       message.success('已创建')
     }
     emit('close')
   } catch (e: any) {
-    message.error(e.response?.data?.detail || '操作失败')
+    // ssl-ux-review-fixes 5.3：422 detail 数组逐条拼接，不再直出 [object Object]
+    const d = e.response?.data?.detail
+    let reason: string
+    if (Array.isArray(d)) reason = d.map((it: any) => it?.msg || JSON.stringify(it)).join('；')
+    else if (typeof d === 'string' && d) reason = d
+    else reason = '操作失败'
+    message.error(`保存失败：${reason}`)
   } finally {
     submitting.value = false
   }
@@ -913,5 +1007,30 @@ function handleClose() {
 }
 .mtls-uri-add-row .form-input {
   flex: 1;
+}
+
+/* ssl-ux-review-fixes 10.2：PEM 即时预览行 */
+.pem-preview-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--muted, #666);
+  background: var(--bg-secondary, #f5f5f5);
+  border-radius: 6px;
+}
+.pem-preview-row.pem-preview-mismatch {
+  background: oklch(65% 0.2 25 / 12%);
+  color: oklch(50% 0.2 25);
+}
+.pem-preview-match-ok {
+  color: oklch(55% 0.15 145);
+}
+.pem-preview-match-bad,
+.pem-preview-invalid {
+  color: oklch(50% 0.2 25);
+  font-weight: 600;
 }
 </style>

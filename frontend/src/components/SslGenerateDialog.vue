@@ -67,90 +67,24 @@
                 >{{ ca.name }} ({{ ca.algorithm || 'sm2' }})</a-select-option
               >
             </a-select>
-            <div v-if="filteredCaCerts.length === 0 && caCerts.length > 0" class="form-hint">
+            <div v-if="caCertsLoading" class="form-hint">正在加载 CA 根证书…</div>
+            <div v-else-if="caCertsError" class="form-hint">
+              CA 根证书列表加载失败，<a style="cursor: pointer; text-decoration: underline" @click="loadCaCerts"
+                >重试</a
+              >
+            </div>
+            <div v-else-if="!form.cluster_id" class="form-hint">请先选择集群，将列出该集群可用的 CA 根证书</div>
+            <div v-else-if="filteredCaCerts.length === 0 && caCerts.length > 0" class="form-hint">
               该集群没有 {{ algorithmLabel }} 类型的 CA，<a
                 style="cursor: pointer; text-decoration: underline"
                 @click="$emit('openCaCreate')"
                 >创建 {{ algorithmLabel }} CA</a
               >
             </div>
-            <div v-else-if="caCerts.length === 0 && !caCertsLoading" class="form-hint" style="color: var(--danger)">
-              该集群没有 CA 根证书，
-              <a style="cursor: pointer; text-decoration: underline" @click="$emit('openCaCreate')">请先创建 CA</a>
+            <div v-else-if="caCerts.length === 0" class="form-hint" style="color: var(--danger)">
+              该集群没有 CA 根证书，请先在「CA 根证书」页签创建
             </div>
           </div>
-          <div v-if="form.algorithm === 'sm2'" class="form-group" style="flex: 0 0 auto; padding-top: 24px">
-            <label class="checkbox-label">
-              <input type="checkbox" :checked="form.generate_client_certs" disabled />
-              同时生成客户端证书
-              <a-tooltip title="国密 SM2 默认同时生成客户端双证书">
-                <span class="tooltip-icon">ⓘ</span>
-              </a-tooltip>
-            </label>
-          </div>
-        </div>
-
-        <!-- 双向认证 (mTLS) — SM2+server 时显示 -->
-        <div v-if="form.algorithm === 'sm2'">
-          <div class="form-group" style="margin-top: 8px">
-            <label class="checkbox-label">
-              <input type="checkbox" v-model="mtlsEnabled" /> <span>启用双向认证 (mTLS)</span>
-            </label>
-          </div>
-          <template v-if="mtlsEnabled">
-            <div class="collapse-section">
-              <div class="collapse-header" @click="mtlsExpanded = !mtlsExpanded">
-                <span class="collapse-arrow">{{ mtlsExpanded ? '▼' : '▶' }}</span>
-                <span class="collapse-title">mTLS 配置</span>
-                <span class="collapse-badge" v-if="form.client_ca">已配置</span>
-              </div>
-              <div v-show="mtlsExpanded" class="collapse-body">
-                <div class="form-group">
-                  <label class="form-label">客户端 CA 证书 (client_ca)</label>
-                  <textarea
-                    v-model="form.client_ca"
-                    class="form-input"
-                    rows="6"
-                    placeholder="留空则自动使用当前 CA 的证书（勾选同时生成客户端证书时）&#10;-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
-                  ></textarea>
-                  <div class="form-hint">客户端的 CA 根证书 PEM，勾选"同时生成客户端证书"且留空时自动填充</div>
-                </div>
-                <div class="form-row">
-                  <div class="form-group">
-                    <label class="form-label">证书链深度 (client_depth)</label>
-                    <input
-                      v-model.number="form.client_depth"
-                      type="number"
-                      class="form-input"
-                      min="0"
-                      max="10"
-                      placeholder="默认 1"
-                    />
-                    <div class="form-hint">默认 1，0 表示不限制</div>
-                  </div>
-                  <div class="form-group" style="flex: 2">
-                    <label class="form-label">跳过 mTLS 的 URI 正则</label>
-                    <div class="mtls-uri-list">
-                      <div v-for="(tag, i) in mtlsSkipTags" :key="i" class="mtls-uri-item">
-                        <code class="mtls-uri-code">{{ tag }}</code>
-                        <button class="btn btn-ghost btn-sm" @click="removeMtlsSkipTag(i)">删除</button>
-                      </div>
-                      <div class="mtls-uri-add-row">
-                        <input
-                          v-model="mtlsSkipInput"
-                          type="text"
-                          class="form-input"
-                          placeholder="输入正则表达式"
-                          @keydown.enter.prevent="addMtlsSkipTag"
-                        />
-                        <button class="btn btn-primary btn-sm" @click="addMtlsSkipTag">添加</button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </template>
         </div>
 
         <!-- 证书参数 -->
@@ -226,7 +160,7 @@
               v-model="dnsInput"
               type="text"
               class="sni-input-inline"
-              placeholder="输入域名后按 Enter"
+              placeholder="Enter 或逗号添加，支持粘贴多个"
               :disabled="generating"
               @keydown.enter.prevent="addDnsTag"
               @keydown="addDnsTagOnComma"
@@ -249,7 +183,7 @@
               v-model="ipInput"
               type="text"
               class="sni-input-inline"
-              placeholder="输入 IP 后按 Enter"
+              placeholder="Enter 或逗号添加，支持粘贴多个"
               :disabled="generating"
               @keydown.enter.prevent="addIpTag"
               @keydown="addIpTagOnComma"
@@ -270,8 +204,97 @@
               max="36500"
               :disabled="generating"
             />
-            <div class="form-hint">天，默认 365</div>
+            <div class="form-hint">
+              天，默认 365<template v-if="validityExpiryPreview"> · 到期日约 {{ validityExpiryPreview }}</template>
+            </div>
           </div>
+        </div>
+
+        <!-- 高级选项：默认折叠，mTLS 与客户端证书不在首屏（ssl-ux-review-fixes 11.1） -->
+        <div class="collapse-section">
+          <div class="collapse-header" @click="advancedExpanded = !advancedExpanded">
+            <span class="collapse-arrow">{{ advancedExpanded ? '▼' : '▶' }}</span>
+            <span class="collapse-title">高级选项</span>
+            <span class="collapse-badge" v-if="form.algorithm === 'sm2' && (mtlsEnabled || form.client_ca)"
+              >已配置</span
+            >
+          </div>
+          <template v-if="advancedExpanded">
+            <div class="collapse-body">
+              <div v-if="form.algorithm === 'sm2'" class="form-group">
+                <label class="checkbox-label">
+                  <input type="checkbox" :checked="form.generate_client_certs" disabled />
+                  同时生成客户端证书
+                  <a-tooltip title="国密 SM2 默认同时生成客户端双证书">
+                    <span class="tooltip-icon">ⓘ</span>
+                  </a-tooltip>
+                </label>
+              </div>
+              <!-- 双向认证 (mTLS) — SM2 时显示开关；非国密显示灰字说明（ssl-ux-review-fixes 6.7） -->
+              <div v-if="form.algorithm === 'sm2'">
+                <div class="form-group" style="margin-top: 8px">
+                  <label class="checkbox-label">
+                    <input type="checkbox" v-model="mtlsEnabled" /> <span>启用双向认证 (mTLS)</span>
+                  </label>
+                </div>
+              </div>
+              <div v-else class="form-hint" style="margin-top: 8px">双向认证仅支持国密 SM2 证书</div>
+              <template v-if="form.algorithm === 'sm2' && mtlsEnabled">
+                <div class="collapse-section">
+                  <div class="collapse-header" @click="mtlsExpanded = !mtlsExpanded">
+                    <span class="collapse-arrow">{{ mtlsExpanded ? '▼' : '▶' }}</span>
+                    <span class="collapse-title">mTLS 配置</span>
+                    <span class="collapse-badge" v-if="form.client_ca">已配置</span>
+                  </div>
+                  <div v-show="mtlsExpanded" class="collapse-body">
+                    <div class="form-group">
+                      <label class="form-label">客户端 CA 证书 (client_ca)</label>
+                      <textarea
+                        v-model="form.client_ca"
+                        class="form-input"
+                        rows="6"
+                        placeholder="留空则自动使用当前 CA 的证书（勾选同时生成客户端证书时）&#10;-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
+                      ></textarea>
+                      <div class="form-hint">客户端的 CA 根证书 PEM，勾选"同时生成客户端证书"且留空时自动填充</div>
+                    </div>
+                    <div class="form-row">
+                      <div class="form-group">
+                        <label class="form-label">证书链深度 (client_depth)</label>
+                        <input
+                          v-model.number="form.client_depth"
+                          type="number"
+                          class="form-input"
+                          min="0"
+                          max="10"
+                          placeholder="默认 1"
+                        />
+                        <div class="form-hint">默认 1，0 表示不限制</div>
+                      </div>
+                      <div class="form-group" style="flex: 2">
+                        <label class="form-label">跳过 mTLS 的 URI 正则</label>
+                        <div class="mtls-uri-list">
+                          <div v-for="(tag, i) in mtlsSkipTags" :key="i" class="mtls-uri-item">
+                            <code class="mtls-uri-code">{{ tag }}</code>
+                            <button class="btn btn-ghost btn-sm" @click="removeMtlsSkipTag(i)">删除</button>
+                          </div>
+                          <div class="mtls-uri-add-row">
+                            <input
+                              v-model="mtlsSkipInput"
+                              type="text"
+                              class="form-input"
+                              placeholder="输入正则表达式"
+                              @keydown.enter.prevent="addMtlsSkipTag"
+                            />
+                            <button class="btn btn-primary btn-sm" @click="addMtlsSkipTag">添加</button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </template>
         </div>
 
         <!-- 生成中状态 -->
@@ -347,6 +370,7 @@
           class="btn btn-primary"
           @click="handleGenerate"
           :disabled="generating || !canGenerate"
+          :title="canGenerate ? undefined : '请先选择签发 CA 根证书'"
         >
           {{ generating ? '生成中...' : '生成并保存' }}
         </button>
@@ -366,6 +390,8 @@ import { isIpAddress } from '@/utils/ip'
 const props = defineProps<{
   visible: boolean
   clusters: any[]
+  /** ssl-ux-review-fixes 6.6：列表集群筛选非空时预选该集群 */
+  initialClusterId?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -399,6 +425,15 @@ const mtlsEnabled = ref(false)
 const mtlsSkipTags = ref<string[]>([])
 const mtlsSkipInput = ref('')
 const mtlsExpanded = ref(false)
+// ssl-ux-review-fixes 11.1：高级选项（mTLS/客户端证书）默认折叠
+const advancedExpanded = ref(false)
+// 有效期 → 到期日即时预览
+const validityExpiryPreview = computed(() => {
+  const days = Number(form.validity_days)
+  if (!Number.isFinite(days) || days <= 0) return ''
+  const d = new Date(Date.now() + days * 86400000)
+  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`
+})
 const generating = ref(false)
 const errorMsg = ref('')
 const commandLog = ref<any[]>([])
@@ -407,6 +442,7 @@ const resultData = ref<any>(null)
 
 const caCerts = ref<any[]>([])
 const caCertsLoading = ref(false)
+const caCertsError = ref(false)
 
 const algorithmLabel = computed(() => {
   const map: Record<string, string> = { sm2: 'SM2', rsa: 'RSA', ecc: 'ECC' }
@@ -428,12 +464,7 @@ const errors = reactive({
 })
 
 const canGenerate = computed(() => {
-  return (
-    form.name.trim() &&
-    form.common_name.trim() &&
-    form.cluster_id &&
-    (form.algorithm !== 'sm2' || form.ca_cert_id !== null)
-  )
+  return form.name.trim() && form.common_name.trim() && form.cluster_id && form.ca_cert_id !== null
 })
 
 function validate(): boolean {
@@ -458,10 +489,6 @@ function validate(): boolean {
     errors.dns_sans = '请至少添加一个域名 SAN 或 IP SAN'
     valid = false
   }
-  if (!form.ca_cert_id) {
-    message.warning('请选择签发 CA 根证书')
-    valid = false
-  }
   return valid
 }
 
@@ -472,9 +499,11 @@ function toggleLog(index: number) {
 async function loadCaCerts() {
   if (!form.cluster_id) {
     caCerts.value = []
+    caCertsError.value = false
     return
   }
   caCertsLoading.value = true
+  caCertsError.value = false
   try {
     const { default: api } = await import('@/api')
     const res = await api.get(`/clusters/${form.cluster_id}/ssl`, { params: { page_size: 500 } })
@@ -485,6 +514,7 @@ async function loadCaCerts() {
     }
   } catch {
     caCerts.value = []
+    caCertsError.value = true
   } finally {
     caCertsLoading.value = false
   }
@@ -634,7 +664,8 @@ watch(
   (v) => {
     if (v) {
       form.algorithm = 'rsa'
-      form.cluster_id = ''
+      // ssl-ux-review-fixes 6.6：预选列表当前集群筛选
+      form.cluster_id = props.initialClusterId ? (Number(props.initialClusterId) as any) : ''
       form.name = ''
       form.common_name = ''
       form.validity_days = 365
@@ -649,6 +680,7 @@ watch(
       mtlsSkipTags.value = []
       mtlsExpanded.value = false
       caCerts.value = []
+      caCertsError.value = false
       errorMsg.value = ''
       commandLog.value = []
       expandedLogs.value = []

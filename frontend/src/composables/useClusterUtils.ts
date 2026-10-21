@@ -127,6 +127,8 @@ export function showDeleteConfirm(opts: {
   isCluster?: boolean
   /** 通用附加警示行（黄底，global-rule-ux-close-loop 3.1）：置于 scope 区上方，空/未传不渲染（向后兼容） */
   extraWarning?: string
+  /** Edge 删除后果行（ssl-ux-review-fixes 6.8）：勾选「Edge 节点」后显示，未传不渲染（其它域 DOM 不变） */
+  edgeConsequenceHint?: string
   /** 资源统计加载失败：清单区显示降级提示（不影响删除） */
   statsLoadFailed?: boolean
   /** 节点明细加载失败：Edge 删除退化为后端全量遍历（node_ids 不传） */
@@ -270,6 +272,16 @@ export function showDeleteConfirm(opts: {
           )
         : null
 
+    /** Edge 删除后果行（ssl-ux-review-fixes 6.8）：勾选 Edge 后显示具体业务后果，未传不渲染 */
+    const edgeConsequenceRow =
+      deleteEdge && opts.edgeConsequenceHint
+        ? h(
+            'div',
+            { style: 'margin-top:8px;margin-left:24px;font-size:12px;color:var(--danger);' },
+            opts.edgeConsequenceHint,
+          )
+        : null
+
     const vnode = h(
       AppModal,
       {
@@ -340,6 +352,7 @@ export function showDeleteConfirm(opts: {
               ),
               nodeSection,
               nodesUnavailableSection,
+              edgeConsequenceRow,
               // 未勾选 Edge 删除时提示：平台记录删除不影响节点运行（upstream-ux-close-loop 4.7）
               deleteEdge
                 ? null
