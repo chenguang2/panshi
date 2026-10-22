@@ -116,7 +116,8 @@
   - `deploy.http` 字段
   - `deploy.http.edge.listen` 字段，且不为空列表
   - `deploy.http.admin.listen` 字段，且不为空列表
-- **AND** 验证不通过时 SHALL 提示具体错误（含字段路径；YAML 语法错误含行号）
+- **AND** `deploy.http.edge.listen` 与 `deploy.http.admin.listen` 的每个条目（`addr` 字段，或纯字符串条目）中 `host:port` 的端口部分 SHALL 为 1-65535 的整数；`unix:` 前缀条目 SHALL 跳过端口校验
+- **AND** 验证不通过时 SHALL 提示具体错误（含字段路径；YAML 语法错误含行号；端口非法含项序号、原值与合法范围，如「deploy → http → edge → listen 第 1 项端口非法: 0.0.0.0:99999（端口须为 1-65535 的整数）」）
 
 #### Scenario: 发布节点选择弹窗
 - **WHEN** 字段验证通过
