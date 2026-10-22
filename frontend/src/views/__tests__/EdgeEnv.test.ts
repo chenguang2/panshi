@@ -418,6 +418,38 @@ describe('EdgeEnv.vue 入口守卫 · 未选集群/节点不发起 SSE', () => {
     expect(mockInstallStart).not.toHaveBeenCalled()
     wrapper.unmount()
   })
+
+  it('onPublishClick：listen 端口越界时不进入发布流程且提示端口非法（edge-env-port-validation）', async () => {
+    const wrapper = await mountPage()
+    const vm = wrapper.vm as any
+    vm.selectedClusterId = 1
+    vm.allNodes = [{ id: 10, ip: '10.0.0.1', management_port: 9180, status: 1 }]
+    vm.editorContent = [
+      'deploy:',
+      '  prefix: edge',
+      '  http:',
+      '    edge:',
+      '      listen:',
+      '        - addr: 0.0.0.0:99999',
+      '    admin:',
+      '      listen:',
+      '        - addr: 0.0.0.0:16620',
+    ].join('\n')
+    vm.onPublishClick()
+    await wrapper.vm.$nextTick()
+    expect(vm.alertVisible).toBe(true)
+    expect(vm.alertContent).toContain('端口非法')
+    expect(vm.alertContent).toContain('1-65535')
+    expect(vm.publishDiffVisible).toBe(false)
+    expect(mockInstallStart).not.toHaveBeenCalled()
+    // 合法内容不受影响（钉住不误伤）
+    vm.alertVisible = false
+    vm.editorContent = vm.editorContent.replace('99999', '16610')
+    vm.onPublishClick()
+    await wrapper.vm.$nextTick()
+    expect(vm.publishDiffVisible).toBe(true)
+    wrapper.unmount()
+  })
 })
 
 // ── 组2：发布反馈与状态语义（P0-1 前端侧 / Q1 重试分流 / 2.5 无节点置灰） ──

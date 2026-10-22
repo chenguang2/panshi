@@ -679,6 +679,20 @@ function validateFields(content: string): string | null {
     const adminListen = parsed.deploy.http.admin?.listen
     if (!Array.isArray(adminListen) || adminListen.length === 0)
       return '缺少必填字段或为空: deploy → http → admin → listen'
+    for (const [side, list] of [
+      ['edge', edgeListen],
+      ['admin', adminListen],
+    ] as const) {
+      for (let i = 0; i < list.length; i++) {
+        const entry = list[i] as { addr?: unknown } | string
+        const addr = typeof entry === 'string' ? entry : entry?.addr
+        if (typeof addr !== 'string' || addr.startsWith('unix:')) continue
+        const idx = addr.lastIndexOf(':')
+        const port = idx >= 0 ? addr.slice(idx + 1) : ''
+        if (!/^\d+$/.test(port) || Number(port) < 1 || Number(port) > 65535)
+          return `deploy → http → ${side} → listen 第 ${i + 1} 项端口非法: ${addr}（端口须为 1-65535 的整数）`
+      }
+    }
   } catch {
     return 'YAML 格式解析失败'
   }
