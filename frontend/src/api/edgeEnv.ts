@@ -10,6 +10,8 @@ interface NodeResultItem {
   route?: 'relay' | 'direct'
   /** 经中继时的跳板主机串，如 jboss@192.168.0.13 */
   relay_via?: string
+  /** reload 宽松警告（后端扫描 EDGE_RELOAD_WARNING 标记；缺失不渲染） */
+  warning?: string
 }
 
 /** 读取配置流（GET /clusters/{id}/edge-env/read-stream）的单个事件负载 */

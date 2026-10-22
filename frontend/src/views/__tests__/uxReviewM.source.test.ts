@@ -33,10 +33,12 @@ describe('M2 列表空态带引导 CTA', () => {
 })
 
 describe('M3 edge.env 初始态引导', () => {
-  it('编辑器空内容时显示获取模板引导', () => {
+  it('编辑器空内容时显示独立空态卡（读取节点配置引导，不与编辑器内容视觉混淆）', () => {
     const s = src('views', 'EdgeEnv.vue')
-    expect(s).toContain('ee-empty-hint')
-    expect(s).toMatch(/ee-empty-hint[\s\S]*?获取配置模板/)
+    // 2026-10-22 edge-env-ux-review-fixes：ee-empty-hint 悬浮层升级为 ee-empty-card 独立卡，按钮改名「读取节点配置」
+    expect(s).toContain('ee-empty-card')
+    expect(s).not.toContain('ee-empty-hint')
+    expect(s).toMatch(/ee-empty-card[\s\S]*?读取节点配置/)
   })
 })
 

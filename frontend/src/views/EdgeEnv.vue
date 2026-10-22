@@ -3,38 +3,39 @@
     <PageHeader title="edge.env 配置" description="远程读取、编辑和部署 Edge 网关的 edge.env 配置文件">
       <template #actions>
         <button
-          class="btn btn-primary"
+          class="btn btn-secondary"
           @click="startReadTemplate"
           :disabled="!selectedClusterId || !selectedNodeId || readStreaming"
         >
-          {{ readStreaming ? '读取中...' : '获取配置模板' }}
+          {{ readStreaming ? '读取中...' : '读取节点配置' }}
         </button>
-        <button class="btn btn-primary" @click="onPublishClick" :disabled="!selectedClusterId">发布</button>
-        <button class="btn btn-secondary" @click="showVersionManagement" :disabled="!selectedClusterId">
-          版本管理
+        <button class="btn btn-primary" @click="onPublishClick" :disabled="!selectedClusterId || !allNodes.length">
+          发布
         </button>
+        <button class="btn btn-ghost" @click="showVersionManagement" :disabled="!selectedClusterId">版本管理</button>
       </template>
     </PageHeader>
 
     <div class="ee-toolbar">
-      <div class="search-input-wrap">
-        <input v-model="searchText" type="text" placeholder="搜索集群名称..." class="form-input" @input="onSearch" />
-        <span class="search-icon">&#128269;</span>
-      </div>
-      <select v-model="groupFilter" class="form-input" style="width: 140px" @change="onGroupChange">
-        <option value="__all__">全部分组</option>
-        <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
-        <option value="__ung__">未分组</option>
-      </select>
-      <select v-model="selectedClusterId" class="form-input" style="width: 160px" @change="onClusterChange">
-        <option value="">请选择集群</option>
-        <option v-for="c in filteredClusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
-      </select>
+      <a-select
+        :value="selectedClusterId === '' ? undefined : selectedClusterId"
+        show-search
+        placeholder="请选择集群"
+        style="width: 260px"
+        :filter-option="filterClusterOption"
+        @change="onASelectClusterChange"
+      >
+        <a-select-opt-group v-for="g in clusterGroups" :key="g.label" :label="g.label">
+          <a-select-option v-for="c in g.clusters" :key="c.id" :value="c.id">
+            {{ c.display_name || c.name }}
+          </a-select-option>
+        </a-select-opt-group>
+      </a-select>
       <select
-        v-model="selectedNodeId"
+        :value="selectedNodeId"
         class="form-input"
         style="width: 240px"
-        @change="onNodeChange"
+        @change="onNodeSelectChange"
         :disabled="!nodes.length"
       >
         <option value="">请选择节点</option>
@@ -49,20 +50,33 @@
     </div>
     <div v-else-if="noActiveNodes" class="ee-empty">
       <div class="ee-empty-text">当前集群无节点，无法管理 edge.env</div>
+      <div class="ee-empty-sub">请先在集群管理中为该集群添加节点</div>
     </div>
     <div v-else class="ee-editor-area">
-      <MonacoEditor v-model="editorContent" language="yaml" height="calc(100vh - 320px)" />
-      <div v-if="!editorContent && !readStreaming" class="ee-empty-hint">
-        选择集群与节点后点击「获取配置模板」读取当前配置，或直接在编辑器中输入内容
+      <div v-if="!editorContent && !readStreaming" class="ee-empty-card">
+        <div class="ee-empty-card-title">开始使用</div>
+        <div class="ee-guide-line">① 在上方选择集群与节点</div>
+        <div class="ee-guide-line">② 点击「读取节点配置」载入当前配置</div>
+        <div class="ee-guide-line">③ 编辑后点击「发布」写入所选节点</div>
       </div>
+      <MonacoEditor v-else v-model="editorContent" language="yaml" height="calc(100vh - 320px)" />
+    </div>
+
+    <div v-if="statusSourceLabel" class="ee-status-bar">
+      <span class="ee-status-source">
+        {{ statusSourceLabel }}<template v-if="statusReadAtText"> · 读取于 {{ statusReadAtText }}</template>
+      </span>
+      <span v-if="isDirty" class="ee-dirty-badge">● 未发布修改</span>
     </div>
 
     <!-- Read Template Progress Modal -->
     <div class="modal-overlay" :style="{ display: readModalVisible ? 'flex' : 'none' }">
       <div class="modal modal-wide">
         <div class="modal-header">
-          <h2>获取配置模板</h2>
-          <button class="modal-close" @click="closeReadModal">&times;</button>
+          <h2>读取节点配置</h2>
+          <button class="modal-close" :title="readStreaming ? '关闭将中止读取' : '关闭'" @click="closeReadModal">
+            &times;
+          </button>
         </div>
         <div class="modal-body">
           <div v-if="readNode" class="ee-node-card">
@@ -129,11 +143,24 @@
       <div class="modal modal-wide">
         <div class="modal-header">
           <h2>确认变更</h2>
+          <span v-if="!diffIdentical" class="ee-diff-summary">
+            +{{ diffView.added }} −{{ diffView.removed }} · 基线：{{ diffBaselineLabel }}
+          </span>
           <button class="modal-close" @click="publishDiffVisible = false">&times;</button>
         </div>
         <div class="modal-body">
-          <div v-if="diffHtml" class="ee-diff" v-html="diffHtml"></div>
-          <div v-else class="ee-diff-empty">与上次获取的内容一致，无变更</div>
+          <div v-if="diffIdentical" class="ee-diff-empty">与基线内容一致，无变更</div>
+          <div v-else class="ee-diff">
+            <div v-for="(row, i) in diffView.rows" :key="i" class="ee-diff-row" :class="`ee-diff-${row.type}`">
+              <template v-if="row.type === 'fold'">{{ row.text }}</template>
+              <template v-else>
+                <span class="ee-diff-no">{{ row.oldNo ?? '' }}</span>
+                <span class="ee-diff-no">{{ row.newNo ?? '' }}</span>
+                <span class="ee-diff-sign">{{ row.type === 'add' ? '+' : row.type === 'del' ? '−' : ' ' }}</span>
+                <span class="ee-diff-text">{{ row.text }}</span>
+              </template>
+            </div>
+          </div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="publishDiffVisible = false">取消</button>
@@ -166,32 +193,30 @@
               >
               <a style="cursor: pointer; color: var(--accent)" @click="clearAllPublishNodes">取消全选</a>
             </div>
-            <span>已选择 {{ selectedPublishNodeIds.length }} / {{ allNodes.length }} 个节点</span>
+            <span>已选择 {{ selectedPublishNodeIds.length }} / 在线 {{ onlineNodes.length }} 台</span>
           </div>
           <div class="publish-node-list">
-            <div v-for="n in allNodes" :key="n.id" class="publish-node-item" @click="togglePublishNode(n)">
-              <input type="checkbox" :checked="selectedPublishNodeIds.includes(n.id)" />
+            <div
+              v-for="n in allNodes"
+              :key="n.id"
+              class="publish-node-item"
+              :class="{ disabled: n.status !== 1 }"
+              @click="togglePublishNode(n)"
+            >
+              <input type="checkbox" :checked="selectedPublishNodeIds.includes(n.id)" :disabled="n.status !== 1" />
               <span class="publish-node-ip">{{ n.ip }}:{{ n.management_port }}</span>
               <span v-if="n.status !== 1" class="badge badge-neutral">离线</span>
               <span v-else class="badge badge-success">在线</span>
             </div>
           </div>
-          <div
-            v-if="selectedPublishNodeIds.length === 0"
-            style="color: var(--danger); font-size: 12px; margin-top: 8px"
-          >
+          <div class="ee-consequence-hint">将把上述内容写入所选节点并执行 edge init/reload 生效</div>
+          <div v-if="zeroNodeTried" style="color: var(--danger); font-size: 12px; margin-top: 8px">
             请至少选择一个节点
           </div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="publishNodeModalVisible = false">取消</button>
-          <button
-            class="btn btn-primary"
-            @click="executePublish"
-            :disabled="selectedPublishNodeIds.length === 0 || publishing"
-          >
-            确认发布
-          </button>
+          <button class="btn btn-primary" @click="executePublish" :disabled="publishing">确认发布</button>
         </div>
       </div>
     </div>
@@ -200,8 +225,8 @@
     <div class="modal-overlay" :style="{ display: publishProgressVisible ? 'flex' : 'none' }">
       <div class="modal modal-wide">
         <div class="modal-header">
-          <h2>发布进度</h2>
-          <button class="modal-close" @click="closePublishProgress">&times;</button>
+          <h2>发布进度{{ publishing ? '（发布中，完成后可关闭）' : '' }}</h2>
+          <button class="modal-close" :disabled="publishing" @click="closePublishProgress">&times;</button>
         </div>
         <div class="modal-body">
           <div v-if="nodeResults.length === 0 && publishing && !publishResult" class="ee-deploying">
@@ -228,6 +253,7 @@
               </span>
             </div>
             <div v-if="nodeResult.error" class="ee-node-error">{{ nodeResult.error }}</div>
+            <div v-if="nodeResult.warning" class="ee-node-warning">⚠ {{ nodeResult.warning }}</div>
           </div>
           <div v-if="publishLogs.length > 0" class="ee-log-area">
             <div v-for="(log, i) in publishLogs" :key="i" class="ee-log-line" v-html="ansiToHtml(log)"></div>
@@ -244,10 +270,18 @@
             <span v-if="deploySummary" style="margin-left: 8px; color: var(--muted)">
               成功 {{ deploySummary.success }} / 失败 {{ deploySummary.failed }}
             </span>
+            <button
+              v-if="(deploySummary?.failed ?? 0) > 0"
+              class="btn btn-secondary"
+              style="margin-left: 12px"
+              @click="retryFailedNodes"
+            >
+              重试失败节点
+            </button>
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-secondary" @click="closePublishProgress">关闭</button>
+          <button class="btn btn-secondary" :disabled="publishing" @click="closePublishProgress">关闭</button>
         </div>
       </div>
     </div>
@@ -266,7 +300,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import { message } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import MonacoEditor from '@/components/MonacoEditor.vue'
@@ -275,36 +309,53 @@ import api from '@/api'
 import * as edgeEnvApi from '@/api/edgeEnv'
 import { useInstallStream } from '@/composables/useInstallStream'
 import { routeLabel } from '@/composables/useClusterUtils'
+import { renderUnifiedDiff, type UnifiedDiffView } from '@/utils/lineDiff'
 import type { Cluster } from '@/types'
 import { PAGE_SIZE_DROPDOWN } from '@/constants'
 import { load as yamlLoad } from 'js-yaml'
-import { ansiToHtml, escapeHtml } from '@/utils/ansi'
+import { ansiToHtml } from '@/utils/ansi'
+import { formatDateTime } from '@/utils/format'
 
 const route = useRoute()
+const router = useRouter()
 
 const clusters = ref<Cluster[]>([])
 const nodes = ref<any[]>([])
 const allNodes = ref<any[]>([])
 const selectedClusterId = ref<number | string>('')
 const selectedNodeId = ref<number | string>('')
-const searchText = ref('')
-const groupFilter = ref('__all__')
 
-const groupOptions = computed(() => {
-  const names = new Set(clusters.value.map((c) => c.group_name || ''))
-  return Array.from(names).filter(Boolean).sort()
-})
-
-const filteredClusters = computed(() => {
-  let list = clusters.value
-  if (groupFilter.value === '__ung__') list = list.filter((c) => !c.group_name)
-  else if (groupFilter.value !== '__all__') list = list.filter((c) => c.group_name === groupFilter.value)
-  if (searchText.value) {
-    const q = searchText.value.toLowerCase()
-    list = list.filter((c) => (c.display_name || c.name).toLowerCase().includes(q))
+/** 集群下拉分组（Q4：分组作 optgroup 展示，具名分组按名称排序、未分组兜底在末尾） */
+const clusterGroups = computed(() => {
+  const named = new Map<string, Cluster[]>()
+  const ungrouped: Cluster[] = []
+  for (const c of clusters.value) {
+    if (c.group_name) {
+      if (!named.has(c.group_name)) named.set(c.group_name, [])
+      named.get(c.group_name)!.push(c)
+    } else {
+      ungrouped.push(c)
+    }
   }
-  return list
+  const groups = Array.from(named.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([label, cs]) => ({ label, clusters: cs }))
+  if (ungrouped.length) groups.push({ label: '未分组', clusters: ungrouped })
+  return groups
 })
+
+function onASelectClusterChange(val: unknown) {
+  void applyClusterChange(val === undefined || val === null || val === '' ? '' : Number(val))
+}
+
+/** a-select show-search 过滤：命中 display_name 或集群标识（name） */
+function filterClusterOption(input: string, option: any) {
+  const c = clusters.value.find((cl) => cl.id === Number(option?.value))
+  if (!c) return false
+  const q = input.toLowerCase()
+  return [c.display_name, c.name].some((s) => (s || '').toLowerCase().includes(q))
+}
+
 const editorContent = ref('')
 const savedContent = ref('')
 const errorMsg = ref('')
@@ -363,15 +414,39 @@ interface ReadNodeState {
 const readNode = ref<ReadNodeState | null>(null)
 let readAbort: AbortController | null = null
 
+/** 编辑器内容来源（P2-4 状态条）：读取的节点 / 载入的版本 / 手动输入 */
+const contentSource = ref<{ label: string; at: string } | null>(null)
+
 // Publish
 const publishDiffVisible = ref(false)
-const diffHtml = ref('')
+const diffView = ref<UnifiedDiffView>({ rows: [], added: 0, removed: 0 })
+const diffIdentical = ref(false)
+const diffBaselineLabel = computed(() =>
+  contentSource.value ? `${contentSource.value.label} 的当前配置` : '空（未读取节点配置）',
+)
 const publishNodeModalVisible = ref(false)
 const publishProgressVisible = ref(false)
 const selectedPublishNodeIds = ref<number[]>([])
+const zeroNodeTried = ref(false)
+/** 重试失败节点时预填的节点 id 集；手动点「发布」时清空（回退默认全选在线） */
+const retryPrefillIds = ref<number[] | null>(null)
 const nodeResults = ref<any[]>([])
 const publishResult = ref<any>(null)
 const publishLogs = ref<string[]>([])
+
+const onlineNodes = computed(() => allNodes.value.filter((n: any) => n.status === 1))
+
+/** 打开节点选择弹窗：默认全选在线节点；重试入口传预填集（过滤已离线） */
+function openNodeSelection(prefillIds?: number[]) {
+  publishNodeModalVisible.value = true
+  zeroNodeTried.value = false
+  if (prefillIds) {
+    const onlineIds = new Set(onlineNodes.value.map((n: any) => n.id))
+    selectedPublishNodeIds.value = prefillIds.filter((id) => onlineIds.has(id))
+  } else {
+    selectedPublishNodeIds.value = onlineNodes.value.map((n: any) => n.id)
+  }
+}
 
 const installStream = useInstallStream()
 const publishing = computed(() => installStream.installing.value)
@@ -383,9 +458,45 @@ const deploySummary = computed(() => {
   const failed = results.filter((r: any) => r.status === 'failed').length
   return { success, failed }
 })
+
+/** 有未发布修改 = 编辑内容与已发布基线不一致 */
+const isDirty = computed(() => editorContent.value !== savedContent.value)
+
+const statusSourceLabel = computed(() => {
+  if (!editorContent.value) return ''
+  if (contentSource.value) return `内容来自 ${contentSource.value.label}`
+  return '未读取，手动输入'
+})
+const statusReadAtText = computed(() => (contentSource.value ? formatDateTime(contentSource.value.at) : ''))
+
+/** 离开守卫：发布中直接拦（提示等待）；dirty 走确认 */
+async function confirmLeaveIfDirty(): Promise<boolean> {
+  if (publishing.value) {
+    showAlert('发布进行中', '发布尚未完成，离开将中断发布（剩余节点将被跳过），请等待发布完成后操作。')
+    return false
+  }
+  if (isDirty.value) {
+    return await showConfirm({
+      title: '确认离开',
+      content: '当前编辑内容尚未发布，确定要离开吗？',
+      okText: '确认离开',
+    })
+  }
+  return true
+}
+
+function handleBeforeUnload(e: BeforeUnloadEvent) {
+  if (isDirty.value || publishing.value) {
+    e.preventDefault()
+    e.returnValue = ''
+  }
+}
+
+onBeforeRouteLeave((_to, _from) => confirmLeaveIfDirty())
 onUnmounted(() => {
   installStream.cancel()
   readAbort?.abort()
+  window.removeEventListener('beforeunload', handleBeforeUnload)
 })
 
 const noActiveNodes = computed(() => {
@@ -393,35 +504,8 @@ const noActiveNodes = computed(() => {
   return nodes.value.length === 0
 })
 
-let searchTimer: ReturnType<typeof setTimeout> | null = null
-function onSearch() {
-  if (searchTimer) clearTimeout(searchTimer)
-  searchTimer = setTimeout(() => {
-    if (selectedClusterId.value) {
-      const stillInList = filteredClusters.value.find((c) => c.id === Number(selectedClusterId.value))
-      if (!stillInList) {
-        selectedClusterId.value = ''
-        selectedNodeId.value = ''
-      }
-    }
-  }, 200)
-}
-
-function onGroupChange() {
-  if (groupFilter.value === '__all__') {
-    selectedClusterId.value = ''
-    selectedNodeId.value = ''
-  } else {
-    const available = filteredClusters.value
-    selectedClusterId.value = available.length > 0 ? String(available[0].id) : ''
-    selectedNodeId.value = ''
-  }
-  if (selectedClusterId.value) {
-    onClusterChange()
-  }
-}
-
 onMounted(async () => {
+  window.addEventListener('beforeunload', handleBeforeUnload)
   await loadClusters()
   const clusterId = route.query.cluster_id
   if (clusterId) {
@@ -457,15 +541,48 @@ async function onClusterChange() {
   editorContent.value = ''
   errorMsg.value = ''
   selectedNodeId.value = ''
+  contentSource.value = null
   const cluster = clusters.value.find((c) => c.id === Number(selectedClusterId.value))
   selectedClusterName.value = cluster?.display_name || cluster?.name || String(selectedClusterId.value)
   await loadNodes()
   if (nodes.value.length > 0) {
     selectedNodeId.value = nodes.value[0].id
   }
+  router.replace({ query: { ...route.query, cluster_id: String(selectedClusterId.value) } })
 }
 
-async function onNodeChange() {
+/** 受控切换集群：dirty 先确认，取消则不赋值（下拉显示随 :value 回弹，无回滚问题） */
+function onClusterSelectChange(e: Event) {
+  const raw = (e.target as HTMLSelectElement).value
+  void applyClusterChange(raw === '' ? '' : Number(raw))
+}
+
+async function applyClusterChange(newId: number | '') {
+  const cur = selectedClusterId.value
+  const next = newId === '' ? '' : Number(newId)
+  if (next === (cur === '' ? '' : Number(cur))) return
+  if (isDirty.value) {
+    const ok = await showConfirm({
+      title: '确认切换集群',
+      content: '当前编辑内容尚未发布，切换集群将丢弃编辑内容，是否继续？',
+      okText: '确认切换',
+    })
+    if (!ok) return
+  }
+  selectedClusterId.value = newId
+  await onClusterChange()
+}
+
+/** 受控切换节点：同款确认守卫（onNodeChange 仅剩确认后清空职责） */
+function onNodeSelectChange(e: Event) {
+  const raw = (e.target as HTMLSelectElement).value
+  void applyNodeChange(raw === '' ? '' : Number(raw))
+}
+
+async function applyNodeChange(newId: number | '') {
+  const cur = selectedNodeId.value
+  const next = newId === '' ? '' : Number(newId)
+  if (next === (cur === '' ? '' : Number(cur))) return
   if (editorContent.value) {
     const ok = await showConfirm({
       title: '确认切换节点',
@@ -474,8 +591,10 @@ async function onNodeChange() {
     })
     if (!ok) return
   }
+  selectedNodeId.value = newId
   editorContent.value = ''
   errorMsg.value = ''
+  contentSource.value = null
 }
 
 // ── Read template ──
@@ -486,9 +605,9 @@ async function startReadTemplate() {
   // Confirm discard if editor has content
   if (editorContent.value) {
     const ok = await showConfirm({
-      title: '确认获取模板',
-      content: '当前编辑内容将被丢弃，确定要获取模板吗？',
-      okText: '确认获取',
+      title: '确认读取',
+      content: '当前编辑内容将被丢弃，确定要读取吗？',
+      okText: '确认读取',
     })
     if (!ok) return
   }
@@ -508,12 +627,18 @@ async function startReadTemplate() {
       if (data.type === 'content') {
         editorContent.value = data.content || ''
         savedContent.value = data.content || ''
+        contentSource.value = {
+          label: readNode.value?.ip || String(selectedNodeId.value),
+          at: new Date().toISOString(),
+        }
         if (readNode.value) {
           if (data.route) readNode.value.route = data.route
           readNode.value.status = 'success'
         }
         readStreaming.value = false
-        readLogs.value.push('✅ 配置模板获取完成')
+        const via = routeLabel(data.route)
+        message.success(`已载入 ${readNode.value?.ip ?? ''} 的当前配置${via ? `（${via}）` : ''}`)
+        closeReadModal()
       }
       if (data.type === 'error') {
         readError.value = data.message || '读取失败'
@@ -541,7 +666,7 @@ function closeReadModal() {
 
 function validateFields(content: string): string | null {
   if (!content || !content.trim()) {
-    return '编辑器内容为空，请先获取配置模板或输入内容'
+    return '编辑器内容为空，请先读取节点配置或输入内容'
   }
   try {
     const parsed = yamlLoad(content) as Record<string, any> | null
@@ -561,34 +686,8 @@ function validateFields(content: string): string | null {
 }
 
 function computeDiff() {
-  if (editorContent.value === savedContent.value) {
-    diffHtml.value = ''
-    return
-  }
-  const oldLines = (savedContent.value || '').split('\n')
-  const newLines = editorContent.value.split('\n')
-  let html = '<div style="font-family:monospace;font-size:12px;max-height:400px;overflow:auto;">'
-  const maxLen = Math.max(oldLines.length, newLines.length)
-  for (let i = 0; i < maxLen; i++) {
-    const oldLine = oldLines[i] || ''
-    const newLine = newLines[i] || ''
-    if (oldLine !== newLine) {
-      if (i < oldLines.length && (newLine === '' || newLines[i] === undefined)) {
-        html += `<div style="background:#fdd;padding:1px 8px;color:#c00;">- ${escapeHtml(oldLine)}</div>`
-      } else if (i < newLines.length && (oldLine === '' || oldLines[i] === undefined)) {
-        html += `<div style="background:#dfd;padding:1px 8px;color:#080;">+ ${escapeHtml(newLine)}</div>`
-      } else {
-        html += `<div style="background:#ffd;padding:1px 8px;color:#960;">~ ${escapeHtml(oldLine)}</div>`
-        if (newLine !== oldLine) {
-          html += `<div style="background:#dfd;padding:1px 8px;color:#080;">+ ${escapeHtml(newLine)}</div>`
-        }
-      }
-    } else {
-      html += `<div style="padding:1px 8px;color:#999;">  ${escapeHtml(oldLine)}</div>`
-    }
-  }
-  html += '</div>'
-  diffHtml.value = html
+  diffIdentical.value = editorContent.value === savedContent.value
+  diffView.value = renderUnifiedDiff(savedContent.value || '', editorContent.value, 3)
 }
 
 function onPublishClick() {
@@ -600,7 +699,7 @@ function onPublishClick() {
 
   // Empty content check
   if (!editorContent.value || !editorContent.value.trim()) {
-    showAlert('提示', '编辑器内容为空，请先获取配置模板或输入内容')
+    showAlert('提示', '编辑器内容为空，请先读取节点配置或输入内容')
     return
   }
 
@@ -613,23 +712,24 @@ function onPublishClick() {
 
   // Show diff comparison
   computeDiff()
-  selectedPublishNodeIds.value = []
+  retryPrefillIds.value = null
   publishDiffVisible.value = true
 }
 
 function onShowNodeSelection() {
   publishDiffVisible.value = false
-  publishNodeModalVisible.value = true
+  openNodeSelection(retryPrefillIds.value ?? undefined)
 }
 
 function togglePublishNode(n: any) {
+  if (n.status !== 1) return
   const idx = selectedPublishNodeIds.value.indexOf(n.id)
   if (idx === -1) selectedPublishNodeIds.value.push(n.id)
   else selectedPublishNodeIds.value.splice(idx, 1)
 }
 
 function selectAllPublishNodes() {
-  selectedPublishNodeIds.value = allNodes.value.map((n: any) => n.id)
+  selectedPublishNodeIds.value = onlineNodes.value.map((n: any) => n.id)
 }
 
 function clearAllPublishNodes() {
@@ -651,7 +751,11 @@ function readStatusText(status: ReadNodeState['status']): string {
 }
 
 async function executePublish() {
-  if (!selectedClusterId.value || selectedPublishNodeIds.value.length === 0) return
+  if (!selectedClusterId.value) return
+  if (selectedPublishNodeIds.value.length === 0) {
+    zeroNodeTried.value = true
+    return
+  }
   publishNodeModalVisible.value = false
   publishProgressVisible.value = true
   nodeResults.value = []
@@ -673,11 +777,23 @@ async function executePublish() {
           if (nr) {
             nr.status = data.status === 'success' ? 'success' : 'failed'
             if (data.route) nr.route = data.route
+            if (data.warning) nr.warning = data.warning
           }
         } else if (data.type === 'complete') {
           publishResult.value = data
-          savedContent.value = editorContent.value
-          message.success('发布完成')
+          const failedCount = deploySummary.value?.failed ?? 0
+          if (!('version' in data)) {
+            // 全部失败：后端不建版本（complete 不携带 version 键），基线保持不变（diff 继续如实反映未发布修改）
+            message.error('发布失败，未产生新版本')
+          } else {
+            // 至少一个节点成功：节点已实际写入该内容，基线随之更新
+            savedContent.value = editorContent.value
+            if (failedCount > 0) {
+              message.warning(`发布完成，${failedCount} 个节点失败，请查看失败原因`)
+            } else {
+              message.success('发布完成')
+            }
+          }
           installStream.forceComplete()
         }
       } catch {
@@ -703,10 +819,29 @@ async function executePublish() {
   })
 }
 
+/** 完成汇总条：重试失败节点（预填失败集，diff 按 dirty 分流） */
+function retryFailedNodes() {
+  const results = publishResult.value?.node_results || nodeResults.value
+  const failedIps = (Array.isArray(results) ? results : [])
+    .filter((r: any) => r.status === 'failed')
+    .map((r: any) => r.ip)
+  const prefill = allNodes.value.filter((n: any) => failedIps.includes(n.ip)).map((n: any) => n.id)
+  retryPrefillIds.value = prefill
+  publishProgressVisible.value = false
+  if (isDirty.value) {
+    computeDiff()
+    publishDiffVisible.value = true
+  } else {
+    openNodeSelection(prefill)
+  }
+}
+
 function closePublishProgress() {
+  if (publishing.value) return
   publishProgressVisible.value = false
   nodeResults.value = []
   publishResult.value = null
+  retryPrefillIds.value = null
 }
 
 // ── Version management ──
@@ -717,6 +852,8 @@ function showVersionManagement() {
 
 function onVersionLoadToEditor(data: { content: string; version: number }) {
   editorContent.value = data.content
+  savedContent.value = data.content
+  contentSource.value = { label: `版本 v${data.version}`, at: new Date().toISOString() }
 }
 </script>
 
@@ -724,13 +861,21 @@ function onVersionLoadToEditor(data: { content: string; version: number }) {
 .ee-editor-area {
   position: relative;
 }
-.ee-empty-hint {
-  position: absolute;
-  top: 14px;
-  left: 64px;
+.ee-empty-card {
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  padding: 48px 16px;
+  text-align: center;
   color: var(--muted);
   font-size: 13px;
-  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ee-empty-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 4px;
 }
 .ee-toolbar {
   display: flex;
@@ -760,6 +905,30 @@ function onVersionLoadToEditor(data: { content: string; version: number }) {
   font-size: 14px;
   color: var(--muted);
 }
+.ee-empty-sub {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--muted);
+  opacity: 0.85;
+}
+.ee-guide-line {
+  margin-top: 4px;
+}
+.ee-guide-line:first-child {
+  margin-top: 0;
+}
+.ee-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.ee-dirty-badge {
+  color: #d46b08;
+  font-weight: 600;
+}
 .ee-editor-area {
   margin-top: 0;
 }
@@ -770,6 +939,54 @@ function onVersionLoadToEditor(data: { content: string; version: number }) {
   padding: 8px;
   max-height: 400px;
   overflow: auto;
+}
+.ee-diff-summary {
+  font-size: 12px;
+  color: var(--muted);
+  margin-right: 8px;
+}
+.ee-diff-row {
+  display: flex;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.ee-diff-no {
+  width: 36px;
+  flex-shrink: 0;
+  text-align: right;
+  padding-right: 8px;
+  color: var(--muted);
+  user-select: none;
+}
+.ee-diff-sign {
+  width: 16px;
+  flex-shrink: 0;
+  user-select: none;
+}
+.ee-diff-text {
+  flex: 1;
+}
+.ee-diff-add {
+  background: rgba(82, 196, 26, 0.12);
+}
+.ee-diff-add .ee-diff-sign {
+  color: #389e0d;
+}
+.ee-diff-del {
+  background: rgba(255, 77, 79, 0.1);
+}
+.ee-diff-del .ee-diff-sign {
+  color: #cf1322;
+}
+.ee-diff-fold {
+  color: var(--muted);
+  text-align: center;
+  background: var(--bg);
+  font-size: 12px;
+  padding: 2px 0;
 }
 .ee-diff-empty {
   text-align: center;
@@ -832,6 +1049,11 @@ function onVersionLoadToEditor(data: { content: string; version: number }) {
   color: var(--danger);
   font-family: var(--font-mono);
 }
+.ee-node-warning {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #d48806;
+}
 .ee-deploy-result {
   margin-top: 12px;
   padding: 8px;
@@ -877,6 +1099,11 @@ function onVersionLoadToEditor(data: { content: string; version: number }) {
 .publish-node-item.disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+.ee-consequence-hint {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted);
 }
 .publish-node-ip {
   font-family: var(--font-mono);

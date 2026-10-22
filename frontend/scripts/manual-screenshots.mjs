@@ -64,6 +64,68 @@ const SHOTS = [
     viewportShot: true,
     actions: [{ click: 'button:has-text("恢复数据")' }],
   },
+  // ── 第 4 章 edge.env（工具栏收纳/读取改名/节点弹窗改版后重截） ──
+  { name: '03-01-edgeenv-initial', path: '/edge-env' },
+  {
+    name: '03-02-edgeenv-selected',
+    path: '/edge-env?cluster_id=4',
+    actions: [{ select: { selector: 'select', value: '7' } }],
+  },
+  {
+    name: '03-03-edgeenv-read-done',
+    path: '/edge-env?cluster_id=4',
+    actions: [
+      { select: { selector: 'select', value: '7' } },
+      { click: 'button:has-text("读取节点配置")' },
+      { wait: { text: 'ok: [192.168.0.13]', timeout: 60_000 } },
+      { waitMs: 300 },
+    ],
+    viewportShot: true,
+  },
+  {
+    name: '03-04-edgeenv-editor',
+    path: '/edge-env?cluster_id=4',
+    actions: [
+      { select: { selector: 'select', value: '7' } },
+      { click: 'button:has-text("读取节点配置")' },
+      { wait: { text: '内容来自 192.168.0.13', timeout: 60_000 } },
+      { waitMs: 500 },
+    ],
+  },
+  {
+    name: '03-07-publish-nodes',
+    path: '/edge-env?cluster_id=4',
+    actions: [
+      { select: { selector: 'select', value: '7' } },
+      { click: 'button:has-text("读取节点配置")' },
+      { wait: { text: '内容来自 192.168.0.13', timeout: 60_000 } },
+      { type: { selector: '.monaco-editor', text: '\n# manual-demo-change' } },
+      { click: 'button:has-text("发布")' },
+      { wait: { text: '确认变更', timeout: 10_000 } },
+      { click: 'button:has-text("继续选择节点")' },
+      { wait: { text: '发布节点', timeout: 10_000 } },
+      { waitMs: 300 },
+    ],
+    viewportShot: true,
+  },
+  {
+    name: '03-08-publish-node-checked',
+    path: '/edge-env?cluster_id=4',
+    actions: [
+      { select: { selector: 'select', value: '7' } },
+      { click: 'button:has-text("读取节点配置")' },
+      { wait: { text: '内容来自 192.168.0.13', timeout: 60_000 } },
+      { type: { selector: '.monaco-editor', text: '\n# manual-demo-change' } },
+      { click: 'button:has-text("发布")' },
+      { wait: { text: '确认变更', timeout: 10_000 } },
+      { click: 'button:has-text("继续选择节点")' },
+      { wait: { text: '发布节点', timeout: 10_000 } },
+      { click: 'a:has-text("取消全选")' },
+      { click: '.publish-node-item:has-text("192.168.0.13")' },
+      { waitMs: 300 },
+    ],
+    viewportShot: true,
+  },
 ]
 
 mkdirSync(OUT_DIR, { recursive: true })
@@ -108,6 +170,21 @@ for (const shot of SHOTS) {
     if (act.click) {
       await page.locator(act.click).first().click()
       await page.waitForTimeout(500) // 等待 Tab/抽屉/弹窗切换完成
+    } else if (act.select) {
+      // 原生 <select>：按 value 选中（如 edge-env 节点下拉）
+      await page.locator(act.select.selector).first().selectOption(act.select.value)
+      await page.waitForTimeout(500)
+    } else if (act.type) {
+      // 点击目标后键入（如 Monaco 编辑器制造 dirty）
+      await page.locator(act.type.selector).first().click()
+      await page.keyboard.type(act.type.text)
+      await page.waitForTimeout(300)
+    } else if (act.wait) {
+      // 等待文本出现（如 SSE 读取完成后的状态条）
+      await page.waitForSelector(`text=${act.wait.text}`, { timeout: act.wait.timeout || 15_000 })
+      await page.waitForTimeout(300)
+    } else if (act.waitMs) {
+      await page.waitForTimeout(act.waitMs)
     }
   }
   const file = resolve(OUT_DIR, `${shot.name}.png`)
