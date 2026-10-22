@@ -48,11 +48,27 @@ async def edge_env_db(test_db):
 
 class TestEdgeEnvDeploy:
 
-    async def test_invalid_yaml_returns_422(self, edge_env_db):
+    async def test_deploy_invalid_yaml_returns_422(self, edge_env_db):
         app = _make_app(edge_env_db)
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers=AUTH) as c:
             resp = await c.post("/api/v1/clusters/1/edge-env/deploy", json={"content": "key:\n\tval\n"})
             assert resp.status_code == 422
+
+    async def test_deploy_out_of_range_port_returns_422_with_field_path(self, edge_env_db):
+        """2026-10-22 实测事故向量：99999 端口必须在校验层拦下（422 + 字段路径），不触节点。"""
+        app = _make_app(edge_env_db)
+        content = (
+            "deploy:\n  prefix: edge\n  http:\n"
+            "    edge:\n      listen:\n        - addr: 0.0.0.0:99999\n"
+            "    admin:\n      listen:\n        - addr: 0.0.0.0:16620\n"
+        )
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers=AUTH) as c:
+            resp = await c.post("/api/v1/clusters/1/edge-env/deploy", json={"content": content})
+            assert resp.status_code == 422
+            detail = resp.json().get("detail", "")
+            assert "deploy → http → edge → listen" in detail
+            assert "99999" in detail
+            assert "1-65535" in detail
 
     async def test_empty_content_returns_422(self, edge_env_db):
         app = _make_app(edge_env_db)

@@ -1,6 +1,37 @@
 from typing import Any, Tuple, Optional
 import yaml
 
+_PORT_RANGE_HINT = "端口须为 1-65535 的整数"
+
+
+def _extract_port(addr: str) -> Optional[str]:
+    """从 ``host:port`` 形态提取端口段；无冒号返回 None。兼容 IPv6 ``[::]:80``。"""
+    idx = addr.rfind(":")
+    if idx < 0:
+        return None
+    return addr[idx + 1:]
+
+
+def _validate_listen_entries(side: str, listen: Any) -> Optional[str]:
+    """校验单个 listen 列表的端口合法性，返回错误文案或 None。
+
+    跳过：``unix:`` 前缀条目、无 ``addr`` 键的 dict 条目（未知扩展不误伤）。
+    """
+    if not isinstance(listen, list):
+        return None
+    path = f"deploy → http → {side} → listen"
+    for i, entry in enumerate(listen, start=1):
+        if isinstance(entry, dict):
+            addr = entry.get("addr")
+        else:
+            addr = entry
+        if not isinstance(addr, str) or addr.startswith("unix:"):
+            continue
+        port = _extract_port(addr)
+        if port is None or not port.isdigit() or not (1 <= int(port) <= 65535):
+            return f"{path} 第 {i} 项端口非法: {addr}（{_PORT_RANGE_HINT}）"
+    return None
+
 
 def _get(data: dict[str, Any], *keys: str) -> Any:
     """Safely traverse nested dict keys, returning None if any missing."""
@@ -50,6 +81,12 @@ def validate_edge_env(content: str) -> Tuple[bool, Optional[str]]:
     admin_listen = _get(data, "deploy", "http", "admin", "listen")
     if not isinstance(admin_listen, list) or len(admin_listen) == 0:
         return False, "缺少必填字段或字段为空: deploy → http → admin → listen"
+
+    # Check listen entry port validity (edge-env-port-validation)
+    for side, listen in (("edge", edge_listen), ("admin", admin_listen)):
+        port_err = _validate_listen_entries(side, listen)
+        if port_err:
+            return False, port_err
 
     return True, None
 
