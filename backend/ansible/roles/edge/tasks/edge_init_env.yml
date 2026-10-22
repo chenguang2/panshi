@@ -26,7 +26,7 @@
   when: env_content is defined and env_content | length > 0
   register: cmd_output
   changed_when: false
-  failed_when: false
+  failed_when: cmd_output.rc != 0
   ignore_errors: false
   no_log: false
   tags:
@@ -38,10 +38,20 @@
     bin/edge reload;
   loop: "{{ lookup('ansible.utils.index_of', ips, 'eq', inventory_hostname, wantlist=True) }}"
   when: env_content is defined and env_content | length > 0
+  register: reload_output
   changed_when: false
   failed_when: false
   ignore_errors: true
   no_log: false
+  tags:
+    - edge_init_env
+
+# reload 宽松判定（决策点 C）：失败不打断发布，但输出标记行供平台扫描并附 warning。
+- name: report reload failure
+  debug:
+    msg: "EDGE_RELOAD_WARNING: rc={{ item.rc | default('unknown') }}"
+  loop: "{{ reload_output.results | default([]) }}"
+  when: (item.rc | default(0)) != 0
   tags:
     - edge_init_env
 
@@ -73,7 +83,7 @@
   when: env_content is not defined or env_content | length == 0
   register: cmd_output
   changed_when: false
-  failed_when: false
+  failed_when: cmd_output.rc != 0
   ignore_errors: false
   no_log: false
   tags:

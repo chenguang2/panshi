@@ -1557,3 +1557,19 @@ def parse_autostart_status(stdout: str) -> str:
         return "disabled"
     return "unknown"
 
+
+
+def translate_ansible_error(ansible_stdout: str, ip: str) -> str | None:
+    """共享 ansible 失败文案转译（部署/读取流单源，openspec edge-env-ux-review-fixes D7）。
+
+    按原始 ansible 输出命中已知失败模式，返回面向用户的可读文案；
+    未命中任何已知分支时返回 None，由调用方结合动作给兜底文案。
+    """
+    s = ansible_stdout or ""
+    if "Could not match supplied host pattern" in s or "no hosts matched" in s:
+        return f"节点 {ip} 不在 Ansible 主机清单中，请在 inventory/host 文件中添加该节点的 SSH 连接信息"
+    if "UNREACHABLE" in s:
+        return f"节点 {ip} 无法连接，请检查网络和 SSH 配置"
+    if "Permission denied" in s:
+        return f"节点 {ip} SSH 认证失败，请检查免密登录或 inventory/host 中的密码"
+    return None

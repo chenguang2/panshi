@@ -6,6 +6,7 @@ from tests.api_helpers import admin_auth_headers
 
 AUTH = admin_auth_headers()
 from fastapi import FastAPI
+from sqlalchemy import select
 
 from app.api.v1.cluster_edge_env import router
 from app.core.database import get_db
@@ -444,3 +445,246 @@ class TestEdgeEnvDeployFailureDetection:
                             complete = data
                     assert sorted(done_statuses) == ["failed", "success"]
                     assert complete["status"] == "partial", f"mixed nodes -> partial, got {complete['status']}"
+
+
+class TestEdgeEnvDeployVersionSemantics:
+    """openspec edge-env-ux-review-fixes 组8：失败部署不建版本（D1/决策点B/Q3）。"""
+
+    async def test_deploy_all_failed_does_not_create_version(self, mock_ansible, edge_env_db):
+        """all_failed：SHALL NOT 建 ConfigVersion、SHALL NOT 推进 current_version、complete 无 version 键。"""
+        import json
+        c = Cluster(name="ver-fail", status=1)
+        edge_env_db.add(c)
+        await edge_env_db.commit()
+        await edge_env_db.refresh(c)
+        edge_env_db.add_all([
+            Node(cluster_id=c.id, ip="192.168.1.1", service_port=80, management_port=9990, edge_path="/data/edge", status=1),
+            Node(cluster_id=c.id, ip="192.168.1.2", service_port=80, management_port=9990, edge_path="/data/edge", status=1),
+        ])
+        await edge_env_db.commit()
+        app = _make_app(edge_env_db)
+        valid_content = "deploy:\n  prefix: edge\n  http:\n    edge:\n      listen:\n        - addr: 0.0.0.0:9980\n    admin:\n      listen:\n        - addr: 0.0.0.0:9990\n"
+
+        async def fake_stream_fail(*args, **kwargs):
+            yield "data: {\"line\": \"TASK [run]\"}\n\n"
+            yield "data: {\"rc\": 1, \"status\": \"failed\", \"percent\": 100}\n\n"
+
+        create_spy = AsyncMock(return_value=1)
+        with (
+            patch("app.api.v1.cluster_edge_env._run_ansible_stream", side_effect=fake_stream_fail),
+            patch("app.api.v1.cluster_edge_env.create_config_version", create_spy),
+        ):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers=AUTH) as cl:
+                async with cl.stream("POST", f"/api/v1/clusters/{c.id}/edge-env/deploy", json={"content": valid_content}) as resp:
+                    complete = None
+                    async for line in resp.aiter_lines():
+                        if line.startswith("data: "):
+                            data = json.loads(line[6:])
+                            if data.get("type") == "complete":
+                                complete = data
+        assert complete is not None and complete["status"] == "all_failed"
+        create_spy.assert_not_awaited()
+        assert "version" not in complete, "all_failed 部署不得携带 version"
+        versions = (await edge_env_db.execute(select(ConfigVersion))).scalars().all()
+        assert versions == [], "all_failed 部署不得创建版本记录"
+        await edge_env_db.refresh(c)
+        assert (c.current_version or 0) == 0, "all_failed 部署不得推进集群当前版本"
+
+    async def test_deploy_partial_creates_version_once(self, mock_ansible, edge_env_db):
+        """partial：恰建一次版本，complete 携带 version（首胜即落库语义）。"""
+        import json
+        c = Cluster(name="ver-partial", status=1)
+        edge_env_db.add(c)
+        await edge_env_db.commit()
+        await edge_env_db.refresh(c)
+        edge_env_db.add_all([
+            Node(cluster_id=c.id, ip="192.168.1.1", service_port=80, management_port=9990, edge_path="/data/edge", status=1),
+            Node(cluster_id=c.id, ip="192.168.1.2", service_port=80, management_port=9990, edge_path="/data/edge", status=1),
+        ])
+        await edge_env_db.commit()
+        app = _make_app(edge_env_db)
+        valid_content = "deploy:\n  prefix: edge\n  http:\n    edge:\n      listen:\n        - addr: 0.0.0.0:9980\n    admin:\n      listen:\n        - addr: 0.0.0.0:9990\n"
+
+        rcs = iter([0, 1])
+
+        async def fake_stream_rc(*args, **kwargs):
+            rc = next(rcs)
+            yield f"data: {{\"rc\": {rc}, \"status\": \"{'successful' if rc == 0 else 'failed'}\", \"percent\": 100}}\n\n"
+
+        create_spy = AsyncMock(return_value=1)
+        with (
+            patch("app.api.v1.cluster_edge_env._run_ansible_stream", side_effect=fake_stream_rc),
+            patch("app.api.v1.cluster_edge_env.create_config_version", create_spy),
+        ):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers=AUTH) as cl:
+                async with cl.stream("POST", f"/api/v1/clusters/{c.id}/edge-env/deploy", json={"content": valid_content}) as resp:
+                    complete = None
+                    async for line in resp.aiter_lines():
+                        if line.startswith("data: "):
+                            data = json.loads(line[6:])
+                            if data.get("type") == "complete":
+                                complete = data
+        assert complete is not None and complete["status"] == "partial"
+        create_spy.assert_awaited_once()
+        assert complete.get("version") == 1
+
+
+class TestEdgeEnvDeployErrorTranslation:
+    """openspec edge-env-ux-review-fixes 组9：部署错误转译（D7）。"""
+
+    async def test_deploy_failure_error_translated(self, mock_ansible, edge_env_db):
+        """rc!=0 且 stdout 含 UNREACHABLE：error SHALL 为转译文案而非裸 rc。"""
+        import json
+        c = Cluster(name="tr-unreach", status=1)
+        edge_env_db.add(c)
+        await edge_env_db.commit()
+        await edge_env_db.refresh(c)
+        edge_env_db.add(Node(cluster_id=c.id, ip="192.168.1.1", service_port=80, management_port=9990, edge_path="/data/edge", status=1))
+        await edge_env_db.commit()
+        app = _make_app(edge_env_db)
+        valid_content = "deploy:\n  prefix: edge\n  http:\n    edge:\n      listen:\n        - addr: 0.0.0.0:9980\n    admin:\n      listen:\n        - addr: 0.0.0.0:9990\n"
+
+        async def fake_stream_unreachable(*args, **kwargs):
+            yield "data: {\"line\": \"UNREACHABLE! 192.168.1.1 => Failed to connect\"}\n\n"
+            yield "data: {\"rc\": 1, \"status\": \"failed\", \"percent\": 100}\n\n"
+
+        with (
+            patch("app.api.v1.cluster_edge_env._run_ansible_stream", side_effect=fake_stream_unreachable),
+            patch("app.api.v1.cluster_edge_env.create_config_version", AsyncMock(return_value=1)),
+        ):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers=AUTH) as cl:
+                async with cl.stream("POST", f"/api/v1/clusters/{c.id}/edge-env/deploy", json={"content": valid_content}) as resp:
+                    node_done = None
+                    async for line in resp.aiter_lines():
+                        if line.startswith("data: "):
+                            data = json.loads(line[6:])
+                            if data.get("type") == "node_done":
+                                node_done = data
+        assert node_done is not None and node_done["status"] == "failed"
+        assert node_done["error"] == "节点 192.168.1.1 无法连接，请检查网络和 SSH 配置", node_done["error"]
+        assert "ansible rc" not in node_done["error"]
+
+    async def test_deploy_fallback_error_contains_rc(self, mock_ansible, edge_env_db):
+        """未命中任何已知分支：兜底文案「发布失败（ansible rc=N），详情见下方日志」。"""
+        import json
+        c = Cluster(name="tr-fallback", status=1)
+        edge_env_db.add(c)
+        await edge_env_db.commit()
+        await edge_env_db.refresh(c)
+        edge_env_db.add(Node(cluster_id=c.id, ip="192.168.1.1", service_port=80, management_port=9990, edge_path="/data/edge", status=1))
+        await edge_env_db.commit()
+        app = _make_app(edge_env_db)
+        valid_content = "deploy:\n  prefix: edge\n  http:\n    edge:\n      listen:\n        - addr: 0.0.0.0:9980\n    admin:\n      listen:\n        - addr: 0.0.0.0:9990\n"
+
+        async def fake_stream_rc7(*args, **kwargs):
+            yield "data: {\"line\": \"some unknown failure\"}\n\n"
+            yield "data: {\"rc\": 7, \"status\": \"failed\", \"percent\": 100}\n\n"
+
+        with (
+            patch("app.api.v1.cluster_edge_env._run_ansible_stream", side_effect=fake_stream_rc7),
+            patch("app.api.v1.cluster_edge_env.create_config_version", AsyncMock(return_value=1)),
+        ):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers=AUTH) as cl:
+                async with cl.stream("POST", f"/api/v1/clusters/{c.id}/edge-env/deploy", json={"content": valid_content}) as resp:
+                    node_done = None
+                    async for line in resp.aiter_lines():
+                        if line.startswith("data: "):
+                            data = json.loads(line[6:])
+                            if data.get("type") == "node_done":
+                                node_done = data
+        assert node_done is not None
+        assert node_done["error"] == "发布失败（ansible rc=7），详情见下方日志", node_done["error"]
+
+
+class TestEdgeEnvReloadWarning:
+    """openspec edge-env-ux-review-fixes 组10：reload 宽松警告标记（D2/决策点C）。"""
+
+    async def test_reload_warning_marker_attaches_warning_field(self, mock_ansible, edge_env_db):
+        """stdout 含 EDGE_RELOAD_WARNING 标记：节点仍 success，结果附 warning 字段。"""
+        import json
+        c = Cluster(name="rw-mark", status=1)
+        edge_env_db.add(c)
+        await edge_env_db.commit()
+        await edge_env_db.refresh(c)
+        edge_env_db.add(Node(cluster_id=c.id, ip="192.168.1.1", service_port=80, management_port=9990, edge_path="/data/edge", status=1))
+        await edge_env_db.commit()
+        app = _make_app(edge_env_db)
+        valid_content = "deploy:\n  prefix: edge\n  http:\n    edge:\n      listen:\n        - addr: 0.0.0.0:9980\n    admin:\n      listen:\n        - addr: 0.0.0.0:9990\n"
+
+        async def fake_stream_warn(*args, **kwargs):
+            yield "data: {\"line\": \"ok: [x] => {\\\"msg\\\": \\\"EDGE_RELOAD_WARNING: rc=1\\\"}\"}\n\n"
+            yield "data: {\"rc\": 0, \"status\": \"successful\", \"percent\": 100}\n\n"
+
+        with (
+            patch("app.api.v1.cluster_edge_env._run_ansible_stream", side_effect=fake_stream_warn),
+            patch("app.api.v1.cluster_edge_env.create_config_version", AsyncMock(return_value=1)),
+        ):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers=AUTH) as cl:
+                async with cl.stream("POST", f"/api/v1/clusters/{c.id}/edge-env/deploy", json={"content": valid_content}) as resp:
+                    node_done = None
+                    complete = None
+                    async for line in resp.aiter_lines():
+                        if line.startswith("data: "):
+                            data = json.loads(line[6:])
+                            if data.get("type") == "node_done":
+                                node_done = data
+                            elif data.get("type") == "complete":
+                                complete = data
+        assert node_done is not None and node_done["status"] == "success"
+        assert node_done.get("warning"), "reload 异常标记必须附 warning 字段"
+        assert "reload" in node_done["warning"]
+        assert complete is not None and complete["status"] == "all_success"
+
+
+class TestEdgeEnvPlaybookSource:
+    """openspec edge-env-ux-review-fixes 组10：playbook 源码守卫（init 严格 / reload 宽松+标记）。"""
+
+    def _yml(self) -> str:
+        from pathlib import Path
+        p = Path(__file__).resolve().parents[1] / "ansible" / "roles" / "edge" / "tasks" / "edge_init_env.yml"
+        return p.read_text(encoding="utf-8")
+
+    def test_init_steps_are_strict(self):
+        yml = self._yml()
+        assert yml.count("failed_when: cmd_output.rc != 0") >= 2, "新旧两处 bin/edge init 步骤都必须显式 rc 判定（严格失败）"
+
+    def test_reload_is_lenient_with_warning_marker(self):
+        yml = self._yml()
+        assert "EDGE_RELOAD_WARNING" in yml, "reload 失败必须输出平台可扫描的标记行"
+        # init 步骤不再允许 failed_when: false；唯一豁免是 reload 步骤本身
+        assert yml.count("failed_when: false") == 1, "仅 reload 步骤保留宽松判定"
+
+
+class TestEdgeEnvReadErrorSingleSource:
+    """openspec edge-env-ux-review-fixes 组9.3：读取流错误文案与共享转译单源。"""
+
+    async def test_read_stream_unreachable_translated(self, mock_ansible, edge_env_db):
+        import json
+        c = Cluster(name="read-tr", status=1)
+        edge_env_db.add(c)
+        await edge_env_db.commit()
+        await edge_env_db.refresh(c)
+        edge_env_db.add(Node(cluster_id=c.id, ip="192.168.1.9", service_port=80, management_port=9990, edge_path="/data/edge", status=1))
+        await edge_env_db.commit()
+        node_id = (await edge_env_db.execute(select(Node.id).where(Node.ip == "192.168.1.9"))).scalar_one()
+        app = _make_app(edge_env_db)
+        mock_svc = MagicMock(spec=AnsibleRunnerService)
+        mock_svc.generic_run = AsyncMock(return_value={"rc": 1, "stdout": "UNREACHABLE! 192.168.1.9 => Failed to connect to host", "stderr": ""})
+
+        async def fake_read_stream(*args, **kwargs):
+            yield "data: {\"line\": \"UNREACHABLE! 192.168.1.9 => Failed to connect to host\"}\n\n"
+
+        with (
+            patch("app.api.v1.cluster_edge_env._ansible_service", mock_svc),
+            patch("app.api.v1.cluster_edge_env._run_ansible_stream", side_effect=fake_read_stream),
+        ):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers=AUTH) as cl:
+                async with cl.stream("GET", f"/api/v1/clusters/{c.id}/edge-env/read-stream?node_id={node_id}") as resp:
+                    error_events = []
+                    async for line in resp.aiter_lines():
+                        if line.startswith("data: "):
+                            data = json.loads(line[6:])
+                            if data.get("type") == "error":
+                                error_events.append(data)
+        assert error_events, "读取失败必须产生 error 事件"
+        assert error_events[0]["message"] == "节点 192.168.1.9 无法连接，请检查网络和 SSH 配置", error_events[0]["message"]

@@ -15,12 +15,16 @@ from app.schemas.edge_env import (
     EdgeEnvDeployRequest,
 )
 from app.schemas.cluster import ConfigVersionResponse, ConfigVersionListResponse
-from app.services.ansible_service import AnsibleRunnerService, _run_ansible_stream
+from app.services.ansible_service import AnsibleRunnerService, _run_ansible_stream, translate_ansible_error
 from app.services import relay_registry
 from app.services.edge_sync import create_config_version
 from app.utils.yaml_validator import validate_yaml, validate_edge_env
 
 logger = logging.getLogger(__name__)
+
+# reload 宽松判定（决策点 C）：playbook 输出 EDGE_RELOAD_WARNING 标记行时，
+# 节点仍记 success 但附本 warning 文案（#21 输出标记扫描范式）。
+_RELOAD_WARNING_TEXT = "配置已写入且 init 通过，reload 异常——变更可能未完全生效，请检查节点日志"
 
 from app.core.deps import require_permission
 
@@ -107,6 +111,8 @@ async def deploy_edge_env(
     async def deploy_stream():
         node_results: list[dict] = []
         all_success = True
+        new_version: int | None = None  # 首个节点成功后立即创建（Q3：SSE 中断时「版本存在 ⟺ 至少一节点成功」）
+        config_data = {"yaml": request.content}
 
         for i, node in enumerate(nodes):
             # 节点执行路径（与 HTTP 腿 route 契约对齐）：SSH 腿必须按跳板决策自行
@@ -145,19 +151,31 @@ async def deploy_edge_env(
                     or "could not match supplied host pattern" in ansible_stdout.lower()
                 ):
                     node_rc = -1
-                    err = f"节点 {node.ip} 不在 Ansible 主机清单中，请在 inventory/host 文件中添加该节点的 SSH 连接信息"
+                    err = translate_ansible_error(ansible_stdout, node.ip) or f"节点 {node.ip} 不在 Ansible 主机清单中"
                     all_success = False
                     node_results.append({"ip": node.ip, "status": "failed", "error": err, **route_fields})
                     yield f"data: {json.dumps({'type': 'node_done', 'ip': node.ip, 'status': 'failed', 'error': err, **route_fields})}\n\n"
                     continue
 
                 if node_rc == 0:
-                    node_results.append({"ip": node.ip, "status": "success", **route_fields})
-                    yield f"data: {json.dumps({'type': 'node_done', 'ip': node.ip, 'status': 'success', **route_fields})}\n\n"
+                    if new_version is None:
+                        new_version = await create_config_version(
+                            db, "edge_env", cluster_id, cluster_id, config_data, cluster
+                        )
+                        await db.commit()  # 版本先落库（Q3），再继续后续节点
+                    result_entry = {"ip": node.ip, "status": "success", **route_fields}
+                    if "EDGE_RELOAD_WARNING" in ansible_stdout:
+                        result_entry["warning"] = _RELOAD_WARNING_TEXT
+                    node_results.append(result_entry)
+                    done_payload = {"type": 'node_done', "ip": node.ip, "status": "success", **route_fields}
+                    if "warning" in result_entry:
+                        done_payload["warning"] = result_entry["warning"]
+                    yield f"data: {json.dumps(done_payload)}\n\n"
                 else:
                     all_success = False
-                    node_results.append({"ip": node.ip, "status": "failed", "error": f"ansible rc={node_rc}", **route_fields})
-                    yield f"data: {json.dumps({'type': 'node_done', 'ip': node.ip, 'status': 'failed', 'error': f'ansible rc={node_rc}', **route_fields})}\n\n"
+                    err = translate_ansible_error(ansible_stdout, node.ip) or f"发布失败（ansible rc={node_rc}），详情见下方日志"
+                    node_results.append({"ip": node.ip, "status": "failed", "error": err, **route_fields})
+                    yield f"data: {json.dumps({'type': 'node_done', 'ip': node.ip, 'status': 'failed', 'error': err, **route_fields})}\n\n"
             except Exception as e:
                 all_success = False
                 node_results.append({"ip": node.ip, "status": "failed", "error": str(e), **route_fields})
@@ -166,13 +184,11 @@ async def deploy_edge_env(
         overall_status = "all_success" if all_success and node_results else \
                          "partial" if any(r.get("status") == "success" for r in node_results) else "all_failed"
 
-        # Create version record in ConfigVersion
-        config_data = {"yaml": request.content}
-        new_version = await create_config_version(
-            db, "edge_env", cluster_id, cluster_id, config_data, cluster
-        )
-
-        yield f"data: {json.dumps({'type': 'complete', 'version': new_version, 'status': overall_status, 'node_results': node_results})}\n\n"
+        # Create version record in ConfigVersion（已前移至首个节点成功时；all_failed 不建版本）
+        complete_payload: dict = {"type": "complete", "status": overall_status, "node_results": node_results}
+        if new_version is not None:
+            complete_payload["version"] = new_version
+        yield f"data: {json.dumps(complete_payload)}\n\n"
 
     await db.commit()  # 落审计骨架 + 释放写锁（#29：流内 ansible 期间不再持事务）
     return StreamingResponse(
@@ -271,15 +287,8 @@ async def read_edge_env_stream(
             if result.get("rc") == 0 and "no hosts matched" not in content.lower():
                 yield f"data: {json.dumps({'type': 'content', 'content': content, 'percent': 100, **route_fields})}\n\n"
             else:
-                # Friendly error message based on Ansible output
-                if "Could not match supplied host pattern" in ansible_stdout or "no hosts matched" in ansible_stdout:
-                    err_msg = f"节点 {node.ip} 不在 Ansible 主机清单中，请在 inventory/host 文件中添加该节点的 SSH 连接信息"
-                elif "UNREACHABLE" in ansible_stdout:
-                    err_msg = f"节点 {node.ip} 无法连接，请检查网络和 SSH 配置"
-                elif "Permission denied" in ansible_stdout:
-                    err_msg = f"节点 {node.ip} SSH 认证失败，请检查免密登录或 inventory/host 中的密码"
-                else:
-                    err_msg = f"读取 edge.env 失败"
+                # Friendly error message（与部署流单源：共享 translate_ansible_error）
+                err_msg = translate_ansible_error(ansible_stdout, node.ip) or "读取 edge.env 失败"
                 yield f"data: {json.dumps({'type': 'error', 'message': err_msg, 'percent': 100, **route_fields})}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'message': str(e), 'percent': 100, **route_fields})}\n\n"
