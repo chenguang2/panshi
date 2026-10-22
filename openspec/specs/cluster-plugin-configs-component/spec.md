@@ -28,12 +28,16 @@ The system SHALL provide a `ClusterPluginConfigs` component that renders the plu
 
 ### Requirement: 表单误关保护
 
+插件组表单弹窗 SHALL 在存在未保存变更时拦截误关并要求确认，无变更时直接关闭。
+
 #### Scenario: 有未保存变更时关闭需确认
 - **WHEN** 表单存在未保存变更且用户点击关闭/取消/遮罩
 - **THEN** SHALL 出现放弃变更确认（对齐 `UpstreamFormModal` 先例），确认后才关闭
 - **AND** 无变更时 SHALL 直接关闭，不弹确认
 
 ### Requirement: 列表筛选与空态文案
+
+插件组主列表页 SHALL 提供语义明确的集群分组筛选默认项，并区分两类空态的行动引导文案。
 
 #### Scenario: 筛选下拉语义明确
 - **WHEN** 主列表页渲染集群分组筛选下拉
@@ -44,6 +48,8 @@ The system SHALL provide a `ClusterPluginConfigs` component that renders the plu
 - **THEN** SHALL 区分「暂无插件组」（含「添加插件组」行动按钮）与「无匹配结果」（含「清空筛选」按钮），MUST NOT 两种情况显示同一文案
 
 ### Requirement: 路由关联卡片状态语义
+
+路由表单弹窗的插件组关联展示 SHALL 提供指向真实创建入口的空态提示，并诚实标注未发布状态。
 
 #### Scenario: 关联空态指路明确
 - **WHEN** 路由表单弹窗的插件组 Tab 无可选插件组
