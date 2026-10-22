@@ -403,6 +403,7 @@ const navSections = computed<NavSection[]>(() => {
           route: '/relay-gateways',
           icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="6" height="6" rx="1"/><rect x="10" y="10" width="6" height="6" rx="1"/><path d="M5 8v3a2 2 0 002 2h3"/></svg>',
           permission: 'relay_gateway',
+          feature: 'relay_gateway',
         },
         {
           label: '用户管理',

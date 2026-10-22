@@ -257,6 +257,28 @@ describe('AppSidebar 备份与容灾 feature 门控（db_backup）', () => {
     await r.isReady()
     expect(findNavItem(wrapper, '备份与容灾')).toBeUndefined()
   })
+
+  it('featuresStore 无 relay_gateway 时中继区域管理隐藏（即使持权限）', async () => {
+    localStorage.setItem('user', JSON.stringify({ id: 6, username: 'relay_view', role: 'user' }))
+    localStorage.setItem('permissions', JSON.stringify(['relay_gateway']))
+    useFeaturesStore().$patch({ loaded: true, features: { relay_gateway: false } })
+    const r = makeRouter()
+    const wrapper = mount(AppSidebar, { global: { plugins: [r] } })
+    await r.isReady()
+    expect(findNavItem(wrapper, '中继区域管理')).toBeUndefined()
+  })
+
+  it('featuresStore 有 relay_gateway 且持权限时中继区域管理可见', async () => {
+    localStorage.setItem('user', JSON.stringify({ id: 7, username: 'relay_view_on', role: 'user' }))
+    localStorage.setItem('permissions', JSON.stringify(['relay_gateway']))
+    useFeaturesStore().$patch({ loaded: true, features: { relay_gateway: true } })
+    const r = makeRouter()
+    const wrapper = mount(AppSidebar, { global: { plugins: [r] } })
+    await r.isReady()
+    const item = findNavItem(wrapper, '中继区域管理')
+    expect(item).toBeDefined()
+    expect(item!.attributes('href')).toBe('/relay-gateways')
+  })
 })
 
 describe('AppSidebar 数据库徽标待重启态（db-switch-restart-completion）', () => {

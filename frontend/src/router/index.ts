@@ -69,6 +69,12 @@ export const featureRouteMap: Record<string, RouteRecordRaw | RouteRecordRaw[]> 
     component: () => import('@/views/DnsQueryList.vue'),
     meta: { permission: 'dns_proxy_http' },
   },
+  relay_gateway: {
+    path: 'relay-gateways',
+    name: 'RelayGateways',
+    component: () => import('@/views/RelayGateways.vue'),
+    meta: { permission: 'relay_gateway' },
+  },
   edge_env: {
     path: 'edge-env',
     name: 'EdgeEnv',
@@ -143,12 +149,6 @@ const coreRoutes: RouteRecordRaw[] = [
     children: [
       { path: '', name: 'Dashboard', component: () => import('@/views/Dashboard.vue') },
       { path: 'users', name: 'Users', component: () => import('@/views/UserList.vue'), meta: { adminOnly: true } },
-      {
-        path: 'relay-gateways',
-        name: 'RelayGateways',
-        component: () => import('@/views/RelayGateways.vue'),
-        meta: { permission: 'relay_gateway' },
-      },
       {
         path: 'central-management',
         name: 'CentralManagement',

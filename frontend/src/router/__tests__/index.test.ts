@@ -47,6 +47,18 @@ describe('Router', () => {
     expect(dmRoutes.some((r) => r.name === 'DbMigration')).toBe(false)
   })
 
+  it('has /relay-gateways route in relay_gateway feature map (dynamic registration, not static)', async () => {
+    const mod = await import('../index')
+    const route = mod.featureRouteMap.relay_gateway as { name?: string; path?: string; meta?: { permission?: string } }
+    expect(route).toBeDefined()
+    expect(route?.name).toBe('RelayGateways')
+    expect(route?.path).toBe('relay-gateways')
+    expect(route?.meta?.permission).toBe('relay_gateway')
+    // 不再静态注册（静态注册不受 features.yaml 门控，关闸后仍可路由直达）
+    const staticRoutes = mod.default.getRoutes()
+    expect(staticRoutes.some((r) => r.name === 'RelayGateways')).toBe(false)
+  })
+
   it('registers /db-migration in navMeta search index (section + page name)', async () => {
     const { sectionMap, pageNameMap } = await import('../navMeta')
     expect(sectionMap.DbMigration).toBe('系统管理')

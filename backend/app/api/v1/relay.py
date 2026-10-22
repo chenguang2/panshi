@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import require_permission
+from app.core.features import feature_enabled
 from app.models.cluster import Cluster
 from app.models.relay import RelayGateway
 from app.schemas.relay import (
@@ -29,7 +30,24 @@ from app.services import relay_sshd
 from app.services.relay_init import RelayInitError
 from app.services.relay_push import RelayPushError
 
-router = APIRouter(prefix="/relay", tags=["relay"], dependencies=[Depends(require_permission("relay_gateway"))])
+def _require_relay_feature():
+    """relay_gateway 总闸（对齐 database.py::_require_migration_feature 模式）。
+
+    请求期实时读 features.yaml（mtime 热加载），关闸即 404——总开关的
+    「改完即时生效免重启」承诺覆盖管理面（挂载级 feature_routers 门控需重启，
+    只适合静态特性）。权限依赖在前解析：无权限者先 403，404 不泄露模块存在性。
+    执行路径（EdgeClient/ansible 腿）的回退直连由 relay_registry.relay_enabled()
+    独立实时判定，与本检查同源热加载，双保险。
+    """
+    if not feature_enabled("relay_gateway"):
+        raise HTTPException(status_code=404, detail="中继网关功能未启用")
+
+
+router = APIRouter(
+    prefix="/relay",
+    tags=["relay"],
+    dependencies=[Depends(require_permission("relay_gateway")), Depends(_require_relay_feature)],
+)
 
 # 同区域并发保护（单进程）：acquire 在端点（SSE 开始前可返回 409）；release 由流的 finally
 # 调用——客户端断连也会触发 finally，规则 #33 要求 finally 只做同步操作（discard 满足）。
