@@ -4,7 +4,7 @@
 从 edge.env 探测可用四层代理端口：区分可用与占用端口，并在前端展示实时探测进度。
 ## Requirements
 ### Requirement: System detects available stream ports from edge.env
-The system SHALL read the remote edge.env file from a selected cluster node and parse available stream listen ports.
+The system SHALL read the remote edge.env file from a selected cluster node and parse available stream listen ports. 参考节点下拉 SHALL 标注并禁选离线节点；检测失败时 SHALL 给出原因与解法，并自动勾选「手动输入端口」定位输入框。检测日志面板 SHALL 如实标注为「检测步骤」而非伪装实时事件流。
 
 #### Scenario: Detect ports successfully
 - **WHEN** user selects a cluster and reference node, clicks "检测可用端口"
@@ -20,15 +20,21 @@ The system SHALL read the remote edge.env file from a selected cluster node and 
 
 #### Scenario: Stream module is disabled in edge.env
 - **WHEN** edge.env has Stream configured as `NOstream` (disabled)
-- **THEN** the system shows a warning "Stream 模块未启用" and lists no ports
+- **THEN** the system SHALL 提示该节点 Stream 模块未启用并引导改用手动输入（沿用既有处理，不视为错误）
 
 #### Scenario: custom include ports are ignored
-- **WHEN** `deploy.stream.custom.include` references external config files with additional listen ports
-- **THEN** the system does NOT parse those files and only reports ports from `deploy.stream.edge.listen`
+- **WHEN** edge.env contains custom include files with additional ports
+- **THEN** those ports SHALL NOT appear in the detection results
 
 #### Scenario: edge.env read fails
 - **WHEN** the remote node is unreachable or SSH connection fails
-- **THEN** the system shows an error message with the failure reason and allows manual port input
+- **THEN** the error SHALL 说明原因与解法：「节点 {ip} 当前不可达或 Edge 未安装，无法读取端口配置；可勾选下方『手动输入端口』继续，或到『节点管理』检查节点状态」
+- **AND** 系统 SHALL 自动勾选「手动输入端口」并聚焦输入框
+
+#### Scenario: 离线参考节点禁选
+- **WHEN** 用户展开参考节点下拉
+- **THEN** 离线节点 SHALL 显示「（离线）」后缀且 SHALL NOT 可选中
+- **AND** 当前已选节点变为离线时 SHALL 在节点选择下方提示「该节点当前离线，检测可能失败」
 
 ### Requirement: System distinguishes available vs occupied ports
 The system SHALL query existing stream proxies AND Edge node stream routes to determine which detected ports are already in use.

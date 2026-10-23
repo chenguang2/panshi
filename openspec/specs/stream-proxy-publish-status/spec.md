@@ -1,6 +1,10 @@
-# stream-proxy-ux-review-fixes 变更规格
+# stream-proxy-publish-status Specification
 
-## ADDED Requirements
+## Purpose
+
+四层代理发布状态四态模型（未发布 / 已发布 / 待发布 / 发布未完全生效）：平台侧配置变更后与 Edge 实际运行配置的差异可见化，与上游/路由/插件组等域共享同一套推导与呈现语义（edge_sync 单点推导、PublishStatusTag 呈现）。来源：stream-proxy-ux-review-fixes（2026-10-23 UX 评审）。
+
+## Requirements
 
 ### Requirement: 四态发布状态推导
 
@@ -22,6 +26,6 @@
 - **THEN** `last_publish_status` SHALL 被清空，`pending_publish` SHALL 为 true（待发布）
 
 #### Scenario: 列表与详情响应契约
-- **WHEN** 客户端请求列表（`GET /ssl` 全局列表或 `GET /clusters/{id}/stream-proxies`）或详情
+- **WHEN** 客户端请求列表（`GET /stream-proxies` 全局列表或 `GET /clusters/{id}/stream-proxies`）或详情
 - **THEN** 每个条目 SHALL 携带 `pending_publish`（布尔）与 `last_publish_status`（可为 null）
 - **AND** `pending_publish` SHALL 由 `edge_sync.derive_pending_publish` 推导，前端 MUST NOT 按时间戳自行实现
