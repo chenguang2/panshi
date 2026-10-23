@@ -1551,3 +1551,135 @@ describe('删除确认 Edge 后果行 edgeConsequenceHint（ssl-ux-review-fixes 
     expect(document.body.textContent || '').toContain('将从所选节点移除该证书，使用它的 HTTPS 域名将无法建立 TLS 连接')
   })
 })
+
+// ── 部分失败重试 + 删除确认节点标识（stream-proxy-ux-review-fixes 批 3）──
+describe('executeDeleteWithProgress 重试删除（retryable）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+  })
+
+  it('部分失败 + retryable：终态渲染「重试删除」按钮，点击仅对失败节点重跑且 delete_db=false', async () => {
+    const { executeDeleteWithProgress } = await import('../useClusterUtils')
+    // 3 节点选 3，其中 2 失败；库删除成功
+    const results = [
+      { scope: 'database', status: 'success', message: '已删除' },
+      { scope: 'edge', status: 'success', node: '10.0.0.1:9180' },
+      { scope: 'edge', status: 'failed', node: '10.0.0.2:9180', error: 'timeout' },
+      { scope: 'edge', status: 'failed', node: '10.0.0.3:9180', error: 'conn refused' },
+    ]
+    mockApiDelete.mockResolvedValueOnce({ data: { message: 'ok', results } })
+    mockApiDelete.mockResolvedValueOnce({
+      data: { message: 'ok', results: [{ scope: 'edge', status: 'success', node: '10.0.0.2:9180' }] },
+    })
+
+    const opts = {
+      title: '删除四层代理: x',
+      apiEndpoint: '/clusters/1/stream-proxies/9',
+      cluster: {
+        id: 1,
+        nodes: [
+          { id: 11, ip: '10.0.0.1', management_port: 9180 },
+          { id: 12, ip: '10.0.0.2', management_port: 9180 },
+          { id: 13, ip: '10.0.0.3', management_port: 9180 },
+        ],
+      },
+      deleteDb: true,
+      deleteEdge: true,
+      nodeIds: [11, 12, 13],
+      refreshFn: vi.fn(),
+      retryable: true as const,
+    }
+    await executeDeleteWithProgress(opts)
+
+    // 终态按钮「重试删除」已渲染
+    const retryBtn = [...document.querySelectorAll('button')].find((b) => b.textContent === '重试删除')
+    expect(retryBtn).toBeTruthy()
+    ;(retryBtn as HTMLButtonElement).click()
+    await new Promise((r) => setTimeout(r, 50))
+    await vi.waitFor(() => {
+      expect(mockApiDelete).toHaveBeenCalledTimes(2)
+    })
+    const secondCall = mockApiDelete.mock.calls[1]
+    expect(secondCall[1].data.delete_db).toBe(false)
+    expect(secondCall[1].data.delete_edge).toBe(true)
+    expect([...secondCall[1].data.node_ids].sort()).toEqual([12, 13])
+  })
+
+  it('部分失败但未开 retryable：不渲染重试按钮（既有消费方行为不变）', async () => {
+    const { executeDeleteWithProgress } = await import('../useClusterUtils')
+    mockApiDelete.mockResolvedValue({
+      data: {
+        message: 'ok',
+        results: [
+          { scope: 'database', status: 'success', message: '已删除' },
+          { scope: 'edge', status: 'failed', node: '10.0.0.2:9180', error: 'timeout' },
+        ],
+      },
+    })
+    await executeDeleteWithProgress({
+      title: 'x',
+      apiEndpoint: '/clusters/1/upstreams/1',
+      cluster: makeCluster(),
+      deleteDb: true,
+      deleteEdge: true,
+      nodeIds: [1],
+      refreshFn: vi.fn(),
+    })
+    const retryBtn = [...document.querySelectorAll('button')].find((b) => b.textContent === '重试删除')
+    expect(retryBtn).toBeFalsy()
+  })
+})
+
+describe('showDeleteConfirm 节点在线标识与默认全选（opt-in）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+  })
+
+  it('defaultSelectOnline + status：在线默认勾选、离线默认不选且带标识；全选在线/取消全选可用', async () => {
+    const { showDeleteConfirm } = await import('../useClusterUtils')
+    showDeleteConfirm({
+      title: '删除确认',
+      apiEndpoint: '/clusters/1/stream-proxies/9',
+      nodes: [
+        { id: 1, ip: '10.0.0.1', management_port: 9180, status: 1 },
+        { id: 2, ip: '10.0.0.2', management_port: 9180, status: 0 },
+      ],
+      defaultSelectOnline: true,
+      subsetConsequence: '未选中的 {n} 个节点将保留该转发规则并继续承载流量',
+      onOk: () => {},
+    })
+    // 节点区在勾选「同时删除 Edge 节点」（第二个 scope checkbox）后才可见
+    const scopeBoxes = [...document.querySelectorAll('input[type="checkbox"]')] as HTMLInputElement[]
+    scopeBoxes[1].click()
+    await Promise.resolve()
+    const text = document.body.textContent ?? ''
+    expect(text).toContain('在线')
+    expect(text).toContain('离线')
+    expect(text).toContain('未选中的 1 个节点将保留该转发规则并继续承载流量')
+    expect(text).toContain('全选在线')
+    // 在线默认勾选（前两个 checkbox 是 数据库/Edge scope，节点框从下标 2 起）
+    const boxes = [...document.querySelectorAll('input[type="checkbox"]')] as HTMLInputElement[]
+    expect(boxes[2].checked).toBe(true)
+    expect(boxes[3].checked).toBe(false)
+  })
+
+  it('未传 opt-in 参数的既有消费方：DOM 不变（无在线/离线标识）', async () => {
+    const { showDeleteConfirm } = await import('../useClusterUtils')
+    showDeleteConfirm({
+      title: '删除确认',
+      apiEndpoint: '/clusters/1/upstreams/1',
+      nodes: [
+        { id: 1, ip: '10.0.0.1', management_port: 9180 },
+        { id: 2, ip: '10.0.0.2', management_port: 9180 },
+      ],
+      onOk: () => {},
+    })
+    const text = document.body.textContent ?? ''
+    expect(text).not.toContain('全选在线')
+    expect(text).not.toContain('未选中的')
+    const boxes = [...document.querySelectorAll('input[type="checkbox"]')] as HTMLInputElement[]
+    expect(boxes.every((b) => !b.checked)).toBe(true)
+  })
+})

@@ -1,4 +1,23 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+const mockCreateStreamProxy = vi.fn(() => Promise.resolve({ data: {} }))
+const mockUpdateStreamProxy = vi.fn(() => Promise.resolve({ data: {} }))
+const mockShowOverlayModal = vi.hoisted(() => vi.fn())
+vi.mock('@/api/streamProxy', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>()
+  return {
+    ...actual,
+    createStreamProxy: (...a: unknown[]) => mockCreateStreamProxy(...(a as [])),
+    updateStreamProxy: (...a: unknown[]) => mockUpdateStreamProxy(...(a as [])),
+  }
+})
+vi.mock('@/composables/useOverlayModal', () => ({
+  showOverlayModal: (...args: unknown[]) => mockShowOverlayModal(...args),
+}))
+vi.mock('@/api', () => ({
+  default: { get: vi.fn(() => Promise.resolve({ data: { items: [] } })) },
+}))
+vi.mock('@/ant-design-vue', () => ({ message: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }))
 import { flushPromises, mount } from '@vue/test-utils'
 
 const MOCK_CLUSTERS = [
@@ -388,5 +407,236 @@ describe('StreamProxyFormWizard.vue', () => {
       vm.dnsWanFilterExclude = []
       expect(vm.validateDnsWan()).toBe(false)
     })
+  })
+})
+
+// ── checks 保真（stream-proxy-ux-review-fixes 批 1 / P0-1）────────────────
+describe('StreamProxyFormWizard checks 提交保真', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  async function mountWizard(props: Record<string, unknown> = {}) {
+    const StreamProxyFormWizard = (await import('../StreamProxyFormWizard.vue')).default
+    const w = mount(StreamProxyFormWizard, {
+      props: { visible: false, editingProxy: null, clusters: MOCK_CLUSTERS, ...props },
+      global: {
+        stubs: [
+          'AModal',
+          'AForm',
+          'AFormItem',
+          'AInput',
+          'ASelect',
+          'ASelectOption',
+          'AButton',
+          'AInputNumber',
+          'ATable',
+          'HealthCheckForm',
+        ],
+      },
+    })
+    // 编辑初始化挂在 visible false→true 转换上，先挂 false 再打开
+    await w.setProps({ visible: true })
+    await flushPromises()
+    return w
+  }
+
+  function fillBaseForm(vm: any) {
+    vm.form.name = 'checks-fidelity'
+    vm.form.cluster_id = 1
+    vm.form.listen_port = 19999
+    vm.form.targets = [{ host: '10.0.0.1', port: 80, weight: 100 }]
+  }
+
+  it('创建未勾选高级配置：载荷不含 checks/retries/retry_timeout 三键', async () => {
+    const w = await mountWizard()
+    const vm = w.vm as any
+    fillBaseForm(vm)
+    vm.advancedEnabled = false
+    await vm.handleSubmit()
+    await flushPromises()
+    expect(mockCreateStreamProxy).toHaveBeenCalledTimes(1)
+    const payload = mockCreateStreamProxy.mock.calls[0][1]
+    expect(payload).not.toHaveProperty('checks')
+    expect(payload).not.toHaveProperty('retries')
+    expect(payload).not.toHaveProperty('retry_timeout')
+  })
+
+  it('编辑 checks=null 且未勾选：载荷不含三键（不传即不改，化石数据不被改写）', async () => {
+    const w = await mountWizard({
+      editingProxy: {
+        id: 5,
+        cluster_id: 1,
+        name: 'fossil',
+        listen_port: 9990,
+        scheme: 'tcp',
+        proxy_type: 'normal',
+        load_balance: 'roundrobin',
+        targets: [{ target: '10.0.0.1:80', weight: 100 }],
+        checks: null,
+        retries: null,
+        retry_timeout: null,
+        description: 'x',
+      },
+    })
+    const vm = w.vm as any
+    expect(vm.advancedEnabled).toBe(false)
+    vm.form.name = 'fossil-edited'
+    await vm.handleSubmit()
+    await flushPromises()
+    expect(mockShowOverlayModal).not.toHaveBeenCalled()
+    expect(mockUpdateStreamProxy).toHaveBeenCalledTimes(1)
+    const payload = mockUpdateStreamProxy.mock.calls[0][2]
+    expect(payload).not.toHaveProperty('checks')
+    expect(payload).not.toHaveProperty('retries')
+    expect(payload).not.toHaveProperty('retry_timeout')
+  })
+
+  it('编辑已有自定义 checks 后取消勾选：提交先弹确认；确认后载荷显式 checks=null', async () => {
+    const w = await mountWizard({
+      editingProxy: {
+        id: 6,
+        cluster_id: 1,
+        name: 'with-checks',
+        listen_port: 9991,
+        scheme: 'tcp',
+        proxy_type: 'normal',
+        load_balance: 'roundrobin',
+        targets: [{ target: '10.0.0.1:80', weight: 100 }],
+        checks: { passive: {}, active: { type: 'http' } },
+        retries: 3,
+        retry_timeout: 5,
+        description: '',
+      },
+    })
+    const vm = w.vm as any
+    expect(vm.advancedEnabled).toBe(true)
+    vm.advancedEnabled = false
+    await vm.handleSubmit()
+    // 弹确认，未提交
+    expect(mockShowOverlayModal).toHaveBeenCalledTimes(1)
+    expect(mockUpdateStreamProxy).not.toHaveBeenCalled()
+    const opts = mockShowOverlayModal.mock.calls[0][0]
+    await opts.onOk()
+    await flushPromises()
+    expect(mockUpdateStreamProxy).toHaveBeenCalledTimes(1)
+    const payload = mockUpdateStreamProxy.mock.calls[0][2]
+    expect(payload).toHaveProperty('checks', null)
+  })
+
+  it('清除确认取消：保持勾选不变、不提交', async () => {
+    const w = await mountWizard({
+      editingProxy: {
+        id: 7,
+        cluster_id: 1,
+        name: 'cancel-clear',
+        listen_port: 9992,
+        scheme: 'tcp',
+        proxy_type: 'normal',
+        load_balance: 'roundrobin',
+        targets: [{ target: '10.0.0.1:80', weight: 100 }],
+        checks: { passive: {}, active: {} },
+        retries: null,
+        retry_timeout: null,
+        description: '',
+      },
+    })
+    const vm = w.vm as any
+    vm.advancedEnabled = false
+    await vm.handleSubmit()
+    const opts = mockShowOverlayModal.mock.calls[0][0]
+    await opts.onCancel()
+    await flushPromises()
+    expect(vm.advancedEnabled).toBe(true)
+    expect(mockUpdateStreamProxy).not.toHaveBeenCalled()
+  })
+
+  it('勾选高级配置：checks/retries/retry_timeout 照常提交', async () => {
+    const w = await mountWizard()
+    const vm = w.vm as any
+    fillBaseForm(vm)
+    vm.advancedEnabled = true
+    vm.form.checks = { passive: {}, active: { type: 'tcp' } }
+    vm.form.retries = 2
+    vm.form.retry_timeout = 3
+    await vm.handleSubmit()
+    await flushPromises()
+    const payload = mockCreateStreamProxy.mock.calls[0][1]
+    expect(payload.checks).toEqual({ passive: {}, active: { type: 'tcp' } })
+    expect(payload.retries).toBe(2)
+    expect(payload.retry_timeout).toBe(3)
+  })
+})
+
+// ── 批 4 向导（stream-proxy-ux-review-fixes）────────────────────────────
+describe('StreamProxyFormWizard 批 4 向导体验', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+  })
+
+  async function mountW(props: Record<string, unknown> = {}) {
+    const StreamProxyFormWizard = (await import('../StreamProxyFormWizard.vue')).default
+    const w = mount(StreamProxyFormWizard, {
+      props: { visible: false, editingProxy: null, clusters: MOCK_CLUSTERS, defaultProxyType: 'normal', ...props },
+      global: {
+        stubs: [
+          'AModal',
+          'AForm',
+          'AFormItem',
+          'AInput',
+          'ASelect',
+          'ASelectOption',
+          'AButton',
+          'AInputNumber',
+          'ATable',
+          'HealthCheckForm',
+        ],
+      },
+    })
+    await w.setProps({ visible: true })
+    await flushPromises()
+    return w
+  }
+
+  it('defaultProxyType 存在时代理类型整组（含 label）不渲染——不留空壳「代理类型 *」', async () => {
+    await mountW()
+    // 组件根为 Teleport to body，DOM 断言走 document
+    expect(document.querySelectorAll('.spwf-toggle-btn').length).toBe(0)
+    expect(document.body.textContent).not.toContain('代理类型')
+  })
+
+  it('编辑直达第 2 步，摘要条显示集群/端口/参考节点并可[修改]回第 1 步', async () => {
+    const w = await mountW({
+      editingProxy: {
+        id: 8,
+        cluster_id: 1,
+        name: 'direct-step2',
+        listen_port: 9993,
+        scheme: 'tcp',
+        proxy_type: 'normal',
+        load_balance: 'roundrobin',
+        targets: [{ target: '10.0.0.1:80', weight: 100 }],
+        checks: null,
+        retries: null,
+        retry_timeout: null,
+        ref_node_id: 77,
+      },
+    })
+    const vm = w.vm as any
+    expect(vm.currentStep).toBe(2)
+    const summary = document.querySelector('.spwf-edit-summary') as HTMLElement | null
+    expect(summary).toBeTruthy()
+    expect(summary!.textContent).toContain('集群A')
+    expect(summary!.textContent).toContain('9993')
+    ;(summary!.querySelector('.spwf-edit-summary-edit') as HTMLElement).click()
+    await w.vm.$nextTick()
+    expect(vm.currentStep).toBe(1)
+  })
+
+  it('新建仍从第 1 步开始且无摘要条', async () => {
+    const w = await mountW()
+    expect((w.vm as any).currentStep).toBe(1)
+    expect(document.querySelector('.spwf-edit-summary')).toBeNull()
   })
 })

@@ -34,12 +34,12 @@
             </div>
             <div class="spvd-field">
               <span class="spvd-label">状态</span>
-              <span>
-                <span v-if="proxy.current_version" class="badge badge-success"
-                  ><span class="status-dot online"></span>已发布</span
-                >
-                <span v-else class="badge badge-neutral"><span class="status-dot"></span>未发布</span>
-              </span>
+              <PublishStatusTag
+                :version="proxy.current_version"
+                :published-at="proxy.published_at"
+                :pending="proxy.pending_publish === true"
+                :last-publish-status="proxy.last_publish_status"
+              />
             </div>
             <div class="spvd-field" v-if="proxy.current_version">
               <span class="spvd-label">版本</span>
@@ -97,6 +97,32 @@
               </div>
             </div>
 
+            <div class="spvd-section">健康检查与重试</div>
+            <div class="spvd-field">
+              <span class="spvd-label">健康检查</span>
+              <span class="spvd-value">
+                <span v-if="checksSummary" class="spvd-mono">{{ checksSummary }}</span>
+                <span v-else class="spvd-muted">未配置</span>
+              </span>
+            </div>
+            <div class="spvd-field">
+              <span class="spvd-label">重试次数</span>
+              <span class="spvd-value">{{ proxy.retries ?? '未配置' }}</span>
+            </div>
+            <div class="spvd-field">
+              <span class="spvd-label">重试超时</span>
+              <span class="spvd-value">{{ proxy.retry_timeout != null ? proxy.retry_timeout + 's' : '未配置' }}</span>
+            </div>
+
+            <div v-if="isDnsProxy && dnsHosts" class="spvd-section">DNS 域名映射</div>
+            <div v-if="isDnsProxy && dnsHosts" class="spvd-tags">
+              <span v-for="(host, domain) in dnsHosts" :key="domain" class="spvd-tag"
+                >{{ domain
+                }}<span class="spvd-tag-wt">（{{ host.type }} · {{ Object.keys(host.nodes).length }} 节点）</span></span
+              >
+            </div>
+            <div v-if="isDnsProxy && !dnsHosts" class="spvd-muted">无 DNS 配置</div>
+
             <div v-if="proxy.remote_addr || proxy.sni" class="spvd-section">匹配条件</div>
             <div class="spvd-field" v-if="proxy.remote_addr">
               <span class="spvd-label">remote_addr</span>
@@ -130,7 +156,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { StreamProxy } from '@/types'
-import { formatMonthDayTime as formatDate } from '@/utils/format'
+import { formatDateTime as formatDate } from '@/utils/format'
 
 const props = defineProps<{
   visible: boolean
@@ -149,6 +175,37 @@ function schemeLabel(scheme: string | undefined): string {
 }
 
 const isDnsProxy = computed(() => props.proxy?.proxy_type === 'dns')
+const checksSummary = computed(() => {
+  const c = props.proxy?.checks
+  if (!c) return null
+  const obj = (typeof c === 'string' ? safeParse(c) : c) as Record<string, any> | null
+  if (!obj || typeof obj !== 'object') return null
+  const parts: string[] = []
+  if (obj.active && typeof obj.active === 'object') parts.push(`active${obj.active.type ? ':' + obj.active.type : ''}`)
+  if (obj.passive && typeof obj.passive === 'object') parts.push('passive')
+  return parts.length ? parts.join(' / ') : JSON.stringify(obj).slice(0, 60)
+})
+function safeParse(v: string): unknown {
+  try {
+    return JSON.parse(v)
+  } catch {
+    return null
+  }
+}
+const dnsHosts = computed<Record<string, { nodes: Record<string, string[]>; type: string; ttl_valid?: number }> | null>(
+  () => {
+    if (!isDnsProxy.value || !props.proxy?.dns_config) return null
+    const cfg =
+      typeof props.proxy.dns_config === 'string' ? safeParse(props.proxy.dns_config as string) : props.proxy.dns_config
+    const domains = (cfg as any)?.domains
+    if (!domains || typeof domains !== 'object') return null
+    const out: Record<string, { nodes: Record<string, string[]>; type: string; ttl_valid?: number }> = {}
+    for (const [domain, dc] of Object.entries(domains as Record<string, any>)) {
+      out[domain] = { nodes: dc?.nodes || {}, type: dc?.type || 'roundrobin', ttl_valid: dc?.ttl_valid }
+    }
+    return out
+  },
+)
 
 const isWanEnabled = computed(() => {
   if (!props.proxy?.dns_config) return false

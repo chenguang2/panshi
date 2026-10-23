@@ -234,6 +234,9 @@ class StreamProxy(Base):
     sni = Column(String(255), nullable=True)          # TLS SNI（保留向后兼容）
     ref_node_id = Column(Integer, nullable=True)      # 参考节点 ID（用于端口检测）
     proxy_type = Column(String(10), nullable=False, default="normal")  # normal / dns
+    # 上次发布结果：'partial'=部分/全部节点失败；全部成功为 NULL
+    # （publish_resource/rollback_resource 既有 hasattr 能力探测单点写回，加列即自动接入）
+    last_publish_status = Column(String(16), nullable=True)
     dns_config = Column(Text, nullable=True)     # JSON: DNS 域名映射配置（proxy_type=dns 时使用）
     status = Column(Integer, nullable=False, default=1)
     current_version = Column(Integer, nullable=True)

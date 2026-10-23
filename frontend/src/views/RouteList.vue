@@ -202,8 +202,9 @@
     />
     <PublishConfirmModal
       v-model:visible="publishVisible"
-      title="发布路由"
+      :title="`发布路由「${publishingRecord?.name ?? ''}」`"
       :cluster-id="publishClusterId"
+      :current-version="publishingRecord?.current_version ?? null"
       @confirm="onPublish"
       @cancel="publishVisible = false"
     />

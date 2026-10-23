@@ -526,3 +526,21 @@ describe('VersionManagementModal.vue - 异代快照警示（ssl-version-orphan-p
     expect(text).toContain('覆盖')
   })
 })
+
+describe('VersionManagementModal.vue - stream 恢复范围文案（stream-proxy-ux-review-fixes）', () => {
+  it('stream 域恢复确认含「不随回滚变更」范围说明', async () => {
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === GLOBAL_RULE_HISTORY_URL.replace('global_rules', 'stream-proxies').replace('/9/history', '/9/history'))
+        return Promise.resolve({ data: { items: versionsFixture, current_version: 3 } })
+      if (url === HISTORY_URL) return Promise.resolve({ data: { items: versionsFixture, current_version: 3 } })
+      return Promise.reject(new Error('unexpected GET: ' + url))
+    })
+    const w = await mountModal({ resourceType: 'stream_proxy' })
+    await selectVersion(w, 1)
+    await w.find('.detail-actions .btn-primary').trigger('click')
+    const opts = lastOverlayOpts()
+    const text = contentText(opts.content)
+    expect(text).toContain('不随回滚变更')
+    expect(text).toContain('健康检查')
+  })
+})

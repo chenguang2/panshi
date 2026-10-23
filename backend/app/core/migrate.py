@@ -165,6 +165,7 @@ COLUMN_MIGRATIONS = [
     ("ps_plugin_config", "last_publish_status", "VARCHAR(16)"),
     ("ps_global_rule", "last_publish_status", "VARCHAR(16)"),
     ("ps_plugin_metadata", "last_publish_status", "VARCHAR(16)"),
+    ("ps_stream_proxy", "last_publish_status", "VARCHAR(16)"),
     # static-resources-ux-close-loop 组 5：发布结果持久化（#118 三列缺一即启动崩溃环）
     ("ps_static_resource", "last_publish_ok", "BOOLEAN"),
     ("ps_static_resource", "last_publish_detail", "TEXT"),

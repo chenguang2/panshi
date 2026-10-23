@@ -133,10 +133,20 @@ export function showDeleteConfirm(opts: {
   statsLoadFailed?: boolean
   /** 节点明细加载失败：Edge 删除退化为后端全量遍历（node_ids 不传） */
   nodesLoadFailed?: boolean
+  /** 勾选 Edge 删除时默认全选在线节点（stream-proxy-ux-review-fixes 3.1；opt-in，既有消费方默认不变） */
+  defaultSelectOnline?: boolean
+  /** 子集勾选后果行（{n} 占位未选节点数）：勾选 Edge 且未全选时显示（opt-in） */
+  subsetConsequence?: string
 }) {
   let deleteDb = false
   let deleteEdge = false
   const selectedNodeIds: Set<number> = new Set()
+  // 默认全选在线节点（opt-in）：离线节点默认不选但可见
+  if (opts.defaultSelectOnline && opts.nodes?.length) {
+    for (const n of opts.nodes) {
+      if ((n as { status?: number }).status !== 0) selectedNodeIds.add(n.id)
+    }
+  }
   let okDisabled = true
 
   const container = document.createElement('div')
@@ -232,9 +242,42 @@ export function showDeleteConfirm(opts: {
               style: `margin-top:8px;margin-left:24px;border-left:2px solid var(--border);padding-left:12px;display:${deleteEdge ? 'block' : 'none'};`,
             },
             [
-              h('div', { style: 'font-size:12px;color:var(--muted);margin-bottom:4px;' }, '选择要删除的 Edge 节点：'),
-              ...opts.nodes.map((n) =>
-                h(
+              h('div', { style: 'display:flex;align-items:center;gap:10px;margin-bottom:6px;' }, [
+                h('div', { style: 'font-size:12px;color:var(--muted);' }, '选择要删除的 Edge 节点：'),
+                ...(opts.defaultSelectOnline
+                  ? [
+                      h(
+                        'a',
+                        {
+                          style: 'font-size:12px;cursor:pointer;color:var(--accent);',
+                          onClick: () => {
+                            for (const n of opts.nodes!) {
+                              if ((n as { status?: number }).status !== 0) selectedNodeIds.add(n.id)
+                            }
+                            updateOkDisabled()
+                            renderModal()
+                          },
+                        },
+                        '全选在线',
+                      ),
+                      h(
+                        'a',
+                        {
+                          style: 'font-size:12px;cursor:pointer;color:var(--accent);',
+                          onClick: () => {
+                            selectedNodeIds.clear()
+                            updateOkDisabled()
+                            renderModal()
+                          },
+                        },
+                        '取消全选',
+                      ),
+                    ]
+                  : []),
+              ]),
+              ...opts.nodes.map((n) => {
+                const online = (n as { status?: number }).status !== 0
+                return h(
                   'label',
                   {
                     style:
@@ -253,9 +296,33 @@ export function showDeleteConfirm(opts: {
                       style: 'width:14px;height:14px;accent-color:var(--accent);cursor:pointer;',
                     }),
                     h('span', { style: 'font-family:var(--font-mono);' }, `${n.ip}:${n.management_port}`),
+                    // 仅当调用方传 status 字段时渲染在线/离线标识（既有消费方 DOM 不变）
+                    ...((n as { status?: number }).status !== undefined
+                      ? [
+                          h(
+                            'span',
+                            {
+                              style: `font-size:11px;padding:0 5px;border-radius:3px;${online ? 'color:var(--success);border:1px solid color-mix(in srgb, var(--success) 40%, transparent);' : 'color:var(--danger,#d4380d);border:1px solid color-mix(in srgb, var(--danger,#d4380d) 40%, transparent);'}`,
+                            },
+                            online ? '在线' : '离线',
+                          ),
+                        ]
+                      : []),
                   ],
-                ),
-              ),
+                )
+              }),
+              ...(opts.subsetConsequence && opts.nodes.length > 0
+                ? [
+                    h(
+                      'div',
+                      {
+                        style: 'font-size:12px;color:var(--muted);margin-top:2px;',
+                        key: 'subset-hint',
+                      },
+                      opts.subsetConsequence.replace('{n}', String(opts.nodes.length - selectedNodeIds.size)),
+                    ),
+                  ]
+                : []),
             ],
           )
         : null
@@ -519,6 +586,10 @@ function createProgressModal(
         width: 600,
         okText: '确定',
         okDisabled: progress.percent < 100,
+        // P2-2（stream-proxy-ux-review-fixes 4.4）：任务执行中隐藏取消/X——
+        // 取消只是隐藏视图、任务后台继续且全局锁不释放，提供取消入口是误导
+        wrapClass: progress.percent < 100 ? 'app-modal-progress-running' : '',
+        closable: progress.percent < 100 ? false : true,
         onOk: () => {
           render(null, container)
           container.remove()
@@ -928,6 +999,34 @@ interface DeleteProgressOptions {
   refreshFn: () => Promise<void>
   clearSelectedFn?: () => void
   afterDelete?: () => Promise<void>
+  /** 失败节点重试（stream-proxy-ux-review-fixes 3.2）：部分失败终态出现「重试删除」，仅对失败节点重跑 Edge 删除（deleteDb 恒 false——首轮已删库） */
+  retryable?: boolean
+}
+
+/** 失败节点标签（ip:port）→ 节点 id（经 opts.cluster.nodes 映射；映射不上退回原 nodeIds） */
+function failedLabelToIds(failedLabels: string[], opts: DeleteProgressOptions): number[] {
+  if (failedLabels.length === 0) return []
+  const nodes = opts.cluster?.nodes || []
+  const ids = nodes.filter((n) => failedLabels.includes(`${n.ip}:${n.management_port}`)).map((n) => n.id)
+  return ids.length > 0 ? ids : opts.nodeIds
+}
+
+/** 部分失败终态的「重试删除」：仅对失败节点重跑 Edge 删除；库记录首轮已删，deleteDb 恒 false */
+function deleteRetryAction(
+  opts: DeleteProgressOptions,
+  lastRunRef: { dbDeleted: boolean; failedIds: number[] },
+): ProgressTerminalAction {
+  return {
+    label: '重试删除',
+    onClick: () => {
+      void executeDeleteWithProgress({
+        ...opts,
+        deleteDb: false,
+        deleteEdge: true,
+        nodeIds: lastRunRef.failedIds.length > 0 ? lastRunRef.failedIds : opts.nodeIds,
+      })
+    },
+  }
 }
 
 export async function executeDeleteWithProgress(opts: DeleteProgressOptions): Promise<void> {
@@ -939,14 +1038,22 @@ export async function executeDeleteWithProgress(opts: DeleteProgressOptions): Pr
   try {
     const logs: string[] = []
     const addLog = (text: string) => {
+      if (!text) return // 空行不产生孤立时间戳行（stream-proxy-ux-review-fixes 4.4）
       logs.push(`[${new Date().toLocaleTimeString()}] ${text}`)
     }
     const progress: { percent: number; status: 'active' | 'success' | 'exception' } = {
       percent: 0,
       status: 'active',
     }
+    // 重试所需的上轮执行结果（失败节点 id + 库记录是否已删）
+    const lastRunRef = { dbDeleted: false, failedIds: [] as number[] }
 
-    const modal = createProgressModal(opts.title, progress, logs)
+    const modal = createProgressModal(
+      opts.title,
+      progress,
+      logs,
+      opts.retryable ? deleteRetryAction(opts, lastRunRef) : undefined,
+    )
 
     const updateContent = () => {
       modal.update()
@@ -979,7 +1086,9 @@ export async function executeDeleteWithProgress(opts: DeleteProgressOptions): Pr
       if (resourceKey && resourceKey.keys.length > 0) {
         logBatchDeleteResults(data, resourceKey, addLog, progress)
       } else {
-        logSingleDeleteResults(data, opts, addLog, progress)
+        const runInfo = logSingleDeleteResults(data, opts, addLog, progress)
+        lastRunRef.dbDeleted = runInfo.dbSuccess
+        lastRunRef.failedIds = failedLabelToIds(runInfo.failedLabels, opts)
       }
 
       updateContent()
@@ -1052,7 +1161,7 @@ function logSingleDeleteResults(
   opts: DeleteProgressOptions,
   addLog: (text: string) => void,
   progress: { percent: number; status: 'active' | 'success' | 'exception' },
-) {
+): { failedLabels: string[]; dbSuccess: boolean } {
   const dbResult = data.results?.find((r) => r.scope === 'database')
   if (dbResult) {
     addLog('正在从数据库删除...')
@@ -1123,16 +1232,21 @@ function logSingleDeleteResults(
 
   progress.percent = 100
   addLog('')
-  if (edgeResults.length > 0 && !edgeResults.some((r) => r.status === 'failed')) {
+  const failedLabels = edgeResults.filter((r) => r.status === 'failed').map((r) => r.node ?? '')
+  const dbSuccess = !!dbResult && dbResult.status === 'success'
+  if (edgeResults.length > 0 && failedLabels.length === 0) {
     progress.status = 'success'
     addLog('✅ 删除完成!')
-  } else if (edgeResults.some((r) => r.status === 'failed')) {
+  } else if (failedLabels.length > 0) {
     progress.status = 'exception'
-    addLog('⚠️ 部分节点删除失败，请手动清理')
+    addLog(`⚠️ ${failedLabels.length} 个节点删除失败（${failedLabels.join('、')}），这些节点仍在按原配置转发`)
+    if (opts.retryable) addLog('可点击下方「重试删除」，或登录节点手动清理')
+    else addLog('请手动清理')
   } else {
     progress.status = 'success'
     addLog('✅ 已完成')
   }
+  return { failedLabels, dbSuccess }
 }
 
 export function publishStatusRender(version: number | null, publishedAt: string | null) {

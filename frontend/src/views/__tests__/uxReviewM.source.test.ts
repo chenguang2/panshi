@@ -10,10 +10,10 @@ function src(...parts: string[]): string {
 }
 
 describe('M1 四层代理权重语法与上游统一', () => {
-  it('权重显示为全角括号（100）而非 :100', () => {
+  it('权重显示为 :100（stream-proxy-ux-review-fixes 反转：与抽屉/上游列表统一，旧全角括号约定废止）', () => {
     const s = src('views', 'StreamProxyList.vue')
-    expect(s).toContain('（{{ t.weight }}）')
-    expect(s).not.toContain(':{{ t.weight }}')
+    expect(s).toContain(':{{ t.weight }}')
+    expect(s).not.toContain('（{{ t.weight }}）')
   })
 })
 

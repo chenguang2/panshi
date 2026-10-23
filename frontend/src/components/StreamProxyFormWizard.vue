@@ -52,8 +52,8 @@
                   @blur="formErrors.node_id = form.node_id ? '' : '请选择节点'"
                 >
                   <option value="">请选择节点</option>
-                  <option v-for="n in nodes" :key="n.id" :value="n.id">
-                    {{ n.ip }}:{{ n.management_port || n.service_port }}
+                  <option v-for="n in nodes" :key="n.id" :value="n.id" :disabled="n.status === 0">
+                    {{ n.ip }}:{{ n.management_port || n.service_port }}{{ n.status === 0 ? '（离线）' : '' }}
                   </option>
                 </select>
                 <span v-if="formErrors.node_id" class="form-error">{{ formErrors.node_id }}</span>
@@ -106,26 +106,26 @@
               <span v-if="formErrors.port" class="form-error">{{ formErrors.port }}</span>
             </div>
 
-            <!-- Proxy Type -->
-            <div class="form-group" style="margin-top: 12px">
+            <!-- Proxy Type：页面入口（defaultProxyType）已定类型，整组不渲染（stream-proxy-ux-review-fixes D5） -->
+            <div v-if="!props.defaultProxyType" class="form-group" style="margin-top: 12px">
               <label class="form-label">代理类型 <span class="required">*</span></label>
               <div class="spwf-toggle">
-                <button
-                  class="spwf-toggle-btn"
-                  :class="{ active: form.proxy_type === 'normal' }"
-                  @click="form.proxy_type = 'normal'"
-                  :style="{ display: props.defaultProxyType && props.defaultProxyType !== 'normal' ? 'none' : '' }"
-                >
-                  四层代理
-                </button>
-                <button
-                  class="spwf-toggle-btn"
-                  :class="{ active: form.proxy_type === 'dns' }"
-                  @click="form.proxy_type = 'dns'"
-                  :style="{ display: props.defaultProxyType && props.defaultProxyType !== 'dns' ? 'none' : '' }"
-                >
-                  DNS代理
-                </button>
+                <template v-if="!props.defaultProxyType">
+                  <button
+                    class="spwf-toggle-btn"
+                    :class="{ active: form.proxy_type === 'normal' }"
+                    @click="form.proxy_type = 'normal'"
+                  >
+                    四层代理
+                  </button>
+                  <button
+                    class="spwf-toggle-btn"
+                    :class="{ active: form.proxy_type === 'dns' }"
+                    @click="form.proxy_type = 'dns'"
+                  >
+                    DNS代理
+                  </button>
+                </template>
                 <label
                   v-if="form.proxy_type === 'dns'"
                   class="checkbox-label spwf-wan-switch"
@@ -145,6 +145,7 @@
               </label>
               <input
                 v-if="manualPortEnabled"
+                ref="manualPortInputRef"
                 v-model.number="manualPort"
                 type="number"
                 class="form-input"
@@ -164,6 +165,16 @@
 
           <!-- ═══ Step 2: Config Details ═══ -->
           <div v-show="currentStep === 2">
+            <div v-if="props.editingProxy" class="spwf-edit-summary">
+              集群
+              {{
+                clusters.find((c: any) => c.id === Number(form.cluster_id))?.display_name ||
+                clusters.find((c: any) => c.id === Number(form.cluster_id))?.name ||
+                '-'
+              }}
+              · 端口 {{ form.listen_port }} · 参考节点 {{ nodeLabelOf(form.node_id) || '未设置' }}
+              <a class="spwf-edit-summary-edit" @click="currentStep = 1">修改</a>
+            </div>
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label">名称 <span class="required">*</span></label>
@@ -610,11 +621,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, reactive, computed, watch, nextTick } from 'vue'
 import { message } from 'ant-design-vue'
 import type { Cluster, PortItem, StreamProxy } from '@/types'
 import * as streamProxyApi from '@/api/streamProxy'
 import api from '@/api'
+import { showOverlayModal } from '@/composables/useOverlayModal'
 import { PAGE_SIZE_DROPDOWN } from '@/constants'
 
 const props = defineProps<{
@@ -643,6 +655,11 @@ const logLines = ref<string[]>([])
 const submitting = ref(false)
 const manualPortEnabled = ref(false)
 const manualPort = ref<number | null>(null)
+const manualPortInputRef = ref<HTMLInputElement | null>(null)
+const nodeLabelOf = (id: unknown) => {
+  const n = nodes.value.find((x: any) => x.id === Number(id))
+  return n ? `${n.ip}:${n.management_port || n.service_port}` : ''
+}
 const dnsEnableLog = ref(false)
 const showDnsCidr = false
 
@@ -696,6 +713,8 @@ const form = reactive({
 })
 
 const advancedEnabled = ref(false)
+// 编辑打开时高级配置的初始状态（批 1 checks 保真：仅「初始勾选→被用户取消」路径需要清除确认）
+const advancedWasOnAtEdit = ref(false)
 const formErrors = reactive<Record<string, string>>({})
 const wanFilterError = ref('')
 const targetErrors = ref<string[]>([])
@@ -846,7 +865,7 @@ watch(checksJson, (val) => {
   }
 })
 
-watch(advancedEnabled, (val) => {
+watch(advancedEnabled, async (val) => {
   const isDns = form.proxy_type === 'dns'
   if (!val) {
     form.checks = null
@@ -855,6 +874,14 @@ watch(advancedEnabled, (val) => {
     form.retry_timeout = 0
   } else {
     form.checks = JSON.parse(checksJson.value) as Record<string, unknown>
+    // 展开后滚动定位 + 短暂高亮（stream-proxy-ux-review-fixes D5 / P2-10）
+    await nextTick()
+    const el = document.querySelector('.spwf-advanced')
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      el.classList.add('spwf-advanced-flash')
+      setTimeout(() => el.classList.remove('spwf-advanced-flash'), 1200)
+    }
   }
 })
 
@@ -921,9 +948,18 @@ async function handleDetectPorts() {
     logLines.value.push('查询已用端口...')
     logLines.value.push('✅ 配置读取完成')
   } catch (e: any) {
-    portError.value = e.response?.data?.detail || '端口检测失败'
+    const nodeIp = nodes.value.find((n: any) => n.id === Number(form.node_id))?.ip || ''
+    const detail = e.response?.data?.detail
+    portError.value =
+      typeof detail === 'string' && detail !== '端口检测失败'
+        ? detail
+        : `节点 ${nodeIp} 当前不可达或 Edge 未安装，无法读取端口配置；可勾选下方「手动输入端口」继续，或到「节点管理」检查节点状态`
     logLines.value.push('❌ 端口检测失败')
     hasSearched.value = true
+    // 失败联动：自动展开手动输入并聚焦（stream-proxy-ux-review-fixes D5）
+    manualPortEnabled.value = true
+    await nextTick()
+    manualPortInputRef.value?.focus()
   } finally {
     detecting.value = false
   }
@@ -1208,6 +1244,24 @@ function validateForm(): boolean {
 
 async function handleSubmit() {
   if (!validateForm()) return
+  // checks 保真（stream-proxy-ux-review-fixes D1）：编辑态从「勾选」改为「不勾选」且原 proxy 有 checks
+  // 时，提交前必须确认清除后果；取消则恢复勾选、不提交。
+  if (props.editingProxy?.checks && advancedWasOnAtEdit.value && !advancedEnabled.value) {
+    showOverlayModal({
+      title: '确认清除健康检查',
+      content: '将清除该代理的健康检查配置，保存并发布后 Edge 侧健康检查将停止',
+      okText: '清除并保存',
+      onOk: () => doSubmit(),
+      onCancel: () => {
+        advancedEnabled.value = true
+      },
+    })
+    return
+  }
+  await doSubmit()
+}
+
+async function doSubmit() {
   submitting.value = true
 
   try {
@@ -1217,7 +1271,6 @@ async function handleSubmit() {
       scheme: form.scheme,
       proxy_type: form.proxy_type,
       ref_node_id: form.node_id || undefined,
-      checks: form.checks,
     }
 
     if (form.proxy_type === 'dns') {
@@ -1239,8 +1292,12 @@ async function handleSubmit() {
     }
 
     if (advancedEnabled.value) {
+      submitData.checks = form.checks
       if (form.retries !== undefined) submitData.retries = form.retries
       if (form.retry_timeout !== undefined) submitData.retry_timeout = form.retry_timeout
+    } else if (props.editingProxy?.checks) {
+      // 已确认清除（handleSubmit 门控）：显式 checks=null 让后端清空（不传=不改）
+      submitData.checks = null
     }
 
     const cid = Number(form.cluster_id)
@@ -1369,8 +1426,10 @@ watch(
       }
       const hasChecks = p.checks && JSON.stringify(form.checks) !== dfltCheck
       const hasRetries = p.retries !== undefined && p.retries !== null
-      const hasRetryTimeout = p.retry_timeout !== undefined && p.retry_timeout !== 0
+      // retry_timeout 为 null 是 API 常态（未配置过高级配置的代理）——null 不算已配置
+      const hasRetryTimeout = p.retry_timeout !== undefined && p.retry_timeout !== null && p.retry_timeout !== 0
       advancedEnabled.value = !!(hasChecks || hasRetries || hasRetryTimeout)
+      advancedWasOnAtEdit.value = advancedEnabled.value
 
       try {
         const res = await api.get(`/clusters/${p.cluster_id}/nodes`, { params: { page_size: PAGE_SIZE_DROPDOWN } })
@@ -1385,8 +1444,8 @@ watch(
         nodes.value = []
       }
 
-      // 编辑模式统一先进 step 1
-      currentStep.value = 1
+      // 编辑直达配置步（stream-proxy-ux-review-fixes D5 / P3-3）：摘要条可回第 1 步
+      currentStep.value = 2
     } else {
       form.cluster_id = ''
       form.node_id = ''
@@ -1652,6 +1711,35 @@ watch(
   padding: 16px;
   background: var(--surface);
   margin-bottom: 16px;
+}
+.spwf-advanced-flash {
+  animation: spwf-adv-flash 1.2s ease-out;
+}
+@keyframes spwf-adv-flash {
+  0% {
+    background: color-mix(in srgb, var(--accent) 18%, var(--surface));
+  }
+  100% {
+    background: var(--surface);
+  }
+}
+.spwf-edit-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+  margin-bottom: 12px;
+}
+.spwf-edit-summary-edit {
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
 }
 
 /* ── Protocol Badge (DNS fixed) ── */

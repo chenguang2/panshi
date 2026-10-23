@@ -33,14 +33,30 @@ export function useStreamProxyList(proxyType: Ref<'normal' | 'dns'>) {
     return clusters.value.filter((c) => c.group_name === groupFilter.value)
   })
 
+  // ssl 外域四态对齐（stream-proxy-ux-review-fixes D2）：状态 Tab 过滤与计数
+  const statusFilter = ref<'all' | 'unpublished' | 'pending' | 'published'>('all')
+  const statusOf = (p: any): 'unpublished' | 'pending' | 'published' => {
+    if (p.pending_publish === true) return 'pending'
+    if (p.current_version) return 'published'
+    return 'unpublished'
+  }
+  const statusCounts = computed(() => {
+    const c = { unpublished: 0, pending: 0, published: 0 }
+    for (const p of proxies.value) c[statusOf(p) as keyof typeof c]++
+    return c
+  })
+
   const displayedProxies = computed(() => {
-    return [...proxies.value].sort((a, b) => {
+    let list = [...proxies.value]
+    if (statusFilter.value !== 'all') list = list.filter((p) => statusOf(p) === statusFilter.value)
+    list.sort((a, b) => {
       const ga = a.cluster_group_name || ''
       const gb = b.cluster_group_name || ''
       if (ga && !gb) return 1
       if (!ga && gb) return -1
       return ga.localeCompare(gb)
     })
+    return list
   })
 
   // ── 批量管理模式 ──
@@ -148,6 +164,8 @@ export function useStreamProxyList(proxyType: Ref<'normal' | 'dns'>) {
     proxies,
     clusters,
     totalCount,
+    statusFilter,
+    statusCounts,
     loading,
     searchText,
     clusterFilter,

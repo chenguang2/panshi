@@ -72,6 +72,9 @@ class StreamProxyResponse(StreamProxyBase):
     keepalive_pool: Optional[Dict[str, Any]] = None
     current_version: Optional[int] = None
     published_at: Optional[str] = None
+    # 四态发布状态（stream-proxy-ux-review-fixes D2，upstream 同款）
+    pending_publish: bool = False
+    last_publish_status: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 

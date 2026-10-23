@@ -34,7 +34,10 @@ const stubs = {
   },
   StreamProxyViewDrawer: { template: '<div class="mock-view-drawer" />', props: ['visible', 'proxy'] },
   VersionManagementModal: { template: '<div class="mock-version-modal" />' },
-  PublishConfirmModal: { template: '<div class="mock-publish-modal" />' },
+  PublishConfirmModal: {
+    template: '<div class="mock-publish-modal" :data-cv="String(currentVersion)" :data-title="title" />',
+    props: ['visible', 'title', 'clusterId', 'currentVersion'],
+  },
 }
 
 const MOCK_PROXIES = {
@@ -464,5 +467,244 @@ describe('StreamProxyList.vue · 版本弹窗发布出口接线', () => {
     expect(pm.props('clusterId')).toBe(1)
     // 版本弹窗必须先关闭（Teleport 到 body 末尾的版本弹窗恒压住视图内发布框）
     expect(vmm.props('open')).toBe(false)
+  })
+})
+
+// ── 四态发布状态（stream-proxy-ux-review-fixes 批 2）────────────────────
+describe('StreamProxyList.vue 四态状态（ssl 外域对齐 upstream）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+  })
+
+  function mockItems(items: any[]) {
+    mockApiGet.mockImplementation((url: string) => {
+      if (url.includes('/stream-proxies'))
+        return Promise.resolve({ data: { total: items.length, page: 1, page_size: 20, items } })
+      if (url === '/clusters') return Promise.resolve({ data: { items: [] } })
+      return Promise.reject(new Error('unknown url: ' + url))
+    })
+  }
+
+  const base = {
+    cluster_id: 1,
+    cluster_name: 'test',
+    scheme: 'tcp',
+    proxy_type: 'normal',
+    load_balance: 'roundrobin',
+    targets: [{ target: '10.0.0.1:80', weight: 100 }],
+  }
+
+  async function mountList() {
+    const StreamProxyList = (await import('../StreamProxyList.vue')).default
+    const w = mount(StreamProxyList, { global: { stubs } })
+    await flushPromises()
+    return w
+  }
+
+  it('pending_publish=true 显示「待发布」，不再渲染自制「已发布」徽章', async () => {
+    mockItems([
+      {
+        id: 1,
+        name: 'pending-one',
+        listen_port: 10001,
+        current_version: 2,
+        published_at: '2026-10-23T01:00:00Z',
+        pending_publish: true,
+        last_publish_status: null,
+        ...base,
+      },
+    ])
+    const w = await mountList()
+    const card = w.findAll('.sp-card').find((c) => c.text().includes('pending-one'))!
+    expect(card.text()).toContain('待发布')
+    expect(card.find('.ps-pending').exists()).toBe(true)
+    expect(card.find('.badge-success').exists()).toBe(false)
+  })
+
+  it('last_publish_status=partial 显示「发布未完全生效」', async () => {
+    mockItems([
+      {
+        id: 2,
+        name: 'partial-one',
+        listen_port: 10002,
+        current_version: 3,
+        published_at: '2026-10-23T01:00:00Z',
+        pending_publish: false,
+        last_publish_status: 'partial',
+        ...base,
+      },
+    ])
+    const w = await mountList()
+    const card = w.findAll('.sp-card').find((c) => c.text().includes('partial-one'))!
+    expect(card.text()).toContain('发布未完全生效')
+  })
+
+  it('状态 Tab 渲染计数，点击「待发布」过滤列表', async () => {
+    mockItems([
+      {
+        id: 1,
+        name: 'a-pending',
+        listen_port: 10003,
+        current_version: 1,
+        published_at: '2026-10-23T01:00:00Z',
+        pending_publish: true,
+        last_publish_status: null,
+        ...base,
+      },
+      {
+        id: 2,
+        name: 'b-published',
+        listen_port: 10004,
+        current_version: 2,
+        published_at: '2026-10-23T02:00:00Z',
+        pending_publish: false,
+        last_publish_status: null,
+        ...base,
+      },
+    ])
+    const w = await mountList()
+    const tabs = w.findAll('.sp-status-tab')
+    expect(tabs.length).toBeGreaterThanOrEqual(4)
+    const pendingTab = tabs.find((t) => t.text().includes('待发布'))!
+    expect(pendingTab.text()).toContain('1')
+    await pendingTab.trigger('click')
+    await w.vm.$nextTick()
+    const names = w.findAll('.sp-card-name').map((n) => n.text())
+    expect(names).toEqual(['a-pending'])
+  })
+
+  it('分段控件激活态可见：aria-pressed 与 .active 同步切换；计数 0 降透明（.empty 可点）', async () => {
+    mockItems([
+      {
+        id: 1,
+        name: 'a-pending',
+        listen_port: 10003,
+        current_version: 1,
+        published_at: '2026-10-23T01:00:00Z',
+        pending_publish: true,
+        last_publish_status: null,
+        ...base,
+      },
+      {
+        id: 2,
+        name: 'b-published',
+        listen_port: 10004,
+        current_version: 2,
+        published_at: '2026-10-23T02:00:00Z',
+        pending_publish: false,
+        last_publish_status: null,
+        ...base,
+      },
+    ])
+    const w = await mountList()
+    const tabs = w.findAll('.sp-status-tab')
+    const allTab = tabs.find((t) => t.text().includes('全部'))!
+    const unpublishedTab = tabs.find((t) => t.text().includes('未发布'))!
+    // 初始：全部=active
+    expect(allTab.classes()).toContain('active')
+    expect(allTab.attributes('aria-pressed')).toBe('true')
+    expect(unpublishedTab.attributes('aria-pressed')).toBe('false')
+    // 切换后：aria 与 class 同步；计数 0 段带 .empty（可点但降透明）
+    await unpublishedTab.trigger('click')
+    await w.vm.$nextTick()
+    expect(unpublishedTab.classes()).toContain('active')
+    expect(unpublishedTab.attributes('aria-pressed')).toBe('true')
+    expect(allTab.attributes('aria-pressed')).toBe('false')
+    // fixture：未发布计数为 0（两条均有版本）→ 该段降透明但可点
+    const unpublishedTab2 = tabs.find((t) => t.text().includes('未发布'))!
+    expect(unpublishedTab2.classes()).toContain('empty')
+    expect(unpublishedTab2.attributes('disabled')).toBeUndefined()
+  })
+
+  it('发布确认弹窗携带 current-version 与资源名标题', async () => {
+    mockItems([
+      {
+        id: 9,
+        name: 'pub-target',
+        listen_port: 10005,
+        current_version: 2,
+        published_at: '2026-10-23T01:00:00Z',
+        pending_publish: false,
+        last_publish_status: null,
+        ...base,
+      },
+    ])
+    const w = await mountList()
+    const card = w.findAll('.sp-card').find((c) => c.text().includes('pub-target'))!
+    const pubBtn = card.findAll('button').find((b) => b.text() === '发布')!
+    await pubBtn.trigger('click')
+    await w.vm.$nextTick()
+    const modal = w.find('.mock-publish-modal')
+    expect(modal.attributes('data-cv')).toBe('2')
+    expect(modal.attributes('data-title')).toContain('pub-target')
+  })
+})
+
+// ── 批 4 列表（stream-proxy-ux-review-fixes）────────────────────────────
+describe('StreamProxyList.vue 批 4 空态与权重', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url.includes('/stream-proxies'))
+        return Promise.resolve({ data: { total: 0, page: 1, page_size: 20, items: [] } })
+      if (url === '/clusters') return Promise.resolve({ data: { items: [] } })
+      return Promise.reject(new Error('unknown url: ' + url))
+    })
+  })
+
+  it('搜索无结果空态：含关键词与清除筛选', async () => {
+    const StreamProxyList = (await import('../StreamProxyList.vue')).default
+    const w = mount(StreamProxyList, { global: { stubs } })
+    await flushPromises()
+    const input = w.find('.search-input-wrap input')
+    await input.setValue('nonexistent')
+    await input.trigger('input')
+    await input.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    await w.vm.$nextTick()
+    expect(w.find('.sp-empty-text').text()).toContain('没有匹配「nonexistent」')
+    expect(w.find('.sp-empty-text').text()).toContain('清除筛选')
+    expect(w.find('.sp-empty-icon').element.tagName.toLowerCase()).toBe('svg')
+  })
+
+  it('无数据空态：暂无四层代理（无清除筛选）', async () => {
+    const StreamProxyList = (await import('../StreamProxyList.vue')).default
+    const w = mount(StreamProxyList, { global: { stubs } })
+    await flushPromises()
+    expect(w.find('.sp-empty-text').text()).toBe('暂无四层代理')
+  })
+
+  it('卡片权重格式与抽屉一致（:100）', async () => {
+    mockApiGet.mockImplementation((url: string) => {
+      if (url.includes('/stream-proxies'))
+        return Promise.resolve({
+          data: {
+            total: 1,
+            page: 1,
+            page_size: 20,
+            items: [
+              {
+                id: 1,
+                name: 'w',
+                cluster_id: 1,
+                listen_port: 1,
+                scheme: 'tcp',
+                proxy_type: 'normal',
+                load_balance: 'roundrobin',
+                targets: [{ target: '10.0.0.1:80', weight: 100 }],
+                current_version: null,
+              },
+            ],
+          },
+        })
+      if (url === '/clusters') return Promise.resolve({ data: { items: [] } })
+      return Promise.reject(new Error('unknown url: ' + url))
+    })
+    const StreamProxyList = (await import('../StreamProxyList.vue')).default
+    const w = mount(StreamProxyList, { global: { stubs } })
+    await flushPromises()
+    expect(w.find('.sp-target-wt').text()).toBe(':100')
   })
 })

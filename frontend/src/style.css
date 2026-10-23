@@ -616,6 +616,11 @@ select.form-input {
    U1 保真：AntD Modal 复刻原 modal-overlay 风格
    （AppModal.vue 使用；头部品牌色染 / 顶部对齐 / 大圆角）
    =========================== */
+/* 进度弹窗执行中隐藏取消按钮（取消仅隐藏视图、任务后台继续——提供入口是误导） */
+.ant-modal.app-modal.app-modal-progress-running .ant-modal-footer .ant-btn:first-child {
+  display: none;
+}
+
 .ant-modal.app-modal {
   top: 5vh;
   max-width: calc(100vw - 32px);

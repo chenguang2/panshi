@@ -100,8 +100,12 @@ async def create_dns_proxy(
             StreamProxy.listen_port == data.listen_port,
         )
     )
-    if existing.scalar_one_or_none():
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="端口已被占用")
+    occupier = existing.scalar_one_or_none()
+    if occupier:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"监听端口 {data.listen_port} 已被四层代理「{occupier.name}」占用，请更换端口",
+        )
 
     proxy_data = data.model_dump(exclude={"targets"})
     if data.targets is not None:

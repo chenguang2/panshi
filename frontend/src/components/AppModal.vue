@@ -14,6 +14,8 @@ withDefaults(
     okDisabled?: boolean
     okDanger?: boolean
     closable?: boolean
+    /** 追加到 Modal 根节点的 class（进度弹窗执行中隐藏取消按钮用，stream-proxy-ux-review-fixes 4.4） */
+    wrapClass?: string
     bodyStyle?: CSSProperties
   }>(),
   {
@@ -49,6 +51,7 @@ const emit = defineEmits<{
     :footer="footer === null ? null : undefined"
     :closable="closable"
     :body-style="bodyStyle"
+    :class="wrapClass"
     class="app-modal"
     @update:open="(v: boolean) => emit('update:open', v)"
     @ok="emit('ok')"

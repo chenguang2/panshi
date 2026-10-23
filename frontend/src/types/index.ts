@@ -317,6 +317,9 @@ export interface StreamProxy {
   sni?: string
   status: number
   current_version?: number
+  /** 四态发布状态（stream-proxy-ux-review-fixes，后端 derive_pending_publish 推导） */
+  pending_publish?: boolean
+  last_publish_status?: string | null
   published_at?: string
   created_at?: string
   updated_at?: string

@@ -42,6 +42,16 @@ async def _proxy_response_with_cluster_name(proxy, cluster_id: int, db):
     cluster = await db.get(Cluster, cluster_id)
     cluster_name = cluster.display_name or cluster.name if cluster else ""
     resp = StreamProxyResponse.model_validate(proxy)
+    pub_map = await edge_sync.load_publish_time_map(db, "stream_proxy", [proxy.id])
+    ts = pub_map.get(proxy.id)
+    resp.published_at = ts.isoformat() + "Z" if ts else None
+    resp.pending_publish = edge_sync.derive_pending_publish(
+        current_version=proxy.current_version,
+        updated_at=proxy.updated_at,
+        published_at=ts,
+        last_publish_status=proxy.last_publish_status,
+    )
+    resp.last_publish_status = proxy.last_publish_status
     item = resp.model_dump()
     item["cluster_name"] = cluster_name
     return item
@@ -113,16 +123,7 @@ async def list_stream_proxies(
     proxies = result.scalars().all()
 
     proxy_ids = [p.id for p in proxies]
-    pub_result = await db.execute(
-        select(
-            ConfigVersion.resource_id,
-            func.max(ConfigVersion.created_at).label("latest_ts"),
-        ).where(
-            ConfigVersion.resource_type == "stream_proxy",
-            ConfigVersion.resource_id.in_(proxy_ids) if proxy_ids else False,
-        ).group_by(ConfigVersion.resource_id)
-    )
-    pub_map = {r.resource_id: r.latest_ts for r in pub_result.all()} if proxy_ids else {}
+    pub_map = await edge_sync.load_publish_time_map(db, "stream_proxy", proxy_ids)
 
     cluster = await db.get(Cluster, cluster_id)
     cluster_name = cluster.display_name or cluster.name if cluster else ""
@@ -132,6 +133,13 @@ async def list_stream_proxies(
         resp = StreamProxyResponse.model_validate(p)
         ts = pub_map.get(p.id)
         resp.published_at = ts.isoformat() + "Z" if ts else None
+        resp.pending_publish = edge_sync.derive_pending_publish(
+            current_version=p.current_version,
+            updated_at=p.updated_at,
+            published_at=ts,
+            last_publish_status=p.last_publish_status,
+        )
+        resp.last_publish_status = p.last_publish_status
         item = resp.model_dump()
         item["cluster_name"] = cluster_name
         items.append(item)
@@ -190,20 +198,20 @@ async def list_all_stream_proxies(
 
     # Build published_at map from ConfigVersion
     proxy_ids = [p.id for p in proxies]
-    pub_result = await db.execute(
-        select(ConfigVersion.resource_id, func.max(ConfigVersion.created_at).label("latest_ts"))
-        .where(
-            ConfigVersion.resource_type == "stream_proxy",
-            ConfigVersion.resource_id.in_(proxy_ids) if proxy_ids else False,
-        ).group_by(ConfigVersion.resource_id)
-    )
-    pub_map = {r.resource_id: r.latest_ts for r in pub_result.all()} if proxy_ids else {}
+    pub_map = await edge_sync.load_publish_time_map(db, "stream_proxy", proxy_ids)
 
     items = []
     for p in proxies:
         resp = StreamProxyResponse.model_validate(p)
         ts = pub_map.get(p.id)
         resp.published_at = ts.isoformat() + "Z" if ts else None
+        resp.pending_publish = edge_sync.derive_pending_publish(
+            current_version=p.current_version,
+            updated_at=p.updated_at,
+            published_at=ts,
+            last_publish_status=p.last_publish_status,
+        )
+        resp.last_publish_status = p.last_publish_status
         item = resp.model_dump()
         item["cluster_name"] = cluster_name_map.get(p.cluster_id, "")
         item["cluster_group_name"] = cluster_group_map.get(p.cluster_id, "")
@@ -224,8 +232,13 @@ async def create_stream_proxy(
             StreamProxy.listen_port == data.listen_port,
         )
     )
-    if existing.scalar_one_or_none():
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="端口已被占用")
+    occupier = existing.scalar_one_or_none()
+    if occupier:
+        # stream-proxy-ux-review-fixes 4.1：detail 带占用者与端口，前端据此给出换端口引导
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"监听端口 {data.listen_port} 已被四层代理「{occupier.name}」占用，请更换端口",
+        )
 
     proxy_data = data.model_dump(exclude={"targets"})
     if data.targets is not None:

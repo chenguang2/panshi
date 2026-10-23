@@ -647,7 +647,12 @@ const handleRepublish = async () => {
   // ssl-version-orphan-purge：异代快照（快照 name ≠ 当前资源名）恢复 = 覆盖当前资源身份，红色警示
   const target = versions.value.find((v) => v.version === version)
   const foreignName = target ? snapshotNameOf(target) : null
-  const plainText = `将把平台侧配置恢复到 v${version}，Edge 节点上的现有配置不受影响；如需下发请再执行发布`
+  // stream-proxy-ux-review-fixes D3：stream 恢复是部分恢复——如实告知恢复范围
+  const scopeNote =
+    props.resourceType === 'stream_proxy'
+      ? '该版本恢复范围为名称/协议/负载均衡/目标/超时/连接池；监听端口、健康检查、重试与 DNS 配置不随回滚变更。'
+      : ''
+  const plainText = `将把平台侧配置恢复到 v${version}，Edge 节点上的现有配置不受影响；如需下发请再执行发布${scopeNote ? '。' + scopeNote : ''}`
   // content 支持 VNode：异代警示行用红色块，正文保持原样（string 会被 textContent 转义，不能塞 HTML）
   const confirmContent =
     foreignName && foreignName !== props.resourceName
