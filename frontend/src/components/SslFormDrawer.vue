@@ -616,7 +616,13 @@ watch(
             .map((s: string) => s.trim())
             .filter(Boolean)
         : []
-      splitSniByType(sniTags.value)
+      // uapm 修复：优先用证书 SAN（序列化期从 cert PEM 解析），sni 拆分仅作旧载荷回退
+      if (Array.isArray(c.dns_sans) || Array.isArray(c.ip_sans)) {
+        dnsTags.value = c.dns_sans || []
+        ipTags.value = c.ip_sans || []
+      } else {
+        splitSniByType(sniTags.value)
+      }
       form.cert = c.cert
       form.key = c.key || c.private_key || ''
       form.ssl_protocols = c.ssl_protocols

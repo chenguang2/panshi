@@ -601,3 +601,34 @@ describe('SslFormDrawer PEM 即时预览（ssl-ux-review-fixes 10.2）', () => {
     expect(mockPreview.mock.calls.length).toBe(before)
   })
 })
+
+describe('SslFormDrawer 编辑态证书 SAN 展示（uapm 修复）', () => {
+  it('优先展示证书 SAN（dns_sans/ip_sans），而非 sni 拆分——证书里有而 sni 没有的条目可见', async () => {
+    const w = await mountWithVisibility({
+      id: 2,
+      cluster_id: 4,
+      name: 'uapm',
+      sni: 'edge.local,qcg.com',
+      dns_sans: ['edge.local', 'g.gkpt.cars', 'qcg.com'],
+      ip_sans: ['192.168.0.13', '192.168.0.14'],
+      cert: 'CERT',
+      cert_type: 'server',
+    })
+    expect(w.text()).toContain('g.gkpt.cars')
+    expect(w.text()).toContain('192.168.0.13')
+    expect(w.text()).toContain('192.168.0.14')
+  })
+
+  it('旧载荷（无 SAN 字段）回退 sni 拆分：IP 归 IP、域名归 DNS', async () => {
+    const w = await mountWithVisibility({
+      id: 3,
+      cluster_id: 4,
+      name: 'legacy',
+      sni: 'a.com,10.0.0.5',
+      cert: 'CERT',
+      cert_type: 'server',
+    })
+    expect(w.text()).toContain('a.com')
+    expect(w.text()).toContain('10.0.0.5')
+  })
+})

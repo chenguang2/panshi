@@ -29,11 +29,13 @@ def parse_cert_pem(pem: Any) -> Optional[dict]:
         cn_attrs = parsed.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
         subject_cn = cn_attrs[0].value if cn_attrs else None
         san: list[str] = []
+        dns_names: list[str] = []
+        ip_addrs_str: list[str] = []
         try:
             san_ext = parsed.extensions.get_extension_for_class(x509.SubjectAlternativeName)
-            dns_names = san_ext.value.get_values_for_type(x509.DNSName)
-            ip_addrs = san_ext.value.get_values_for_type(x509.IPAddress)
-            san = [str(v) for v in dns_names] + [str(v) for v in ip_addrs]
+            dns_names = [str(v) for v in san_ext.value.get_values_for_type(x509.DNSName)]
+            ip_addrs_str = [str(v) for v in san_ext.value.get_values_for_type(x509.IPAddress)]
+            san = dns_names + ip_addrs_str
         except x509.ExtensionNotFound:
             san = []
 
@@ -58,6 +60,8 @@ def parse_cert_pem(pem: Any) -> Optional[dict]:
             "ok": True,
             "subject_cn": subject_cn,
             "san": san,
+            "dns_sans": dns_names,
+            "ip_sans": ip_addrs_str,
             "not_after": not_after.isoformat(),
             "algorithm": algorithm,
             "expire_days": (not_after - datetime.utcnow()).days,

@@ -45,6 +45,9 @@ export interface SslCertificate {
   /** ssl-ux-review-fixes 组 3：到期信息（后端 derive_expiry 派生；解析失败为 null） */
   expire_at?: string | null
   expire_days?: number | null
+  /** uapm 修复：证书 SAN（后端序列化期从 cert PEM 解析，非模型列；解析失败为空数组） */
+  dns_sans?: string[]
+  ip_sans?: string[]
 }
 
 /** ssl-ux-review-fixes 9.2：GET /clusters/{id}/ssl/{cert_id}/key 按需取响应（国密含 sign_key） */

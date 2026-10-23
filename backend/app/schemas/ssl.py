@@ -111,6 +111,10 @@ class SslCertificateResponse(SslCertificateBase):
     # 证书到期信息（ux-review H2：序列化期从 cert PEM 解析，非模型列；None=解析失败如国密双证书）
     expire_at: Optional[str] = None
     expire_days: Optional[int] = None
+    # 证书 SAN（uapm 案例：IP SAN 只烧在证书体里，平台此前从不透出 → 卡片/编辑无法显示；
+    # 同 expire_at 模式：序列化期从 cert PEM 解析，非模型列，解析失败降级空列表）
+    dns_sans: List[str] = Field(default_factory=list)
+    ip_sans: List[str] = Field(default_factory=list)
     # 私钥在位布尔（ssl-ux-review-fixes 9.1：响应掩码后由布尔表达「是否有私钥」）
     has_private_key: bool = False
     has_sign_key: bool = False
@@ -147,15 +151,20 @@ class SslCertificateResponse(SslCertificateBase):
         ssl-ux-review-fixes 10.1：解析逻辑收敛到 services/ssl_pem.parse_cert_pem
         （与 POST /ssl/preview 共用，禁止两份 x509 解析）。
         """
-        if self.expire_at is not None:
+        if self.expire_at is not None and self.dns_sans and self.ip_sans:
             return self
         from app.services.ssl_pem import parse_cert_pem
 
         info = parse_cert_pem(getattr(self, "cert", None))
         if info is None:
             return self
-        self.expire_at = info["not_after"]
-        self.expire_days = info["expire_days"]
+        if self.expire_at is None:
+            self.expire_at = info["not_after"]
+            self.expire_days = info["expire_days"]
+        if not self.dns_sans:
+            self.dns_sans = info.get("dns_sans", [])
+        if not self.ip_sans:
+            self.ip_sans = info.get("ip_sans", [])
         return self
 
     class Config:

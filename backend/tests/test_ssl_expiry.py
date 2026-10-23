@@ -5,6 +5,7 @@
 schema 级直测：SslCertificateResponse 的所有 API 站点都走 model_validate，
 校验器单点生效，无需逐端点重测。
 """
+import ipaddress
 from datetime import datetime, timedelta, timezone
 
 from cryptography import x509
@@ -15,13 +16,17 @@ from cryptography.x509.oid import NameOID
 from app.schemas.ssl import SslCertificateResponse
 
 
-def _self_signed_pem(days: int) -> str:
+def _self_signed_pem(
+    days: int,
+    dns_sans: list[str] | None = None,
+    ip_sans: list[str] | None = None,
+) -> str:
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     now = datetime.now(timezone.utc)
     # 负天数（已过期证书）时起点须早于终点，前移量随负天数放大
     before_offset = timedelta(days=1) if days >= 0 else timedelta(days=-days + 1)
     name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "ux-review.local")])
-    cert = (
+    builder = (
         x509.CertificateBuilder()
         .subject_name(name)
         .issuer_name(name)
@@ -29,8 +34,12 @@ def _self_signed_pem(days: int) -> str:
         .serial_number(x509.random_serial_number())
         .not_valid_before(now - before_offset)
         .not_valid_after(now + timedelta(days=days))
-        .sign(key, hashes.SHA256())
     )
+    if dns_sans or ip_sans:
+        san_items: list[x509.GeneralName] = [x509.DNSName(d) for d in (dns_sans or [])]
+        san_items += [x509.IPAddress(ipaddress.ip_address(ip)) for ip in (ip_sans or [])]
+        builder = builder.add_extension(x509.SubjectAlternativeName(san_items), critical=False)
+    cert = builder.sign(key, hashes.SHA256())
     return cert.public_bytes(serialization.Encoding.PEM).decode()
 
 
@@ -74,3 +83,36 @@ class TestSslExpiryDerivation:
         pem = _self_signed_pem(days=3650)
         resp = SslCertificateResponse.model_validate(_payload(pem) | {"is_ca": 1})
         assert 3648 <= resp.expire_days <= 3650
+
+
+class TestSanDerivation:
+    def test_cert_with_ip_and_dns_sans_derives_both(self):
+        """uapm 案例：证书体里有 IP SAN，平台须原样透出（卡片/编辑才能显示）。"""
+        resp = SslCertificateResponse.model_validate(
+            _payload(_self_signed_pem(90, dns_sans=["edge.local", "qcg.com"], ip_sans=["192.168.0.13", "192.168.0.14"]))
+        )
+        assert resp.dns_sans == ["edge.local", "qcg.com"]
+        assert resp.ip_sans == ["192.168.0.13", "192.168.0.14"]
+        dumped = resp.model_dump()
+        assert dumped["dns_sans"] == ["edge.local", "qcg.com"]
+        assert dumped["ip_sans"] == ["192.168.0.13", "192.168.0.14"]
+
+    def test_cert_without_san_degrades_to_empty(self):
+        resp = SslCertificateResponse.model_validate(_payload(_self_signed_pem(90)))
+        assert resp.dns_sans == []
+        assert resp.ip_sans == []
+
+    def test_unparseable_cert_degrades_sans_to_empty(self):
+        resp = SslCertificateResponse.model_validate(_payload("-----BEGIN CERTIFICATE-----\nZm9v\n-----END CERTIFICATE-----"))
+        assert resp.dns_sans == []
+        assert resp.ip_sans == []
+
+    def test_parse_cert_pem_exposes_dns_ip_separately(self):
+        from app.services.ssl_pem import parse_cert_pem
+
+        info = parse_cert_pem(_self_signed_pem(30, dns_sans=["a.com"], ip_sans=["10.0.0.1"]))
+        assert info is not None
+        assert info["dns_sans"] == ["a.com"]
+        assert info["ip_sans"] == ["10.0.0.1"]
+        # 合并 san 字段保持向后兼容（preview 端点消费）
+        assert info["san"] == ["a.com", "10.0.0.1"]
