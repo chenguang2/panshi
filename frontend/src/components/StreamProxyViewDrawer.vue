@@ -3,7 +3,7 @@
     <div class="modal-overlay" :style="{ display: visible ? 'flex' : 'none' }">
       <div class="modal" style="max-width: 600px">
         <div class="modal-header">
-          <h2>查看四层代理 - {{ proxy?.name }}</h2>
+          <h2>查看 {{ proxy?.proxy_type === 'dns' ? 'DNS 代理' : '四层代理' }} - {{ proxy?.name }}</h2>
           <button class="modal-close" @click="emit('update:visible', false)">&times;</button>
         </div>
         <div class="modal-body">
@@ -28,7 +28,7 @@
               <span class="spvd-label">协议</span>
               <span class="spvd-value">{{ schemeLabel(proxy.scheme) }}</span>
             </div>
-            <div class="spvd-field">
+            <div v-if="!isDnsProxy" class="spvd-field">
               <span class="spvd-label">负载均衡</span>
               <span class="spvd-value">{{ lbLabel }}</span>
             </div>
@@ -157,6 +157,7 @@
 import { computed } from 'vue'
 import type { StreamProxy } from '@/types'
 import { formatDateTime as formatDate } from '@/utils/format'
+import PublishStatusTag from '@/components/PublishStatusTag.vue'
 
 const props = defineProps<{
   visible: boolean
@@ -197,7 +198,7 @@ const dnsHosts = computed<Record<string, { nodes: Record<string, string[]>; type
     if (!isDnsProxy.value || !props.proxy?.dns_config) return null
     const cfg =
       typeof props.proxy.dns_config === 'string' ? safeParse(props.proxy.dns_config as string) : props.proxy.dns_config
-    const domains = (cfg as any)?.domains
+    const domains = (cfg as any)?.hosts // 真实结构 hosts 键（DnsUdpProxyList.vue 同源；dns-udp-proxy-ux-parity D5）
     if (!domains || typeof domains !== 'object') return null
     const out: Record<string, { nodes: Record<string, string[]>; type: string; ttl_valid?: number }> = {}
     for (const [domain, dc] of Object.entries(domains as Record<string, any>)) {

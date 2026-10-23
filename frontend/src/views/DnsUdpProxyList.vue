@@ -10,6 +10,19 @@
     </PageHeader>
 
     <div class="sp-header-actions">
+      <div class="sp-status-tabs" role="group" aria-label="按发布状态筛选">
+        <button
+          v-for="t in statusTabs"
+          :key="t.key"
+          class="sp-status-tab"
+          :class="{ active: statusFilter === t.key, empty: t.count === 0 }"
+          :aria-pressed="statusFilter === t.key ? 'true' : 'false'"
+          @click="goStatus(t.key)"
+        >
+          {{ t.label }}
+          <span class="sp-status-count">{{ t.count }}</span>
+        </button>
+      </div>
       <div class="search-input-wrap">
         <input v-model="searchText" type="text" placeholder="搜索 DNS 代理..." class="form-input" @input="onSearch" />
         <span class="search-icon">&#128269;</span>
@@ -36,8 +49,24 @@
 
     <div v-if="loading" class="loading-state">加载中...</div>
     <div v-else-if="displayedProxies.length === 0" class="sp-empty">
-      <div class="sp-empty-icon">&#9635;</div>
-      <div class="sp-empty-text">暂无 DNS 代理</div>
+      <svg
+        class="sp-empty-icon"
+        viewBox="0 0 48 48"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        style="width: 48px; height: 48px; color: var(--muted)"
+      >
+        <rect x="8" y="14" width="32" height="24" rx="2" />
+        <path d="M8 22h32M16 10v8M32 10v8" />
+      </svg>
+      <div v-if="searchText" class="sp-empty-text">
+        没有匹配「{{ searchText }}」的 DNS 代理
+        <a class="link-btn" style="margin-left: 8px" @click="onClearSearch">清除筛选</a>
+      </div>
+      <div v-else class="sp-empty-text">暂无 DNS 代理</div>
     </div>
     <div v-else class="sp-grid" :class="{ 'batch-mode': batchMode }">
       <div
@@ -61,15 +90,12 @@
             <div v-if="p.description" class="sp-card-desc">{{ p.description }}</div>
           </div>
           <div class="sp-card-meta">
-            <span v-if="p.current_version" class="badge badge-success"
-              ><span class="status-dot online"></span>已发布</span
-            >
-            <span v-else class="badge badge-neutral"><span class="status-dot"></span>未发布</span>
-            <div class="sp-version-text">
-              <template v-if="p.current_version"
-                ><PublishStatusTag :version="p.current_version" :published-at="p.published_at"
-              /></template>
-            </div>
+            <PublishStatusTag
+              :version="p.current_version"
+              :published-at="p.published_at"
+              :pending="p.pending_publish === true"
+              :last-publish-status="p.last_publish_status"
+            />
           </div>
         </div>
         <div class="sp-card-details">
@@ -156,8 +182,9 @@
     <!-- Publish -->
     <PublishConfirmModal
       v-model:visible="publishVisible"
-      title="发布 DNS 代理"
+      :title="`发布 DNS 代理「${publishingProxy?.name ?? ''}」`"
       :cluster-id="publishClusterId"
+      :current-version="publishingProxy?.current_version ?? null"
       @confirm="onPublishConfirm"
       @cancel="publishVisible = false"
     />
@@ -178,6 +205,7 @@ import { executePublish, showDeleteConfirm, executeDeleteWithProgress, routeLabe
 import { getGroupColorStyle, getCardBorderStyle } from '@/composables/useGroupColors'
 import { formatDateTime as formatDate } from '@/utils/format'
 import { useStreamProxyList } from '@/composables/useStreamProxyList'
+import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
 import PublishStatusTag from '@/components/PublishStatusTag.vue'
 
 const proxyType = computed<'dns'>(() => 'dns')
@@ -186,6 +214,8 @@ const {
   proxies,
   clusters,
   totalCount,
+  statusFilter,
+  statusCounts,
   loading,
   searchText,
   clusterFilter,
@@ -207,6 +237,18 @@ const {
   loadProxies,
   loadClusters,
 } = useStreamProxyList(proxyType)
+
+// ── 状态分段（对齐四层代理页，dns-udp-proxy-ux-parity 批 1）──
+type StatusKey = 'all' | 'unpublished' | 'pending' | 'published'
+const statusTabs = computed<{ key: StatusKey; label: string; count: number }[]>(() => [
+  { key: 'all', label: '全部', count: totalCount.value },
+  { key: 'unpublished', label: '未发布', count: statusCounts.value.unpublished },
+  { key: 'pending', label: '待发布', count: statusCounts.value.pending },
+  { key: 'published', label: '已发布', count: statusCounts.value.published },
+])
+function goStatus(key: StatusKey) {
+  statusFilter.value = key
+}
 
 function onGroupChange() {
   clusterFilter.value = ''
@@ -277,12 +319,14 @@ function dnsApiPath(clusterId: number, proxyId: number, action: string = ''): st
   return `/clusters/${clusterId}/dns-proxies/${proxyId}${action}`
 }
 
-let searchTimer: ReturnType<typeof setTimeout> | null = null
+// 搜索防抖换共享实现（dns-udp-proxy-ux-parity 3.3，对齐四层代理页）
+const { onSearch: onDebouncedSearch } = useDebouncedSearch()
 function onSearch() {
-  if (searchTimer) clearTimeout(searchTimer)
-  searchTimer = setTimeout(() => {
-    loadProxies()
-  }, 300)
+  onDebouncedSearch(() => loadProxies())
+}
+function onClearSearch() {
+  searchText.value = ''
+  loadProxies()
 }
 
 // ── CRUD Actions ──
@@ -309,10 +353,15 @@ function viewProxy(p: StreamProxy) {
 }
 
 async function deleteProxy(p: StreamProxy) {
-  let nodes: { id: number; ip: string; management_port: number }[] = []
+  let nodes: { id: number; ip: string; management_port: number; status?: number }[] = []
   try {
     const res = await api.get(`/clusters/${p.cluster_id}/nodes`)
-    nodes = res.data?.items || []
+    nodes = (res.data?.items || []).map((n: any) => ({
+      id: n.id,
+      ip: n.ip,
+      management_port: n.management_port,
+      status: n.status,
+    }))
   } catch {
     /* ignore */
   }
@@ -321,6 +370,8 @@ async function deleteProxy(p: StreamProxy) {
     title: `确定要删除 DNS 代理 "${p.name}" 吗？`,
     apiEndpoint: dnsApiPath(p.cluster_id, p.id),
     nodes,
+    defaultSelectOnline: true,
+    subsetConsequence: '未选中的 {n} 个节点将保留该转发规则并继续承载流量',
     onOk: async (deleteDb, deleteEdge, nodeIds) => {
       await executeDeleteWithProgress({
         title: `删除 DNS 代理: ${p.name}`,
@@ -331,6 +382,7 @@ async function deleteProxy(p: StreamProxy) {
         nodeIds,
         refreshFn: loadProxies,
         clearSelectedFn: () => {},
+        retryable: true,
       })
     },
   })
@@ -455,6 +507,72 @@ loadProxies()
 .sp-page:has(.sp-batch-bar) {
   padding-bottom: 80px;
 }
+/* ── 状态分段控件（连接式 segmented，与四层代理页同款）──────────────── */
+.sp-status-tabs {
+  display: inline-flex;
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 3px;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.sp-status-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-family: inherit;
+  padding: 5px 13px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    opacity 0.15s;
+}
+
+.sp-status-tab:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--fg);
+}
+
+.sp-status-tab.active {
+  background: var(--accent);
+  color: #fff;
+  cursor: default;
+  font-weight: 500;
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.sp-status-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--muted) 14%, transparent);
+  color: var(--muted);
+}
+
+.sp-status-tab.active .sp-status-count {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+
+.sp-status-tab.empty {
+  opacity: 0.55;
+}
+
+.sp-status-tab.empty:hover {
+  opacity: 1;
+}
+
 .sp-header-actions {
   display: flex;
   align-items: center;

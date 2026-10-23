@@ -15,7 +15,10 @@ vi.mock('@/composables/useOverlayModal', () => ({
   showOverlayModal: (...args: unknown[]) => mockShowOverlayModal(...args),
 }))
 vi.mock('@/api', () => ({
-  default: { get: vi.fn(() => Promise.resolve({ data: { items: [] } })) },
+  default: {
+    get: vi.fn(() => Promise.resolve({ data: { items: [] } })),
+    post: vi.fn(() => Promise.resolve({ data: { id: 99 } })),
+  },
 }))
 vi.mock('@/ant-design-vue', () => ({ message: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }))
 import { flushPromises, mount } from '@vue/test-utils'
@@ -638,5 +641,97 @@ describe('StreamProxyFormWizard 批 4 向导体验', () => {
     const w = await mountW()
     expect((w.vm as any).currentStep).toBe(1)
     expect(document.querySelector('.spwf-edit-summary')).toBeNull()
+  })
+})
+
+// ── 批 2：WAN 可见性 + 资源名词（dns-udp-proxy-ux-parity）──────────────
+describe('StreamProxyFormWizard DNS 型 WAN 与名词', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+  })
+
+  it('defaultProxyType=dns 时 WAN 开关可见可切换（不再被 toggle 区 v-if 连带隐藏）', async () => {
+    const StreamProxyFormWizard = (await import('../StreamProxyFormWizard.vue')).default
+    const w = mount(StreamProxyFormWizard, {
+      props: { visible: false, editingProxy: null, clusters: MOCK_CLUSTERS, defaultProxyType: 'dns' },
+      global: {
+        stubs: [
+          'AModal',
+          'AForm',
+          'AFormItem',
+          'AInput',
+          'ASelect',
+          'ASelectOption',
+          'AButton',
+          'AInputNumber',
+          'ATable',
+          'HealthCheckForm',
+        ],
+      },
+    })
+    await w.setProps({ visible: true })
+    await flushPromises()
+    // WAN 开关在（step2 区，v-show 不影响 DOM 存在性）
+    const wan = document.querySelector('.spwf-wan-switch') as HTMLElement | null
+    expect(wan).toBeTruthy()
+    expect(document.body.textContent).toContain('启用内外网分离')
+    // 切到 step2 后 display 非 none（v-show 生效但可见）
+    const vm = w.vm as any
+    vm.currentStep = 2
+    await w.vm.$nextTick()
+    expect((wan as HTMLElement).checkVisibility?.() ?? true).toBe(true)
+  })
+
+  it('defaultProxyType=dns 时向导标题为「新建 DNS 代理」', async () => {
+    const StreamProxyFormWizard = (await import('../StreamProxyFormWizard.vue')).default
+    mount(StreamProxyFormWizard, {
+      props: { visible: true, editingProxy: null, clusters: MOCK_CLUSTERS, defaultProxyType: 'dns' },
+      global: {
+        stubs: [
+          'AModal',
+          'AForm',
+          'AFormItem',
+          'AInput',
+          'ASelect',
+          'ASelectOption',
+          'AButton',
+          'AInputNumber',
+          'ATable',
+          'HealthCheckForm',
+        ],
+      },
+    })
+    await flushPromises()
+    expect(document.body.textContent).toContain('新建 DNS 代理')
+    expect(document.body.textContent).not.toContain('新建四层代理')
+  })
+
+  it('DNS 型提交按钮与标题名词一致（创建 DNS 代理）', async () => {
+    const StreamProxyFormWizard = (await import('../StreamProxyFormWizard.vue')).default
+    const w = mount(StreamProxyFormWizard, {
+      props: { visible: true, editingProxy: null, clusters: MOCK_CLUSTERS, defaultProxyType: 'dns' },
+      global: {
+        stubs: [
+          'AModal',
+          'AForm',
+          'AFormItem',
+          'AInput',
+          'ASelect',
+          'ASelectOption',
+          'AButton',
+          'AInputNumber',
+          'ATable',
+          'HealthCheckForm',
+        ],
+      },
+    })
+    await flushPromises()
+    const vm = w.vm as any
+    vm.currentStep = 2
+    await w.vm.$nextTick()
+    const btn = [...document.querySelectorAll('button')].find((b) => b.textContent?.includes('创建'))
+    expect(btn?.textContent?.trim()).toBe('创建 DNS 代理')
+    expect(document.body.textContent).not.toContain('创建四层代理')
   })
 })

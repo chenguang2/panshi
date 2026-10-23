@@ -80,6 +80,14 @@ async def list_dns_proxies(
         resp = StreamProxyResponse.model_validate(p)
         ts = pub_map.get(p.id)
         resp.published_at = ts.isoformat() + "Z" if ts else None
+        # dns-udp-proxy-ux-parity D1：域内端点与 stream-proxies 同套四态推导（单点实现）
+        resp.pending_publish = edge_sync.derive_pending_publish(
+            current_version=p.current_version,
+            updated_at=p.updated_at,
+            published_at=ts,
+            last_publish_status=p.last_publish_status,
+        )
+        resp.last_publish_status = p.last_publish_status
         item = resp.model_dump()
         item["cluster_name"] = cluster_name
         items.append(item)

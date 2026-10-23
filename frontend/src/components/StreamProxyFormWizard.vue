@@ -3,7 +3,7 @@
     <div class="modal-overlay" :style="{ display: visible ? 'flex' : 'none' }">
       <div class="modal" style="max-width: 680px">
         <div class="modal-header">
-          <h2>{{ editingProxy ? '编辑四层代理' : '新建四层代理' }}</h2>
+          <h2>{{ editingProxy ? `编辑 ${resourceLabel}` : `新建 ${resourceLabel}` }}</h2>
           <button class="modal-close" @click="handleCancel">&times;</button>
         </div>
 
@@ -123,17 +123,9 @@
                     :class="{ active: form.proxy_type === 'dns' }"
                     @click="form.proxy_type = 'dns'"
                   >
-                    DNS代理
+                    DNS 代理
                   </button>
                 </template>
-                <label
-                  v-if="form.proxy_type === 'dns'"
-                  class="checkbox-label spwf-wan-switch"
-                  style="margin-left: 16px; font-size: 12px"
-                >
-                  <input type="checkbox" v-model="dnsWanEnabled" />
-                  <span>启用内外网分离（按来源 IP 返回内/外网地址）</span>
-                </label>
               </div>
             </div>
 
@@ -390,6 +382,14 @@
 
               <!-- Domain List -->
               <div class="form-group">
+                <label
+                  v-if="form.proxy_type === 'dns'"
+                  class="checkbox-label spwf-wan-switch"
+                  style="margin-bottom: 10px; font-size: 12px"
+                >
+                  <input type="checkbox" v-model="dnsWanEnabled" />
+                  <span>启用内外网分离（按来源 IP 返回内/外网地址）</span>
+                </label>
                 <label class="form-label">域名映射 <span class="required">*</span></label>
                 <div
                   v-for="(dom, di) in form.dns_domains"
@@ -611,7 +611,7 @@
               下一步
             </button>
             <button v-if="currentStep === 2" class="btn btn-primary" :disabled="submitting" @click="handleSubmit">
-              {{ submitting ? '提交中...' : editingProxy ? '保存' : '创建' }}
+              {{ submitting ? '提交中...' : editingProxy ? '保存' : `创建 ${resourceLabel}` }}
             </button>
           </div>
         </div>
@@ -656,6 +656,10 @@ const submitting = ref(false)
 const manualPortEnabled = ref(false)
 const manualPort = ref<number | null>(null)
 const manualPortInputRef = ref<HTMLInputElement | null>(null)
+// 资源名词单点（dns-udp-proxy-ux-parity D4）：标题/按钮/toast 统一走此映射
+const resourceLabel = computed(() =>
+  props.defaultProxyType === 'dns' || form.proxy_type === 'dns' ? 'DNS 代理' : '四层代理',
+)
 const nodeLabelOf = (id: unknown) => {
   const n = nodes.value.find((x: any) => x.id === Number(id))
   return n ? `${n.ip}:${n.management_port || n.service_port}` : ''
@@ -1303,10 +1307,10 @@ async function doSubmit() {
     const cid = Number(form.cluster_id)
     if (props.editingProxy) {
       await streamProxyApi.updateStreamProxy(cid, props.editingProxy.id, submitData)
-      message.success('四层代理已更新')
+      message.success(`${resourceLabel.value}已更新`)
     } else {
       await streamProxyApi.createStreamProxy(cid, submitData)
-      message.success('四层代理已创建')
+      message.success(`${resourceLabel.value}已创建`)
     }
     emit('saved')
     emit('close')

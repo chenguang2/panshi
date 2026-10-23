@@ -1234,7 +1234,13 @@ function logSingleDeleteResults(
   addLog('')
   const failedLabels = edgeResults.filter((r) => r.status === 'failed').map((r) => r.node ?? '')
   const dbSuccess = !!dbResult && dbResult.status === 'success'
-  if (edgeResults.length > 0 && failedLabels.length === 0) {
+  // dns-udp-proxy-ux-parity D2：勾选了 Edge 删除但没有任何节点实际执行（全部离线/不可达
+  // 被后端 skipped）——这是「什么都没删」的警示终态，绝不能报绿色成功
+  if (opts.deleteEdge && edgeResults.length === 0 && edgeNotices.length > 0) {
+    progress.status = 'exception'
+    addLog(`⚠️ 所选节点均未执行 Edge 删除（离线或不可达），Edge 侧配置未清理`)
+    addLog('可稍后在节点恢复在线后重试删除，或登录节点手动清理')
+  } else if (edgeResults.length > 0 && failedLabels.length === 0) {
     progress.status = 'success'
     addLog('✅ 删除完成!')
   } else if (failedLabels.length > 0) {

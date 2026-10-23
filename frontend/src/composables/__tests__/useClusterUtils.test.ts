@@ -1683,3 +1683,62 @@ describe('showDeleteConfirm 节点在线标识与默认全选（opt-in）', () =
     expect(boxes.every((b) => !b.checked)).toBe(true)
   })
 })
+
+describe('假成功修正：deleteEdge 但无任何 Edge 结果（dns-udp-proxy-ux-parity 3.1）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+  })
+
+  it('只选离线节点（全部 skipped 无 node）：终态警示非绿色成功', async () => {
+    const { executeDeleteWithProgress } = await import('../useClusterUtils')
+    mockApiDelete.mockResolvedValue({
+      data: {
+        message: 'ok',
+        results: [
+          { scope: 'database', status: 'success', message: '已删除' },
+          // 后端对全部离线节点返回 skipped 提示条目（无 node 字段）
+          { scope: 'edge', status: 'skipped', message: '节点 10.9.0.40 离线，跳过 Edge 删除' },
+          { scope: 'edge', status: 'skipped', message: '节点 10.9.0.41 离线，跳过 Edge 删除' },
+        ],
+      },
+    })
+    await executeDeleteWithProgress({
+      title: 'x',
+      apiEndpoint: '/clusters/1/dns-proxies/9',
+      cluster: makeCluster(),
+      deleteDb: true,
+      deleteEdge: true,
+      nodeIds: [40, 41],
+      refreshFn: vi.fn(),
+    })
+    const text = document.body.textContent ?? ''
+    expect(text).toContain('未执行 Edge 删除')
+    // 终态非绿：按钮区应有警示色/弹窗无「删除完成」
+    expect(text).not.toContain('✅ 删除完成!')
+    expect(text).not.toContain('✅ 已完成')
+  })
+
+  it('正常全部成功（有 node 成功行）仍绿色完成（既有语义不回退）', async () => {
+    const { executeDeleteWithProgress } = await import('../useClusterUtils')
+    mockApiDelete.mockResolvedValue({
+      data: {
+        message: 'ok',
+        results: [
+          { scope: 'database', status: 'success', message: '已删除' },
+          { scope: 'edge', status: 'success', node: '10.0.0.1:9180' },
+        ],
+      },
+    })
+    await executeDeleteWithProgress({
+      title: 'x',
+      apiEndpoint: '/clusters/1/dns-proxies/9',
+      cluster: makeCluster(),
+      deleteDb: true,
+      deleteEdge: true,
+      nodeIds: [1],
+      refreshFn: vi.fn(),
+    })
+    expect(document.body.textContent).toContain('✅ 删除完成!')
+  })
+})

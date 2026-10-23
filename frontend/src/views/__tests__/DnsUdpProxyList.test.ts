@@ -34,7 +34,10 @@ const stubs = {
   },
   StreamProxyViewDrawer: { template: '<div class="mock-view-drawer" />', props: ['visible', 'proxy'] },
   VersionManagementModal: { template: '<div class="mock-version-modal" />' },
-  PublishConfirmModal: { template: '<div class="mock-publish-modal" />' },
+  PublishConfirmModal: {
+    template: '<div class="mock-publish-modal" :data-cv="String(currentVersion)" :data-title="title" />',
+    props: ['visible', 'title', 'clusterId', 'currentVersion'],
+  },
 }
 
 const MOCK_DNS_PROXIES = {
@@ -457,5 +460,188 @@ describe('DnsUdpProxyList.vue · 版本弹窗发布出口接线', () => {
     expect(pm.props('clusterId')).toBe(1)
     // 版本弹窗必须先关闭（Teleport 到 body 末尾的版本弹窗恒压住视图内发布框）
     expect(vmm.props('open')).toBe(false)
+  })
+})
+
+// ── 四态状态 + 分段控件（dns-udp-proxy-ux-parity 批 1，对齐四层代理页）──
+describe('DnsUdpProxyList.vue 四态与分段控件', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+  })
+
+  function mockItems(items: any[]) {
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/stream-proxies')
+        return Promise.resolve({ data: { total: items.length, page: 1, page_size: 20, items } })
+      if (url === '/clusters')
+        return Promise.resolve({ data: { items: [{ id: 1, display_name: '生产集群', group_name: '线上' }] } })
+      return Promise.reject(new Error('unknown url: ' + url))
+    })
+  }
+
+  const base = {
+    cluster_id: 1,
+    cluster_name: '生产集群',
+    scheme: 'udp',
+    proxy_type: 'dns',
+    load_balance: 'roundrobin',
+    listen_port: 9053,
+    dns_config: {
+      hosts: { 'app.example.com': { type: 'roundrobin', nodes: { '10.0.0.1': ['10.0.0.0/8'] }, ttl_valid: 15 } },
+    },
+  }
+
+  async function mountList() {
+    const DnsUdpProxyList = (await import('../DnsUdpProxyList.vue')).default
+    const w = mount(DnsUdpProxyList, { global: { stubs } })
+    await flushPromises()
+    return w
+  }
+
+  it('编辑后（pending_publish=true）卡片显示「待发布」而非「已发布」', async () => {
+    mockItems([
+      {
+        id: 1,
+        name: 'dns-pending',
+        current_version: 4,
+        published_at: '2026-10-23T01:00:00Z',
+        pending_publish: true,
+        last_publish_status: null,
+        ...base,
+      },
+    ])
+    const w = await mountList()
+    const card = w.findAll('.sp-card').find((c) => c.text().includes('dns-pending'))!
+    expect(card.text()).toContain('待发布')
+    expect(card.find('.ps-pending').exists()).toBe(true)
+    // 二元徽章已移除：不出现自制「已发布」badge-success
+    expect(card.find('.badge-success').exists()).toBe(false)
+  })
+
+  it('last_publish_status=partial 显示「发布未完全生效」', async () => {
+    mockItems([
+      {
+        id: 2,
+        name: 'dns-partial',
+        current_version: 2,
+        published_at: '2026-10-23T01:00:00Z',
+        pending_publish: false,
+        last_publish_status: 'partial',
+        ...base,
+      },
+    ])
+    const w = await mountList()
+    const card = w.findAll('.sp-card').find((c) => c.text().includes('dns-partial'))!
+    expect(card.text()).toContain('发布未完全生效')
+  })
+
+  it('状态分段控件渲染计数并过滤；激活段 aria-pressed；空段降透明可点', async () => {
+    mockItems([
+      {
+        id: 1,
+        name: 'a-pending',
+        current_version: 1,
+        published_at: '2026-10-23T01:00:00Z',
+        pending_publish: true,
+        last_publish_status: null,
+        ...base,
+      },
+      {
+        id: 2,
+        name: 'b-published',
+        current_version: 2,
+        published_at: '2026-10-23T02:00:00Z',
+        pending_publish: false,
+        last_publish_status: null,
+        ...base,
+      },
+    ])
+    const w = await mountList()
+    const tabs = w.findAll('.sp-status-tab')
+    expect(tabs.length).toBeGreaterThanOrEqual(4)
+    const pendingTab = tabs.find((t) => t.text().includes('待发布'))!
+    expect(pendingTab.text()).toContain('1')
+    expect(pendingTab.attributes('aria-pressed')).toBe('false')
+    await pendingTab.trigger('click')
+    await w.vm.$nextTick()
+    expect(pendingTab.classes()).toContain('active')
+    expect(pendingTab.attributes('aria-pressed')).toBe('true')
+    expect(w.findAll('.sp-card-name').map((n) => n.text())).toEqual(['a-pending'])
+    // 未发布计数 0：.empty 且无 disabled
+    const unpub = tabs.find((t) => t.text().includes('未发布'))!
+    expect(unpub.classes()).toContain('empty')
+    expect(unpub.attributes('disabled')).toBeUndefined()
+  })
+
+  it('发布确认弹窗携带资源名标题与当前版本', async () => {
+    mockItems([
+      {
+        id: 9,
+        name: 'dns-pub',
+        current_version: 2,
+        published_at: '2026-10-23T01:00:00Z',
+        pending_publish: false,
+        last_publish_status: null,
+        ...base,
+      },
+    ])
+    const w = await mountList()
+    const card = w.findAll('.sp-card').find((c) => c.text().includes('dns-pub'))!
+    await card
+      .findAll('button')
+      .find((b) => b.text() === '发布')!
+      .trigger('click')
+    await w.vm.$nextTick()
+    const modal = w.find('.mock-publish-modal')
+    expect(modal.attributes('data-title')).toContain('dns-pub')
+    expect(modal.attributes('data-cv')).toBe('2')
+  })
+})
+
+// ── 批 3：空态两态 + 权重/TTL（dns-udp-proxy-ux-parity）─────────────────
+describe('DnsUdpProxyList.vue 批 3 空态', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/stream-proxies') return Promise.resolve({ data: { total: 0, page: 1, page_size: 20, items: [] } })
+      if (url === '/clusters') return Promise.resolve({ data: { items: [] } })
+      return Promise.reject(new Error('unknown url: ' + url))
+    })
+  })
+
+  it('搜索无结果空态：含关键词与清除筛选；SVG 图标', async () => {
+    const DnsUdpProxyList = (await import('../DnsUdpProxyList.vue')).default
+    const w = mount(DnsUdpProxyList, { global: { stubs } })
+    await flushPromises()
+    const input = w.find('.search-input-wrap input')
+    await input.setValue('nonexistent')
+    await input.trigger('input')
+    await flushPromises()
+    await w.vm.$nextTick()
+    expect(w.find('.sp-empty-text').text()).toContain('没有匹配「nonexistent」')
+    expect(w.find('.sp-empty-text').text()).toContain('清除筛选')
+    expect(w.find('.sp-empty-icon').element.tagName.toLowerCase()).toBe('svg')
+  })
+
+  it('无数据空态：暂无 DNS 代理', async () => {
+    const DnsUdpProxyList = (await import('../DnsUdpProxyList.vue')).default
+    const w = mount(DnsUdpProxyList, { global: { stubs } })
+    await flushPromises()
+    expect(w.find('.sp-empty-text').text()).toBe('暂无 DNS 代理')
+  })
+})
+
+// ── 源码守卫：删除确认 opt-in 传参（共享层行为已由 useClusterUtils.test + 四层页真页验证）──
+describe('DnsUdpProxyList 删除确认传参守卫', () => {
+  it('deleteProxy 传递 defaultSelectOnline/subsetConsequence/retryable 与 nodes status', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { resolve } = await import('node:path')
+    const s = readFileSync(resolve(process.cwd(), 'src/views/DnsUdpProxyList.vue'), 'utf-8')
+    expect(s).toContain('defaultSelectOnline: true')
+    expect(s).toContain('subsetConsequence:')
+    expect(s).toContain('retryable: true')
+    expect(s).toContain('status: n.status')
   })
 })
