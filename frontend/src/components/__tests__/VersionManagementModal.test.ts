@@ -114,6 +114,16 @@ function lastOverlayOpts(): OverlayOpts {
   return mockShowOverlayModal.mock.calls[mockShowOverlayModal.mock.calls.length - 1][0] as OverlayOpts
 }
 
+/** content 可能是 string 或 VNode（children 嵌套）；递归取纯文本供断言 */
+function contentText(c: unknown): string {
+  if (typeof c === 'string') return c
+  if (c == null) return ''
+  const children = (c as { children?: unknown }).children
+  if (typeof children === 'string') return children
+  if (Array.isArray(children)) return children.map((x) => contentText(x)).join('')
+  return contentText(children)
+}
+
 async function confirmRestore(wrapper: VueWrapper) {
   await wrapper.find('.detail-actions .btn-primary').trigger('click')
   const opts = lastOverlayOpts()
@@ -441,5 +451,78 @@ describe('VersionManagementModal.vue - rollback 端点精确路由（version-mod
     const postCalls = mockApiPost.mock.calls.map((c) => c[0])
     expect(postCalls).toContain(DNS_ROLLBACK_V2_URL)
     expect(postCalls.every((u: string) => !u.includes('/routes/'))).toBe(true)
+  })
+})
+
+// ── 异代快照警示（ssl-version-orphan-purge）────────────────────────────
+describe('VersionManagementModal.vue - 异代快照警示（ssl-version-orphan-purge）', () => {
+  function setupForeignVersions() {
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === HISTORY_URL)
+        return Promise.resolve({
+          data: {
+            items: [
+              {
+                id: 1,
+                version: 1,
+                config: JSON.stringify({ name: 'gm-server', cert: 'JULY-PEM' }),
+                created_at: '2026-07-22T03:16:10Z',
+                created_by: 'system',
+              },
+              {
+                id: 2,
+                version: 2,
+                config: JSON.stringify({ name: 'demo-upstream', cert: 'TODAY-PEM' }),
+                created_at: '2026-10-23T01:05:46Z',
+                created_by: 'system',
+              },
+            ],
+            current_version: 2,
+          },
+        })
+      return Promise.reject(new Error('unexpected GET: ' + url))
+    })
+    mockApiPost.mockImplementation((url: string) => {
+      if (url === ROLLBACK_V2_URL) return Promise.resolve({ data: {} })
+      return Promise.reject(new Error('unexpected POST: ' + url))
+    })
+  }
+
+  it('快照 name ≠ 当前资源名：列表项显示「异代」标记（title 含快照名）', async () => {
+    setupForeignVersions()
+    const w = await mountModal()
+    const items = w.findAll('.version-item')
+    const v1 = items.find((el) => el.text().includes('v1'))!
+    expect(v1.text()).toContain('异代')
+    expect(v1.find('.version-foreign-tag').attributes('title')).toContain('gm-server')
+    const v2 = items.find((el) => el.text().includes('v2'))!
+    expect(v2.find('.version-foreign-tag').exists()).toBe(false)
+  })
+
+  it('config 解析失败（非 JSON 字符串）静默不标记、不报错', async () => {
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === HISTORY_URL)
+        return Promise.resolve({
+          data: {
+            items: [{ id: 1, version: 1, config: 'not-json{{', created_at: '2026-07-22T03:16:10Z' }],
+            current_version: null,
+          },
+        })
+      return Promise.reject(new Error('unexpected GET: ' + url))
+    })
+    const w = await mountModal()
+    expect(w.findAll('.version-foreign-tag')).toHaveLength(0)
+  })
+
+  it('异代快照恢复确认弹窗含红色警示（恢复将覆盖名称与内容）', async () => {
+    setupForeignVersions()
+    const w = await mountModal()
+    await selectVersion(w, 1)
+    await w.find('.detail-actions .btn-primary').trigger('click')
+    const opts = lastOverlayOpts()
+    // content 支持 VNode | string（useOverlayModal）；递归取文本断言
+    const text = contentText(opts.content)
+    expect(text).toContain('gm-server')
+    expect(text).toContain('覆盖')
   })
 })

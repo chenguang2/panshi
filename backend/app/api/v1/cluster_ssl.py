@@ -15,6 +15,7 @@ from app.core.deps import require_permission, get_current_user
 from app.models.user import User
 from app.services.audit import enrich_audit, log_audit
 from app.models.ssl import SslCertificate
+from app.models.cluster import ConfigVersion
 from app.schemas.ssl import (
     SslCertificateCreate, SslCertificateUpdate, SslCertificateResponse,
     SslCertificateGenerateRequest, SslCertificateGenerateResponse,
@@ -411,6 +412,14 @@ async def delete_ssl_certificate(
         results.extend(edge_results)
 
     if not body or body.delete_db:
+        # ssl-version-orphan-purge：删库记录时同步清理版本快照（对齐 routes/upstreams 等
+        # 六域既有模式）——此前 ssl 是唯一漏清理的域，孤儿经 id 复用被新证书继承
+        # （uapm 案例根因）。同一事务提交，避免半删状态。
+        await db.execute(
+            ConfigVersion.__table__.delete().where(
+                ConfigVersion.resource_type == "ssl", ConfigVersion.resource_id == cert_id
+            )
+        )
         await db.delete(cert)
         await db.commit()
         results.append({"scope": "database", "status": "success", "message": "数据库记录已删除"})

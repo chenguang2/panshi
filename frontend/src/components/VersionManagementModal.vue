@@ -49,6 +49,12 @@
                       />
                       <span class="version-number" @click.stop="selectVersion(v)">v{{ v.version }}</span>
                       <span v-if="v.version === currentVersion" class="version-current-tag">当前</span>
+                      <span
+                        v-if="isForeignSnapshot(v)"
+                        class="version-foreign-tag"
+                        :title="`该快照属于「${snapshotNameOf(v)}」，与当前资源名不同（疑似历史遗留的异代快照）`"
+                        >异代</span
+                      >
                     </div>
                     <div class="version-item-meta">
                       {{ formatDate(v.created_at) }}<span v-if="v.created_by"> · 由 {{ v.created_by }} 发布</span>
@@ -123,7 +129,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { h, ref, computed, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import api from '@/api'
 import { formatDate } from '@/utils/format'
@@ -200,6 +206,21 @@ const resourceTypeLabel = computed(() => RESOURCE_TYPE_LABELS[props.resourceType
 
 const loading = ref(false)
 const versions = ref<ConfigVersion[]>([])
+
+// ssl-version-orphan-purge：从快照 config 原文解析快照 name（字符串/对象双形态；解析失败 null 静默）
+const snapshotNameOf = (v: ConfigVersion): string | null => {
+  try {
+    const cfg = typeof v.config === 'string' ? JSON.parse(v.config) : v.config
+    const n = cfg?.name
+    return typeof n === 'string' && n.trim() ? n.trim() : null
+  } catch {
+    return null
+  }
+}
+const isForeignSnapshot = (v: ConfigVersion): boolean => {
+  const n = snapshotNameOf(v)
+  return n !== null && n !== props.resourceName
+}
 const selectedVersion = ref<number | null>(null)
 const compareMode = ref(false)
 const selectedVersions = ref<number[]>([])
@@ -623,10 +644,26 @@ const handleRepublish = async () => {
     return
   }
   const version = selectedVersion.value
+  // ssl-version-orphan-purge：异代快照（快照 name ≠ 当前资源名）恢复 = 覆盖当前资源身份，红色警示
+  const target = versions.value.find((v) => v.version === version)
+  const foreignName = target ? snapshotNameOf(target) : null
+  const plainText = `将把平台侧配置恢复到 v${version}，Edge 节点上的现有配置不受影响；如需下发请再执行发布`
+  // content 支持 VNode：异代警示行用红色块，正文保持原样（string 会被 textContent 转义，不能塞 HTML）
+  const confirmContent =
+    foreignName && foreignName !== props.resourceName
+      ? h('div', [
+          h(
+            'div',
+            { style: 'color: var(--danger, #d4380d); font-weight: 600; margin-bottom: 8px' },
+            `⚠ 该版本属于「${foreignName}」（疑似历史遗留的异代快照），恢复将覆盖当前资源的名称与内容`,
+          ),
+          plainText,
+        ])
+      : plainText
   // 恢复不推送 Edge：先如实告知语义，确认后才调回滚 API
   showOverlayModal({
     title: '确认恢复配置',
-    content: `将把平台侧配置恢复到 v${version}，Edge 节点上的现有配置不受影响；如需下发请再执行发布`,
+    content: confirmContent,
     okText: '确认恢复',
     onOk: () => performRollback(),
   })
@@ -806,6 +843,18 @@ const handleClose = () => {
   color: var(--success);
   border: 1px solid color-mix(in srgb, var(--success) 40%, transparent);
   line-height: 18px;
+}
+.version-foreign-tag {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  background: color-mix(in srgb, var(--danger, #d4380d) 12%, transparent);
+  color: var(--danger, #d4380d);
+  border: 1px solid color-mix(in srgb, var(--danger, #d4380d) 40%, transparent);
+  line-height: 18px;
+  cursor: help;
 }
 
 .detail-actions {

@@ -56,6 +56,15 @@ async def lifespan(app: FastAPI):
     await init_db()
     async with AsyncSessionLocal() as session:
         await seed_data(session)
+    # ssl-version-orphan-purge：清掉历史遗留的 ssl 孤儿版本（早于所属证书创建时间的
+    # 快照——id 复用「改嫁」的遗留数据；uapm 案例根因）。幂等，无孤儿时零删除。
+    try:
+        from app.services.ssl_version_cleanup import purge_orphan_ssl_versions
+
+        async with AsyncSessionLocal() as session:
+            await purge_orphan_ssl_versions(session)
+    except Exception:
+        pass
     from app.services.node_task_service import recover_interrupted_tasks
     await recover_interrupted_tasks()
     # P2⑥：清扫崩溃残留的网关 root 凭据（relay_sshd 注入打标行）
