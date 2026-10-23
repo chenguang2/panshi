@@ -36,6 +36,9 @@ const SHOTS = [
   { name: '00-01-login', path: '/login', preLogin: true },
   { name: '00-02-dashboard-empty', path: '/' },
   { name: '00-03-db-management', path: '/database-management' },
+  // ── 第 10 章 证书管理（ssl-cert-management：证书管理分组两页） ──
+  { name: '09-01-ssl-ca-tab-empty', path: '/ssl/ca' },
+  { name: '09-10-server-page-warn', path: '/ssl/server' },
   // ── 第 18 章 数据库管理（含顶部迁移/备份摘要入口卡） ──
   { name: '18-new-01', path: '/database-management' },
   // ── 第 19 章 数据迁移（独立页） ──

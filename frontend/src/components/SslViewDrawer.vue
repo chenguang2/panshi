@@ -57,7 +57,9 @@
                   <div class="modal-body">
                     <p style="font-size: 14px; line-height: 1.6">
                       下载 CA 私钥属于<strong style="color: var(--danger)">高风险操作</strong
-                      >，确认后私钥将以明文形式下载。
+                      >，确认后私钥将以明文形式下载。<strong style="color: var(--danger)"
+                        >CA 私钥绝不可分发给终端用户</strong
+                      >（私钥仅用于签发证书）。
                     </p>
                     <p style="font-size: 13px; color: var(--muted); margin-top: 8px">请确保在安全环境中操作。</p>
                     <div v-if="caKeyError" class="form-error" style="margin-top: 12px">{{ caKeyError }}</div>
@@ -84,6 +86,18 @@
                       >
                     </template>
                     <span v-if="!cert.sni">-</span>
+                  </span>
+                </a-descriptions-item>
+                <!-- uapm 修复：证书 SAN 结构化展示（含 sni 未收录的域名与全部 IP），随 PEM 同源解析 -->
+                <a-descriptions-item label="证书 SAN">
+                  <span class="ssl-sni-tags">
+                    <template v-for="d in cert.dns_sans || []" :key="'d-' + d">
+                      <span class="sni-tag">{{ d }}</span>
+                    </template>
+                    <template v-for="ip in cert.ip_sans || []" :key="'ip-' + ip">
+                      <span class="sni-tag">{{ ip }}</span>
+                    </template>
+                    <span v-if="!(cert.dns_sans || []).length && !(cert.ip_sans || []).length">—</span>
                   </span>
                 </a-descriptions-item>
                 <a-descriptions-item label="证书类型">{{ certTypeLabel(cert.cert_type) }}</a-descriptions-item>
@@ -152,7 +166,7 @@
               <a-divider style="flex: 1; min-width: 0">证书内容 (PEM)</a-divider>
               <button
                 class="btn btn-ghost btn-sm download-btn"
-                @click="downloadCert('cert', cert.cert, `${cert.name}_cert.pem`)"
+                @click="downloadCert('cert', cert.cert, `${cert.name}.crt`)"
               >
                 📥 下载
               </button>
@@ -175,7 +189,7 @@
                 <a-divider style="flex: 1; min-width: 0">签名证书 (sign_cert)</a-divider>
                 <button
                   class="btn btn-ghost btn-sm download-btn"
-                  @click="downloadCert('sign_cert', cert.sign_cert, `${cert.name}_sign_cert.pem`)"
+                  @click="downloadCert('sign_cert', cert.sign_cert, `${cert.name}_sign.crt`)"
                 >
                   📥 下载
                 </button>
@@ -251,7 +265,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import { message } from 'ant-design-vue'
-import { downloadPem, buildCertZip, downloadBlob } from '@/utils/download'
+import { downloadPem, buildCertZip, downloadBlob, downloadCertFile, buildCertFileName } from '@/utils/download'
 import { formatDateOnly } from '@/utils/format'
 import {
   expireBadgeClass,
@@ -274,6 +288,8 @@ const ALGO_META: Record<string, { color: string }> = {
 const props = defineProps<{
   visible: boolean
   cert: any | null
+  /** 集群显示名（CA 证书下载文件名 `{集群名}_{名称}.crt` 与 CA 分发页同源；缺省回退 cluster_id） */
+  clusterLabel?: string
 }>()
 
 defineEmits<{
@@ -369,7 +385,10 @@ async function downloadPrivateKey(filename: string) {
 }
 
 function downloadCaCert(cert: any) {
-  if (cert.cert) downloadPem(cert.cert, `${cert.name}_ca.crt`)
+  if (cert.cert) {
+    const cluster = { display_name: props.clusterLabel, cluster_id: cert.cluster_id }
+    downloadCertFile(cert.cert, buildCertFileName(cluster, cert.name))
+  }
 }
 
 async function doDownloadCaKey() {

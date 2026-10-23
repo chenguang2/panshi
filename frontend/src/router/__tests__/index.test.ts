@@ -64,4 +64,36 @@ describe('Router', () => {
     expect(sectionMap.DbMigration).toBe('系统管理')
     expect(pageNameMap.DbMigration).toBe('数据迁移')
   })
+
+  it('ssl_cert feature map holds CA/server routes plus /ssl redirect (dynamic registration)', async () => {
+    const { featureRouteMap } = await import('../index')
+    const entries = featureRouteMap.ssl_cert
+    expect(Array.isArray(entries)).toBe(true)
+    const routes = entries as Array<{ name?: string; path?: string; meta?: { permission?: string } }>
+    expect(
+      routes.some((r) => r.name === 'CaCertList' && r.path === 'ssl/ca' && r.meta?.permission === 'ssl_cert'),
+    ).toBe(true)
+    expect(
+      routes.some((r) => r.name === 'ServerCertList' && r.path === 'ssl/server' && r.meta?.permission === 'ssl_cert'),
+    ).toBe(true)
+    const redirect = routes.find((r) => r.path === 'ssl')
+    expect(redirect).toBeDefined()
+    expect((redirect as { redirect?: string }).redirect).toBe('/ssl/server')
+    // 旧 SslList 视图不再注册
+    expect(routes.some((r) => r.name === 'SslList')).toBe(false)
+    // 全部动态注册：静态路由表不含任何 ssl 路由
+    const staticRoutes = (await import('../index')).default.getRoutes()
+    expect(
+      staticRoutes.some((r) => r.name === 'CaCertList' || r.name === 'ServerCertList' || r.name === 'SslList'),
+    ).toBe(false)
+  })
+
+  it('registers cert pages in navMeta search index under 证书管理 section', async () => {
+    const { sectionMap, pageNameMap } = await import('../navMeta')
+    expect(sectionMap.CaCertList).toBe('证书管理')
+    expect(sectionMap.ServerCertList).toBe('证书管理')
+    expect(pageNameMap.CaCertList).toBe('CA 根证书')
+    expect(pageNameMap.ServerCertList).toBe('服务器证书')
+    expect(pageNameMap.SslList).toBeUndefined()
+  })
 })

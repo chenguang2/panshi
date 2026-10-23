@@ -688,6 +688,8 @@ watch(
     }
   },
 )
+// ssl-cert-management：生成框保持打开时，供页面在「对话框内创建 CA」成功后刷新 CA 下拉
+defineExpose({ loadCaCerts })
 </script>
 
 <style scoped>

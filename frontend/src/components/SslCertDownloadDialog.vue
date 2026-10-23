@@ -1,8 +1,8 @@
 <template>
   <div class="modal-overlay" :style="{ display: visible ? 'flex' : 'none' }">
-    <div class="modal" style="max-width: 480px">
+    <div class="modal" style="max-width: 520px">
       <div class="modal-header">
-        <h2>选择要下载的文件</h2>
+        <h2>下载服务器证书</h2>
         <button class="modal-close" @click="handleClose">&times;</button>
       </div>
       <div class="modal-body">
@@ -12,17 +12,33 @@
             >({{ algoLabel(cert.algorithm) }})</span
           >
         </p>
+        <!-- ssl-cert-management：仅证书文件选项，私钥彻底退出分发链路 -->
         <label class="checkbox-row" v-for="item in fileOptions" :key="item.key">
           <input type="checkbox" v-model="item.checked" :disabled="downloading" />
           <span>{{ item.label }}</span>
         </label>
-        <!-- ssl-ux-review-fixes 6.2：ZIP 打包敏感数据提示 -->
-        <p class="text-muted" style="margin-top: 12px; margin-bottom: 0">ZIP 内含私钥，属敏感数据，请妥善保管</p>
+
+        <div class="dl-warnbox">
+          <div class="dl-warnbox-title">⚠ 下载前请确认用途</div>
+          <div>
+            ① 此文件是<b>当前版本</b>的副本：证书更新或重新生成后即<b>失效</b>，届时需重新下载。<br />
+            ② <b>终端用户请勿安装本文件</b>——请安装 CA 根证书，才能显示「安全」。
+          </div>
+          <div class="dl-warnbox-actions">
+            <button class="btn btn-secondary btn-sm" @click="emit('download-ca', cert)">⬇ 下载 CA 根证书</button>
+          </div>
+        </div>
+
+        <p class="text-muted" style="margin: 10px 0 0; font-size: 12px; line-height: 1.6">
+          ℹ️
+          <b>私钥不随证书下载</b
+          >：私钥仅用于平台发布部署。如需查看，请在「查看」抽屉中按需获取（高风险操作，将被审计记录）。
+        </p>
       </div>
       <div class="modal-footer">
         <button class="btn btn-ghost" @click="handleClose" :disabled="downloading">取消</button>
         <button class="btn btn-primary" @click="handleDownload" :disabled="downloading || selectedCount === 0">
-          {{ downloading ? '打包中...' : '下载 ZIP' }}
+          {{ downloading ? '下载中...' : isGm ? '下载 ZIP' : '下载 .crt' }}
         </button>
       </div>
     </div>
@@ -32,8 +48,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { message } from 'ant-design-vue'
-import { buildCertZip, downloadBlob } from '@/utils/download'
-import { fetchSslPrivateKey } from '@/api/ssl'
+import { buildCertZip, downloadBlob, downloadCertFile } from '@/utils/download'
 
 const props = defineProps<{
   visible: boolean
@@ -42,27 +57,22 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: []
+  /** 用户点击「下载 CA 根证书」快捷操作（页面负责定位该证书签发 CA 并直下 .crt / 跳转 CA 页） */
+  'download-ca': [cert: any]
 }>()
 
 const downloading = ref(false)
 
-const fileOptions = ref<{ key: string; label: string; checked: boolean; available: boolean }[]>([])
+const fileOptions = ref<{ key: string; label: string; checked: boolean }[]>([])
 
 const selectedCount = computed(() => fileOptions.value.filter((o) => o.checked).length)
 
+const isGm = computed(() => props.cert?.algorithm === 'sm2')
+
 function buildOptions(cert: any) {
-  const opts: { key: string; label: string; checked: boolean; available: boolean }[] = []
-  // ssl-ux-review-fixes 6.2：非国密去「加密」前缀（单证书无歧义）；国密双证书保留加密/签名区分
-  // ssl-ux-review-fixes 9.3：私钥选项按 has_private_key/has_sign_key 布尔判定（响应掩码后字段恒空串）
-  const gm = cert?.algorithm === 'sm2'
-  if (cert?.cert)
-    opts.push({ key: 'cert', label: gm ? '加密证书 (cert.pem)' : '证书 (cert.pem)', checked: true, available: true })
-  if (cert?.has_private_key)
-    opts.push({ key: 'key', label: gm ? '加密私钥 (key.pem)' : '私钥 (key.pem)', checked: true, available: true })
-  if (cert?.sign_cert)
-    opts.push({ key: 'sign_cert', label: '签名证书 (sign_cert.pem)', checked: true, available: true })
-  if (cert?.has_sign_key)
-    opts.push({ key: 'sign_key', label: '签名私钥 (sign_key.pem)', checked: true, available: true })
+  const opts: { key: string; label: string; checked: boolean }[] = []
+  if (cert?.cert) opts.push({ key: 'cert', label: `服务器证书 ${cert.name}.crt`, checked: true })
+  if (cert?.sign_cert) opts.push({ key: 'sign_cert', label: `签名证书 ${cert.name}_sign.crt`, checked: true })
   return opts
 }
 
@@ -82,32 +92,26 @@ async function handleDownload() {
   if (selected.length === 0) return
   downloading.value = true
   try {
-    // ssl-ux-review-fixes 9.3：私钥经按需端点取回（列表响应已掩码，本地无明文）
-    let source: any = props.cert
-    const needsKey = selected.includes('key') || selected.includes('sign_key')
-    if (needsKey) {
-      const res = await fetchSslPrivateKey(Number(props.cert.cluster_id), Number(props.cert.id))
-      source = {
-        ...props.cert,
-        key: res.data?.private_key || '',
-        sign_key: res.data?.sign_key || '',
-      }
+    if (isGm.value) {
+      // 国密双证书：zip 打包（仅证书文件，无私钥）
+      const blob = await buildCertZip(props.cert, selected)
+      downloadBlob(blob, `${props.cert.name}_certs.zip`)
+    } else {
+      // 单证书：单文件直下 .crt
+      downloadCertFile(props.cert.cert, `${props.cert.name}.crt`)
     }
-    const blob = await buildCertZip(source, selected)
-    downloadBlob(blob, `${props.cert.name}_certs.zip`)
-    message.success('证书文件已下载')
+    message.success(`已下载。证书更新后此副本即失效，请勿分发给终端用户（终端用户应安装 CA 根证书）`, 6)
     // 先复位 downloading 再关窗：handleClose 的下载中守卫会吞掉 try 块内的关窗
-    // （实页走查发现的历史缺陷：下载成功后弹窗滞留）
     downloading.value = false
     handleClose()
-  } catch (e) {
-    message.error('打包下载失败')
+  } catch {
+    message.error('下载失败')
   } finally {
     downloading.value = false
   }
 }
 
-const algoMap: Record<string, string> = { sm2: 'SM2', rsa: 'RSA 2048', ecc: 'ECC P-256' }
+const algoMap: Record<string, string> = { sm2: '国密 SM2 双证书', rsa: 'RSA 2048', ecc: 'ECC P-256' }
 function algoLabel(algo: string): string {
   return algoMap[algo] || algo
 }
@@ -130,8 +134,31 @@ function handleClose() {
 .checkbox-row input {
   margin: 0;
 }
+.checkbox-row span {
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
 .text-muted {
   color: var(--muted);
   font-size: 13px;
+}
+.dl-warnbox {
+  background: oklch(72% 0.14 70 / 14%);
+  border: 1px solid oklch(72% 0.14 70 / 40%);
+  border-radius: 8px;
+  padding: 11px 13px;
+  font-size: 12.5px;
+  color: oklch(38% 0.07 70);
+  line-height: 1.6;
+  margin: 12px 0 0;
+}
+.dl-warnbox-title {
+  font-weight: 700;
+  color: oklch(45% 0.12 70);
+  margin-bottom: 3px;
+}
+.dl-warnbox-actions {
+  margin-top: 8px;
+  display: flex;
 }
 </style>

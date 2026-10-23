@@ -14,6 +14,17 @@ vi.mock('ant-design-vue', () => ({
   message: { warning: vi.fn(), success: vi.fn(), error: vi.fn() },
 }))
 
+const mockDownloadPem = vi.fn()
+const mockDownloadCertFile = vi.fn()
+vi.mock('@/utils/download', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/utils/download')>()
+  return {
+    ...actual,
+    downloadPem: (...a: unknown[]) => mockDownloadPem(...a),
+    downloadCertFile: (...a: unknown[]) => mockDownloadCertFile(...a),
+  }
+})
+
 const stubs = {
   ADescriptions: { template: '<div><slot /></div>' },
   ADescriptionsItem: {
@@ -162,5 +173,61 @@ describe('SslViewDrawer 私钥按需获取（ssl-ux-review-fixes 9.3）', () => 
     await confirmBtn!.trigger('click')
     await new Promise((r) => setTimeout(r, 0))
     expect(mockFetchKey).toHaveBeenCalled()
+  })
+})
+
+describe('SslViewDrawer 下载文件名（ssl-cert-management）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('证书文件下载后缀为 .crt', async () => {
+    const w = await mountView(baseCert())
+    const dlBtn = w.findAll('button').find((b) => b.text().includes('📥 下载'))
+    expect(dlBtn).toBeDefined()
+    await dlBtn!.trigger('click')
+    expect(mockDownloadPem).toHaveBeenCalledWith('CERT-PEM', 'srv.crt')
+  })
+
+  it('CA 证书下载文件名与分发页一致：{集群名}_{名称}.crt', async () => {
+    const SslViewDrawer = (await import('../SslViewDrawer.vue')).default
+    const w2 = mount(SslViewDrawer, {
+      props: {
+        visible: true,
+        cert: baseCert({ is_ca: true, name: '企业根CA', cluster_id: 3 }),
+        clusterLabel: '生产集团',
+      },
+      global: { stubs: { ...stubs, Teleport: true } },
+    })
+    await w2.vm.$nextTick()
+    const btn = w2.findAll('button').find((b) => b.text().includes('下载 CA 证书'))
+    expect(btn).toBeDefined()
+    await btn!.trigger('click')
+    expect(mockDownloadCertFile).toHaveBeenCalledWith('CERT-PEM', '生产集团_企业根CA.crt')
+  })
+
+  it('CA 私钥高风险确认弹窗含「绝不可分发给终端用户」', async () => {
+    const w = await mountView(baseCert({ is_ca: true, name: '企业根CA' }))
+    const dangerBtn = w.findAll('button').find((b) => b.text() === '下载 CA 私钥')
+    expect(dangerBtn).toBeDefined()
+    await dangerBtn!.trigger('click')
+    expect(w.text()).toContain('绝不可分发给终端用户')
+  })
+})
+
+describe('SslViewDrawer 证书 SAN 行（uapm 修复）', () => {
+  it('server 证书显示「证书 SAN」行（DNS + IP 合并标签）', async () => {
+    const w = await mountView(baseCert({ ip_sans: ['192.168.0.13'], dns_sans: ['edge.local', 'g.gkpt.cars'] }))
+    const row = w.find('.desc-item[data-label="证书 SAN"]')
+    expect(row.exists()).toBe(true)
+    expect(row.text()).toContain('192.168.0.13')
+    expect(row.text()).toContain('g.gkpt.cars')
+  })
+
+  it('无 SAN 字段时显示「—」', async () => {
+    const w = await mountView(baseCert())
+    const row = w.find('.desc-item[data-label="证书 SAN"]')
+    expect(row.exists()).toBe(true)
+    expect(row.text()).toContain('—')
   })
 })

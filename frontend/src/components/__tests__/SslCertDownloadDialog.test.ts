@@ -5,10 +5,16 @@ vi.mock('ant-design-vue', () => ({
   message: { warning: vi.fn(), success: vi.fn(), error: vi.fn() },
 }))
 
+const mockBuildCertZip = vi.fn().mockResolvedValue(new Blob(['zip-bytes']))
+const mockDownloadBlob = vi.fn()
+const mockDownloadCertFile = vi.fn()
+
 vi.mock('@/utils/download', () => ({
-  buildCertZip: vi.fn().mockResolvedValue(new Blob()),
-  downloadBlob: vi.fn(),
+  buildCertZip: (...a: unknown[]) => mockBuildCertZip(...a),
+  downloadBlob: (...a: unknown[]) => mockDownloadBlob(...a),
+  downloadCertFile: (...a: unknown[]) => mockDownloadCertFile(...a),
   downloadPem: vi.fn(),
+  buildCertFileName: vi.fn((_c: unknown, n: string) => `集群_${n}.crt`),
 }))
 
 const mockFetchKey = vi.fn()
@@ -21,155 +27,113 @@ async function mountDialog(cert: Record<string, any>) {
   const wrapper = mount(SslCertDownloadDialog, {
     props: { visible: false, cert },
   })
-  // fileOptions 由 visible watch 构建，需真实翻转
   await wrapper.setProps({ visible: true })
   await wrapper.vm.$nextTick()
   return wrapper
 }
 
-describe('SslCertDownloadDialog 中文命名与敏感提示（ssl-ux-review-fixes 6.2）', () => {
+describe('SslCertDownloadDialog 分发语义重做（ssl-cert-management）', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockBuildCertZip.mockResolvedValue(new Blob(['zip-bytes']))
   })
 
-  it('6.2 非国密证书选项为「证书 (cert.pem)」「私钥 (key.pem)」（无加密前缀）', async () => {
+  it('对话框无私钥选项（has_private_key/has_sign_key 无论真假都不出现）', async () => {
     const w = await mountDialog({
       id: 1,
       cluster_id: 3,
       name: 'srv',
       cert: 'C',
-      key: '',
       has_private_key: true,
-      algorithm: 'rsa',
+      has_sign_key: true,
+      sign_cert: 'SC',
+      algorithm: 'sm2',
     })
     const labels = w.findAll('.checkbox-row').map((r) => r.text())
-    expect(labels.some((t) => t.includes('证书 (cert.pem)'))).toBe(true)
-    expect(labels.some((t) => t.includes('私钥 (key.pem)'))).toBe(true)
+    expect(labels.some((t) => t.includes('私钥'))).toBe(false)
+    expect(labels.some((t) => t.includes('签名私钥'))).toBe(false)
+    expect(labels.some((t) => t.includes('key.pem'))).toBe(false)
+    expect(mockFetchKey).not.toHaveBeenCalled()
+  })
+
+  it('单证体系选项「服务器证书 {名称}.crt」，无「加密」前缀', async () => {
+    const w = await mountDialog({ id: 1, cluster_id: 3, name: 'srv', cert: 'C', algorithm: 'rsa' })
+    const labels = w.findAll('.checkbox-row').map((r) => r.text())
+    expect(labels.some((t) => t.includes('服务器证书') && t.includes('srv.crt'))).toBe(true)
     expect(labels.some((t) => t.includes('加密证书'))).toBe(false)
   })
 
-  it('6.2 国密双证书保留「加密/签名」前缀区分', async () => {
+  it('国密双证书显示加密+签名两个 .crt 选项', async () => {
     const w = await mountDialog({
       id: 1,
       cluster_id: 3,
       name: 'gm',
       cert: 'C',
-      key: '',
-      has_private_key: true,
       sign_cert: 'SC',
-      sign_key: '',
-      has_sign_key: true,
       algorithm: 'sm2',
     })
     const labels = w.findAll('.checkbox-row').map((r) => r.text())
-    expect(labels.some((t) => t.includes('加密证书 (cert.pem)'))).toBe(true)
-    expect(labels.some((t) => t.includes('加密私钥 (key.pem)'))).toBe(true)
-    expect(labels.some((t) => t.includes('签名证书 (sign_cert.pem)'))).toBe(true)
-    expect(labels.some((t) => t.includes('签名私钥 (sign_key.pem)'))).toBe(true)
+    expect(labels.some((t) => t.includes('服务器证书') && t.includes('gm.crt'))).toBe(true)
+    expect(labels.some((t) => t.includes('签名证书') && t.includes('gm_sign.crt'))).toBe(true)
   })
 
-  it('6.2 底部灰字提示「ZIP 内含私钥，属敏感数据，请妥善保管」', async () => {
+  it('固定失效警示 + 终端用户指引 + 「下载 CA 根证书」按钮（点击 emit download-ca）', async () => {
+    const w = await mountDialog({ id: 1, cluster_id: 3, name: 'srv', cert: 'C', algorithm: 'rsa' })
+    expect(w.text()).toContain('当前版本')
+    expect(w.text()).toContain('失效')
+    expect(w.text()).toContain('CA 根证书')
+    const caBtn = w.findAll('button').find((b) => b.text().includes('下载 CA 根证书'))
+    expect(caBtn).toBeDefined()
+    await caBtn!.trigger('click')
+    expect(w.emitted('download-ca')).toHaveLength(1)
+  })
+
+  it('私钥去向说明：仅平台部署使用，查看抽屉高风险获取', async () => {
+    const w = await mountDialog({ id: 1, cluster_id: 3, name: 'srv', cert: 'C', algorithm: 'rsa' })
+    expect(w.text()).toContain('私钥不随证书下载')
+    expect(w.text()).toContain('查看')
+  })
+
+  it('非国密单证书直下单文件 .crt（不打 zip、不调 jszip）', async () => {
+    const w = await mountDialog({ id: 1, cluster_id: 3, name: 'srv', cert: 'C', algorithm: 'rsa' })
+    const dlBtn = w.findAll('button').find((b) => b.text().includes('下载 .crt'))
+    expect(dlBtn).toBeDefined()
+    await dlBtn!.trigger('click')
+    expect(mockDownloadCertFile).toHaveBeenCalledTimes(1)
+    expect(mockBuildCertZip).not.toHaveBeenCalled()
+    expect(mockDownloadBlob).not.toHaveBeenCalled()
+  })
+
+  it('国密双证书打 zip：内部仅证书文件（.crt），无 key 选项可选', async () => {
     const w = await mountDialog({
       id: 1,
       cluster_id: 3,
-      name: 'srv',
+      name: 'gm',
       cert: 'C',
-      key: '',
-      has_private_key: true,
-      algorithm: 'rsa',
+      sign_cert: 'SC',
+      algorithm: 'sm2',
     })
-    expect(w.text()).toContain('ZIP 内含私钥，属敏感数据，请妥善保管')
-  })
-})
-
-describe('SslCertDownloadDialog 私钥按需获取（ssl-ux-review-fixes 9.3）', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    mockFetchKey.mockResolvedValue({ data: { private_key: 'LIVE-KEY', sign_key: 'LIVE-SIGN' } })
-  })
-
-  it('私钥选项按 has_private_key/has_sign_key 判定（掩码后字段恒空仍有选项；无钥无选项）', async () => {
-    const withKey = await mountDialog({
-      id: 1,
-      cluster_id: 3,
-      name: 'a',
-      cert: 'C',
-      key: '',
-      has_private_key: true,
-      algorithm: 'rsa',
-    })
-    expect(
-      withKey
-        .findAll('.checkbox-row')
-        .map((r) => r.text())
-        .some((t) => t.includes('私钥')),
-    ).toBe(true)
-
-    const noKey = await mountDialog({
-      id: 2,
-      cluster_id: 3,
-      name: 'b',
-      cert: 'C',
-      key: '',
-      has_private_key: false,
-      algorithm: 'rsa',
-    })
-    expect(
-      noKey
-        .findAll('.checkbox-row')
-        .map((r) => r.text())
-        .some((t) => t.includes('私钥')),
-    ).toBe(false)
+    const dlBtn = w.findAll('button').find((b) => b.text().includes('下载 ZIP'))
+    expect(dlBtn).toBeDefined()
+    await dlBtn!.trigger('click')
+    expect(mockBuildCertZip).toHaveBeenCalledTimes(1)
+    const source = mockBuildCertZip.mock.calls[0][0] as Record<string, string>
+    const selected = mockBuildCertZip.mock.calls[0][1] as string[]
+    expect(selected).toEqual(['cert', 'sign_cert'])
+    expect(source).not.toHaveProperty('key')
+    expect(source).not.toHaveProperty('sign_key')
+    expect(mockDownloadBlob).toHaveBeenCalledWith(expect.any(Blob), 'gm_certs.zip')
   })
 
-  it('勾选私钥下载时经按需端点取钥并合并进 ZIP', async () => {
-    const w = await mountDialog({
-      id: 9,
-      cluster_id: 3,
-      name: 'srv',
-      cert: 'C',
-      key: '',
-      has_private_key: true,
-      algorithm: 'rsa',
-    })
-    // 默认全选（cert+key），直接下载
-    await w.find('.modal-footer .btn-primary').trigger('click')
+  it('下载成功 toast 含重新分发提醒并自动关窗', async () => {
+    const { message } = await import('ant-design-vue')
+    const w = await mountDialog({ id: 1, cluster_id: 3, name: 'srv', cert: 'C', algorithm: 'rsa' })
+    const dlBtn = w.findAll('button').find((b) => b.text().includes('下载 .crt'))
+    await dlBtn!.trigger('click')
     await new Promise((r) => setTimeout(r, 0))
-    expect(mockFetchKey).toHaveBeenCalledWith(3, 9)
-    const merged = (await import('@/utils/download')).buildCertZip as any
-    expect(merged.mock.calls[0][0].key).toBe('LIVE-KEY')
-  })
-
-  it('仅下载证书（取消私钥勾选）不触发取钥', async () => {
-    const w = await mountDialog({
-      id: 9,
-      cluster_id: 3,
-      name: 'srv',
-      cert: 'C',
-      key: '',
-      has_private_key: true,
-      algorithm: 'rsa',
-    })
-    const keyRow = w.findAll('.checkbox-row').find((r) => r.text().includes('私钥'))
-    await keyRow.find('input').setValue(false)
-    await w.find('.modal-footer .btn-primary').trigger('click')
-    await new Promise((r) => setTimeout(r, 0))
-    expect(mockFetchKey).not.toHaveBeenCalled()
-  })
-
-  it('下载成功后弹窗自动关闭（handleClose 的下载中守卫不得吞掉成功关窗）', async () => {
-    mockFetchKey.mockResolvedValue({ data: { private_key: 'LIVE-KEY' } })
-    const w = await mountDialog({
-      id: 9,
-      cluster_id: 3,
-      name: 'srv',
-      cert: 'C',
-      key: '',
-      has_private_key: true,
-      algorithm: 'rsa',
-    })
-    await w.find('.modal-footer .btn-primary').trigger('click')
-    await new Promise((r) => setTimeout(r, 0))
-    expect(w.emitted('close')).toBeDefined()
+    expect(message.success).toHaveBeenCalled()
+    const content = String((message.success as ReturnType<typeof vi.fn>).mock.calls[0][0])
+    expect(content).toContain('失效')
+    expect(w.emitted('close')).toHaveLength(1)
   })
 })

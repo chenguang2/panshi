@@ -209,9 +209,9 @@ describe('时间哨兵 · AuditLog.vue', () => {
   })
 })
 
-// ── SslList：卡片 PublishStatusTag（formatPublishDateTime(published_at)） ──
+// ── ServerCertList：卡片 PublishStatusTag（formatPublishDateTime(published_at)） ──
 
-describe('时间哨兵 · SslList.vue（PublishStatusTag 发布时间）', () => {
+describe('时间哨兵 · ServerCertList.vue（PublishStatusTag 发布时间）', () => {
   const stubs = {
     PageHeader: { template: '<div><slot name="actions" /><slot /></div>' },
     SslFormDrawer: true,
@@ -246,8 +246,8 @@ describe('时间哨兵 · SslList.vue（PublishStatusTag 发布时间）', () =>
   })
 
   it('发布时间按 Asia/Shanghai 渲染（naive UTC 跨日 +8，含秒）', async () => {
-    const SslList = (await import('../SslList.vue')).default
-    const wrapper = mount(SslList, { global: { stubs } })
+    const ServerCertList = (await import('../ServerCertList.vue')).default
+    const wrapper = mount(ServerCertList, { global: { stubs } })
     await flushPromises()
     await wrapper.vm.$nextTick()
     const dateEl = wrapper.find('.ps-date')

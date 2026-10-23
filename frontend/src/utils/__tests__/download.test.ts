@@ -95,7 +95,7 @@ describe('buildCertZip', () => {
     const blob = await buildCertZip(mockCert, ['cert'])
     const JSZip = (await import('jszip')).default
     const zip = await JSZip.loadAsync(await blob.arrayBuffer())
-    expect(Object.keys(zip.files).sort()).toEqual(['test-cert_cert.pem'])
+    expect(Object.keys(zip.files).sort()).toEqual(['test-cert.crt'])
   })
 
   it('should include cert and key for basic cert', async () => {
@@ -103,7 +103,7 @@ describe('buildCertZip', () => {
     const JSZip = (await import('jszip')).default
     const buf = await blob.arrayBuffer()
     const zip = await JSZip.loadAsync(buf)
-    expect(Object.keys(zip.files).sort()).toEqual(['test-cert_cert.pem', 'test-cert_key.pem'])
+    expect(Object.keys(zip.files).sort()).toEqual(['test-cert.crt', 'test-cert_key.pem'])
   })
 
   it('should include all 4 files for dual cert', async () => {
@@ -112,10 +112,62 @@ describe('buildCertZip', () => {
     const buf = await blob.arrayBuffer()
     const zip = await JSZip.loadAsync(buf)
     expect(Object.keys(zip.files).sort()).toEqual([
-      'test-cert_cert.pem',
+      'test-cert.crt',
       'test-cert_key.pem',
-      'test-cert_sign_cert.pem',
+      'test-cert_sign.crt',
       'test-cert_sign_key.pem',
     ])
+  })
+})
+
+describe('证书文件命名与 .crt 下载（ssl-cert-management）', () => {
+  it('buildCertFileName 用集群名前缀 + .crt 后缀', async () => {
+    const { buildCertFileName } = await import('@/utils/download')
+    expect(buildCertFileName({ display_name: '生产集团', name: 'prod', cluster_id: 3 }, '企业根CA')).toBe(
+      '生产集团_企业根CA.crt',
+    )
+    expect(buildCertFileName({ name: 'prod', cluster_id: 3 }, '企业根CA')).toBe('prod_企业根CA.crt')
+    expect(buildCertFileName({ cluster_id: 7 }, 'CA')).toBe('7_CA.crt')
+  })
+
+  it('downloadCertFile 以 x-x509-ca-cert MIME 触发下载', async () => {
+    const { downloadCertFile } = await import('@/utils/download')
+    const anchorClick = vi.fn()
+    URL.createObjectURL = vi.fn((b: Blob) => {
+      expect(b.type).toBe('application/x-x509-ca-cert')
+      return 'blob:cert'
+    })
+    URL.revokeObjectURL = vi.fn()
+    vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+      if (tag === 'a') return { href: '', download: '', click: anchorClick } as unknown as HTMLElement
+      return document.createElement(tag)
+    })
+    downloadCertFile('PEM', '生产集团_根CA.crt')
+    expect(anchorClick).toHaveBeenCalled()
+    vi.restoreAllMocks()
+  })
+
+  it('buildCertZip：分发 zip 内证书用 .crt、无私钥（未选即无）', async () => {
+    const { buildCertZip } = await import('@/utils/download')
+    const src = {
+      name: '国密网关证书',
+      cert: 'CERT',
+      private_key: 'KEY',
+      sign_cert: 'SIGNCERT',
+      sign_key: 'SIGNKEY',
+    }
+    const blob = await buildCertZip(src, ['cert', 'sign_cert'])
+    const JSZip = (await import('jszip')).default
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer())
+    expect(Object.keys(zip.files).sort()).toEqual(['国密网关证书.crt', '国密网关证书_sign.crt'])
+  })
+
+  it('buildCertZip 保留 key 分支（管理链路：生成交付/客户端包）', async () => {
+    const { buildCertZip } = await import('@/utils/download')
+    const src = { name: 'client1', cert: 'CERT', private_key: 'KEY' }
+    const blob = await buildCertZip(src, ['cert', 'key'])
+    const JSZip = (await import('jszip')).default
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer())
+    expect(Object.keys(zip.files).sort()).toEqual(['client1.crt', 'client1_key.pem'])
   })
 })

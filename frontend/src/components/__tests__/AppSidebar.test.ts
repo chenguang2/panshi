@@ -346,3 +346,66 @@ describe('AppSidebar 数据库徽标待重启态（db-switch-restart-completion�
     expect(wrapper.find('.sidebar-db-dot.pending').exists()).toBe(true)
   })
 })
+
+describe('AppSidebar 证书管理分组（ssl-cert-management）', () => {
+  function makeRouter() {
+    return createRouter({
+      history: createWebHistory(),
+      routes: [
+        { path: '/', name: 'Dashboard', component: { template: '<div />' } },
+        { path: '/ssl/ca', name: 'CaCertList', component: { template: '<div />' } },
+        { path: '/ssl/server', name: 'ServerCertList', component: { template: '<div />' } },
+      ],
+    })
+  }
+
+  function findNavItem(wrapper: ReturnType<typeof mount>, label: string) {
+    return wrapper.findAll('.nav-item').find((w) => w.find('.nav-label').text() === label)
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    mockLocalStorage()
+    useFeaturesStore().$patch({ loaded: true })
+    Element.prototype.scrollIntoView = vi.fn((_options?: ScrollIntoViewOptions) => {})
+  })
+
+  it('「证书管理」分组位于核心功能之后，含 CA 根证书/服务器证书两项', async () => {
+    localStorage.setItem('user', JSON.stringify({ id: 11, username: 'cert_op', role: 'user' }))
+    localStorage.setItem('permissions', JSON.stringify(['ssl_cert']))
+    const r = makeRouter()
+    const wrapper = mount(AppSidebar, { global: { plugins: [r] } })
+    await r.isReady()
+    const titles = wrapper.findAll('.sidebar-section-title').map((w) => w.text())
+    const coreIdx = titles.indexOf('核心功能')
+    const certIdx = titles.indexOf('证书管理')
+    expect(certIdx).toBeGreaterThan(-1)
+    expect(certIdx).toBe(coreIdx + 1)
+    const ca = findNavItem(wrapper, 'CA 根证书')
+    const server = findNavItem(wrapper, '服务器证书')
+    expect(ca).toBeDefined()
+    expect(ca!.attributes('href')).toBe('/ssl/ca')
+    expect(server).toBeDefined()
+    expect(server!.attributes('href')).toBe('/ssl/server')
+  })
+
+  it('核心功能分组不再含「SSL 证书」旧入口', async () => {
+    localStorage.setItem('user', JSON.stringify({ id: 12, username: 'cert_op2', role: 'user' }))
+    localStorage.setItem('permissions', JSON.stringify(['ssl_cert']))
+    const r = makeRouter()
+    const wrapper = mount(AppSidebar, { global: { plugins: [r] } })
+    await r.isReady()
+    expect(findNavItem(wrapper, 'SSL 证书')).toBeUndefined()
+  })
+
+  it('featuresStore 无 ssl_cert（显式 false）时证书管理两项隐藏（即使持权限）', async () => {
+    localStorage.setItem('user', JSON.stringify({ id: 13, username: 'cert_view', role: 'user' }))
+    localStorage.setItem('permissions', JSON.stringify(['ssl_cert']))
+    useFeaturesStore().$patch({ loaded: true, features: { ssl_cert: false } })
+    const r = makeRouter()
+    const wrapper = mount(AppSidebar, { global: { plugins: [r] } })
+    await r.isReady()
+    expect(findNavItem(wrapper, 'CA 根证书')).toBeUndefined()
+    expect(findNavItem(wrapper, '服务器证书')).toBeUndefined()
+  })
+})

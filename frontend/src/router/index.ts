@@ -57,12 +57,25 @@ export const featureRouteMap: Record<string, RouteRecordRaw | RouteRecordRaw[]> 
     component: () => import('@/views/DnsUdpProxyList.vue'),
     meta: { permission: 'dns_proxy_udp' },
   },
-  ssl_cert: {
-    path: 'ssl',
-    name: 'SslList',
-    component: () => import('@/views/SslList.vue'),
-    meta: { permission: 'ssl_cert' },
-  },
+  ssl_cert: [
+    {
+      path: 'ssl/ca',
+      name: 'CaCertList',
+      component: () => import('@/views/CaCertList.vue'),
+      meta: { permission: 'ssl_cert' },
+    },
+    {
+      path: 'ssl/server',
+      name: 'ServerCertList',
+      component: () => import('@/views/ServerCertList.vue'),
+      meta: { permission: 'ssl_cert' },
+    },
+    {
+      // 旧路由兼容：/ssl → /ssl/server（禁用时整组不注册，直接 404）
+      path: 'ssl',
+      redirect: '/ssl/server',
+    },
+  ],
   dns_proxy_http: {
     path: 'dns-queries',
     name: 'DnsQueryList',

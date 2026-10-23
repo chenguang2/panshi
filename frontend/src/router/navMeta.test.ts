@@ -4,7 +4,7 @@ import { filterNavEntries, type NavEntry } from './navMeta'
 const entries: NavEntry[] = [
   { name: 'ClusterList', title: '集群管理', section: '核心功能', path: '/clusters' },
   { name: 'DatabaseManagement', title: '数据库管理', section: '系统管理', path: '/database-management' },
-  { name: 'SslList', title: 'SSL 证书', section: '边缘网络', path: '/ssl' },
+  { name: 'CaCertList', title: 'CA 根证书', section: '证书管理', path: '/ssl/ca' },
   { name: 'NodeTaskCenter', title: '节点任务', section: '运维管理', path: '/node-tasks' },
 ]
 
@@ -32,8 +32,8 @@ describe('filterNavEntries', () => {
   })
 
   it('matches latin title case-insensitively', () => {
-    expect(filterNavEntries(entries, 'SSL')[0].name).toBe('SslList')
-    expect(filterNavEntries(entries, 'ssl')[0].name).toBe('SslList')
+    expect(filterNavEntries(entries, 'CA')[0].name).toBe('CaCertList')
+    expect(filterNavEntries(entries, '根证书')[0].name).toBe('CaCertList')
   })
 
   it('matches by path', () => {
