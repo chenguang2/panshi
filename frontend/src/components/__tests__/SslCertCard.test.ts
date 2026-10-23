@@ -121,3 +121,21 @@ describe('SslCertCard IP SAN 行（uapm 修复）', () => {
     expect(w.findAll('.ssl-card-row label').map((l) => l.text())).not.toContain('IP')
   })
 })
+
+describe('SslCertCard 匹配名单不一致警示（ssl-cert-rollback-consistency）', () => {
+  it('sniMismatch=true 显示警示与「同步」按钮，点击 emit sync-sni', async () => {
+    const w = mountCard({ cert: baseServer, variant: 'server', caName: null, sniMismatch: true })
+    expect(w.text()).toContain('匹配名单与证书 SAN 不一致')
+    const btn = w.findAll('button').find((b) => b.text() === '同步')
+    expect(btn).toBeDefined()
+    await btn!.trigger('click')
+    expect(w.emitted('sync-sni')).toHaveLength(1)
+  })
+
+  it('sniMismatch 缺省/false 不渲染警示行', () => {
+    const w1 = mountCard({ cert: baseServer, variant: 'server', caName: null })
+    expect(w1.text()).not.toContain('匹配名单与证书 SAN 不一致')
+    const w2 = mountCard({ cert: baseServer, variant: 'server', caName: null, sniMismatch: false })
+    expect(w2.text()).not.toContain('匹配名单与证书 SAN 不一致')
+  })
+})

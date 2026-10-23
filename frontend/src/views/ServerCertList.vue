@@ -55,6 +55,7 @@
         :cert="cert"
         variant="server"
         :ca-name="caNameOf(cert)"
+        :sni-mismatch="cert.sni_mismatch === true"
         @view="viewCert"
         @download="openDownloadDialog"
         @edit="openEditDrawer"
@@ -62,6 +63,7 @@
         @publish="publishCert"
         @version="openVersionManagement"
         @ca-click="goCaPage"
+        @sync-sni="syncSni"
       />
     </div>
 
@@ -331,6 +333,23 @@ function onDownloadCa(cert: any) {
   }
   downloadCertFile(ca.cert, buildCertFileName(clusterLabelOf(ca), ca.name))
   message.success('已下载 CA 根证书。可直接分发给用户安装（单文件、不含私钥）', 6)
+}
+
+// ssl-cert-rollback-consistency：匹配名单与 SAN 不一致的一键同步（以 SAN 推导值重写 sni）
+async function syncSni(cert: any) {
+  const dns: string[] = Array.isArray(cert.dns_sans) ? cert.dns_sans : []
+  const ips: string[] = Array.isArray(cert.ip_sans) ? cert.ip_sans : []
+  if (!dns.length && !ips.length) {
+    message.warning('该证书缺少 SAN 解析结果，无法同步匹配名单')
+    return
+  }
+  try {
+    await api.put(`/clusters/${cert.cluster_id}/ssl/${cert.id}`, { sni: [...dns, ...ips].join(',') })
+    message.success('匹配名单已与证书 SAN 同步')
+    loadCerts()
+  } catch {
+    message.error('同步匹配名单失败')
+  }
 }
 
 function viewCert(cert: any) {

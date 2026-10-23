@@ -21,7 +21,7 @@ from app.schemas.ssl import (
     CaCertificateGenerateRequest, CommandLogEntry,
     SslPemPreviewRequest, SslPemPreviewResponse, SslPemCertPreview, SslPemKeyPreview,
 )
-from app.services.ssl_pem import parse_cert_pem, parse_key_pem, keys_match
+from app.services.ssl_pem import RESERVED_SNIS, parse_cert_pem, parse_key_pem, keys_match  # noqa: F401  RESERVED_SNIS re-export
 from app.models.cluster import Cluster, ConfigVersion, Node
 from app.schemas.cluster import PublishRequest, DeleteClusterRequest
 from app.services import edge_sync
@@ -36,7 +36,7 @@ global_router = APIRouter(prefix="/ssl", tags=["ssl"], dependencies=[Depends(req
 
 # 系统保留域名：Edge 网关内部管理/健康检查的默认访问域名。
 # 生成/更新/回滚 server 证书时强制合并进 DNS SAN 与 sni 字段，不可被用户移除。
-RESERVED_SNIS = ("edge.local",)
+# （常量本体收敛到 services/ssl_pem——schema 层 sni_mismatch 比对共用，此处 re-export 沿用既有导入路径）
 
 
 def _masked_ssl_response(cert) -> "SslCertificateResponse":
@@ -434,7 +434,16 @@ async def publish_ssl_certificate(
 
     # DB stores SNI as comma-separated string (e.g., "qcg.com,abc.com").
     # Edge API expects a single domain in "sni" or an array in "snis".
-    sni_list = [s.strip() for s in cert.sni.split(",") if s.strip()] if cert.sni else []
+    # ssl-cert-rollback-consistency：匹配名单从证书 PEM SAN 推导（PEM 为唯一事实源），
+    # 存量 sni 与 SAN 脱节的证书发布即自愈；解析失败（国密非标等）回退现 sni 拆分。
+    cert_info = parse_cert_pem(cert.cert)
+    if cert_info is not None:
+        derived_sni = merge_reserved_into_sni_str(",".join(cert_info["dns_sans"] + cert_info["ip_sans"]))
+    else:
+        derived_sni = cert.sni
+    sni_list = [s.strip() for s in derived_sni.split(",") if s.strip()] if derived_sni else []
+    if derived_sni != cert.sni:
+        cert.sni = derived_sni
     config_data: dict = {
         "name": cert.name,
         "cert": cert.cert, "key": cert.private_key,
@@ -516,8 +525,15 @@ async def rollback_ssl_certificate(
     async def _restore(_db, cert, cfg):
         if "name" in cfg:
             cert.name = cfg["name"]
-        if "sni" in cfg:
-            cert.sni = cfg["sni"]
+        # ssl-cert-rollback-consistency：快照 SNI 键跨三代格式（sni 字符串 / snis 数组），
+        # 双读兼容——只认 sni 会把多 SNI 版本静默漏恢复（uapm 案例）。
+        restored_sni: str | None = None
+        if isinstance(cfg.get("snis"), list):
+            restored_sni = ",".join(str(s).strip() for s in cfg["snis"] if str(s).strip())
+        elif isinstance(cfg.get("sni"), str):
+            restored_sni = cfg["sni"]
+        if restored_sni is not None:
+            cert.sni = restored_sni
         if "cert" in cfg:
             cert.cert = cfg["cert"]
         if "key" in cfg:
@@ -526,7 +542,14 @@ async def rollback_ssl_certificate(
             cert.cert_type = cfg["type"]
         if "ssl_protocols" in cfg:
             cert.ssl_protocols = json.dumps(cfg["ssl_protocols"]) if isinstance(cfg["ssl_protocols"], list) else cfg["ssl_protocols"]
-        if cert.cert_type == "server" and not cert.is_ca:
+        # ssl-cert-rollback-consistency：证书 PEM 为唯一事实源——恢复本体后从 SAN 重同步 sni
+        # （快照里的 sni/snis 可能与 PEM 不一致或缺失）；解析失败（国密非标等）降级保留双读结果。
+        from app.services.ssl_pem import parse_cert_pem
+
+        info = parse_cert_pem(cert.cert)
+        if info is not None:
+            cert.sni = merge_reserved_into_sni_str(",".join(info["dns_sans"] + info["ip_sans"]))
+        elif restored_sni is not None and cert.cert_type == "server" and not cert.is_ca:
             cert.sni = merge_reserved_into_sni_str(cert.sni)
 
     await edge_sync.rollback_resource(

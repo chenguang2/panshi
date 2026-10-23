@@ -11,6 +11,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional
 
+# 系统保留 SNI（强制合并进 DNS SAN 与 sni，不可被用户移除）。
+# 语义归属：证书/匹配名单公共语义，api 层与 schema 层共用（cluster_ssl 与
+# SslCertificateResponse.sni_mismatch 比对都要用它，且 schema 不得反向依赖 api）。
+RESERVED_SNIS = ("edge.local",)
+
 
 def parse_cert_pem(pem: Any) -> Optional[dict]:
     """解析证书 PEM → {ok, subject_cn, san, not_after, algorithm, expire_days}；非法返回 None。

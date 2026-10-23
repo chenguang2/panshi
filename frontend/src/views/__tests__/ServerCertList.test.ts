@@ -3,8 +3,9 @@ import { flushPromises, mount } from '@vue/test-utils'
 
 const mockGet = vi.fn()
 
+const mockPut = vi.fn()
 vi.mock('@/api', () => ({
-  default: { get: (...args: any[]) => mockGet(...args) },
+  default: { get: (...args: any[]) => mockGet(...args), put: (...args: any[]) => mockPut(...args) },
 }))
 
 vi.mock('ant-design-vue', () => ({
@@ -173,5 +174,58 @@ describe('ServerCertList 分发警示页（ssl-cert-management）', () => {
     expect(mockPush).not.toHaveBeenCalledWith('/ssl/ca')
     const sslCallsAfter = mockGet.mock.calls.filter(([u]) => u === '/ssl').length
     expect(sslCallsAfter).toBeGreaterThan(sslCallsBefore)
+  })
+})
+
+describe('ServerCertList 匹配名单同步（ssl-cert-rollback-consistency）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockPut.mockResolvedValue({ status: 200, data: {} })
+    setupGet([
+      mockCert({
+        id: 1,
+        sni: 'edge.local,qcg.com',
+        dns_sans: ['edge.local', 'qcg.com', 'g.gkpt.cars'],
+        ip_sans: ['192.168.0.13'],
+        sni_mismatch: true,
+      }),
+      caCert,
+    ])
+  })
+
+  it('卡片 sni_mismatch=true 渲染警示行与同步按钮', async () => {
+    const ServerCertList = (await import('../ServerCertList.vue')).default
+    const w = mount(ServerCertList, { global: { stubs } })
+    await flushPromises()
+    const card = w.findAll('.ssl-card').find((c) => c.text().includes('srv'))
+    expect(card!.text()).toContain('匹配名单与证书 SAN 不一致')
+    expect(card!.findAll('button').some((b) => b.text() === '同步')).toBe(true)
+  })
+
+  it('点击同步 → PUT 携带 SAN 推导 sni → 刷新', async () => {
+    const ServerCertList = (await import('../ServerCertList.vue')).default
+    const w = mount(ServerCertList, { global: { stubs } })
+    await flushPromises()
+    const cardComp = w.findAllComponents({ name: 'SslCertCard' }).find((c) => c.props('cert')?.name === 'srv')
+    expect(cardComp).toBeDefined()
+    const sslCallsBefore = mockGet.mock.calls.filter(([u]) => u === '/ssl').length
+    cardComp!.vm.$emit('sync-sni', cardComp!.props('cert'))
+    await flushPromises()
+    expect(mockPut).toHaveBeenCalledWith('/clusters/1/ssl/1', {
+      sni: 'edge.local,qcg.com,g.gkpt.cars,192.168.0.13',
+    })
+    const sslCallsAfter = mockGet.mock.calls.filter(([u]) => u === '/ssl').length
+    expect(sslCallsAfter).toBeGreaterThan(sslCallsBefore)
+  })
+
+  it('SAN 字段缺失时不发 PUT', async () => {
+    setupGet([mockCert({ id: 9, sni: 'edge.local,x.com', dns_sans: undefined, ip_sans: undefined }), caCert])
+    const ServerCertList = (await import('../ServerCertList.vue')).default
+    const w = mount(ServerCertList, { global: { stubs } })
+    await flushPromises()
+    const cardComp = w.findAllComponents({ name: 'SslCertCard' }).find((c) => c.props('cert')?.name === 'srv')
+    cardComp!.vm.$emit('sync-sni', cardComp!.props('cert'))
+    await flushPromises()
+    expect(mockPut).not.toHaveBeenCalled()
   })
 })

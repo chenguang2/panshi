@@ -6,6 +6,8 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Optional, List
 from datetime import datetime
 
+from app.services.ssl_pem import RESERVED_SNIS
+
 
 class CommandLogEntry(BaseModel):
     """A single command execution record during certificate generation."""
@@ -115,6 +117,8 @@ class SslCertificateResponse(SslCertificateBase):
     # 同 expire_at 模式：序列化期从 cert PEM 解析，非模型列，解析失败降级空列表）
     dns_sans: List[str] = Field(default_factory=list)
     ip_sans: List[str] = Field(default_factory=list)
+    # ssl-cert-rollback-consistency：匹配名单与证书 SAN 不一致（PEM 解析失败恒 False——无法判定不告警）
+    sni_mismatch: bool = False
     # 私钥在位布尔（ssl-ux-review-fixes 9.1：响应掩码后由布尔表达「是否有私钥」）
     has_private_key: bool = False
     has_sign_key: bool = False
@@ -165,6 +169,11 @@ class SslCertificateResponse(SslCertificateBase):
             self.dns_sans = info.get("dns_sans", [])
         if not self.ip_sans:
             self.ip_sans = info.get("ip_sans", [])
+        # ssl-cert-rollback-consistency：规范化集合比对（PEM SAN 为事实源）。
+        # 系统保留项（edge.local）由平台强制管理、允许单侧存在，两侧都剔除后再比对。
+        sni_set = {s.strip() for s in (self.sni or "").split(",") if s.strip()} - set(RESERVED_SNIS)
+        san_set = (set(info["dns_sans"]) | set(info["ip_sans"])) - set(RESERVED_SNIS)
+        self.sni_mismatch = sni_set != san_set
         return self
 
     class Config:

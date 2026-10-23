@@ -12,6 +12,8 @@ const props = defineProps<{
   variant: 'ca' | 'server'
   /** 服务器证书的签发 CA 名称（页面经 ca_cert_id 映射解析；null = 引用无效/外部签发） */
   caName?: string | null
+  /** 匹配名单（sni）与证书 SAN 不一致（后端派生；仅 server 形态展示） */
+  sniMismatch?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -22,6 +24,7 @@ const emit = defineEmits<{
   (e: 'publish', cert: Record<string, any>): void
   (e: 'version', cert: Record<string, any>): void
   (e: 'ca-click'): void
+  (e: 'sync-sni', cert: Record<string, any>): void
 }>()
 
 // CA 临期红色警示（E4）：CA 过期 = 所有已装终端全部失效，强度高于普通证书临期徽章
@@ -38,6 +41,10 @@ const caExpiring =
       ⚠️ 该 CA 将于 <b>{{ Math.abs(cert.expire_days) }} 天</b>内{{
         cert.expire_days < 0 ? '已经' : ''
       }}过期：过期后所有已安装此证书的终端将重新显示「不安全」。请尽快更换 CA 并重新分发根证书。
+    </div>
+    <div v-if="variant === 'server' && sniMismatch" class="ssl-card-alert-msg sni-warn">
+      ⚠️ 匹配名单与证书 SAN 不一致（Edge 匹配名单缺少证书实际覆盖的域名/IP）
+      <button class="btn btn-secondary btn-sm" style="margin-left: 8px" @click="emit('sync-sni', cert)">同步</button>
     </div>
     <div class="ssl-card-topbar" :style="getGroupColorStyle(cert.cluster_group_name)">
       <span>{{ cert.cluster_name || '-' }}</span>
@@ -207,6 +214,15 @@ const caExpiring =
   padding: 8px 16px;
   line-height: 1.55;
   border-bottom: 1px solid oklch(55% 0.18 28 / 15%);
+}
+.sni-warn {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  background: oklch(72% 0.14 70 / 14%);
+  color: oklch(40% 0.09 70);
+  border-bottom: 1px solid oklch(72% 0.14 70 / 30%);
 }
 .ssl-card-header {
   display: flex;
