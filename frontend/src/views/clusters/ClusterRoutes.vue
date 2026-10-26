@@ -98,6 +98,12 @@
       class="node-table"
       @change="(pag: any, _filters: any, sorter: any) => handleRouteTableChange(cluster, pag, sorter)"
     >
+      <template #emptyText>
+        <div class="empty-guide">
+          <p style="margin: 0 0 8px">暂无路由 — 添加第一条路由，将流量按规则转发到上游</p>
+          <a-button size="small" type="primary" @click="showAddRouteModal(cluster)">添加路由</a-button>
+        </div>
+      </template>
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'upstream_id'">
           {{ getUpstreamName(cluster, record.upstream_id) }}

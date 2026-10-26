@@ -985,10 +985,13 @@ describe('RouteList.vue 搜索 placeholder（batch1 7.5）', () => {
   })
 })
 
-// ── 7.6：深链 ?cluster_id= 自动打开新建弹窗（route-management-ux-batch1 组7）────
-// 仅当该集群在授权列表内才预选打开；否则忽略（仍按 cluster_id 过滤列表，行为不变）。
+// ── 7.6：深链 ?cluster_id= —— 只做过滤 + 新建预选，不自动开弹窗 ────────────────
+// 2026-10-26 缺陷修复：原实现进页自动打开新建弹窗，与 cluster-stat-links 卡片统计格
+// 的「查看」语义撞车（集群管理卡片点「路由」→ 弹新建窗）；且自动开窗分支无任何真实
+// 消费方。规格（route-management「Deep link preselects cluster」）= 深链进入后用户
+// 手动点「新建路由」时预选该集群；?cluster_id= 本身与其余 6 页一致仅做过滤。
 
-describe('RouteList.vue 深链 cluster_id 自动开新建弹窗（batch1 7.6）', () => {
+describe('RouteList.vue 深链 cluster_id：过滤 + 新建预选（batch1 7.6 修正）', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
@@ -1009,24 +1012,32 @@ describe('RouteList.vue 深链 cluster_id 自动开新建弹窗（batch1 7.6）'
     })
   })
 
-  it('授权内集群：进页自动打开新建弹窗并预选该集群', async () => {
+  it('授权内集群：进页不自动开弹窗；手动点「新建路由」预选该集群', async () => {
     mockRouteQuery = { cluster_id: '5' }
     const RouteList = (await import('../RouteList.vue')).default
     const wrapper = mount(RouteList, { global: { stubs } })
     await flushPromises()
 
+    // 修复点：深链不再自动打开新建弹窗（卡片统计格「查看」语义）
     const vm = wrapper.vm as { formModalVisible: boolean; editingRoute: unknown }
+    expect(vm.formModalVisible).toBe(false)
+    // 既有行为保持：列表请求仍按深链集群过滤
+    const calls = mockApiGet.mock.calls.filter((c: unknown[]) => c[0] === '/routes')
+    expect((calls[calls.length - 1][1] as { params: { cluster_id?: unknown } }).params.cluster_id).toBe('5')
+
+    // 规格场景：深链进入后手动点「新建路由」→ 预选该集群
+    const createBtn = wrapper.findAll('button').find((b) => b.text().includes('新建路由'))
+    expect(createBtn).toBeTruthy()
+    await createBtn!.trigger('click')
+    await flushPromises()
     expect(vm.formModalVisible).toBe(true)
     expect(vm.editingRoute).toBeNull()
     const form = wrapper.findComponent({ name: 'MockRouteForm' })
     expect(form.props('defaultClusterId')).toBe(5)
-    // 既有行为保持：列表请求仍按深链集群过滤
-    const calls = mockApiGet.mock.calls.filter((c: unknown[]) => c[0] === '/routes')
-    expect((calls[calls.length - 1][1] as { params: { cluster_id?: unknown } }).params.cluster_id).toBe('5')
     wrapper.unmount()
   })
 
-  it('未授权/不存在集群：忽略深链不开弹窗（列表仍按 cluster_id 过滤）', async () => {
+  it('未授权/不存在集群：不开弹窗不预选（列表仍按 cluster_id 过滤）', async () => {
     mockRouteQuery = { cluster_id: '999' }
     const RouteList = (await import('../RouteList.vue')).default
     const wrapper = mount(RouteList, { global: { stubs } })
@@ -1036,6 +1047,12 @@ describe('RouteList.vue 深链 cluster_id 自动开新建弹窗（batch1 7.6）'
     expect(vm.formModalVisible).toBe(false)
     const calls = mockApiGet.mock.calls.filter((c: unknown[]) => c[0] === '/routes')
     expect((calls[calls.length - 1][1] as { params: { cluster_id?: unknown } }).params.cluster_id).toBe('999')
+    // 未授权集群不进预选：手动新建时不带 defaultClusterId
+    const createBtn = wrapper.findAll('button').find((b) => b.text().includes('新建路由'))
+    await createBtn!.trigger('click')
+    await flushPromises()
+    const form = wrapper.findComponent({ name: 'MockRouteForm' })
+    expect(form.props('defaultClusterId')).toBeNull()
     wrapper.unmount()
   })
 })

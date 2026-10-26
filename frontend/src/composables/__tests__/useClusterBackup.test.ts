@@ -58,6 +58,29 @@ describe('useClusterBackup', () => {
       expect(result).toBeNull()
       expect(error.value).toBe('boom')
     })
+
+    it('下载登记 X-Backup-Checksum，同会话导入同名文件自动附带 expected_checksum（P1-3）', async () => {
+      mockApiGet.mockResolvedValue({
+        data: new Blob(['{}']),
+        headers: { 'x-backup-checksum': 'sha256:abc123' },
+      })
+      const { downloadBackup, importBackup } = useClusterBackup()
+      await downloadBackup(7, 'demo', { include_secrets: false, include_files: false })
+      const filename = mockDownloadBlob.mock.calls[0][1] as string
+      mockApiPost.mockResolvedValue({ data: { cluster_id: 1, warnings: [], pending_items: [] } })
+      const file = new File(['{}'], filename)
+      await importBackup(file, 'restored')
+      const [, body] = mockApiPost.mock.calls[0]
+      expect(body.get('expected_checksum')).toBe('sha256:abc123')
+    })
+
+    it('无会话内校验和记录（外来文件）→ 不附带 expected_checksum，行为不变', async () => {
+      mockApiPost.mockResolvedValue({ data: { cluster_id: 1, warnings: [], pending_items: [] } })
+      const { importBackup } = useClusterBackup()
+      await importBackup(new File(['{}'], 'outside.json'), 'restored')
+      const [, body] = mockApiPost.mock.calls[0]
+      expect(body.get('expected_checksum')).toBeNull()
+    })
   })
 
   describe('importBackup', () => {

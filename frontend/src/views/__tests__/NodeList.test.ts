@@ -164,8 +164,8 @@ describe('NodeList.vue', () => {
     const source = (await import('../NodeList.vue')).default
     const wrapper = mount(source, { global: { stubs } })
     await flushPromises()
-    // 组件行内操作按钮文案为「⟳ reload」
-    const reloadBtn = wrapper.findAll('button').find((b) => b.text().includes('reload'))
+    // 组件行内操作按钮文案为「⟳ 重载」（central-management-ux-review-fixes P3-1：中文界面去英文）
+    const reloadBtn = wrapper.findAll('button').find((b) => b.text().includes('重载'))
     expect(reloadBtn).toBeDefined()
   })
 
@@ -1097,7 +1097,7 @@ describe('NodeList.vue batch3 批量动作（工具栏 + 分组执行）', () =>
   it('2.1 工具栏含批量启动/批量停止/批量reload/状态查询，未勾选时禁用', async () => {
     const wrapper = await mountBatch()
     const btn = (text: string) => wrapper.findAll('button').find((b) => b.text().includes(text))
-    for (const label of ['批量启动', '批量停止', '批量reload', '批量状态查询']) {
+    for (const label of ['批量启动', '批量停止', '批量重载', '批量状态查询']) {
       const b = btn(label)
       expect(b, `应有 ${label} 按钮`).toBeDefined()
       expect(b!.attributes('disabled')).toBeDefined()

@@ -279,7 +279,9 @@ const pluginOptions = ref<{ name: string; display_name?: string }[]>([])
 const formModalVisible = ref(false)
 const editingRoute = ref<any | null>(null)
 const isCopy = ref(false)
-// 7.6：深链进入时预选的集群 id（仅新建场景预选；用户手动打开新建时不预选）
+// 7.6（规格 route-management「Deep link preselects cluster」）：深链 ?cluster_id= 进入后
+// 手动点「新建路由」时预选该集群；不自动开弹窗（2026-10-26 修复与 cluster-stat-links
+// 卡片统计格「查看」语义的撞车，原自动开窗分支无真实消费方）
 const defaultClusterId = ref<number | null>(null)
 const vmVisible = ref(false)
 const vmId = ref<number | null>(null)
@@ -457,7 +459,7 @@ function onClusterChange() {
 function openCreateModal() {
   editingRoute.value = null
   isCopy.value = false
-  defaultClusterId.value = null
+  defaultClusterId.value = deepLinkedClusterId.value
   formModalVisible.value = true
 }
 function editRoute(r: any) {
@@ -567,9 +569,11 @@ async function loadPlugins() {
   }
 }
 
-// 7.6：深链 ?cluster_id= —— 进页自动打开新建弹窗并预选该集群；
-// 仅当该集群在授权列表（GET /clusters 用户视角）内才打开，否则忽略深链
-//（列表仍按 cluster_id 过滤，既有行为不变；clusterFilter 同步设置保证首查即带过滤）。
+// 7.6（规格「Deep link preselects cluster」）：?cluster_id= 只做过滤 + 记录预选集群；
+// SHALL NOT 自动打开新建弹窗（与 cluster-stat-links 卡片统计格「查看」语义撞车，
+// 2026-10-26 修复；自动开窗分支亦无任何真实消费方）
+const deepLinkedClusterId = ref<number | null>(null)
+
 function resolveDeepLinkClusterId(): number | null {
   const clusterId = route.query.cluster_id as string | undefined
   if (!clusterId) return null
@@ -583,13 +587,7 @@ onMounted(() => {
   if (clusterId) clusterFilter.value = clusterId
   loadClusters()
     .then(() => {
-      const deepClusterId = resolveDeepLinkClusterId()
-      if (deepClusterId != null) {
-        editingRoute.value = null
-        isCopy.value = false
-        defaultClusterId.value = deepClusterId
-        formModalVisible.value = true
-      }
+      deepLinkedClusterId.value = resolveDeepLinkClusterId()
     })
     .catch(() => {})
   loadPlugins()

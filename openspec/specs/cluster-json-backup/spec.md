@@ -32,7 +32,7 @@
 
 ### Requirement: 单一模式导入重建（新 ID + 映射重建外键）
 
-系统 SHALL 仅支持一种导入模式：创建新集群，忽略备份中的平台自增 ID（由数据库分配），并按名称（节点按 ip+service_port）映射重建外键。
+系统 SHALL 仅支持一种导入模式：创建新集群，忽略备份中的平台自增 ID（由数据库分配），并按名称（节点按 ip+service_port）映射重建外键。导入 SHALL 对备份中的 ISO 时间字符串按目标模型列类型矫正（DateTime/Date 列解析回原生类型），MUST NOT 将字符串原样绑定时间列；导入 MUST NOT 迁移源集群的运行态发布状态（`last_publish_ok`/`last_publish_detail`/`last_published_at`）；集群业务属性（含 `region_code` 区域绑定）SHALL 随导入保留；导入失败 SHALL 回滚全部数据库变更且不留任何已落盘文件（失败即无副作用）。
 
 #### Scenario: 导入生成新集群
 - **WHEN** 管理员上传备份并指定新集群名
@@ -57,6 +57,31 @@
 #### Scenario: 备份内重名实体不阻断导入
 - **WHEN** 备份数据中存在同名实体（源集群历史数据常见）
 - **THEN** 导入照常完成并忠实保留重名（外键按 ID 映射，与名称无关）
+
+#### Scenario: 含已发布静态资源的备份可完整导入（回归 P0）
+- **GIVEN** 源集群存在至少一个 `last_published_at` 非空的静态资源（备份中为 ISO 字符串）
+- **WHEN** 导入该备份
+- **THEN** 导入 SHALL 成功创建新集群，不再出现 `SQLite DateTime type only accepts Python datetime` 错误
+- **AND** 时间类列的值 SHALL 为原生 datetime/date 类型或 NULL，MUST NOT 为字符串
+
+#### Scenario: 运行态发布状态不迁移
+- **WHEN** 备份中静态资源携带 `last_publish_ok=true`、`last_published_at`、`last_publish_detail`
+- **THEN** 导入后的对应行三列 SHALL 全为 NULL/空（新集群未发布，不继承源集群发布痕迹）
+
+#### Scenario: 区域绑定保留
+- **WHEN** 备份源集群 `region_code` 非空
+- **THEN** 导入出的新集群 `region_code` SHALL 与源值一致
+- **AND** 新集群仍处于未发布状态（`status=1`），区域绑定变化后的网关白名单下发引导照常适用
+
+#### Scenario: 失败即无副作用
+- **WHEN** 导入在中途失败（校验错误、数据错误或写库异常）导致事务回滚
+- **THEN** 磁盘上 SHALL NOT 残留本次导入写入的静态资源 zip 文件（含部分写入）
+- **AND** 数据库 SHALL 无任何新建行
+
+#### Scenario: 时间字段通用矫正（按类修）
+- **WHEN** 备份条目包含目标模型定义为 DateTime/Date 列的字段且值为字符串
+- **THEN** 导入 SHALL 按 ISO 格式解析为原生类型后写入；解析失败或空值 SHALL 置 None 并继续（不中断导入）
+- **AND** 该矫正 SHALL 基于模型元数据通用实现，未来新增时间列无需修改导入逻辑即被覆盖
 
 ### Requirement: 悬空引用自动清理与警告清单
 
@@ -115,3 +140,64 @@
 - **WHEN** 导入成功完成
 - **THEN** 结果区 SHALL 提供按钮「前往新集群」，携带新 `cluster_id` 跳转统一管理页深链（复用既有 `editClusterId` query）
 - **AND** 关闭弹窗时父页面 SHALL 刷新集群列表（监听 `imported` 事件），使新集群即时可见，MUST NOT 需要用户手动刷新
+
+### Requirement: 导入错误可读
+
+导入失败时系统 SHALL 返回结构化中文错误（`detail.errors` 数组），说明失败原因与建议动作；MUST NOT 向前端透出未加工的 500「服务器内部错误」。
+
+#### Scenario: 数据类失败返回可读原因
+- **WHEN** 导入因数据问题失败（如时间格式非法且不可回退、引用损坏）
+- **THEN** 响应 SHALL 为 400，`detail.errors` 至少包含一条中文原因，定位到出错的资源类型/名称
+
+#### Scenario: 前端呈现
+- **WHEN** 导入失败
+- **THEN** 弹窗错误区 SHALL 逐条展示原因（现有 `errorLines` 渲染路径，无前端结构改动）
+
+### Requirement: 备份导入弹窗术语与表单体验
+
+集群备份导入的用户界面 SHALL 如实表达 clone-only 单向语义（约定 #17）：入口、标题与主按钮 SHALL 使用「导入（新集群）」表述而非「恢复」；新集群名称 SHALL 在提交前按后端同款规则（小写字母/数字/中划线，中划线不得首尾）前置校验并在表单内联展示规则；文件选择 SHALL 使用与全站一致的中文控件呈现已选文件；导入失败 SHALL 在弹窗错误区逐条呈现后端原因并附建议动作。
+
+#### Scenario: 术语诚实化
+- **WHEN** 用户查看统一管理/集群管理页顶栏与导入弹窗
+- **THEN** 入口按钮、弹窗标题、主按钮 SHALL 表达「从备份导入（将创建新集群）」语义，MUST NOT 使用「恢复」一词描述本动作
+- **AND** 版本管理语境的「恢复（回滚）」术语 SHALL 不受影响（两语境不再撞词）
+
+#### Scenario: 名称规则前置校验
+- **GIVEN** 用户在导入弹窗输入新集群名称
+- **WHEN** 名称包含大写字母、下划线或首尾中划线等非法字符
+- **THEN** 表单 SHALL 即时提示规则与错误原因，主按钮 SHALL 禁用或提交被拦截，MUST NOT 依赖后端 400 才暴露规则
+
+#### Scenario: 中文文件选择控件
+- **WHEN** 导入弹窗渲染文件选择
+- **THEN** SHALL 呈现中文按钮/拖放区与已选文件名，MUST NOT 裸露浏览器原生英文控件
+
+#### Scenario: 失败原因与建议动作
+- **WHEN** 导入失败（校验错误 / 数据错误 / 服务器错误）
+- **THEN** 弹窗错误区 SHALL 逐条展示后端 `detail.errors` 中文原因，并附至少一条建议动作（如检查备份文件、更正名称后重试）
+
+### Requirement: 备份下载弹窗内容摘要与双导出语义说明
+
+备份下载弹窗 SHALL 展示内容摘要行（将导出的资源构成，数据取自既有集群统计字段），并 SHALL 说明「JSON 备份（机器可恢复）」与「Excel 导出（人工阅读报表）」的用途差异。
+
+#### Scenario: 下载摘要行
+- **WHEN** 用户打开某集群的备份下载弹窗
+- **THEN** 弹窗 SHALL 展示该集群节点/路由/上游/证书/静态资源等计数摘要
+- **AND** 勾选「包含静态资源文件」时 SHALL 提示体积可能较大
+
+#### Scenario: 双导出语义可区分
+- **WHEN** 用户查看备份下载弹窗说明
+- **THEN** SHALL 可得知 JSON 备份用于跨环境恢复重建、Excel 导出仅为人读报表不含可导入结构
+
+### Requirement: 导入完整性校验和接线（同会话自动）
+
+系统 SHALL 接线备份文件完整性校验：同会话内经平台下载的备份文件再次导入时，前端 SHALL 自动附带下载响应中的校验和（`X-Backup-Checksum`）作为 `expected_checksum`；无会话内校验和记录的文件按现行为（不校验）放行。
+
+#### Scenario: 同会话下载后导入自动校验
+- **GIVEN** 用户在本会话内经平台下载了某集群备份
+- **WHEN** 用户选择该文件执行导入
+- **THEN** 请求 SHALL 自动携带该文件对应的 `expected_checksum`
+- **AND** 文件内容被意外修改时 SHALL 得到明确的「校验和不符」错误
+
+#### Scenario: 跨会话/外来文件降级
+- **WHEN** 导入的文件无会话内校验和记录
+- **THEN** 导入 SHALL 正常进行（不校验），行为与现状一致

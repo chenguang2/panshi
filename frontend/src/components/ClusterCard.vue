@@ -1,9 +1,13 @@
 <template>
   <div class="cl-card">
     <div class="cl-card-topbar">
-      <slot name="topbar">
-        <span>{{ cluster.group_name || '未分组' }}</span>
-      </slot>
+      <div class="cl-topbar-ident">
+        <span class="cl-topbar-name" :title="identTitle">
+          <CodeOutlined class="cl-topbar-icon" />
+          {{ cluster.name }}
+        </span>
+      </div>
+      <slot name="topbar-extra" />
     </div>
     <div class="cl-card-header">
       <div class="cl-card-info">
@@ -118,6 +122,7 @@
 // 纯展示组件：不拉取中继区域等信息——routeBadge 由页面计算后传入（null = 不渲染路径徽章）。
 // 页面差异经 slot 注入：topbar（统一管理的最大化按钮）、actions（按钮组 + #id 尾注）、footer（扩展位）。
 import { computed } from 'vue'
+import { CodeOutlined } from '@ant-design/icons-vue'
 import type { Cluster } from '@/types'
 
 const props = defineProps<{
@@ -133,12 +138,11 @@ function onStatClick(key: string) {
 }
 
 /** 回退式二显副标题：description 优先 → 回退「集群标识: name」（仅 display_name 存在时）→ 无 */
-const subtitle = computed<string | null>(() => {
-  const c = props.cluster
-  if (c.description) return c.description
-  if (c.display_name) return `集群标识: ${c.name}`
-  return null
-})
+/** 副标题纯描述（批 8：回退「集群标识: name」移除——技术身份恒显于标题条身份区，回退为重复） */
+const subtitle = computed<string | null>(() => props.cluster.description || null)
+
+/** 标题条身份 tooltip（数字 ID 唯一露出面随身份条迁移） */
+const identTitle = computed(() => `集群标识（API/管理面使用）: ${props.cluster.name} · ID: ${props.cluster.id}`)
 
 /** 悬停保底：主标题 tooltip 携带数字 ID（#id 尾注删除后全 UI 唯一露出面） */
 const nameTitle = computed(
@@ -188,12 +192,37 @@ const visibleNodes = computed(() => props.cluster.nodes?.slice(0, 3) ?? [])
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   padding: 3px 12px 3px 16px;
   font-size: 11px;
   font-weight: 500;
   color: var(--accent);
   background: oklch(56% 0.16 210 / 8%);
   border-bottom: 1px solid oklch(56% 0.16 210 / 12%);
+}
+
+/* 标题条技术身份区（批 8）：图标 + name 等宽弱色；区域经路径徽章表达（不在此重复） */
+.cl-topbar-ident {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.cl-topbar-name {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: default;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.cl-topbar-icon {
+  font-size: 12px;
+  opacity: 0.75;
 }
 
 .cl-card-header {

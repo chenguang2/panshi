@@ -25,6 +25,14 @@ function todayStamp(): string {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}`
 }
 
+/**
+ * 同会话下载 ↔ 导入的完整性校验和登记表（central-management-ux-review-fixes P1-3）。
+ * 键 = 下载文件名；模块级（跨弹窗开关存活，会话内有效）。导入时命中即自动附带
+ * expected_checksum，文件被篡改/损坏时后端返回明确「校验和不符」而非静默导入。
+ * 无记录（跨会话/外来文件）不附带，行为与既往一致。
+ */
+const checksumRegistry = new Map<string, string>()
+
 export function useClusterBackup() {
   const error = ref<string>('')
   const downloading = ref(false)
@@ -37,6 +45,7 @@ export function useClusterBackup() {
   ): Promise<{ warnings: string[] } | null> {
     downloading.value = true
     error.value = ''
+    const filename = `${clusterName}_备份_${todayStamp()}.json`
     try {
       const res = await api.get(`/clusters/${clusterId}/backup`, {
         params: {
@@ -45,7 +54,10 @@ export function useClusterBackup() {
         },
         responseType: 'blob',
       })
-      downloadBlob(res.data as Blob, `${clusterName}_备份_${todayStamp()}.json`)
+      downloadBlob(res.data as Blob, filename)
+      // 登记完整性校验和（P1-3）：响应头 X-Backup-Checksum → 同会话导入自动附带
+      const checksum = (res.headers as Record<string, string> | undefined)?.['x-backup-checksum']
+      if (checksum) checksumRegistry.set(filename, checksum)
       // 尝试从 blob 中读取导出警告（后端将 warnings 写入文档）
       let warnings: string[] = []
       try {
@@ -72,6 +84,9 @@ export function useClusterBackup() {
       const form = new FormData()
       form.append('file', file)
       form.append('target_cluster_name', targetClusterName)
+      // 同会话下载的文件自动附带校验和（P1-3）；无记录则不附带（行为不变）
+      const checksum = checksumRegistry.get(file.name)
+      if (checksum) form.append('expected_checksum', checksum)
       const res = await api.post('/clusters/import', form, {
         headers: { 'Content-Type': 'multipart/form-data' },
       })

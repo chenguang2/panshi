@@ -3,15 +3,17 @@
     <PageHeader title="集群管理" description="管理所有的网关集群，查看集群资源和运行状态">
       <template #actions>
         <button class="btn btn-secondary" @click="openBackupDownload">备份下载</button>
+        <button class="btn btn-secondary" @click="openBackupImport">从备份导入</button>
         <button class="btn btn-primary" @click="showAddModal">+ 新建集群</button>
       </template>
     </PageHeader>
 
-    <!-- topbar 备份下载入口（cluster-ux-close-loop B6.6）：目标集群经弹窗内下拉选择 -->
+    <!-- 顶栏备份双入口（central-management-ux-review-fixes 批5：两页顶栏对齐）：
+         下载=弹窗内下拉选集群（B6.6）；导入=新集群重建；卡片「更多 → 备份下载」预置目标集群（P2-1） -->
     <ClusterBackupDialog
       :visible="backupDialogVisible"
-      mode="download"
-      :cluster="null"
+      :mode="backupDialogMode"
+      :cluster="cardBackupCluster"
       :clusters="clusters"
       @close="backupDialogVisible = false"
     />
@@ -65,6 +67,15 @@
               <button class="btn btn-secondary btn-sm cl-action-btn" @click="viewCluster(c)">详情</button>
               <button class="btn btn-ghost btn-sm cl-action-btn" @click="testCluster(c)">连接测试</button>
               <button class="btn btn-ghost btn-sm cl-action-btn" @click="editCluster(c)">编辑</button>
+              <a-dropdown :trigger="['click']">
+                <button class="btn btn-ghost btn-sm cl-action-btn" type="button">更多 ▾</button>
+                <template #overlay>
+                  <a-menu @click="onCardMenuClick($event, c)">
+                    <a-menu-item key="backup">备份下载</a-menu-item>
+                    <a-menu-item key="export">导出 Excel</a-menu-item>
+                  </a-menu>
+                </template>
+              </a-dropdown>
               <button class="btn btn-ghost btn-sm cl-action-btn" style="color: var(--danger)" @click="deleteCluster(c)">
                 删除
               </button>
@@ -88,7 +99,7 @@
         </div>
         <div v-if="!testRunning && testLogs.length === 0" class="modal-body">
           <div style="margin-bottom: 12px; font-size: 13px; color: var(--muted)">
-            将对下列节点执行管理面连通性测试（集群挂接区域时自动经区域网关）：
+            将对下列节点执行管理面连通性测试（集群挂接区域时自动经区域网关）。结果为管理面连通性（在线/离线），不改变节点运行态（运行中/已停止）：
           </div>
           <div class="test-nodes-select">
             <div v-for="n in testNodes" :key="n.id" class="test-node-row">
@@ -152,7 +163,12 @@ import ClusterCard from '@/components/ClusterCard.vue'
 import api from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import { useClusterRouteBadge } from '@/composables/useClusterRouteBadge'
-import { routeLabel, deleteClusterWithConfirm, fetchAllClusterNodes } from '@/composables/useClusterUtils'
+import {
+  routeLabel,
+  deleteClusterWithConfirm,
+  fetchAllClusterNodes,
+  exportClusterExcel,
+} from '@/composables/useClusterUtils'
 import type { Cluster } from '@/types'
 import { PAGE_SIZE_DROPDOWN } from '@/constants'
 
@@ -176,11 +192,39 @@ function clearFilters() {
   statusFilter.value = 'all'
 }
 
-/** topbar 备份下载入口（cluster-ux-close-loop B6.6） */
+/** 顶栏备份双入口（批5 两页顶栏对齐）+ 卡片「更多」预置目标（P2-1）；null 目标 = 弹窗内下拉（B6.6） */
 const backupDialogVisible = ref(false)
+const backupDialogMode = ref<'download' | 'import'>('download')
+
+/** 卡片「更多 → 备份下载」的预置目标集群（P2-1）；null = topbar 入口（弹窗内下拉） */
+const cardBackupCluster = ref<Cluster | null>(null)
 
 function openBackupDownload() {
+  cardBackupCluster.value = null
+  backupDialogMode.value = 'download'
   backupDialogVisible.value = true
+}
+
+function openBackupImport() {
+  cardBackupCluster.value = null
+  backupDialogMode.value = 'import'
+  backupDialogVisible.value = true
+}
+
+/** 卡片「更多」菜单（P2-1：备份下载/导出 Excel 网格直达）；a-menu 载荷提取为函数（约定 #25） */
+function onCardMenuClick(e: unknown, cluster: Cluster) {
+  const key = String((e as { key: string | number }).key)
+  onCardMoreAction(key, cluster)
+}
+
+function onCardMoreAction(key: string, cluster: Cluster) {
+  if (key === 'backup') {
+    cardBackupCluster.value = cluster
+    backupDialogMode.value = 'download'
+    backupDialogVisible.value = true
+  } else if (key === 'export') {
+    void exportClusterExcel(cluster.id, cluster.name)
+  }
 }
 const expandedGroups = ref<Record<string, boolean>>({})
 

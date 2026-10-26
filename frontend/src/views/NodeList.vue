@@ -67,7 +67,7 @@
         <PauseCircleOutlined /> 批量停止
       </button>
       <button class="btn btn-ghost btn-sm" :disabled="!selectedNodeKeys.length" @click="handleBatchReload">
-        <ReloadOutlined /> 批量reload
+        <ReloadOutlined /> 批量重载
       </button>
       <button class="btn btn-ghost btn-sm" :disabled="!selectedNodeKeys.length" @click="handleBatchStatus">
         批量状态查询
@@ -141,7 +141,7 @@
                   {{ getActionButtonTitle(btnKey) }}
                 </button>
               </template>
-              <button class="btn btn-ghost btn-sm" @click="handleReload(record)"><ReloadOutlined /> reload</button>
+              <button class="btn btn-ghost btn-sm" @click="handleReload(record)"><ReloadOutlined /> 重载</button>
               <a-dropdown :trigger="['click']">
                 <a-button type="text" size="small" class="action-trigger-btn"><MoreOutlined /></a-button>
                 <template #overlay>
@@ -1243,8 +1243,8 @@ function handleStop(record: any) {
 function handleReload(record: any) {
   showDangerConfirm(
     '确认重新加载节点',
-    `即将对节点 ${record.ip} 执行"reload"操作，重新加载配置，确认继续？`,
-    '确认reload',
+    `即将对节点 ${record.ip} 执行"重载"操作，重新加载配置，确认继续？`,
+    '确认重载',
     async () => {
       await executeAction(record, 'reload', 'reload')
     },

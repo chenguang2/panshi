@@ -1,6 +1,7 @@
-// 集群卡片组件（ClusterCard）守卫 —— 档位 C：共享组件 + 回退式二显副标题。
+// 集群卡片组件（ClusterCard）守卫 —— 档位 C：共享组件 + 标题条技术身份条（批 8）。
 // 组件为纯展示：routeBadge 由页面计算传入（null = 不渲染），组件内不发任何请求。
-// 主标题 display_name || name；副标题 description 优先 → 回退「集群标识: name」（仅 display_name 存在时）→ 无。
+// 主标题 display_name || name；副标题纯 description（回退已移除——技术身份恒显于标题条）；
+// 标题条 = 标识 name（mono）+ 区域微章（region_code 非空）+ topbar-extra slot（页面差异）。
 import { describe, it, expect, beforeAll, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createRouter, createWebHistory } from 'vue-router'
@@ -59,7 +60,7 @@ beforeAll(async () => {
   await router.isReady()
 })
 
-describe('ClusterCard - 主标题 / 副标题（回退式二显）', () => {
+describe('ClusterCard - 主标题 / 副标题（批 8：纯描述副标题）', () => {
   it('主标题 display_name 优先', () => {
     const w = mountCard(makeCluster())
     expect(w.find('.cl-card-name').text()).toBe('生产集群')
@@ -70,20 +71,49 @@ describe('ClusterCard - 主标题 / 副标题（回退式二显）', () => {
     expect(w.find('.cl-card-name').text()).toBe('prod-cluster')
   })
 
-  it('副标题：description 优先（有 description 时不显示集群标识）', () => {
+  it('副标题：有 description 时显示 description', () => {
     const w = mountCard(makeCluster({ description: '核心生产网关集群' }))
     expect(w.find('.cl-card-desc').text()).toBe('核心生产网关集群')
+  })
+
+  it('副标题回退已移除：无 description 时不渲染副标题（技术身份恒显于标题条）', () => {
+    const w = mountCard(makeCluster({ description: undefined }))
+    expect(w.find('.cl-card-desc').exists()).toBe(false)
     expect(w.text()).not.toContain('集群标识:')
   })
+})
 
-  it('副标题回退：无 description 且有 display_name → 「集群标识: name」', () => {
-    const w = mountCard(makeCluster({ description: undefined }))
-    expect(w.find('.cl-card-desc').text()).toBe('集群标识: prod-cluster')
+describe('ClusterCard - 标题条技术身份条（批 8）', () => {
+  it('左侧恒显集群标识 name（图标 + 等宽，无前缀词），不显示组名', () => {
+    const w = mountCard(makeCluster({ name: 'prod-cluster', group_name: '生产' }))
+    const ident = w.find('.cl-topbar-ident')
+    expect(ident.exists()).toBe(true)
+    expect(ident.text()).toContain('prod-cluster')
+    expect(ident.text()).not.toContain('标识')
+    expect(w.find('.cl-topbar-name .anticon').exists()).toBe(true)
+    expect(w.find('.cl-card-topbar').text()).not.toContain('生产')
   })
 
-  it('无 description 且无 display_name → 无副标题', () => {
-    const w = mountCard(makeCluster({ display_name: undefined, description: undefined }))
-    expect(w.find('.cl-card-desc').exists()).toBe(false)
+  it('身份 tooltip 携带集群标识与数字 ID', () => {
+    const w = mountCard(makeCluster({ name: 'prod-cluster' }))
+    expect(w.find('.cl-topbar-name').attributes('title')).toContain('prod-cluster')
+    expect(w.find('.cl-topbar-name').attributes('title')).toContain('ID')
+  })
+
+  it('区域微章已移除：区域经卡片头路径徽章表达（routeBadge），标题条不重复', () => {
+    const w = mountCard(makeCluster({ region_code: 'aoh' }))
+    expect(w.find('.cl-topbar-region').exists()).toBe(false)
+    expect(w.find('.cl-card-topbar').text()).not.toContain('区域')
+  })
+
+  it('topbar-extra slot 承载页面差异（最大化按钮），身份区保留', () => {
+    const w = mount(ClusterCard, {
+      props: { cluster: makeCluster(), routeBadge: null },
+      slots: { 'topbar-extra': '<div class="maximize-btn-sm">最大化</div>' },
+      global: { plugins: [router] },
+    })
+    expect(w.find('.cl-topbar-ident').exists()).toBe(true)
+    expect(w.find('.cl-card-topbar .maximize-btn-sm').exists()).toBe(true)
   })
 })
 
@@ -181,22 +211,9 @@ describe('ClusterCard - 节点 tag（≤3 个）', () => {
 })
 
 describe('ClusterCard - 页面差异 slot', () => {
-  it('topbar 默认显示分组名，空分组显示未分组', () => {
-    expect(mountCard(makeCluster()).find('.cl-card-topbar').text()).toBe('生产')
-    expect(
-      mountCard(makeCluster({ group_name: '' }))
-        .find('.cl-card-topbar')
-        .text(),
-    ).toBe('未分组')
-  })
-
-  it('topbar slot 覆盖默认（统一管理的最大化按钮）', () => {
-    const w = mount(ClusterCard, {
-      props: { cluster: makeCluster(), routeBadge: null },
-      slots: { topbar: '<span>生产</span><div class="maximize-btn-sm">最大化</div>' },
-      global: { plugins: [router] },
-    })
-    expect(w.find('.cl-card-topbar .maximize-btn-sm').exists()).toBe(true)
+  it('标题条不显示组名（分组头承载，批 8 移除回退）', () => {
+    const topbar = mountCard(makeCluster({ group_name: '生产' })).find('.cl-card-topbar')
+    expect(topbar.text()).not.toContain('生产')
   })
 
   it('actions slot 注入 .cl-card-actions（统一管理的 #id 尾注）', () => {

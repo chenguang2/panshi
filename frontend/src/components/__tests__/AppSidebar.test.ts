@@ -380,7 +380,8 @@ describe('AppSidebar 证书管理分组（ssl-cert-management）', () => {
     const coreIdx = titles.indexOf('核心功能')
     const certIdx = titles.indexOf('证书管理')
     expect(certIdx).toBeGreaterThan(-1)
-    expect(certIdx).toBe(coreIdx + 1)
+    // 批 9 后核心功能与证书管理之间插入「监控」组：断言放宽为「位于核心功能之后」
+    expect(certIdx).toBeGreaterThan(coreIdx)
     const ca = findNavItem(wrapper, 'CA 根证书')
     const server = findNavItem(wrapper, '服务器证书')
     expect(ca).toBeDefined()
@@ -407,5 +408,92 @@ describe('AppSidebar 证书管理分组（ssl-cert-management）', () => {
     await r.isReady()
     expect(findNavItem(wrapper, 'CA 根证书')).toBeUndefined()
     expect(findNavItem(wrapper, '服务器证书')).toBeUndefined()
+  })
+})
+
+// ── central-management-ux-review-fixes 批 9：菜单信息架构重组 ────────────────
+// 综合（杂物抽屉）解散：统一管理→核心功能（概览后），指标总览/查询/ClickHouse 配置→新「监控」组；
+// 中继区域管理→运维管理（运行时拓扑运维非平台管理）；系统管理与运维管理对调（管理面收尾）。
+
+describe('AppSidebar 菜单信息架构（批 9）', () => {
+  function makeRouter() {
+    return createRouter({
+      history: createWebHistory(),
+      routes: [
+        { path: '/', name: 'Dashboard', component: { template: '<div />' } },
+        { path: '/central-management', name: 'CentralManagement', component: { template: '<div />' } },
+        { path: '/metrics-overview', name: 'MetricsOverview', component: { template: '<div />' } },
+        { path: '/relay-gateways', name: 'RelayGateways', component: { template: '<div />' } },
+      ],
+    })
+  }
+
+  function findNavItem(wrapper: ReturnType<typeof mount>, label: string) {
+    return wrapper.findAll('.nav-item').find((w) => w.find('.nav-label').text() === label)
+  }
+
+  function sectionTitles(wrapper: ReturnType<typeof mount>) {
+    return wrapper.findAll('.sidebar-section-title').map((w) => w.text().trim())
+  }
+
+  function sectionItemLabels(wrapper: ReturnType<typeof mount>, title: string) {
+    const section = wrapper
+      .findAll('.sidebar-section')
+      .find((w) => w.find('.sidebar-section-title').text().trim() === title)
+    return section ? section.findAll('.nav-label').map((w) => w.text().trim()) : []
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    mockLocalStorage()
+    localStorage.setItem('user', JSON.stringify({ id: 1, username: 'admin', role: 'admin' }))
+    useFeaturesStore().$patch({ loaded: true })
+  })
+
+  it('组序：核心功能 → 证书管理 → 边缘网络 → 监控 → 运维管理 → 系统管理；「综合」解散（监控在边缘网络后，用户裁决）', async () => {
+    const r = makeRouter()
+    const wrapper = mount(AppSidebar, { global: { plugins: [r] } })
+    await r.isReady()
+    expect(sectionTitles(wrapper)).toEqual(['核心功能', '证书管理', '边缘网络', '监控', '运维管理', '系统管理'])
+  })
+
+  it('核心功能：概览之后是统一管理、再集群管理（聚合→单体话流）', async () => {
+    const r = makeRouter()
+    const wrapper = mount(AppSidebar, { global: { plugins: [r] } })
+    await r.isReady()
+    const labels = sectionItemLabels(wrapper, '核心功能')
+    expect(labels.slice(0, 3)).toEqual(['概览', '统一管理', '集群管理'])
+    expect(labels).toContain('静态资源')
+  })
+
+  it('监控组：指标总览（落地页在前）→ 指标查询 → ClickHouse 配置', async () => {
+    const r = makeRouter()
+    const wrapper = mount(AppSidebar, { global: { plugins: [r] } })
+    await r.isReady()
+    expect(sectionItemLabels(wrapper, '监控')).toEqual(['指标总览', '指标查询', 'ClickHouse 配置'])
+  })
+
+  it('中继区域管理归运维管理；系统管理不再含 ClickHouse 配置与中继区域管理', async () => {
+    const r = makeRouter()
+    const wrapper = mount(AppSidebar, { global: { plugins: [r] } })
+    await r.isReady()
+    expect(sectionItemLabels(wrapper, '运维管理')).toContain('中继区域管理')
+    const sys = sectionItemLabels(wrapper, '系统管理')
+    expect(sys).not.toContain('ClickHouse 配置')
+    expect(sys).not.toContain('中继区域管理')
+    expect(sys).not.toContain('插件开关')
+    expect(sys).toContain('用户管理')
+    expect(sys).toContain('数据库管理')
+  })
+
+  it('插件开关归核心功能（静态资源之后，用户裁决），permission=plugin_management + feature 门控', async () => {
+    const r = makeRouter()
+    const wrapper = mount(AppSidebar, { global: { plugins: [r] } })
+    await r.isReady()
+    const core = sectionItemLabels(wrapper, '核心功能')
+    expect(core[core.length - 1]).toBe('插件开关')
+    const item = findNavItem(wrapper, '插件开关')
+    expect(item).toBeDefined()
+    expect(item!.attributes('href')).toBe('/plugin-switches')
   })
 })

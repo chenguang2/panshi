@@ -52,7 +52,7 @@ describe('batch2 4.2 确认弹窗收敛守卫（batch3 1.3 起统一入口为 sh
 
   it('启动/停止/reload 确认保留危险色语义与按钮文案；取消安装走共享工厂（batch3 1.2）', () => {
     const s = src()
-    for (const text of ['确认启动', '确认停止', '确认reload']) {
+    for (const text of ['确认启动', '确认停止', '确认重载']) {
       expect(s, `应保留文案 ${text}`).toContain(text)
     }
     // 取消安装确认已收敛到 createCancelNodeInstallHandler（文案在工厂内钉死）

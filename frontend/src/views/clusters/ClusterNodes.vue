@@ -14,7 +14,7 @@
         >⏹ 停止{{ batchCount > 0 ? `(${batchCount})` : '' }}</a-button
       >
       <a-button size="small" @click="handleNodeReload" :disabled="!(singleOpEnabled || batchOpEnabled)"
-        >⟳ reload{{ batchCount > 0 ? `(${batchCount})` : '' }}</a-button
+        >⟳ 重载{{ batchCount > 0 ? `(${batchCount})` : '' }}</a-button
       >
       <a-button size="small" @click="handleNodeStatusQuery" :disabled="!(singleOpEnabled || batchOpEnabled)"
         >状态查询{{ batchCount > 0 ? `(${batchCount})` : '' }}</a-button
@@ -719,19 +719,16 @@ function handleNodeReload() {
   const node = props.cluster.selectedNode
   if (batchCount.value > 0) {
     const ips = selectedNodeIps()
-    showDangerConfirm(
-      '确认批量 reload 节点',
-      confirmTitle(batchCount.value, ips),
-      `确认reload(${batchCount.value})`,
-      () => batchNodeAction(props.cluster, 'reload', 'reload'),
+    showDangerConfirm('确认批量重载节点', confirmTitle(batchCount.value, ips), `确认重载(${batchCount.value})`, () =>
+      batchNodeAction(props.cluster, 'reload', 'reload'),
     )
     return
   }
   if (!node) return
   showDangerConfirm(
     '确认重新加载节点',
-    `即将对节点 ${node.ip} 执行"reload"操作，重新加载配置，确认继续？`,
-    '确认reload',
+    `即将对节点 ${node.ip} 执行"重载"操作，重新加载配置，确认继续？`,
+    '确认重载',
     () => executeNodeAction(node, 'reload', 'reload'),
   )
 }

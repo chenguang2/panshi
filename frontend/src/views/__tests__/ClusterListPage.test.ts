@@ -398,7 +398,9 @@ describe('ClusterList.vue - 连接测试交互统一（B2）', () => {
   it('引导文案为管理面语义且不出现「TCP 端口连接测试」', async () => {
     const { wrapper } = await openTestModal()
     const text = wrapper.text()
-    expect(text).toContain('将对下列节点执行管理面连通性测试（集群挂接区域时自动经区域网关）：')
+    expect(text).toContain(
+      '将对下列节点执行管理面连通性测试（集群挂接区域时自动经区域网关）。结果为管理面连通性（在线/离线），不改变节点运行态（运行中/已停止）：',
+    )
     expect(text).not.toContain('TCP 端口连接测试')
   })
 
@@ -640,7 +642,7 @@ describe('ClusterList.vue - 空状态与入口（B6）', () => {
     const actionsRow = wrapper.find('.cl-card-actions')
     expect(actionsRow.exists()).toBe(true)
     const labels = actionsRow.findAll('button').map((b) => b.text())
-    expect(labels).toEqual(['详情', '连接测试', '编辑', '删除'])
+    expect(labels).toEqual(['详情', '连接测试', '编辑', '更多 ▾', '删除'])
     const detailBtn = actionsRow.findAll('button')[0]
     expect(detailBtn.classes()).toContain('btn-secondary')
     const delBtn = actionsRow.findAll('button').at(-1)!
@@ -683,6 +685,44 @@ describe('ClusterList.vue - 空状态与入口（B6）', () => {
     expect(dialog.exists()).toBe(true)
     expect(dialog.props('visible')).toBe(true)
     expect(dialog.props('mode')).toBe('download')
+  })
+
+  it('PageHeader 提供「从备份导入」入口，点击切到导入模式（central-management-ux-review-fixes 批5：两页顶栏对齐）', async () => {
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/clusters' || url === '/clusters/my')
+        return Promise.resolve({
+          data: {
+            items: [
+              {
+                id: 1,
+                name: 'alpha',
+                display_name: '甲',
+                group_name: '',
+                status: 1,
+                node_count: 0,
+                healthy_node_count: 0,
+                upstream_count: 0,
+                route_count: 0,
+                plugin_config_count: 0,
+                global_rule_count: 0,
+                static_resource_count: 0,
+                plugin_metadata_count: 0,
+              },
+            ],
+            total: 1,
+          },
+        })
+      return Promise.resolve({ data: {} })
+    })
+    const wrapper = await mountPage()
+    const importBtn = wrapper.findAll('button').find((b) => b.text() === '从备份导入')
+    expect(importBtn, '顶栏应有「从备份导入」按钮').toBeTruthy()
+    await importBtn!.trigger('click')
+    await flushPromises()
+    const dialog = wrapper.findComponent({ name: 'ClusterBackupDialog' })
+    expect(dialog.exists()).toBe(true)
+    expect(dialog.props('visible')).toBe(true)
+    expect(dialog.props('mode')).toBe('import')
   })
 })
 

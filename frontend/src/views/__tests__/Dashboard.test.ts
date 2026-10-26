@@ -664,12 +664,8 @@ describe('Dashboard - 权限键映射与 AppSidebar 同源（批次 5.3）', () 
       const sidebar = gatesOf(sidebarSrc, `route: '${e.path}'`, /label:\s*'|route:\s*'/)
       expect(sidebar.permission, `侧边栏 ${e.path} permission 漂移`).toBe(e.permission)
       expect(sidebar.adminOnly, `侧边栏 ${e.path} adminOnly 漂移`).toBe(e.adminOnly)
-      if (e.path === '/metrics/dashboard') {
-        // 侧边栏对 metrics 的 feature 门控是结构化的（featuresStore.has('metrics') 条件展开），无 feature 字段
-        expect(sidebarSrc).toContain("featuresStore.has('metrics')")
-      } else {
-        expect(sidebar.feature, `侧边栏 ${e.path} feature 漂移`).toBe(e.feature)
-      }
+      // 批 9 后 metrics 菜单项与全站同构（feature 字段门控，不再走条件展开特例）
+      expect(sidebar.feature, `侧边栏 ${e.path} feature 漂移`).toBe(e.feature)
     }
   })
 

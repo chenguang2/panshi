@@ -26,6 +26,8 @@ vi.mock('@/api', () => ({
 const antStubs: Record<string, any> = {
   'a-form': { template: '<form><slot /></form>' },
   'a-form-item': { props: ['label'], template: '<div class="ant-form-item"><slot /></div>' },
+  // 图标按钮桩（批 8）：属性透传（title/disabled/onClick 经 fallthrough 生效），保留 .ant-btn 供断言
+  'a-button': { template: '<button class="ant-btn"><slot /></button>' },
   'a-select': {
     props: ['value'],
     emits: ['update:value', 'change'],
@@ -160,7 +162,7 @@ describe('ClusterStaticResources.vue（Tab）· static-resources-ux-close-loop �
     expect(w.find('.pst-stub').exists()).toBe(false)
   })
 
-  it('失败态（7.3）：徽章显示 N/M 节点失败 + tooltip 列出失败节点，出现「重发失败节点」', async () => {
+  it('失败态（7.3）：徽章显示 N/M 节点失败 + tooltip 列出失败节点，出现重发失败节点图标（批 8）', async () => {
     const w = await mountTab()
     expect(w.text()).toContain('1/3 节点失败')
     const partialCard = w.findAll('.plugin-config-card').find((c) => c.text().includes('partial'))!
@@ -168,21 +170,25 @@ describe('ClusterStaticResources.vue（Tab）· static-resources-ux-close-loop �
     expect(tip).toContain('最近分发')
     expect(tip).toContain('10.0.0.2')
     expect(tip).toContain('boom')
-    expect([...partialCard.findAll('button')].some((b) => b.text().includes('重发失败节点'))).toBe(true)
+    const resend = partialCard
+      .findAll('button')
+      .find((b) => b.attributes('title') === '上次发布存在失败节点：仅重发失败节点')
+    expect(resend, 'failed 态应有重发失败节点图标').toBeTruthy()
   })
 
-  it('配置异常态（7.3）：操作收敛为删除——其余禁用带指路 tooltip', async () => {
+  it('配置异常态（7.3）：操作收敛为删除——其余禁用带指路 tooltip（图标按钮 title 承载，批 8）', async () => {
     const w = await mountTab()
     const orphanCard = w.findAll('.plugin-config-card').find((c) => c.text().includes('orphan'))!
     const tip = '关联路由不存在，请删除该资源或重建路由'
-    const byText = (t: string) => [...orphanCard.findAll('button')].find((b) => b.text().trim() === t)!
-    expect(byText('编辑').attributes('disabled')).toBeDefined()
-    expect(byText('上传 ZIP').attributes('disabled')).toBeDefined()
-    expect(byText('发布').attributes('disabled')).toBeDefined()
-    expect(byText('版本管理').attributes('disabled')).toBeDefined()
-    expect(byText('编辑').attributes('title')).toBe(tip)
-    expect(byText('删除').attributes('disabled')).toBeUndefined()
-    expect([...orphanCard.findAll('button')].some((b) => b.text().includes('重发失败节点'))).toBe(false)
+    const byTitle = (t: string) => [...orphanCard.findAll('button')].find((b) => b.attributes('title') === t)!
+    // broken 态：左组三图标 + 重发图标 + 发布/版本管理 的 title 全部=指路文案且禁用
+    const tipBtns = [...orphanCard.findAll('button')].filter((b) => b.attributes('title') === tip)
+    expect(tipBtns.length).toBe(6)
+    for (const b of tipBtns) expect(b.attributes('disabled')).toBeDefined()
+    expect(byTitle('删除').attributes('disabled')).toBeUndefined()
+    expect(
+      orphanCard.findAll('button').some((b) => b.attributes('title') === '上次发布存在失败节点：仅重发失败节点'),
+    ).toBe(false)
     // 徽章=配置异常
     expect(orphanCard.find('.srs-tag').text()).toBe('配置异常')
   })
@@ -220,12 +226,12 @@ describe('ClusterStaticResources.vue（Tab）· static-resources-ux-close-loop �
     })
     const w = await mountTab()
     const buttons = w.findAll('button')
-    const viewBtns = buttons.filter((b) => b.text().includes('查看 ZIP'))
-    expect(viewBtns.length).toBe(4)
-    // 无文件卡片置灰（orphan/partial/empty）
-    expect(viewBtns[1].attributes('disabled')).toBeDefined()
-    expect(viewBtns[2].attributes('disabled')).toBeDefined()
-    expect(viewBtns[3].attributes('disabled')).toBeDefined()
+    // 有文件 → title=查看 ZIP 内容（仅 portal）；无文件 → title=暂未上传 ZIP 文件（partial/empty）
+    const viewBtns = buttons.filter((b) => b.attributes('title') === '查看 ZIP 内容')
+    expect(viewBtns.length).toBe(1)
+    const noFileBtns = buttons.filter((b) => b.attributes('title') === '暂未上传 ZIP 文件')
+    expect(noFileBtns.length).toBeGreaterThanOrEqual(2)
+    for (const b of noFileBtns) expect(b.attributes('disabled')).toBeDefined()
     // 有文件卡片点击 → 弹窗渲染内容行
     await viewBtns[0].trigger('click')
     await flushPromises()
@@ -249,12 +255,21 @@ describe('ClusterStaticResources.vue（Tab）· static-resources-ux-close-loop �
     expect(publishBtns[3].attributes('disabled')).toBeDefined()
   })
 
-  it('操作按钮为原生按钮体系（btn btn-ghost/btn-secondary，无 a-button 两字插空格）', async () => {
+  it('操作按钮体系（批 8）：图标动作走 a-button 且必带 title；发布/版本管理保持原生文字按钮', async () => {
     const w = await mountTab()
     const actions = w.find('.pcc-actions')
-    expect(actions.findAll('button .ant-btn').length).toBe(0)
-    expect(actions.find('button.btn-secondary').exists()).toBe(true)
-    expect(actions.findAll('button.btn-ghost').length).toBeGreaterThanOrEqual(4)
+    const iconBtns = actions.findAll('.ant-btn')
+    expect(iconBtns.length).toBeGreaterThanOrEqual(4)
+    // 图标按钮无文字（长度 0），且每个都带 title（禁用必须永远有原因）
+    for (const b of iconBtns) {
+      expect(b.text().trim()).toBe('')
+      expect(b.attributes('title'), '图标按钮必须带 tooltip').toBeTruthy()
+    }
+    // 发布/版本管理保持原生 btn 体系（非 a-button）
+    const native = actions.findAll('button.btn-secondary')
+    expect(native.length).toBeGreaterThanOrEqual(1)
+    expect(native[0].text().trim()).toBe('发布')
+    expect(actions.findAll('button.btn-ghost').some((b) => b.text().trim() === '版本管理')).toBe(true)
   })
 })
 

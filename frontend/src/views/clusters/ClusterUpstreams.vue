@@ -75,6 +75,12 @@
       class="node-table"
       @change="(pag: any, _filters: any, sorter: any) => handleUpstreamTableChange(cluster, pag, sorter)"
     >
+      <template #emptyText>
+        <div class="empty-guide">
+          <p style="margin: 0 0 8px">暂无上游 — 添加上游，定义后端服务的负载均衡目标</p>
+          <a-button size="small" type="primary" @click="showAddUpstreamModal(cluster)">添加上游</a-button>
+        </div>
+      </template>
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'targets'">
           <div v-if="record.targets && record.targets.length > 0" class="target-list">

@@ -250,7 +250,9 @@ describe('CentralList.vue - 连接测试交互统一（B2）', () => {
   it('引导文案为管理面语义且不出现「TCP 端口连接测试」', async () => {
     const { wrapper } = await openTestModal()
     const text = wrapper.text()
-    expect(text).toContain('将对下列节点执行管理面连通性测试（集群挂接区域时自动经区域网关）：')
+    expect(text).toContain(
+      '将对下列节点执行管理面连通性测试（集群挂接区域时自动经区域网关）。结果为管理面连通性（在线/离线），不改变节点运行态（运行中/已停止）：',
+    )
     expect(text).not.toContain('TCP 端口连接测试')
   })
 
@@ -434,7 +436,7 @@ describe('CentralList.vue - 空状态与 actions 统一（B6）', () => {
     const actionsRow = wrapper.find('.cl-card-actions')
     expect(actionsRow.exists()).toBe(true)
     const labels = actionsRow.findAll('button').map((b) => b.text())
-    expect(labels).toEqual(['详情', '连接测试', '编辑', '删除'])
+    expect(labels).toEqual(['详情', '连接测试', '编辑', '更多 ▾', '删除'])
     expect(actionsRow.findAll('button')[0].classes()).toContain('btn-secondary')
   })
 })
@@ -520,5 +522,228 @@ describe('CentralList.vue 连接测试节点清单全量拉取（route-managemen
     const nodeRows = wrapper.findAll('.test-node-row')
     expect(nodeRows.length).toBe(501)
     expect(nodeRows.some((r) => r.text().includes('10.9.9.9:16999'))).toBe(true)
+  })
+})
+
+// ── central-management-ux-review-fixes 批 3：刷新保状态 + 子表延迟加载 ──────────
+// P2-5：loadClusters 重建对象不再把展开面板 Tab 重置回首签（#203 陷阱全局版兜底）；
+// 上游子表不再挂载期全量预加载（handleTabClick 按需加载）。
+
+describe('CentralList.vue 刷新保状态与延迟加载（central-management-ux-review-fixes 批3）', () => {
+  function newRouter() {
+    return createRouter({
+      history: createWebHistory(),
+      routes: [{ path: '/', name: 'Dashboard', component: { template: '<div />' } }],
+    })
+  }
+
+  const cluster = {
+    id: 1,
+    name: 'demo-cluster',
+    display_name: '演示集群',
+    group_name: '',
+    status: 1,
+    node_count: 1,
+    healthy_node_count: 1,
+    upstream_count: 1,
+    route_count: 2,
+    plugin_config_count: 0,
+    global_rule_count: 0,
+    static_resource_count: 0,
+    plugin_metadata_count: 0,
+    nodes: [],
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    setActivePinia(createPinia())
+    mockLocalStorage()
+    localStorage.setItem('user', JSON.stringify({ id: 1, username: 'admin', role: 'admin' }))
+    localStorage.setItem('token', 'mock-token')
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/clusters') return Promise.resolve({ data: { items: [cluster], total: 1 } })
+      return Promise.resolve({ data: {} })
+    })
+  })
+
+  it('挂载不预加载上游子表（节点因卡片节点区渲染保持加载）', async () => {
+    const CentralList = (await import('@/views/CentralList.vue')).default
+    const wrapper = mount(CentralList, { global: { plugins: [newRouter()] } })
+    await flushPromises()
+    await flushPromises()
+    const urls = mockApiGet.mock.calls.map((c) => String(c[0]))
+    expect(urls.some((u) => u === '/clusters/1/upstreams')).toBe(false)
+    expect(urls.some((u) => u.startsWith('/clusters/1/nodes'))).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('顶栏提供「备份下载」入口 → 弹窗 download 模式（批5：两页顶栏对齐）', async () => {
+    const CentralList = (await import('@/views/CentralList.vue')).default
+    const wrapper = mount(CentralList, { global: { plugins: [newRouter()] } })
+    await flushPromises()
+    await flushPromises()
+    const dlBtn = wrapper.findAll('button').find((b) => b.text() === '备份下载')
+    expect(dlBtn, '统一管理顶栏应有「备份下载」按钮').toBeTruthy()
+    await dlBtn!.trigger('click')
+    await flushPromises()
+    const dialog = wrapper.findComponent({ name: 'ClusterBackupDialog' })
+    expect(dialog.exists()).toBe(true)
+    expect(dialog.props('visible')).toBe(true)
+    expect(dialog.props('mode')).toBe('download')
+    wrapper.unmount()
+  })
+
+  it('Tab @refresh 后保持当前 Tab（不再重置回首签）', async () => {
+    const CentralList = (await import('@/views/CentralList.vue')).default
+    const routesMod = await import('@/views/clusters/ClusterRoutes.vue')
+    const wrapper = mount(CentralList, { global: { plugins: [newRouter()] } })
+    await flushPromises()
+    await flushPromises()
+
+    // 统计格「路由」→ 最大化并切到路由 Tab
+    const statCell = wrapper.findAll('.cl-stat-cell').find((c) => c.text().includes('路由'))
+    expect(statCell).toBeTruthy()
+    await statCell!.trigger('click')
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.dt.active').text()).toContain('路由')
+
+    // 面板内真实刷新路径：ClusterRoutes emit('refresh') → loadClusters 重建对象
+    mockApiGet.mockClear()
+    const routesComp = wrapper.findComponent(routesMod.default)
+    expect(routesComp.exists()).toBe(true)
+    routesComp.vm.$emit('refresh')
+    await flushPromises()
+    await flushPromises()
+
+    // 列表被重新拉取，且当前 Tab 仍为路由（未被重置回「集群节点」）
+    expect(mockApiGet.mock.calls.some((c) => String(c[0]) === '/clusters')).toBe(true)
+    expect(wrapper.find('.dt.active').text()).toContain('路由')
+    wrapper.unmount()
+  })
+})
+
+// ── central-management-ux-review-fixes 批 7：统一管理分组筛选（与集群管理对齐）────
+
+describe('CentralList.vue 分组筛选（批7：与集群管理对齐）', () => {
+  function newRouter() {
+    return createRouter({
+      history: createWebHistory(),
+      routes: [{ path: '/', name: 'Dashboard', component: { template: '<div />' } }],
+    })
+  }
+
+  const clusters = [
+    {
+      id: 1,
+      name: 'alpha',
+      display_name: '甲',
+      group_name: 'dns',
+      status: 1,
+      node_count: 0,
+      healthy_node_count: 0,
+      upstream_count: 0,
+      route_count: 0,
+      plugin_config_count: 0,
+      global_rule_count: 0,
+      static_resource_count: 0,
+      plugin_metadata_count: 0,
+      nodes: [],
+    },
+    {
+      id: 2,
+      name: 'beta',
+      display_name: '乙',
+      group_name: 'dns',
+      status: 1,
+      node_count: 0,
+      healthy_node_count: 0,
+      upstream_count: 0,
+      route_count: 0,
+      plugin_config_count: 0,
+      global_rule_count: 0,
+      static_resource_count: 0,
+      plugin_metadata_count: 0,
+      nodes: [],
+    },
+    {
+      id: 3,
+      name: 'gamma',
+      display_name: '丙',
+      group_name: '',
+      status: 1,
+      node_count: 0,
+      healthy_node_count: 0,
+      upstream_count: 0,
+      route_count: 0,
+      plugin_config_count: 0,
+      global_rule_count: 0,
+      static_resource_count: 0,
+      plugin_metadata_count: 0,
+      nodes: [],
+    },
+  ]
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    setActivePinia(createPinia())
+    mockLocalStorage()
+    localStorage.setItem('user', JSON.stringify({ id: 1, username: 'admin', role: 'admin' }))
+    localStorage.setItem('token', 'mock-token')
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/clusters') return Promise.resolve({ data: { items: clusters, total: 3 } })
+      return Promise.resolve({ data: {} })
+    })
+  })
+
+  async function mountPage() {
+    const CentralList = (await import('@/views/CentralList.vue')).default
+    const wrapper = mount(CentralList, { global: { plugins: [newRouter()] } })
+    await flushPromises()
+    await flushPromises()
+    return wrapper
+  }
+
+  function groupNames(wrapper: ReturnType<typeof mount>['wrapper']) {
+    return wrapper.findAll('.group-name').map((g) => g.text().trim())
+  }
+
+  /** 工具栏下拉（排除常驻 DOM 的备份弹窗内下拉）：[0]=分组 [1]=状态 */
+  function toolbarSelects(wrapper: ReturnType<typeof mount>['wrapper']) {
+    return wrapper.find('.cl-header-actions').findAll('select')
+  }
+
+  it('工具栏提供分组筛选（全部分组/未分组/各组），选组后仅显示该组', async () => {
+    const wrapper = await mountPage()
+    const groupSelect = toolbarSelects(wrapper)[0]
+    const options = groupSelect.findAll('option').map((o) => o.text())
+    expect(options).toEqual(['全部分组', '未分组', 'dns'])
+    // 选 dns → 只剩 dns 组（未分组组头消失），计数同步
+    await groupSelect.setValue('dns')
+    expect(groupNames(wrapper)).toEqual(['dns'])
+    expect(wrapper.text()).toContain('共 2 个集群')
+    wrapper.unmount()
+  })
+
+  it('未分组选项仅显示未分组集群；重选全部分组恢复（清除筛选仅空态出现，与集群管理同款）', async () => {
+    const wrapper = await mountPage()
+    const groupSelect = toolbarSelects(wrapper)[0]
+    await groupSelect.setValue('__ung__')
+    expect(groupNames(wrapper)).toEqual(['未分组'])
+    expect(wrapper.text()).toContain('共 1 个集群')
+    // 与集群管理同款：清除筛选按钮仅在「筛选结果为空」时出现
+    await groupSelect.setValue('dns')
+    const searchInput = wrapper.find('.cl-header-actions input')
+    await searchInput.setValue('不存在的集群zzz')
+    await flushPromises()
+    // 空态判定（a-empty 描述文案在 jsdom 不入文本树，用计数与清除按钮断言）
+    expect(wrapper.text()).toContain('共 0 个集群')
+    const clearBtn = wrapper.findAll('button').find((b) => b.text() === '清除筛选')
+    expect(clearBtn, '空态应出现「清除筛选」').toBeTruthy()
+    await clearBtn!.trigger('click')
+    await flushPromises()
+    expect(groupNames(wrapper)).toEqual(['未分组', 'dns'])
+    expect(wrapper.text()).toContain('共 3 个集群')
+    wrapper.unmount()
   })
 })

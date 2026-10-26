@@ -15,6 +15,23 @@ export function routeLabel(route?: 'relay' | 'direct'): string {
   return ''
 }
 
+/**
+ * 集群 Excel 导出（人读报表，不可导入；central-management-ux-review-fixes P2-1/P2-8）。
+ * 单一实现供 集群管理/统一管理 两页卡片「更多」菜单复用；失败 message.error，成功无弹窗。
+ */
+export async function exportClusterExcel(clusterId: number, clusterName: string): Promise<void> {
+  try {
+    const res = await api.get(`/clusters/${clusterId}/export`, {
+      responseType: 'blob',
+    })
+    const { downloadBlob } = await import('@/utils/download')
+    downloadBlob(res.data as Blob, `${clusterName}_配置导出.xlsx`)
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { detail?: string } }; message?: string }
+    message.error(err.response?.data?.detail || err.message || '导出失败')
+  }
+}
+
 /** 全量拉取集群节点的单页大小（对齐后端 MAX_PAGE_SIZE=500）。 */
 const NODES_FETCH_PAGE_SIZE = PAGE_SIZE_DROPDOWN
 

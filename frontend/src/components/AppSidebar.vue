@@ -202,6 +202,14 @@ const navSections = computed<NavSection[]>(() => {
       permission: 'task_center',
       feature: 'task_center',
     },
+    {
+      // 批 9：中继区域管理=网关/跳板/白名单下发的运行时拓扑运维，归运维管理（原系统管理）
+      label: '中继区域管理',
+      route: '/relay-gateways',
+      icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="6" height="6" rx="1"/><rect x="10" y="10" width="6" height="6" rx="1"/><path d="M5 8v3a2 2 0 002 2h3"/></svg>',
+      permission: 'relay_gateway',
+      feature: 'relay_gateway',
+    },
   ].filter((item) => {
     const passFeature = !item.feature || featuresStore.has(item.feature)
     const passPermission = !item.permission || authStore.hasPermission(item.permission)
@@ -235,6 +243,13 @@ const navSections = computed<NavSection[]>(() => {
       label: '概览',
       route: '/',
       icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2h6v6H2V2zm8 0h6v6h-6V2zM2 10h6v6H2v-6zm8 0h6v6h-6v-6z"/></svg>',
+    },
+    {
+      // 批 9：统一管理=集群域聚合运维台，与集群管理（单集群）同域双视图，归核心功能
+      label: '统一管理',
+      route: '/central-management',
+      permission: 'central_management',
+      icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h14v3H2V4zm0 7h14v3H2v-3z"/><circle cx="9" cy="5.5" r="1.5" fill="currentColor"/><circle cx="9" cy="12.5" r="1.5" fill="currentColor"/></svg>',
     },
     {
       label: '集群管理',
@@ -283,6 +298,15 @@ const navSections = computed<NavSection[]>(() => {
       route: '/static-resources',
       permission: 'static_resources',
       icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 1v8M6 4l3-3 3 3"/><path d="M3 10v4a1 1 0 001 1h10a1 1 0 001-1v-4"/></svg>',
+    },
+    {
+      // 批 9 补充（用户裁决）：插件开关=插件子系统能力闸门，随消费方归核心功能（尾部）；
+      // 门控对齐后端 require_permission('plugin_management')（原 adminOnly 过紧——持键非管理员后端放行）
+      label: '插件开关',
+      route: '/plugin-switches',
+      icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9h8a4 4 0 010 8H5a4 4 0 010-8zM5 15a2 2 0 110-4 2 2 0 010 4z"/></svg>',
+      permission: 'plugin_management',
+      feature: 'plugin_switches',
     },
   ]
 
@@ -336,35 +360,42 @@ const navSections = computed<NavSection[]>(() => {
       ),
     },
     {
-      title: '综合',
+      // 批 9：监控组——总览/查询的取数与 ClickHouse 配置同源（clickhouse.yaml），配置随消费方同组；
+      // 组序（用户裁决）：位于边缘网络之后、运维管理之前
+      title: '监控',
       items: [
         {
-          label: '统一管理',
-          route: '/central-management',
-          permission: 'central_management',
-          icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h14v3H2V4zm0 7h14v3H2v-3z"/><circle cx="9" cy="5.5" r="1.5" fill="currentColor"/><circle cx="9" cy="12.5" r="1.5" fill="currentColor"/></svg>',
+          label: '指标总览',
+          route: '/metrics/dashboard',
+          permission: 'metrics',
+          feature: 'metrics',
+          icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 16h14M4 13h2v3H4zM8 9h2v7H8zM12 5h2v11h-2z"/></svg>',
         },
-        ...(featuresStore.has('metrics')
-          ? [
-              {
-                label: '指标查询',
-                route: '/metrics',
-                permission: 'metrics',
-                icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 16h14M4 12l3-6 3 4 4-8"/></svg>',
-              } as NavItem,
-              {
-                label: '指标总览',
-                route: '/metrics/dashboard',
-                permission: 'metrics',
-                icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 16h14M4 13h2v3H4zM8 9h2v7H8zM12 5h2v11h-2z"/></svg>',
-              } as NavItem,
-            ]
-          : []),
+        {
+          label: '指标查询',
+          route: '/metrics',
+          permission: 'metrics',
+          feature: 'metrics',
+          icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 16h14M4 12l3-6 3 4 4-8"/></svg>',
+        },
+        {
+          label: 'ClickHouse 配置',
+          route: '/clickhouse-config',
+          icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5l7-3 7 3-7 3-7-3z"/><path d="M2 5v8l7 3 7-3V5"/><path d="M9 8v8"/></svg>',
+          permission: 'clickhouse_config',
+          feature: 'clickhouse_config',
+        },
       ].filter(
         (item) =>
           (!item.feature || featuresStore.has(item.feature)) &&
           (!item.permission || authStore.hasPermission(item.permission)),
       ),
+    },
+    {
+      // 批 9：运维（业务运维）在前、系统管理（平台管理）收尾——越往后越偏管理面
+      title: '运维管理',
+      visible: edgeItems.length > 0,
+      items: edgeItems,
     },
     {
       title: '系统管理',
@@ -378,13 +409,6 @@ const navSections = computed<NavSection[]>(() => {
         authStore.hasPermission('relay_gateway') ||
         (featuresStore.has('audit_log') && authStore.hasPermission('audit_logs')),
       items: [
-        {
-          label: '插件开关',
-          route: '/plugin-switches',
-          icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9h8a4 4 0 010 8H5a4 4 0 010-8zM5 15a2 2 0 110-4 2 2 0 010 4z"/></svg>',
-          adminOnly: true,
-          feature: 'plugin_switches',
-        },
         {
           label: '数据库管理',
           route: '/database-management',
@@ -414,20 +438,6 @@ const navSections = computed<NavSection[]>(() => {
           feature: 'audit_log',
         },
         {
-          label: 'ClickHouse 配置',
-          route: '/clickhouse-config',
-          icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5l7-3 7 3-7 3-7-3z"/><path d="M2 5v8l7 3 7-3V5"/><path d="M9 8v8"/></svg>',
-          permission: 'clickhouse_config',
-          feature: 'clickhouse_config',
-        },
-        {
-          label: '中继区域管理',
-          route: '/relay-gateways',
-          icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="6" height="6" rx="1"/><rect x="10" y="10" width="6" height="6" rx="1"/><path d="M5 8v3a2 2 0 002 2h3"/></svg>',
-          permission: 'relay_gateway',
-          feature: 'relay_gateway',
-        },
-        {
           label: '用户管理',
           route: '/users',
           icon: '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9a3 3 0 100-6 3 3 0 000 6zM3 16c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>',
@@ -439,11 +449,6 @@ const navSections = computed<NavSection[]>(() => {
           (!item.permission || authStore.hasPermission(item.permission)) &&
           (!item.adminOnly || authStore.user?.role === 'admin'),
       ),
-    },
-    {
-      title: '运维管理',
-      visible: edgeItems.length > 0,
-      items: edgeItems,
     },
   ]
 })

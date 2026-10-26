@@ -2,7 +2,8 @@
   <div class="cl-page">
     <PageHeader title="统一管理" description="以集群为单位，统一管理该集群下的资源，实现统一监控与运维">
       <template #actions>
-        <button class="btn btn-secondary" @click="openBackupImport">从备份恢复</button>
+        <button class="btn btn-secondary" @click="openBackupDownloadTopbar">备份下载</button>
+        <button class="btn btn-secondary" @click="openBackupImport">从备份导入</button>
         <button class="btn btn-primary" @click="showAddModal">+ 新建集群</button>
       </template>
     </PageHeader>
@@ -11,6 +12,7 @@
       :visible="backupDialogVisible"
       :mode="backupDialogMode"
       :cluster="backupTargetCluster"
+      :clusters="clusters"
       @imported="onBackupImported"
       @close="onBackupDialogClose"
     />
@@ -20,6 +22,11 @@
         <input v-model="filterText" type="text" placeholder="搜索集群名称或显示名..." class="form-input" />
         <span class="search-icon">🔍</span>
       </div>
+      <select v-model="groupFilter" class="form-input" style="width: 140px; flex-shrink: 0">
+        <option value="__all__">全部分组</option>
+        <option value="__ung__">未分组</option>
+        <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
+      </select>
       <select v-model="statusFilter" class="form-input" style="width: 110px; flex-shrink: 0">
         <option value="all">全部状态</option>
         <option value="enabled">已启用</option>
@@ -76,7 +83,9 @@
                   v-for="c in group.clusters"
                   :key="c.id"
                   class="cluster-name-item"
-                  :title="c.display_name || c.name"
+                  :title="
+                    (c.status === 1 ? '已启用' : '已禁用') + ' · ' + (c.display_name || c.name) + '（点击最大化）'
+                  "
                   @click.stop="maximizeCluster(c)"
                 >
                   <span class="status-dot-sm" :class="c.status === 1 ? 'green' : 'red'"></span>
@@ -96,8 +105,7 @@
                   :route-badge="routeBadge(cluster)"
                   :stat-click="(key: string) => openStatTab(cluster, key)"
                 >
-                  <template #topbar>
-                    <span>{{ cluster.group_name || '未分组' }}</span>
+                  <template #topbar-extra>
                     <div class="maximize-btn-sm" title="最大化" @click.stop="maximizeCluster(cluster)">
                       <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
                         <rect x="1" y="1" width="12" height="12" rx="1.5" stroke="currentColor" stroke-width="1.4" />
@@ -145,6 +153,15 @@
                     <button class="btn btn-secondary btn-sm" @click.stop="viewClusterDetail(cluster)">详情</button>
                     <button class="btn btn-ghost btn-sm" @click.stop="testCluster(cluster)">连接测试</button>
                     <button class="btn btn-ghost btn-sm" @click.stop="editCluster(cluster)">编辑</button>
+                    <a-dropdown :trigger="['click']">
+                      <button class="btn btn-ghost btn-sm" @click.stop>更多 ▾</button>
+                      <template #overlay>
+                        <a-menu @click="onCardMenuClick($event, cluster)">
+                          <a-menu-item key="backup">备份下载</a-menu-item>
+                          <a-menu-item key="export">导出 Excel</a-menu-item>
+                        </a-menu>
+                      </template>
+                    </a-dropdown>
                     <button
                       class="btn btn-ghost btn-sm"
                       style="color: var(--danger)"
@@ -168,7 +185,9 @@
                   v-for="c in group.clusters"
                   :key="c.id"
                   class="cluster-name-item"
-                  :title="c.display_name || c.name"
+                  :title="
+                    (c.status === 1 ? '已启用' : '已禁用') + ' · ' + (c.display_name || c.name) + '（点击最大化）'
+                  "
                   @click.stop="maximizeCluster(c)"
                 >
                   <span class="status-dot-sm" :class="c.status === 1 ? 'green' : 'red'"></span>
@@ -188,8 +207,7 @@
                   :route-badge="routeBadge(cluster)"
                   :stat-click="(key: string) => openStatTab(cluster, key)"
                 >
-                  <template #topbar>
-                    <span>{{ cluster.group_name || '未分组' }}</span>
+                  <template #topbar-extra>
                     <div class="maximize-btn-sm" title="最大化" @click.stop="maximizeCluster(cluster)">
                       <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
                         <rect x="1" y="1" width="12" height="12" rx="1.5" stroke="currentColor" stroke-width="1.4" />
@@ -237,6 +255,15 @@
                     <button class="btn btn-secondary btn-sm" @click.stop="viewClusterDetail(cluster)">详情</button>
                     <button class="btn btn-ghost btn-sm" @click.stop="testCluster(cluster)">连接测试</button>
                     <button class="btn btn-ghost btn-sm" @click.stop="editCluster(cluster)">编辑</button>
+                    <a-dropdown :trigger="['click']">
+                      <button class="btn btn-ghost btn-sm" @click.stop>更多 ▾</button>
+                      <template #overlay>
+                        <a-menu @click="onCardMenuClick($event, cluster)">
+                          <a-menu-item key="backup">备份下载</a-menu-item>
+                          <a-menu-item key="export">导出 Excel</a-menu-item>
+                        </a-menu>
+                      </template>
+                    </a-dropdown>
                     <button
                       class="btn btn-ghost btn-sm"
                       style="color: var(--danger)"
@@ -336,7 +363,7 @@
               class="dt"
               :class="{ active: cluster.activeTab === 'globalPlugins' }"
               @click="switchTab(cluster, 'globalPlugins')"
-              >插件元数据</span
+              >插件元数据 <span class="db">{{ cluster.plugin_metadata_count }}</span></span
             >
             <span
               v-if="authStore.hasPermission('global_rules')"
@@ -519,7 +546,7 @@
         <div class="modal-body">
           <div v-if="!testRunning && testLogs.length === 0">
             <div style="margin-bottom: 12px; font-size: 13px; color: var(--muted)">
-              将对下列节点执行管理面连通性测试（集群挂接区域时自动经区域网关）：
+              将对下列节点执行管理面连通性测试（集群挂接区域时自动经区域网关）。结果为管理面连通性（在线/离线），不改变节点运行态（运行中/已停止）：
             </div>
             <div v-if="testNodes.length > 0" class="test-nodes-list">
               <div v-for="n in testNodes" :key="n.id" class="test-node-row">
@@ -573,8 +600,8 @@ import {
   routeLabel,
   deleteClusterWithConfirm,
   fetchAllClusterNodes,
+  exportClusterExcel,
 } from '@/composables/useClusterUtils'
-import { downloadBlob } from '@/utils/download'
 import api from '@/api'
 import ClusterDetailModal from '@/components/ClusterDetailModal.vue'
 import { useClusterRouteBadge } from '@/composables/useClusterRouteBadge'
@@ -596,6 +623,7 @@ import { useClusterRoutes } from '@/composables/useClusterRoutes'
 import { useClusterPluginConfigs } from '@/composables/useClusterPluginConfigs'
 import { useClusterGlobalRules } from '@/composables/useClusterGlobalRules'
 import { useClusterStaticResources } from '@/composables/useClusterStaticResources'
+import { PAGE_SIZE_CARD_GRID } from '@/constants'
 import ClusterNodes from '@/views/clusters/ClusterNodes.vue'
 import ClusterUpstreams from '@/views/clusters/ClusterUpstreams.vue'
 import ClusterRoutes from '@/views/clusters/ClusterRoutes.vue'
@@ -608,13 +636,18 @@ const clusters = ref<Cluster[]>([])
 const loading = ref(false)
 const filterText = ref('')
 const statusFilter = ref<string>('all')
+// 批 7：分组筛选（与集群管理对齐；groupOptions 复用新建/编辑弹窗的既有 computed）
+const groupFilter = ref('__all__')
 
 /** 筛选是否有生效条件（空状态两分支判定，cluster-ux-close-loop B6.4） */
-const hasActiveFilters = computed(() => filterText.value.trim() !== '' || statusFilter.value !== 'all')
+const hasActiveFilters = computed(
+  () => filterText.value.trim() !== '' || statusFilter.value !== 'all' || groupFilter.value !== '__all__',
+)
 
 function clearFilters() {
   filterText.value = ''
   statusFilter.value = 'all'
+  groupFilter.value = '__all__'
 }
 
 // ── 经中继 / 直连 徽章 ──
@@ -795,6 +828,12 @@ const filteredClusters = computed(() => {
       const matchKey = c.name.toLowerCase().includes(text)
       if (!matchName && !matchKey) return false
     }
+    // 批 7：分组筛选（与集群管理同款三分支语义；与状态/搜索叠加而非短路）
+    if (groupFilter.value === '__ung__') {
+      if (c.group_name) return false
+    } else if (groupFilter.value !== '__all__') {
+      if (c.group_name !== groupFilter.value) return false
+    }
     if (statusFilter.value === 'enabled') return c.status === 1
     if (statusFilter.value === 'disabled') return c.status !== 1
     return true
@@ -902,7 +941,7 @@ function onDragEnd(_event: DragEvent) {
 
 const modalVisible = ref(false)
 const editingCluster = ref<Cluster | null>(null)
-const pagination = reactive({ current: 1, pageSize: 100, total: 0 })
+const pagination = reactive({ current: 1, pageSize: PAGE_SIZE_CARD_GRID, total: 0 })
 const versionModalVisible = ref(false)
 const versionModalType = ref<'upstream' | 'route' | 'plugin_config' | 'global_rule' | 'static_resource'>('upstream')
 const versionModalResourceId = ref<number | null>(null)
@@ -1043,49 +1082,99 @@ const { loadStaticResources } = useClusterStaticResources({
   loadRoutes,
 })
 
+// 列表刷新时按 id 保留的面板运行态字段（central-management-ux-review-fixes 批 3 P2-5：
+// 刷新不重置 Tab/子表数据/选择态——#203 陷阱的全局版兜底；服务端字段以新响应为准）
+const CLUSTER_RUNTIME_KEYS = [
+  'activeTab',
+  'nodes',
+  'nodesLoading',
+  'nodesPagination',
+  'nodesSearch',
+  'nodesSearchField',
+  'nodesSortBy',
+  'nodesSortOrder',
+  'upstreams',
+  'upstreamsLoading',
+  'upstreamsPagination',
+  'upstreamsSearch',
+  'upstreamsSearchField',
+  'upstreamsSortBy',
+  'upstreamsSortOrder',
+  'routes',
+  'routesLoading',
+  'routesPagination',
+  'routesSearch',
+  'routesSearchField',
+  'routesSortBy',
+  'routesSortOrder',
+  'selectedNode',
+  'selectedNodeKeys',
+  'selectedUpstream',
+  'selectedRoute',
+  'selectedRouteKeys',
+  'plugin_configs',
+  'selectedPluginConfig',
+  'global_rules',
+  'selectedGlobalRule',
+] as const
+
+function freshClusterRuntime(): Record<string, unknown> {
+  return {
+    activeTab: 'nodes',
+    nodes: [],
+    nodesLoading: false,
+    nodesPagination: { total: 0, page: 1, pageSize: 20 },
+    nodesSearch: '',
+    nodesSearchField: '',
+    nodesSortBy: '',
+    nodesSortOrder: 'asc' as 'asc' | 'desc',
+    upstreams: null,
+    upstreamsLoading: false,
+    upstreamsPagination: { total: 0, page: 1, pageSize: 20 },
+    upstreamsSearch: '',
+    upstreamsSearchField: '',
+    upstreamsSortBy: '',
+    upstreamsSortOrder: 'asc' as 'asc' | 'desc',
+    routes: null,
+    routesLoading: false,
+    routesPagination: { total: 0, page: 1, pageSize: 20 },
+    routesSearch: '',
+    routesSearchField: '',
+    routesSortBy: '',
+    routesSortOrder: 'asc' as 'asc' | 'desc',
+    selectedNode: null,
+    selectedNodeKeys: [],
+    selectedUpstream: null,
+    selectedRoute: null,
+    selectedRouteKeys: [],
+    plugin_configs: [],
+    selectedPluginConfig: null,
+    global_rules: [],
+    selectedGlobalRule: null,
+  }
+}
+
 const loadClusters = async () => {
   loading.value = true
   try {
     const endpoint = isAdmin() ? '/clusters' : '/clusters/my'
     const res = await api.get(endpoint, { params: { page: pagination.current, page_size: pagination.pageSize } })
-    clusters.value = res.data.items.map((c: Cluster) => ({
-      ...c,
-      activeTab: 'nodes',
-      nodes: [],
-      nodesLoading: false,
-      nodesPagination: { total: 0, page: 1, pageSize: 20 },
-      nodesSearch: '',
-      nodesSearchField: '',
-      nodesSortBy: '',
-      nodesSortOrder: 'asc' as 'asc' | 'desc',
-      upstreams: null,
-      upstreamsLoading: false,
-      upstreamsPagination: { total: 0, page: 1, pageSize: 20 },
-      upstreamsSearch: '',
-      upstreamsSearchField: '',
-      upstreamsSortBy: '',
-      upstreamsSortOrder: 'asc' as 'asc' | 'desc',
-      routes: null,
-      routesLoading: false,
-      routesPagination: { total: 0, page: 1, pageSize: 20 },
-      routesSearch: '',
-      routesSearchField: '',
-      routesSortBy: '',
-      routesSortOrder: 'asc' as 'asc' | 'desc',
-      selectedNode: null,
-      selectedNodeKeys: [],
-      selectedUpstream: null,
-      selectedRoute: null,
-      selectedRouteKeys: [],
-      plugin_configs: [],
-      selectedPluginConfig: null,
-      global_rules: [],
-      selectedGlobalRule: null,
-    }))
+    const prevById = new Map(clusters.value.map((c) => [c.id, c]))
+    clusters.value = res.data.items.map((c: Cluster) => {
+      const prev = prevById.get(c.id)
+      const runtime: Record<string, unknown> = {}
+      if (prev) {
+        for (const k of CLUSTER_RUNTIME_KEYS) runtime[k] = (prev as Record<string, unknown>)[k]
+      } else {
+        Object.assign(runtime, freshClusterRuntime())
+      }
+      return { ...c, ...runtime } as Cluster
+    })
     pagination.total = res.data.total
+    // 卡片节点区渲染需要节点数据（保持挂载加载）；上游延迟到首次切上游 Tab
+    // （handleTabClick 按需加载）——挂载请求数从 1+N(节点)+N(上游) 降为 1+N(节点)
     for (const cluster of clusters.value) {
-      loadNodes(cluster)
-      loadUpstreams(cluster)
+      void loadNodes(cluster)
     }
   } catch (error) {
     message.error('加载集群列表失败')
@@ -1226,13 +1315,14 @@ async function runTest() {
       status: failCount > 0 ? 'error' : 'success',
       msg: `测试完成 — 共 ${results.length} 个节点，成功 ${successCount}，失败 ${failCount}，耗时 ${elapsed}s${failNote}`,
     })
-  } catch (e: any) {
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { detail?: string } }; message?: string }
     for (let i = 0; i < testLogs.value.length; i++) {
       if (testLogs.value[i].status === 'pending') {
         const n = testNodes.value[i]
         testLogs.value[i] = {
           status: 'error',
-          msg: `${n.ip}:${n.management_port} 测试异常 — ${e.response?.data?.detail || e.message}`,
+          msg: `${n.ip}:${n.management_port} 测试异常 — ${err.response?.data?.detail || err.message}`,
         }
       }
     }
@@ -1272,6 +1362,24 @@ function openBackupDownload(cluster: Cluster) {
   backupDialogVisible.value = true
 }
 
+/** 顶栏下载入口（批5 两页顶栏对齐）：null 目标 = 弹窗内下拉选集群（B6.6） */
+function openBackupDownloadTopbar() {
+  backupTargetCluster.value = null
+  backupDialogMode.value = 'download'
+  backupDialogVisible.value = true
+}
+
+/** 卡片「更多」菜单（P2-1：备份下载/导出 Excel 网格直达）；a-menu 载荷提取为函数（约定 #25） */
+function onCardMenuClick(e: unknown, cluster: Cluster) {
+  const key = String((e as { key: string | number }).key)
+  onCardMoreAction(key, cluster)
+}
+
+function onCardMoreAction(key: string, cluster: Cluster) {
+  if (key === 'backup') openBackupDownload(cluster)
+  else if (key === 'export') void exportCluster(cluster)
+}
+
 function openBackupImport() {
   backupTargetCluster.value = null
   backupDialogMode.value = 'import'
@@ -1285,13 +1393,8 @@ async function exportCluster(cluster: Cluster) {
   if (exportingClusters.value.has(cluster.id)) return
   exportingClusters.value.add(cluster.id)
   try {
-    const res = await api.get(`/clusters/${cluster.id}/export`, {
-      responseType: 'blob',
-    })
-    const filename = `${cluster.name}_配置导出.xlsx`
-    downloadBlob(res.data as Blob, filename)
-  } catch (e: any) {
-    message.error(e.response?.data?.detail || e.message || '导出失败')
+    // 单一实现在 useClusterUtils.exportClusterExcel（P2-1/P2-8 两页共用）
+    await exportClusterExcel(cluster.id, cluster.name)
   } finally {
     exportingClusters.value.delete(cluster.id)
   }
