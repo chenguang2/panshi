@@ -97,3 +97,21 @@ describe('Router', () => {
     expect(pageNameMap.SslList).toBeUndefined()
   })
 })
+
+describe('navMeta 与批 9 菜单信息架构同源（plugin-switches-ux-review-fixes 批 3）', () => {
+  it('迁移键归位：插件开关→核心功能；监控组；中继区域→运维管理', async () => {
+    const { sectionMap } = await import('../navMeta')
+    expect(sectionMap.PluginSwitches).toBe('核心功能')
+    expect(sectionMap.CentralManagement).toBe('核心功能')
+    expect(sectionMap.MetricsDashboard).toBe('监控')
+    expect(sectionMap.Metrics).toBe('监控')
+    expect(sectionMap.ClickHouseConfig).toBe('监控')
+    expect(sectionMap.RelayGateways).toBe('运维管理')
+  })
+
+  it('分组词表与侧边栏六组一致，「综合」不再出现（面包屑/全局搜索同源守卫）', async () => {
+    const { sectionMap } = await import('../navMeta')
+    const values = [...new Set(Object.values(sectionMap))]
+    expect(values.sort()).toEqual(['核心功能', '证书管理', '边缘网络', '监控', '运维管理', '系统管理'].sort())
+  })
+})

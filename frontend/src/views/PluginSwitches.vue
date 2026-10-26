@@ -1,6 +1,10 @@
 <template>
   <div class="plugin-switches">
-    <PageHeader title="插件开关" description="管理内置插件的启用/禁用状态，查看插件配置 schema" />
+    <PageHeader title="插件开关" description="控制各插件在新配置中的可选性；禁用不影响既有配置">
+      <template #actions>
+        <router-link class="audit-link" to="/audit-log">操作日志</router-link>
+      </template>
+    </PageHeader>
 
     <!-- Status Bar -->
     <div class="switch-status-bar">
@@ -10,8 +14,8 @@
         >
       </div>
       <div style="display: flex; gap: 8px">
-        <a-button size="small" @click="enableAll">全部启用</a-button>
-        <a-button size="small" @click="disableAll">全部禁用</a-button>
+        <a-button size="small" @click="confirmEnableAll">全部启用</a-button>
+        <a-button size="small" @click="confirmDisableAll">全部禁用</a-button>
       </div>
     </div>
 
@@ -28,7 +32,7 @@
       >
     </div>
 
-    <!-- Filter Bar -->
+    <!-- Filter Bar（双计数已合并：计数仅在上方状态条展示） -->
     <div class="plugin-filter-bar">
       <div class="search-input-wrap">
         <a-input-search v-model:value="searchText" placeholder="搜索插件名称..." />
@@ -38,7 +42,6 @@
         <a-select-option value="enabled">已启用</a-select-option>
         <a-select-option value="disabled">已禁用</a-select-option>
       </a-select>
-      <span class="plugin-count">共 {{ filteredPlugins.length }} 个插件</span>
     </div>
 
     <!-- Loading -->
@@ -56,7 +59,7 @@
         v-for="item in filteredPlugins"
         :key="item.plugin_name"
         class="plugin-card"
-        :class="{ 'disabled-state': !item.enabled }"
+        :class="{ 'disabled-state': !item.enabled, 'unsaved-disabled': !item.enabled && isUnsaved(item) }"
       >
         <div class="plugin-card-header">
           <div class="plugin-card-info">
@@ -68,24 +71,27 @@
           </div>
         </div>
 
+        <!-- 引用影响前移（批 2）：禁用被引用插件时的行内即时警示 -->
+        <div v-if="!item.enabled && refsTotal(item) > 0" class="plugin-ref-warning">
+          该插件仍被 {{ refSummary(item) }} 引用；禁用后新配置不可选，既有配置不受影响
+        </div>
+
         <div class="plugin-card-footer">
           <div class="plugin-card-actions">
-            <span class="plugin-version">{{ item.plugin_name }}</span>
+            <span class="plugin-tech" title="技术名（API 标识）"
+              ><span class="tech-label">技术名</span>{{ item.plugin_name }}</span
+            >
+            <span v-if="refsTotal(item) > 0" class="plugin-refs">被引用 {{ refSummary(item) }}</span>
             <span
               v-if="item.schema && item.schema !== '{}'"
               class="plugin-schema-toggle"
+              title="插件参数定义（只读）"
               @click="toggleSchema(item.plugin_name)"
-              >⚙ schema</span
+              >⚙ 配置结构</span
             >
+            <span v-else class="plugin-schema-none">无参数</span>
           </div>
-          <label class="toggle">
-            <input
-              type="checkbox"
-              :checked="item.enabled"
-              @change="(e) => toggleSwitch(item, (e.target as HTMLInputElement).checked)"
-            />
-            <span class="toggle-slider"></span>
-          </label>
+          <a-switch size="small" :checked="item.enabled" @change="(v: boolean) => toggleSwitch(item, v)" />
         </div>
 
         <div v-if="openSchemas[item.plugin_name]" class="plugin-schema-box visible">
@@ -94,38 +100,73 @@
       </div>
     </div>
 
-    <!-- Save Area -->
-    <div class="switch-actions-save">
-      <span v-if="hasUnsavedChanges" class="unsaved-hint">有未保存的更改</span>
-      <a-button type="primary" @click="saveSwitches" :loading="saving">保存配置</a-button>
+    <!-- Sticky Save Bar（批 1：未保存状态始终可见，可放弃/保存） -->
+    <div v-if="hasUnsavedChanges" class="save-bar-sticky">
+      <span class="unsaved-hint">{{ unsavedCount }} 项未保存</span>
+      <a-button size="small" @click="discardChanges">放弃更改</a-button>
+      <a-button type="primary" size="small" :loading="saving" @click="saveSwitches()">保存配置</a-button>
     </div>
 
-    <!-- Custom Confirm Modal -->
-    <div class="modal-overlay" :style="{ display: confirmVisible ? 'flex' : 'none' }">
-      <div class="modal" style="max-width: 420px">
+    <!-- Page Confirm Modal（批量操作闸门） -->
+    <div class="modal-overlay" :style="{ display: confirmBox.visible ? 'flex' : 'none' }">
+      <div class="modal" style="max-width: 440px">
         <div class="modal-header">
-          <h2>确认离开</h2>
-          <button class="modal-close" @click="cancelLeave">&times;</button>
+          <h2>{{ confirmBox.title }}</h2>
+          <button class="modal-close" @click="confirmBox.visible = false">&times;</button>
         </div>
         <div class="modal-body">
-          <p style="font-size: 13px; color: var(--muted); line-height: 1.6">有未保存的更改，确定要离开吗？</p>
+          <p style="font-size: 13px; color: var(--muted); line-height: 1.6">{{ confirmBox.body }}</p>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-secondary" @click="cancelLeave">取消</button>
-          <button class="btn btn-primary" @click="confirmLeave">离开</button>
+          <button class="btn btn-secondary" @click="confirmBox.visible = false">取消</button>
+          <button class="btn btn-primary" @click="confirmBox.onConfirm">{{ confirmBox.confirmText }}</button>
         </div>
       </div>
     </div>
 
-    <!-- Custom Info Modal (success/warning) -->
+    <!-- Leave Guard Modal（三动作：取消 / 离开 / 保存并离开） -->
+    <div class="modal-overlay" :style="{ display: guardVisible ? 'flex' : 'none' }">
+      <div class="modal" style="max-width: 460px">
+        <div class="modal-header">
+          <h2>确认离开</h2>
+          <button class="modal-close" @click="resolveGuard(false)">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p style="font-size: 13px; color: var(--muted); line-height: 1.6">
+            有 {{ unsavedCount }} 项未保存的更改。离开将丢失这些更改；也可先保存再离开。
+          </p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="resolveGuard(false)">取消</button>
+          <button class="btn btn-secondary" @click="resolveGuard(true)">离开</button>
+          <button class="btn btn-primary" @click="saveAndLeave">保存并离开</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Reference Warning Modal（仅警告场景使用；保存成功为 toast） -->
     <div class="modal-overlay" :style="{ display: infoModal.visible ? 'flex' : 'none' }">
-      <div class="modal" style="max-width: 480px">
+      <div class="modal" style="max-width: 520px">
         <div class="modal-header">
           <h2>{{ infoModal.title }}</h2>
           <button class="modal-close" @click="infoModal.visible = false">&times;</button>
         </div>
-        <div class="modal-body" v-html="infoModal.htmlContent"></div>
+        <div class="modal-body">
+          <p style="margin: 0 0 10px; font-size: 13px; color: var(--muted); line-height: 1.6">
+            以下插件已禁用；既有配置中的引用将继续生效，新配置不可再选择：
+          </p>
+          <template v-for="w in infoModal.warnings" :key="w.plugin">
+            <div class="ref-warning-row">
+              <div class="ref-warning-line">
+                <strong>{{ w.plugin }}</strong
+                >—— {{ refSummaryFromCounts(w.refs) }}
+              </div>
+              <router-link class="ref-view-link" :to="`/routes?search=${w.plugin}`">查看引用</router-link>
+            </div>
+          </template>
+        </div>
         <div class="modal-footer">
+          <button class="btn btn-secondary" @click="restoreReferenced">还原被引用插件</button>
           <button class="btn btn-primary" @click="infoModal.visible = false">知道了</button>
         </div>
       </div>
@@ -134,12 +175,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, onMounted } from 'vue'
+import { ref, computed, reactive, onMounted, watch, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import api from '@/api'
-import { escapeHtml } from '@/utils/ansi'
 import PageHeader from '@/components/PageHeader.vue'
+
+interface RefCounts {
+  routes: number
+  plugin_configs: number
+  global_rules: number
+}
 
 interface PluginItem {
   plugin_name: string
@@ -148,6 +194,13 @@ interface PluginItem {
   description: string
   schema?: string
   enabled: boolean
+  refs?: RefCounts
+}
+
+const REF_LABELS: Record<keyof RefCounts, string> = {
+  routes: '路由',
+  plugin_configs: '插件组',
+  global_rules: '全局规则',
 }
 
 const loading = ref(false)
@@ -201,10 +254,33 @@ const filteredPlugins = computed(() => {
 })
 
 const totalEnabled = computed(() => allPlugins.value.filter((p) => p.enabled).length)
-const hasUnsavedChanges = computed(() => {
-  if (allPlugins.value.length !== originalPlugins.value.length) return false
-  return allPlugins.value.some((p, i) => p.enabled !== originalPlugins.value[i]?.enabled)
+const hasUnsavedChanges = computed(() => unsavedCount.value > 0)
+const unsavedCount = computed(() => {
+  const original = new Map(originalPlugins.value.map((p) => [p.plugin_name, p.enabled]))
+  return allPlugins.value.filter((p) => original.get(p.plugin_name) !== p.enabled).length
 })
+
+function isUnsaved(item: PluginItem): boolean {
+  const original = originalPlugins.value.find((p) => p.plugin_name === item.plugin_name)
+  return original ? original.enabled !== item.enabled : false
+}
+
+function refsTotal(item: PluginItem): number {
+  const r = item.refs
+  if (!r) return 0
+  return r.routes + r.plugin_configs + r.global_rules
+}
+
+function refSummary(item: PluginItem): string {
+  return refSummaryFromCounts(item.refs || { routes: 0, plugin_configs: 0, global_rules: 0 })
+}
+
+function refSummaryFromCounts(r: RefCounts): string {
+  return (Object.keys(REF_LABELS) as (keyof RefCounts)[])
+    .filter((k) => r[k] > 0)
+    .map((k) => `${REF_LABELS[k]} ${r[k]}`)
+    .join(' · ')
+}
 
 function toggleSwitch(item: PluginItem, val: boolean) {
   item.enabled = val
@@ -223,43 +299,55 @@ function formatSchema(schema?: string): string {
   }
 }
 
-function enableAll() {
-  allPlugins.value.forEach((p) => {
-    p.enabled = true
-  })
-}
+// ── 批量操作闸门（批 1）：确认后仅改本地态，需保存生效 ────────────────────
+const confirmBox = reactive<{
+  visible: boolean
+  title: string
+  body: string
+  confirmText: string
+  onConfirm: () => void
+}>({
+  visible: false,
+  title: '',
+  body: '',
+  confirmText: '继续标记',
+  onConfirm: () => {},
+})
 
-function disableAll() {
-  allPlugins.value.forEach((p) => {
-    p.enabled = false
-  })
-}
-
-async function loadSwitches() {
-  loading.value = true
-  try {
-    const [swRes, builtinRes] = await Promise.all([
-      api.get('/plugin-switches'),
-      api.get('/plugins/builtin', { params: { all: 1 } }),
-    ])
-    const existing = new Map<string, boolean>(swRes.data.items.map((s: any) => [s.plugin_name, s.enabled]))
-    allPlugins.value = builtinRes.data.plugins.map((p: any) => ({
-      plugin_name: p.name,
-      display_name: p.display_name || p.name,
-      category: p.category || '',
-      description: p.description || '',
-      schema: p.schema ? JSON.stringify(p.schema) : '{}',
-      enabled: existing.has(p.name) ? existing.get(p.name)! : true,
-    }))
-    originalPlugins.value = allPlugins.value.map((p) => ({ ...p, schema: p.schema }))
-  } catch {
-    message.error('加载插件列表失败')
-  } finally {
-    loading.value = false
+function confirmDisableAll() {
+  const total = allPlugins.value.length
+  confirmBox.title = '全部禁用确认'
+  confirmBox.body = `将把全部 ${total} 个插件标记为禁用（需保存生效）。保存后新配置将无法选择任何插件；既有配置不受影响。`
+  confirmBox.confirmText = '继续标记'
+  confirmBox.onConfirm = () => {
+    allPlugins.value.forEach((p) => {
+      p.enabled = false
+    })
+    confirmBox.visible = false
   }
+  confirmBox.visible = true
 }
 
-async function saveSwitches() {
+function confirmEnableAll() {
+  const total = allPlugins.value.length
+  confirmBox.title = '全部启用确认'
+  confirmBox.body = `将把全部 ${total} 个插件标记为启用（需保存生效）。`
+  confirmBox.confirmText = '继续标记'
+  confirmBox.onConfirm = () => {
+    allPlugins.value.forEach((p) => {
+      p.enabled = true
+    })
+    confirmBox.visible = false
+  }
+  confirmBox.visible = true
+}
+
+// ── 保存 / 放弃（批 1）─────────────────────────────────────────────────
+function discardChanges() {
+  allPlugins.value = originalPlugins.value.map((p) => ({ ...p }))
+}
+
+async function saveSwitches(): Promise<boolean> {
   saving.value = true
   try {
     const res = await api.put(
@@ -272,65 +360,116 @@ async function saveSwitches() {
     originalPlugins.value = allPlugins.value.map((p) => ({ ...p, schema: p.schema }))
     const warnings = res.data?.warnings
     if (warnings && warnings.length > 0) {
-      const warningHtml = warnings
-        .map((w: any) => {
-          const refs = Object.entries(w.refs)
-            .filter(([, count]) => (count as number) > 0)
-            .map(
-              ([type, count]) =>
-                `${type === 'routes' ? '路由' : type === 'plugin_configs' ? '插件组' : '全局规则'}: ${count} 个`,
-            )
-            .join('，')
-          return `<div style="margin-bottom:8px;"><strong>${escapeHtml(String(w.plugin))}</strong>：${refs}</div>`
-        })
-        .join('')
-      infoModal.title = '插件引用警告'
-      infoModal.htmlContent = `<p style="margin-bottom:12px;color:var(--muted);">以下插件已被禁用，但仍有配置引用：</p>${warningHtml}`
+      infoModal.warnings = warnings
+      infoModal.title = '插件已从可选清单移除'
       infoModal.visible = true
     } else {
-      infoModal.title = '保存成功'
-      infoModal.htmlContent = '<p>插件配置已保存</p>'
-      infoModal.visible = true
+      message.success('已保存')
     }
+    return true
   } catch (e: any) {
     const detail = e?.response?.data?.detail || e?.message || '保存失败'
     message.error(typeof detail === 'string' ? detail : '保存失败')
+    return false
   } finally {
     saving.value = false
   }
 }
 
-const confirmVisible = ref(false)
-let pendingNext: ((value: boolean) => void) | null = null
-
-// Info modal state
-const infoModal = reactive({
-  visible: false,
-  title: '',
-  htmlContent: '',
-})
-
-onBeforeRouteLeave((_to, _from, next) => {
-  if (hasUnsavedChanges.value) {
-    confirmVisible.value = true
-    pendingNext = (confirmed: boolean) => {
-      confirmVisible.value = false
-      next(confirmed)
-    }
-  } else {
-    next()
-  }
-})
-
-function confirmLeave() {
-  pendingNext?.(true)
+// 警告弹窗：还原本次被禁用且仍被引用的插件（回到未保存态，由管理员再次保存）
+function restoreReferenced() {
+  const warned = new Set(infoModal.warnings.map((w) => w.plugin))
+  allPlugins.value.forEach((p) => {
+    if (warned.has(p.plugin_name)) p.enabled = true
+  })
+  infoModal.visible = false
 }
 
-function cancelLeave() {
-  pendingNext?.(false)
+const infoModal = reactive<{
+  visible: boolean
+  title: string
+  warnings: { plugin: string; refs: RefCounts }[]
+}>({
+  visible: false,
+  title: '',
+  warnings: [],
+})
+
+// ── 离开守卫（批 1）：取消 / 离开 / 保存并离开 ──────────────────────────
+const guardVisible = ref(false)
+let pendingGuard: ((allowed: boolean) => void) | null = null
+
+function requestLeave(): Promise<boolean> {
+  if (!hasUnsavedChanges.value) return Promise.resolve(true)
+  guardVisible.value = true
+  return new Promise((resolve) => {
+    pendingGuard = resolve
+  })
+}
+
+function resolveGuard(allowed: boolean) {
+  guardVisible.value = false
+  pendingGuard?.(allowed)
+  pendingGuard = null
+}
+
+async function saveAndLeave() {
+  const ok = await saveSwitches()
+  resolveGuard(ok)
+}
+
+onBeforeRouteLeave((_to, _from, next) => {
+  if (!hasUnsavedChanges.value) {
+    next()
+    return
+  }
+  requestLeave().then((allowed) => next(allowed))
+})
+
+// beforeunload：浏览器刷新/关闭守卫（批 1）
+function onBeforeUnload(e: BeforeUnloadEvent) {
+  e.preventDefault()
+  e.returnValue = ''
+}
+
+watch(hasUnsavedChanges, (v) => {
+  if (v) window.addEventListener('beforeunload', onBeforeUnload)
+  else window.removeEventListener('beforeunload', onBeforeUnload)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('beforeunload', onBeforeUnload)
+})
+
+async function loadSwitches() {
+  loading.value = true
+  try {
+    const [swRes, builtinRes] = await Promise.all([
+      api.get('/plugin-switches'),
+      api.get('/plugins/builtin', { params: { all: 1 } }),
+    ])
+    const existing = new Map<string, boolean>((swRes.data.items || []).map((s: any) => [s.plugin_name, s.enabled]))
+    const refsMap: Record<string, RefCounts> = swRes.data.refs || {}
+    allPlugins.value = builtinRes.data.plugins.map((p: any) => ({
+      plugin_name: p.name,
+      display_name: p.display_name || p.name,
+      category: p.category || '',
+      description: p.description || '',
+      schema: p.schema ? JSON.stringify(p.schema) : '{}',
+      enabled: existing.has(p.name) ? existing.get(p.name)! : true,
+      refs: refsMap[p.name] || { routes: 0, plugin_configs: 0, global_rules: 0 },
+    }))
+    originalPlugins.value = allPlugins.value.map((p) => ({ ...p, schema: p.schema }))
+  } catch {
+    message.error('加载插件列表失败')
+  } finally {
+    loading.value = false
+  }
 }
 
 onMounted(loadSwitches)
+
+defineExpose({ requestLeave })
 </script>
 
 <style scoped>
@@ -356,6 +495,15 @@ onMounted(loadSwitches)
 }
 .ssb-count strong {
   font-family: var(--font-mono);
+}
+
+.audit-link {
+  font-size: 13px;
+  color: var(--accent);
+  text-decoration: none;
+}
+.audit-link:hover {
+  text-decoration: underline;
 }
 
 .plugin-categories {
@@ -397,11 +545,6 @@ onMounted(loadSwitches)
   flex-wrap: wrap;
 }
 
-.plugin-count {
-  font-size: 12px;
-  color: var(--muted);
-}
-
 .loading-state,
 .empty-state {
   text-align: center;
@@ -439,8 +582,15 @@ onMounted(loadSwitches)
   box-shadow: var(--shadow-md);
 }
 
-.plugin-card.disabled-state {
-  opacity: 0.55;
+/* 禁用态（批 3）：仅标题微淡，名称与描述保持可读 */
+.plugin-card.disabled-state .plugin-card-name {
+  opacity: 0.75;
+}
+
+/* 未保存的禁用（批 3）：虚线框 + 开关旁圆点，与已保存禁用区分 */
+.plugin-card.unsaved-disabled {
+  border-style: dashed;
+  border-color: var(--accent);
 }
 
 .plugin-card-header {
@@ -481,6 +631,18 @@ onMounted(loadSwitches)
   flex: 1;
 }
 
+/* 引用影响行内警示（批 2） */
+.plugin-ref-warning {
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  background: oklch(75% 0.13 75 / 12%);
+  border: 1px solid oklch(75% 0.13 75 / 40%);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .plugin-card-footer {
   display: flex;
   align-items: center;
@@ -492,14 +654,35 @@ onMounted(loadSwitches)
 
 .plugin-card-actions {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   align-items: center;
+  flex-wrap: wrap;
 }
 
-.plugin-version {
+.plugin-tech {
   font-size: 11px;
   color: var(--muted);
   font-family: var(--font-mono);
+}
+.plugin-tech .tech-label {
+  font-family: inherit;
+  color: var(--muted);
+  opacity: 0.7;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 4px;
+  margin-right: 4px;
+  font-size: 10px;
+}
+
+.plugin-refs {
+  font-size: 11px;
+  color: var(--accent);
+  background: oklch(56% 0.16 210 / 8%);
+  border: 1px solid oklch(56% 0.16 210 / 20%);
+  border-radius: 8px;
+  padding: 1px 7px;
+  white-space: nowrap;
 }
 
 .plugin-schema-toggle {
@@ -510,6 +693,12 @@ onMounted(loadSwitches)
 
 .plugin-schema-toggle:hover {
   text-decoration: underline;
+}
+
+.plugin-schema-none {
+  font-size: 11px;
+  color: var(--muted);
+  opacity: 0.6;
 }
 
 .plugin-schema-box {
@@ -530,19 +719,49 @@ onMounted(loadSwitches)
   display: block;
 }
 
-.switch-actions-save {
+/* Sticky 保存条（批 1） */
+.save-bar-sticky {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 60;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  padding-top: 20px;
-  margin-top: 20px;
-  border-top: 1px solid var(--border);
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
 }
 
 .unsaved-hint {
   font-size: 12px;
+  color: var(--accent);
+  font-weight: 600;
+  margin-right: 2px;
+}
+
+/* 警告弹窗行（批 2） */
+.ref-warning-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+.ref-warning-line {
   color: var(--muted);
+}
+.ref-view-link {
+  font-size: 12px;
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.ref-view-link:hover {
+  text-decoration: underline;
 }
 
 @media (max-width: 768px) {

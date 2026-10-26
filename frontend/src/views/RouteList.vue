@@ -585,6 +585,10 @@ function resolveDeepLinkClusterId(): number | null {
 onMounted(() => {
   const clusterId = route.query.cluster_id as string | undefined
   if (clusterId) clusterFilter.value = clusterId
+  // plugin-switches-ux-review-fixes 批 2：「查看引用」深链——/routes?search=<plugin_name>
+  // 预填搜索框，随首屏请求过滤（useDebouncedSearch 初始值随 loadRoutes 带 search 参数）
+  const searchQuery = route.query.search as string | undefined
+  if (searchQuery) searchText.value = searchQuery
   loadClusters()
     .then(() => {
       deepLinkedClusterId.value = resolveDeepLinkClusterId()

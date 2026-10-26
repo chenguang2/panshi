@@ -184,3 +184,50 @@ class TestPluginDisableWarning:
         )
         assert "warnings" not in result or result["warnings"] == []
 
+
+
+class TestPluginRefsPreview:
+    """plugin-switches-ux-review-fixes 批 2：引用影响前移——GET 携带每插件引用计数，
+    与 PUT 保存后警告共用同一扫描实现（_count_plugin_refs），杜绝两套口径。"""
+
+    async def _seed_same_as_warning(self, test_db):
+        # 复用既有引用数据构造（cluster/route/plugin_config/global_rule 引用 cors 等）
+        await TestPluginDisableWarning()._create_referencing_data(test_db)
+
+    async def test_count_plugin_refs_unit(self, test_db):
+        from app.api.v1.plugin_switches import _count_plugin_refs
+
+        await self._seed_same_as_warning(test_db)
+        counts = await _count_plugin_refs({"cors", "monitor", "auth_basic"}, test_db)
+
+        assert counts["cors"] == {"routes": 1, "plugin_configs": 1, "global_rules": 1}
+        assert counts["monitor"] == {"routes": 0, "plugin_configs": 0, "global_rules": 1}
+        assert counts["auth_basic"] == {"routes": 0, "plugin_configs": 0, "global_rules": 0}
+
+    async def test_get_returns_refs_for_all_builtin_names(self, test_db):
+        """GET 响应带 refs 映射：覆盖全部内置插件名（无行也计 0），前端按名取用。"""
+        from app.api.v1.plugin_switches import list_plugin_switches
+
+        await self._seed_same_as_warning(test_db)
+        result = await list_plugin_switches(db=test_db)
+
+        assert "refs" in result
+        refs = result["refs"]
+        assert refs["cors"] == {"routes": 1, "plugin_configs": 1, "global_rules": 1}
+        assert refs["auth_basic"] == {"routes": 0, "plugin_configs": 0, "global_rules": 0}
+        # items 仍为既有 DB 行契约
+        assert isinstance(result["items"], list)
+
+    async def test_put_warnings_consistent_with_count_impl(self, test_db):
+        """PUT warnings 与 _count_plugin_refs 同源：同数据下数值一致。"""
+        from app.schemas.plugin_switch import PluginSwitchItem
+        from app.api.v1.plugin_switches import update_plugin_switches, _count_plugin_refs
+
+        await self._seed_same_as_warning(test_db)
+        result = await update_plugin_switches(
+            [PluginSwitchItem(plugin_name="cors", enabled=False)],
+            db=test_db,
+        )
+        warnings = {w["plugin"]: w["refs"] for w in result.get("warnings", [])}
+        counts = await _count_plugin_refs({"cors"}, test_db)
+        assert warnings.get("cors") == counts["cors"]
