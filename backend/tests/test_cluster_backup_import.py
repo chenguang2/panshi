@@ -259,20 +259,24 @@ class TestImportFlow:
         assert "页面" in pending
 
     async def test_rollback_on_midway_failure(self, import_db, source_doc, monkeypatch):
-        """导入中途失败 → 全部回滚，不残留新集群（单事务）。"""
+        """导入中途失败 → 全部回滚，不残留新集群（单事务）。
+
+        cluster-backup-restore-fix 后写盘时序为「行全部就绪 → 统一落盘 →
+        commit」，故障注入点随之迁移到 _write_static_file_at（D4）。
+        """
         from app.services import cluster_backup as cb
 
         session, _ = import_db
-        original = cb._write_static_file
 
         def boom(*a, **k):
             raise RuntimeError("boom")
 
-        monkeypatch.setattr(cb, "_write_static_file", boom)
-        # 注入文件内容，确保导入流程会调用 _write_static_file
+        monkeypatch.setattr(cb, "_write_static_file_at", boom)
+        # 注入文件内容，确保导入流程会调用 _write_static_file_at
         doc = json.loads(json.dumps(source_doc))
         doc["data"]["static_resources"][0]["content_base64"] = "emlvaGk="
-        with pytest.raises(RuntimeError):
+        # cluster-backup-restore-fix D5：意外异常转译为可读 ValueError（含段位与原始类型）
+        with pytest.raises(ValueError, match="静态资源段.*RuntimeError"):
             await cb.import_backup(session, doc,
                                 target_cluster_name="restored",
                                 creator_id=777)

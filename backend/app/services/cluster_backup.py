@@ -4,9 +4,12 @@ Design refs: openspec/changes/add-cluster-json-backup/design.md
 - D1 file format, D2 scope/secrets/degradation, D3 single import mode,
   D6 hard validation vs auto-clean warnings.
 """
+import base64
 import json
+import logging
 import re
 from datetime import date, datetime
+from pathlib import Path
 
 from pydantic import BaseModel
 from sqlalchemy import inspect as sa_inspect, select
@@ -249,6 +252,37 @@ _BASE_STORAGE_DIR = os.path.join(
 _DROP_KEYS = ("id", "cluster_id", "current_version", "created_at", "updated_at")
 _NESTED_KEYS = ("targets", "plugins", "content_base64")
 
+# 运行态发布状态列（static-resources-ux-close-loop 组 5）：新导入集群处于
+# 未发布状态，SHALL NOT 继承源集群的发布痕迹（与节点 status 重置为离线、
+# 集群 status=1 同语义）。这些列的时间值经导出序列化是 ISO 字符串，若原样
+# 绑定 DateTime 列会在 commit 时炸出 StatementError（change:
+# cluster-backup-restore-fix P0 根因），故在 static_resources 分支显式丢弃。
+_RUNTIME_STATE_KEYS = ("last_publish_ok", "last_publish_detail", "last_published_at")
+
+
+def _coerce_datetime_fields(kwargs: dict, model: type) -> dict:
+    """按模型列类型矫正时间字段：DateTime/Date 列上的 ISO 字符串解析回原生类型。
+
+    按类修（不逐列打补丁）：未来新增时间列自动免疫。解析失败或空值置 None
+    并继续（不中断导入）。
+    """
+    from sqlalchemy import Date, DateTime
+
+    mapper = sa_inspect(model)
+    for col in mapper.columns:
+        col_type = col.type.__class__
+        if col_type not in (DateTime, Date):
+            continue
+        val = kwargs.get(col.name)
+        if not isinstance(val, str):
+            continue
+        try:
+            kwargs[col.name] = datetime.fromisoformat(val.replace("Z", "+00:00")) \
+                .replace(tzinfo=None)
+        except ValueError:
+            kwargs[col.name] = None
+    return kwargs
+
 
 def _entity_kwargs(item: dict, cluster_id: int, model: type | None = None) -> dict:
     """Backup row → ORM kwargs: drop platform-managed fields, retarget cluster.
@@ -266,6 +300,7 @@ def _entity_kwargs(item: dict, cluster_id: int, model: type | None = None) -> di
         mapper = sa_inspect(model)
         allowed = set(mapper.attrs.keys()) | {c.name for c in mapper.columns}
         kwargs = {k: v for k, v in kwargs.items() if k in allowed}
+        kwargs = _coerce_datetime_fields(kwargs, model)
     return kwargs
 
 
@@ -283,19 +318,37 @@ def _ssl_kwargs(item: dict, cluster_id: int) -> dict:
     return kwargs
 
 
-def _write_static_file(edge_uuid: str | None, version, content_b64: str) -> str:
-    import base64
-    from pathlib import Path
+class BackupImportError(ValueError):
+    """导入校验类失败（保持 400 语义直通）。
 
-    # 写盘前兜底防线（双保险）：即使绕过 validate_backup_document 直调导入，
-    # 恶意 edge_uuid 也不得拼出 base 之外的目录
+    继承 ValueError 兼容既有 API 层 `except ValueError → 400` 契约；
+    非 BackupImportError 的 ValueError（如 binascii.Error）视为意外
+    异常，走 stage 定位转译（D5）——否则解码失败会裸奔英文原始信息。
+    """
+
+
+def _static_file_path(edge_uuid: str | None, version) -> str:
+    """静态资源落盘路径计算（edge_uuid 安全校验在此；不建目录不写盘）。"""
     validate_edge_uuid(edge_uuid)
     ver = version if isinstance(version, int) and version > 0 else 1
-    target_dir = Path(_BASE_STORAGE_DIR) / (edge_uuid or "imported")
-    target_dir.mkdir(parents=True, exist_ok=True)
-    path = target_dir / f"{ver}.zip"
-    path.write_bytes(base64.b64decode(content_b64))
-    return str(path)
+    return str(Path(_BASE_STORAGE_DIR) / (edge_uuid or "imported") / f"{ver}.zip")
+
+
+def _write_static_file_at(path: str, content_b64: str) -> str:
+    """按既定路径落盘 zip 内容（解码失败抛异常，由调用方统一回滚清理）。"""
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(base64.b64decode(content_b64))
+    return str(target)
+
+
+def _write_static_file(edge_uuid: str | None, version, content_b64: str) -> str:
+    """兼容入口：路径计算 + 落盘一步完成。"""
+    return _write_static_file_at(
+        _static_file_path(edge_uuid, version), content_b64)
+
+
+logger = logging.getLogger(__name__)
 
 
 async def import_backup(
@@ -310,6 +363,10 @@ async def import_backup(
     old-id → new-id maps captured during insertion (equivalent to the
     name/ip:port mapping in design D3, exact within one backup).
     """
+    # stage：失败时定位出错资源段（错误可读性，D5）；written_files：回滚后
+    # 需清理的已落盘文件（失败即无副作用，D4）——两者必须在 try 前初始化。
+    stage = "准备"
+    written_files: list[str] = []
     try:
         data = doc["data"]
         warnings: list[str] = []
@@ -319,28 +376,29 @@ async def import_backup(
         from app.schemas.cluster import NAME_ERROR_MSG, NAME_PATTERN
 
         if not NAME_PATTERN.match(target_cluster_name or ""):
-            raise ValueError(NAME_ERROR_MSG)
+            raise BackupImportError(NAME_ERROR_MSG)
 
         dup = await db.execute(
             select(Cluster).where(Cluster.name == target_cluster_name))
         if dup.scalar_one_or_none():
-            raise ValueError(f"目标集群名已存在：{target_cluster_name}")
+            raise BackupImportError(f"目标集群名已存在：{target_cluster_name}")
 
+        stage = "集群"
         src = data["cluster"]
-        cluster = Cluster(
-            name=target_cluster_name,
-            display_name=src.get("display_name"),
-            description=src.get("description"),
-            group_name=src.get("group_name"),
-            admin_url=src.get("admin_url"),
-            status=1,
-            creator_id=creator_id,
-        )
+        # Cluster 导入模型感知（change: cluster-backup-restore-fix D3）：
+        # 业务列（含 region_code 区域绑定）随备份迁移；平台管理字段显式钉死。
+        ckwargs = _entity_kwargs(src, 0, model=Cluster)
+        ckwargs["name"] = target_cluster_name
+        ckwargs["status"] = 1
+        ckwargs["creator_id"] = creator_id
+        ckwargs.pop("admin_key", None)  # 导出侧已排除，双保险
+        cluster = Cluster(**ckwargs)
         db.add(cluster)
         await db.flush()
         cid = cluster.id
 
         # 节点：旧id → 新id；运行态重置为离线（D3 步骤6）
+        stage = "节点"
         node_map: dict[int, int] = {}
         for item in data["nodes"]:
             row = Node(**_entity_kwargs(item, cid, model=Node))
@@ -350,6 +408,7 @@ async def import_backup(
             node_map[item["id"]] = row.id
 
         # SSL 证书：先 CA 后服务器，ca_cert_id 按旧id映射
+        stage = "SSL 证书"
         cert_map: dict[int, int] = {}
         for item in data["ssl_certificates"]:
             if not item.get("is_ca"):
@@ -378,6 +437,7 @@ async def import_backup(
                     "reason": "证书缺少内容，需重新生成或导入证书文件"})
 
         # 上游 + 目标节点
+        stage = "上游"
         upstream_map: dict[int, int] = {}
         for item in data["upstreams"]:
             row = Upstream(**_entity_kwargs(item, cid, model=Upstream))
@@ -391,12 +451,14 @@ async def import_backup(
                 db.add(UpstreamTarget(**tkw))
 
         # 插件组（edge_uuid 原值保留）
+        stage = "插件组"
         pc_edge_uuids = {p.get("edge_uuid") for p in data["plugin_configs"]}
         for item in data["plugin_configs"]:
             db.add(PluginConfig(**_entity_kwargs(item, cid, model=PluginConfig)))
         await db.flush()
 
         # 路由 + 路由插件
+        stage = "路由"
         route_map: dict[int, int] = {}
         for item in data["routes"]:
             kwargs = _entity_kwargs(item, cid, model=Route)
@@ -425,12 +487,14 @@ async def import_backup(
                 pkw["route_id"] = row.id
                 db.add(RoutePlugin(**pkw))
 
+        stage = "全局规则"
         for item in data["global_rules"]:
             db.add(GlobalRule(**_entity_kwargs(item, cid, model=GlobalRule)))
         for item in data["plugin_metadatas"]:
             db.add(PluginMetadata(**_entity_kwargs(item, cid, model=PluginMetadata)))
 
         # 四层代理：ref_node_id 重映射
+        stage = "四层代理"
         for item in data["stream_proxies"]:
             kwargs = _entity_kwargs(item, cid, model=StreamProxy)
             old_ref = item.get("ref_node_id")
@@ -444,15 +508,22 @@ async def import_backup(
                         f"已置空（ref_node_id={old_ref}）")
             db.add(StreamProxy(**kwargs))
 
-        # 静态资源：route_id 映射；有内容则落盘，无内容进需补齐清单
+        # 静态资源：route_id 映射；运行态发布状态丢弃（未发布语义）；
+        # 文件延迟到全部行 flush 成功后统一落盘（失败即无副作用，D4）
+        stage = "静态资源"
+        pending_file_writes: list[tuple[str, str]] = []
         for item in data["static_resources"]:
             kwargs = _entity_kwargs(item, cid, model=StaticResource)
+            for rk in _RUNTIME_STATE_KEYS:
+                kwargs.pop(rk, None)
             old_rt = item.get("route_id")
             kwargs["route_id"] = route_map.get(old_rt) if old_rt else None
             content = item.get("content_base64")
             if content:
-                kwargs["storage_path"] = _write_static_file(
-                    item.get("edge_uuid"), item.get("current_version"), content)
+                target_path = _static_file_path(
+                    item.get("edge_uuid"), item.get("current_version"))
+                kwargs["storage_path"] = target_path
+                pending_file_writes.append((target_path, content))
             else:
                 kwargs["storage_path"] = None
                 pending_items.append({
@@ -460,12 +531,36 @@ async def import_backup(
                     "reason": "静态资源缺少文件内容，需重新上传 ZIP 文件"})
             db.add(StaticResource(**kwargs))
 
+        # 全部 DB 行构造/flush 无异常后，才真正落盘文件并提交；
+        # 任一写盘失败 → rollback + 清理已写文件，磁盘不留孤儿 zip。
+        written_files: list[str] = []
+        for target_path, content_b64 in pending_file_writes:
+            written_files.append(
+                _write_static_file_at(target_path, content_b64))
+
         await db.commit()
         return {
             "cluster_id": cid,
             "warnings": warnings,
             "pending_items": pending_items,
         }
-    except Exception:
+    except Exception as exc:
         await db.rollback()
-        raise
+        for path in written_files:
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+        if isinstance(exc, BackupImportError):
+            raise
+        # 写库/解码等意外异常 → 可读 400（API 层 except ValueError 承接），
+        # 原始堆栈仍记服务端日志（不吞错）。
+        logger.exception("集群备份导入失败（target=%s, stage=%s）",
+                         target_cluster_name, stage)
+        brief = str(exc).strip()
+        if len(brief) > 160:
+            brief = brief[:160] + "…"
+        raise ValueError(
+            f"导入失败（{stage}段）：备份数据与当前数据模型不兼容，"
+            f"请确认备份文件由当前版本平台导出（{type(exc).__name__}: {brief}）"
+        ) from None
