@@ -53,23 +53,25 @@ class TestMetricsAPI:
     @patch("app.api.v1.metrics.query_connection_states")
     @patch("app.api.v1.metrics.query_summary")
     def test_get_summary(self, mock_query, mock_states, isolated_app):
-        mock_query.return_value = {"cpu": 85.0, "mem": 1024.0}
+        mock_query.return_value = ({"cpu": 85.0, "mem": 1024.0}, True)
         mock_states.return_value = {"active": 5.0, "waiting": 3.0}
         resp = isolated_app.get("/api/v1/metrics/summary")
         assert resp.status_code == 200
-        assert resp.json() == {
-            "data": {"cpu": 85.0, "mem": 1024.0},
-            "connection_states": {"active": 5.0, "waiting": 3.0},
-        }
+        body = resp.json()
+        assert body["data"] == {"cpu": 85.0, "mem": 1024.0}
+        assert body["connection_states"] == {"active": 5.0, "waiting": 3.0}
+        assert body["source_ok"] is True and ":" in body["source"]
 
     @patch("app.api.v1.metrics.query_connection_states")
     @patch("app.api.v1.metrics.query_summary")
     def test_get_summary_empty(self, mock_query, mock_states, isolated_app):
-        mock_query.return_value = {}
+        mock_query.return_value = ({}, False)
         mock_states.return_value = {}
         resp = isolated_app.get("/api/v1/metrics/summary")
         assert resp.status_code == 200
-        assert resp.json() == {"data": {}, "connection_states": {}}
+        body = resp.json()
+        assert body["data"] == {} and body["connection_states"] == {}
+        assert body["source_ok"] is False
 
     # ── Feature gating ────────────────────────────────────
 

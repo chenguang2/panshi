@@ -211,7 +211,9 @@ def test_test_failure_returns_ok_false(env, monkeypatch):
         r = c.post("/api/v1/clickhouse/connections/test", json=VALID_BODY)
         assert r.status_code == 200
         body = r.json()
-        assert body["ok"] is False and "Connection refused" in body["error"]
+        # error = 中文主文案（转译）；error_detail = 驱动原始输出
+        assert body["ok"] is False and "连接被拒绝" in body["error"]
+        assert "Connection refused" in body["error_detail"]
 
 
 # ── 权限 ─────────────────────────────────────────────────────────────

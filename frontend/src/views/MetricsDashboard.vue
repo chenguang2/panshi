@@ -1,6 +1,7 @@
 <template>
   <div class="metrics-dashboard">
     <PageHeader title="指标总览" description="Edge 网关关键指标概览" />
+    <MetricsSourceBanner :source-ok="store.sourceOk" :target="store.sourceTarget" />
 
     <!-- ── Global Controls ── -->
     <div class="dashboard-controls">
@@ -57,7 +58,7 @@
     </div>
 
     <!-- ── Extended Analytics Grid ── -->
-    <div class="chart-grid" style="grid-template-columns: 1fr;">
+    <div class="chart-grid" style="grid-template-columns: 1fr">
       <RouteStatsCard :since="store.timeRange" />
     </div>
     <div class="chart-grid">
@@ -92,13 +93,9 @@
 import { computed, onMounted, onUnmounted } from 'vue'
 import { ref } from 'vue'
 import { ReloadOutlined, CaretDownOutlined } from '@ant-design/icons-vue'
-import {
-  useMetricsDashboardStore,
-  BUSINESS_CHARTS,
-  INFRA_CHARTS,
-  CONNECTION_SERIES,
-} from '@/stores/metricsDashboard'
+import { useMetricsDashboardStore, BUSINESS_CHARTS, INFRA_CHARTS, CONNECTION_SERIES } from '@/stores/metricsDashboard'
 import MetricChartCard from '@/components/MetricChartCard.vue'
+import MetricsSourceBanner from '@/components/MetricsSourceBanner.vue'
 import RouteStatsCard from '@/components/RouteStatsCard.vue'
 import StatusAnalysisChart from '@/components/StatusAnalysisChart.vue'
 import TimeComparisonCard from '@/components/TimeComparisonCard.vue'

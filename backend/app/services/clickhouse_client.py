@@ -93,6 +93,12 @@ def invalidate() -> None:
     _config_version += 1
 
 
+def active_target() -> str:
+    """当前生效连接的 host:port（读缓存配置，不发起连接）。供指标页数据源横幅展示。"""
+    cfg = _load_config()
+    return f"{cfg.get('host', '?')}:{cfg.get('port', '?')}"
+
+
 def get_client() -> Client | None:
     client = getattr(_local, "client", None)
     if client is not None and getattr(_local, "version", -1) == _config_version:

@@ -199,7 +199,7 @@ _GAUGE_LATEST_FILTERS: dict[str, tuple[str, str]] = {
 }
 
 
-def query_summary(window_sec: int = 300) -> dict[str, float]:
+def query_summary(window_sec: int = 300) -> tuple[dict[str, float], bool]:
     """汇总卡片：gauge 取最新值，计数器取窗口内增量。
 
     - otel_metrics_sum 全部为累计计数器 → 窗口内增量 max(Value) - min(Value)
@@ -208,8 +208,11 @@ def query_summary(window_sec: int = 300) -> dict[str, float]:
       单序列时等价于最新值）；但 _total 后缀实为计数器，同样按增量计算
       （与 _is_counter 的 Prometheus 后缀启发式一致）
     - _GAUGE_LATEST_FILTERS 中的指标按业务口径过滤序列
+    - 返回 (汇总, source_ok)：任一底层查询执行成功（含空结果）即连接可用；
+      全部失败（execute_query 返回 None）→ False，供指标页数据源横幅判断
     """
     result: dict[str, float] = {}
+    source_ok = False
 
     filter_clauses = " OR ".join(
         f"(MetricName != '{name}' OR Attributes['{key}'] = '{val}')"
@@ -229,7 +232,8 @@ def query_summary(window_sec: int = 300) -> dict[str, float]:
         )
         GROUP BY MetricName
     """)
-    if gauge_rows:
+    if gauge_rows is not None:
+        source_ok = True
         result.update({r[0]: float(r[1]) for r in gauge_rows})
 
     sum_rows = execute_query(f"""
@@ -238,7 +242,8 @@ def query_summary(window_sec: int = 300) -> dict[str, float]:
         WHERE TimeUnix > now() - INTERVAL {window_sec} SECOND
         GROUP BY MetricName
     """)
-    if sum_rows:
+    if sum_rows is not None:
+        source_ok = True
         result.update({r[0]: float(r[1]) for r in sum_rows})
 
     gauge_counter_rows = execute_query(f"""
@@ -248,10 +253,11 @@ def query_summary(window_sec: int = 300) -> dict[str, float]:
           AND endsWith(MetricName, '_total')
         GROUP BY MetricName
     """)
-    if gauge_counter_rows:
+    if gauge_counter_rows is not None:
+        source_ok = True
         result.update({r[0]: float(r[1]) for r in gauge_counter_rows})
 
-    return result
+    return result, source_ok
 
 
 def query_connection_states(window_sec: int = 300) -> dict[str, float]:

@@ -129,10 +129,11 @@ class TestMetricsService:
             [("edge_plugin_errors_total", 5.0)],      # gauge 表 _total 计数器增量
         ]
         from app.services.metrics_service import query_summary
-        result = query_summary()
+        result, source_ok = query_summary()
         assert result["cpu_usage"] == 85.0
         assert result["edge_http_requests_total"] == 1234.0
         assert result["edge_plugin_errors_total"] == 5.0
+        assert source_ok is True
 
     @patch("app.services.metrics_service.execute_query")
     def test_summary_gauge_query_excludes_total_suffix(self, mock_exec):
@@ -154,8 +155,9 @@ class TestMetricsService:
             [],
         ]
         from app.services.metrics_service import query_summary
-        result = query_summary()
+        result, source_ok = query_summary()
         assert result["edge_nginx_http_current_connections"] == 1.0
+        assert source_ok is True
         first_sql = mock_exec.call_args_list[0][0][0]
         assert "Attributes['state'] = 'active'" in first_sql
         # 多节点/多序列：逐序列取最新后求和，而非全局 argMax
@@ -165,13 +167,15 @@ class TestMetricsService:
     def test_summary_empty(self, mock_exec):
         mock_exec.side_effect = [[], [], []]
         from app.services.metrics_service import query_summary
-        assert query_summary() == {}
+        # 空结果（执行成功）≠ 数据源不可用：source_ok 仍为 True
+        assert query_summary() == ({}, True)
 
     @patch("app.services.metrics_service.execute_query")
     def test_summary_none(self, mock_exec):
         mock_exec.side_effect = [None, None, None]
         from app.services.metrics_service import query_summary
-        assert query_summary() == {}
+        # 全部查询失败（None）→ source_ok False，供指标页数据源横幅判断
+        assert query_summary() == ({}, False)
 
     # ── query_connection_states ────────────────────────────
 

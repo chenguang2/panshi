@@ -1,6 +1,7 @@
 <template>
   <div class="metrics-page">
     <PageHeader title="指标查询" description="Edge 网关节点单指标查询与分析" />
+    <MetricsSourceBanner :source-ok="store.sourceOk" :target="store.sourceTarget" />
 
     <!-- ── Controls ── -->
     <div class="metrics-controls">
@@ -71,6 +72,7 @@ import { CanvasRenderer } from 'echarts/renderers'
 import { LineChart, BarChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
 import VChart from 'vue-echarts'
+import MetricsSourceBanner from '@/components/MetricsSourceBanner.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { useMetricsStore } from '@/stores/metrics'
 import { formatFileSize } from '@/utils/format'

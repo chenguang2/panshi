@@ -21,6 +21,8 @@ export async function getMetricTimeSeries(
 interface MetricSummaryResult {
   summary: MetricSummary
   connectionStates: ConnectionStates
+  sourceOk: boolean | null
+  sourceTarget: string
 }
 
 export async function getMetricSummary(): Promise<MetricSummaryResult> {
@@ -28,6 +30,8 @@ export async function getMetricSummary(): Promise<MetricSummaryResult> {
   return {
     summary: res.data.data as MetricSummary,
     connectionStates: (res.data.connection_states ?? {}) as ConnectionStates,
+    sourceOk: typeof res.data.source_ok === 'boolean' ? res.data.source_ok : null,
+    sourceTarget: (res.data.source ?? '') as string,
   }
 }
 

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { getMetricTimeSeries } from '@/api/metrics'
+import { getMetricSummary, getMetricTimeSeries } from '@/api/metrics'
 import type { MetricDataPoint } from '@/types/metrics'
 
 const intervalMap: Record<string, string> = {
@@ -65,6 +65,25 @@ export const useMetricsDashboardStore = defineStore('metricsDashboard', () => {
 
   const chartDataMap = ref<Record<string, MetricDataPoint[]>>({})
   const errorMap = ref<Record<string, string | null>>({})
+  // 数据源连接级可用性（summary 响应 source_ok）：false 显示横幅；null 不显示
+  const sourceOk = ref<boolean | null>(null)
+  const sourceTarget = ref('')
+
+  let sourceInFlight = false
+
+  async function loadSourceStatus(): Promise<void> {
+    if (sourceInFlight) return
+    sourceInFlight = true
+    try {
+      const { sourceOk: ok, sourceTarget: target } = await getMetricSummary()
+      sourceOk.value = ok
+      sourceTarget.value = target
+    } catch {
+      sourceOk.value = null
+    } finally {
+      sourceInFlight = false
+    }
+  }
 
   let refreshTimer: ReturnType<typeof setInterval> | null = null
 
@@ -97,6 +116,7 @@ export const useMetricsDashboardStore = defineStore('metricsDashboard', () => {
     loading.value = true
     try {
       const targets = businessLoadTargets()
+      void loadSourceStatus()
       const results = await Promise.allSettled(targets.map((cd) => loadSingleChart(cd)))
       for (let i = 0; i < results.length; i++) {
         if (results[i].status === 'rejected' && !errorMap.value[targets[i].key]) {
@@ -180,8 +200,11 @@ export const useMetricsDashboardStore = defineStore('metricsDashboard', () => {
     infraLoaded,
     chartDataMap,
     errorMap,
+    sourceOk,
+    sourceTarget,
     loadAllCharts,
     loadInfraCharts,
+    loadSourceStatus,
     setTimeRange,
     setRefreshInterval,
     toggleAutoRefresh,

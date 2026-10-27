@@ -8,6 +8,7 @@
 
 import asyncio
 import secrets
+from datetime import datetime
 from typing import Optional
 
 import yaml
@@ -101,14 +102,17 @@ def _write_struct(struct: dict) -> None:
     data = {"active": struct.get("active"),
             "connections": [{k: v for k, v in c.items() if v is not None} for c in struct["connections"]]}
     ch._CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    ch._CONFIG_PATH.write_text("# ClickHouse 连接配置（由「系统管理 → ClickHouse 配置」页维护）\n"
+    ch._CONFIG_PATH.write_text("# ClickHouse 连接配置（由「监控 → ClickHouse 配置」页维护）\n"
                                + yaml.safe_dump(data, allow_unicode=True, sort_keys=False),
                                encoding="utf-8")
 
 
 def _public(conn: dict, active_id: Optional[str]) -> dict:
     item = {"id": conn.get("id"), "is_active": conn.get("id") == active_id,
-            "password_set": bool(conn.get("password_enc"))}
+            "password_set": bool(conn.get("password_enc")),
+            "last_test_ok": conn.get("last_test_ok"),
+            "last_test_at": conn.get("last_test_at"),
+            "last_test_error": conn.get("last_test_error")}
     item.update({k: conn.get(k) for k in _FIELDS})
     return item
 
@@ -118,6 +122,52 @@ def _find(struct: dict, cid: str) -> dict:
     if conn is None:
         raise HTTPException(status_code=404, detail="连接不存在")
     return conn
+
+
+def _ensure_name_unique(struct: dict, name: str, exclude_id: Optional[str] = None) -> None:
+    """连接名称唯一（trim 后精确比对）；update 排除自身。存量重名不强制处理。"""
+    n = (name or "").strip()
+    for c in struct["connections"]:
+        if c.get("id") != exclude_id and (c.get("name") or "").strip() == n:
+            raise HTTPException(status_code=400, detail=f"连接名称「{n}」已存在")
+
+
+def _translate_test_error(exc: Exception, host: str, port: int, database: str,
+                          connect_timeout: int) -> tuple[str, str]:
+    """试连失败转译：返回 (中文主文案+排查建议, 驱动原始输出)。未命中模式透传原文。"""
+    raw = str(exc) or exc.__class__.__name__
+    low = raw.lower()
+    if "connection refused" in low:
+        msg = (f"连接被拒绝：{host}:{port} 无服务监听。请确认 ClickHouse 已启动、"
+               f"端口为 native TCP 端口（默认 9000，非 HTTP 8123）、防火墙已放行")
+    elif "authentication failed" in low or "password is incorrect" in low \
+            or "no user with such name" in low:
+        msg = f"认证失败：用户名或密码不正确（或该用户无权限访问 {database}）"
+    elif "database" in low and "does not exist" in low:
+        msg = f"数据库 {database} 不存在：请确认库名，或连接后查看可用库"
+    elif "name or service not known" in low or "getaddrinfo" in low \
+            or "name does not resolve" in low or "no address associated" in low:
+        msg = f"无法解析主机 {host}：请检查主机名拼写与 DNS 配置"
+    elif "timed out" in low or "timeout" in low:
+        msg = f"连接超时（{connect_timeout}s）：网络不通、路由不可达或服务无响应"
+    else:
+        return raw, raw
+    return msg, raw
+
+
+def _record_test_result(struct: dict, conn: dict, result: dict) -> None:
+    """测试留痕：只写操作元数据，不动连接参数、不动缓存（规格「测试不落盘」新语义）。"""
+    ok = bool(result.get("ok"))
+    conn["last_test_ok"] = ok
+    conn["last_test_at"] = datetime.utcnow().isoformat()
+    conn["last_test_error"] = None if ok else (result.get("error") or "")[:200]
+    _write_struct(struct)
+
+
+def _with_test_trace(result: dict, conn: dict) -> dict:
+    result["last_test_ok"] = conn.get("last_test_ok")
+    result["last_test_at"] = conn.get("last_test_at")
+    return result
 
 
 async def _try_connect(host: str, port: int, database: str, user: str,
@@ -130,9 +180,10 @@ async def _try_connect(host: str, port: int, database: str, user: str,
                             password=password, connect_timeout=connect_timeout,
                             settings={"connect_timeout": connect_timeout})
             client.execute("SELECT 1")
-            return {"ok": True, "error": None}
+            return {"ok": True, "error": None, "error_detail": None}
         except Exception as exc:
-            return {"ok": False, "error": str(exc)}
+            msg, raw = _translate_test_error(exc, host, port, database, connect_timeout)
+            return {"ok": False, "error": msg, "error_detail": raw}
         finally:
             if client is not None:
                 try:
@@ -161,6 +212,7 @@ async def create_connection(
 ):
     struct = _read_struct()
     cid = "ck_" + secrets.token_hex(4)
+    _ensure_name_unique(struct, body.name)
     conn = {"id": cid, **{k: getattr(body, k) for k in _FIELDS}}
     if body.password:
         conn["password_enc"] = encrypt_password(body.password)
@@ -171,21 +223,26 @@ async def create_connection(
     ch.invalidate()
     enrich_audit(request, resource_id=cid, detail=f"新建 ClickHouse 连接「{body.name}」{body.host}:{body.port}")
     await db.commit()
-    await db.commit()
     return _public(conn, struct["active"])
 
 
 @router.post("/connections/test")
 async def test_connection_form(body: ConnIn):
-    """未保存表单试连（不落盘、不失效）。密码留空且带 id 时用已存密码。"""
+    """未保存表单试连（不失效）。密码留空且带已存 id 时用已存密码并留痕；全新表单不留痕。"""
     password = body.password or ""
+    stored = None
+    struct = None
     if not password and body.id:
         struct = _read_struct()
         stored = next((c for c in struct["connections"] if c.get("id") == body.id), None)
         if stored and stored.get("password_enc"):
             password = decrypt_password(stored["password_enc"])
-    return await _try_connect(body.host, body.port, body.database, body.user,
-                              password, body.connect_timeout)
+    result = await _try_connect(body.host, body.port, body.database, body.user,
+                                password, body.connect_timeout)
+    if stored is not None:
+        _record_test_result(struct, stored, result)
+        result = _with_test_trace(result, stored)
+    return result
 
 
 @router.put("/connections/{conn_id}")
@@ -198,6 +255,7 @@ async def update_connection(
 ):
     struct = _read_struct()
     conn = _find(struct, conn_id)
+    _ensure_name_unique(struct, body.name, exclude_id=conn_id)
     for k in _FIELDS:
         conn[k] = getattr(body, k)
     if body.password:  # 留空=保留原密码
@@ -205,7 +263,6 @@ async def update_connection(
     _write_struct(struct)
     ch.invalidate()
     enrich_audit(request, resource_id=conn_id, detail=f"更新 ClickHouse 连接「{body.name}」{body.host}:{body.port}")
-    await db.commit()
     await db.commit()
     return _public(conn, struct["active"])
 
@@ -225,7 +282,6 @@ async def delete_connection(
     _write_struct(struct)
     ch.invalidate()
     enrich_audit(request, resource_id=conn_id, detail=f"删除 ClickHouse 连接「{conn.get('name')}」")
-    await db.commit()
     await db.commit()
     return {"ok": True}
 
@@ -250,11 +306,21 @@ async def activate_connection(
 
 @router.post("/connections/{conn_id}/test")
 async def test_connection_saved(conn_id: str, body: TestSavedIn | None = None):
-    """按已存连接试连（body.password 非空可临时覆盖，均不落盘）。"""
+    """按已存连接试连（body.password 非空可临时覆盖）。结果作为操作元数据留痕（参数不动、缓存不失效）。"""
     struct = _read_struct()
     conn = _find(struct, conn_id)
-    password = (body.password if body and body.password else
-                (decrypt_password(conn["password_enc"]) if conn.get("password_enc") else ""))
-    return await _try_connect(conn.get("host", "127.0.0.1"), int(conn.get("port", 9000)),
-                              conn.get("database", "esapm_metrics"), conn.get("user", "default"),
-                              password, int(conn.get("connect_timeout", 5)))
+    password = ""
+    if body and body.password:
+        password = body.password
+    elif conn.get("password_enc"):
+        password = decrypt_password(conn["password_enc"])
+        if not password:
+            result = {"ok": False, "error": "密码无法解密（加密密钥可能已轮换），请编辑该连接重新录入密码",
+                      "error_detail": None}
+            _record_test_result(struct, conn, result)
+            return _with_test_trace(result, conn)
+    result = await _try_connect(conn.get("host", "127.0.0.1"), int(conn.get("port", 9000)),
+                                conn.get("database", "esapm_metrics"), conn.get("user", "default"),
+                                password, int(conn.get("connect_timeout", 5)))
+    _record_test_result(struct, conn, result)
+    return _with_test_trace(result, conn)

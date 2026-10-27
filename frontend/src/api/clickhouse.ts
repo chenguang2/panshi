@@ -23,6 +23,9 @@ export interface ClickhouseConnectionPublic {
   connect_timeout: number
   password_set: boolean
   is_active: boolean
+  last_test_ok?: boolean | null
+  last_test_at?: string | null
+  last_test_error?: string | null
 }
 
 interface ClickhouseListResult {
@@ -44,6 +47,9 @@ export interface ClickhouseConnectionPayload {
 interface ClickhouseTestResult {
   ok: boolean
   error: string | null
+  error_detail: string | null
+  last_test_ok?: boolean | null
+  last_test_at?: string | null
 }
 
 export function listConnections(): Promise<AxiosResponse<ClickhouseListResult>> {

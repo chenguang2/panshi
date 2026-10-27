@@ -19,6 +19,7 @@ from app.services.metrics_service import (
     query_time_comparison,
     query_node_health,
 )
+from app.services import clickhouse_client as ch
 
 from app.core.deps import require_permission
 
@@ -34,9 +35,10 @@ async def get_metric_names():
 
 @router.get("/metrics/summary")
 async def get_metrics_summary():
-    data = await asyncio.to_thread(query_summary)
+    data, source_ok = await asyncio.to_thread(query_summary)
     connection_states = await asyncio.to_thread(query_connection_states)
-    return {"data": data, "connection_states": connection_states}
+    return {"data": data, "connection_states": connection_states,
+            "source_ok": source_ok, "source": ch.active_target()}
 
 
 @router.get("/metrics/route-stats")

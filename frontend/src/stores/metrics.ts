@@ -28,6 +28,9 @@ export const useMetricsStore = defineStore('metrics', () => {
   const loading = ref(false)
   const loadingNames = ref(false)
   const error = ref<string | null>(null)
+  // 数据源连接级可用性（summary 响应 source_ok）：false 显示横幅；null（summary 请求本身失败）不显示
+  const sourceOk = ref<boolean | null>(null)
+  const sourceTarget = ref('')
 
   let refreshTimer: ReturnType<typeof setInterval> | null = null
 
@@ -76,12 +79,15 @@ export const useMetricsStore = defineStore('metrics', () => {
     if (summaryInFlight) return
     summaryInFlight = true
     try {
-      const { summary, connectionStates: states } = await getMetricSummary()
+      const { summary, connectionStates: states, sourceOk: ok, sourceTarget: target } = await getMetricSummary()
       summaryData.value = summary
       connectionStates.value = states
+      sourceOk.value = ok
+      sourceTarget.value = target
     } catch {
       summaryData.value = {}
       connectionStates.value = {}
+      sourceOk.value = null
     } finally {
       summaryInFlight = false
     }
@@ -127,6 +133,8 @@ export const useMetricsStore = defineStore('metrics', () => {
     loading,
     loadingNames,
     error,
+    sourceOk,
+    sourceTarget,
     loadMetricNames,
     loadChartData,
     loadSummary,

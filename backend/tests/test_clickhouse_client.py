@@ -63,7 +63,16 @@ class TestClickHouseClient:
         MockClient.assert_called_once()
 
     @patch("app.services.clickhouse_client.Client")
-    def test_get_client_config_applied(self, MockClient):
+    def test_get_client_config_applied(self, MockClient, tmp_path, monkeypatch):
+        # 密闭化（原实现裸读真实 backend/clickhouse.yaml，运行态文件被配置页维护后即红）
+        import yaml
+        import app.services.clickhouse_client as mod
+        cfg = tmp_path / "clickhouse.yaml"
+        cfg.write_text(yaml.dump({"host": "192.168.100.42", "port": 9000,
+                                  "database": "esapm_metrics", "user": "default",
+                                  "connect_timeout": 5}))
+        monkeypatch.setattr(mod, "_CONFIG_PATH", cfg)
+        monkeypatch.setattr(mod, "_LEGACY_CONFIG_PATH", tmp_path / "nonexistent.yaml")
         from app.services.clickhouse_client import get_client, _load_config
         _load_config()
         get_client()
