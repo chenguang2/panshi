@@ -2,7 +2,7 @@
   <div class="inventory-page">
     <PageHeader
       title="Ansible 主机清单"
-      description="维护 Edge 集群的 Ansible inventory（all.children.edge_cluster），保存后立即对节点任务生效，无需重启；SSH 密码以明文存储与展示（脱敏占位曾被误写回清单覆盖真实密码，故不做掩码）"
+      description="维护 Edge 集群的 Ansible inventory（all.children.edge_cluster），保存后立即对节点任务生效，无需重启；SSH 密码按平台约定明文存储与展示，不做掩码。"
     >
       <template #actions>
         <a-tag v-if="dirty" color="warning" class="dirty-tag">有未保存修改</a-tag>
@@ -24,6 +24,7 @@
             源码视图
           </button>
         </div>
+        <button class="btn btn-secondary" @click="openBackups">恢复记录</button>
         <button
           class="btn btn-secondary"
           title="放弃本地修改，重新从服务器加载"
@@ -37,6 +38,13 @@
         </button>
       </template>
     </PageHeader>
+
+    <!-- 元数据行：最后修改时间 · 主机数 · 操作日志入口（批 2） -->
+    <div class="inv-meta">
+      <span v-if="lastModified">清单最后修改：{{ formatDateTime(lastModified) }}</span>
+      <span>{{ rows.length }} 台主机</span>
+      <a @click="goAuditLog">操作日志</a>
+    </div>
 
     <a-spin :spinning="loading || switching" tip="正在与服务器同步...">
       <div class="inventory-body">
@@ -87,7 +95,9 @@
             <div class="card-header">
               <div class="card-heading">
                 <h3>组级默认凭据</h3>
-                <span class="card-subtitle">写入 edge_cluster.vars；未单独配置凭据的主机继承此默认值</span>
+                <span class="card-subtitle"
+                  >写入 edge_cluster.vars；未单独配置凭据的主机继承此默认值；密码按平台约定明文存储</span
+                >
               </div>
             </div>
             <a-table
@@ -100,7 +110,7 @@
               :expand-icon="renderGroupExpandIcon"
             >
               <template #expandedRowRender>
-                <AnsibleAdvancedFields :values="baseVars" @change="setGroupAdvanced" />
+                <AnsibleAdvancedFields :values="baseVars" :errors="groupAdvancedErrors" @change="setGroupAdvanced" />
               </template>
               <a-table-column title="字段" key="node" width="200">
                 <template #default="{ record }">
@@ -117,7 +127,7 @@
                   />
                 </template>
               </a-table-column>
-              <a-table-column title="SSH 密码（明文）" key="pass" width="320">
+              <a-table-column title="SSH 密码" key="pass" width="320">
                 <template #default>
                   <a-input
                     v-model:value="groupPass"
@@ -167,7 +177,11 @@
               :expand-icon="renderExpandIcon"
             >
               <template #expandedRowRender="{ record }">
-                <AnsibleAdvancedFields :values="record" @change="(key, value) => setAdvanced(record, key, value)" />
+                <AnsibleAdvancedFields
+                  :values="record"
+                  :errors="rowAdvancedErrors(rowKeyOf(record))"
+                  @change="(key, value) => setAdvanced(record, key, value)"
+                />
               </template>
               <a-table-column title="IP" key="ip" width="230">
                 <template #default="{ record, index }">
@@ -189,7 +203,7 @@
                   />
                 </template>
               </a-table-column>
-              <a-table-column title="SSH 密码（明文）" key="pass" width="220">
+              <a-table-column title="SSH 密码" key="pass" width="220">
                 <template #default="{ record }">
                   <a-input
                     v-model:value="record.ansible_ssh_pass"
@@ -256,6 +270,32 @@
       </div>
     </a-spin>
 
+    <!-- 恢复记录抽屉：保存时自动备份的列表 / 只读预览 / 一键恢复 -->
+    <a-drawer v-model:open="backupsOpen" title="恢复记录" width="560" placement="right">
+      <div class="bk-list">
+        <a-spin :spinning="backupsLoading" tip="加载备份列表...">
+          <div v-if="!backupsLoading && backups.length === 0" class="bk-empty">
+            暂无备份——每次保存时会自动备份当前清单（保留最近 10 份）。
+          </div>
+          <div v-for="bk in backups" :key="bk.name" class="bk-item" :class="{ expanded: previewName === bk.name }">
+            <div class="bk-row">
+              <div class="bk-meta">
+                <span class="bk-time">{{ formatDateTime(bk.saved_at) }}</span>
+                <span class="bk-size">{{ formatFileSize(bk.size_bytes) }}</span>
+              </div>
+              <div class="bk-actions">
+                <button class="btn btn-secondary btn-sm" @click="togglePreview(bk.name)">
+                  {{ previewName === bk.name ? '收起' : '查看' }}
+                </button>
+                <button class="btn btn-danger btn-sm" @click="restoreClicked(bk)">恢复此备份</button>
+              </div>
+            </div>
+            <pre v-if="previewName === bk.name" class="bk-preview">{{ previewText }}</pre>
+          </div>
+        </a-spin>
+      </div>
+    </a-drawer>
+
     <!-- 批量导入弹窗 -->
     <a-modal
       v-model:open="bulkImportVisible"
@@ -268,16 +308,15 @@
       <a-textarea
         v-model:value="bulkImportText"
         :rows="10"
-        placeholder="每行一条：IP [SSH用户] [SSH密码]（空白分隔，支持 # 注释）"
+        placeholder="每行一条：主机键 [SSH用户] [SSH密码]（主机键为 IP 或主机名；支持 # 注释）"
       />
       <div v-if="bulkImportText" class="bulk-preview">
         <div v-if="bulkImportResult.duplicatesInText" class="bulk-hint">
           文本内 {{ bulkImportResult.duplicatesInText }} 条重复已合并
         </div>
-        <div v-if="bulkImportResult.errors.length === 0 && bulkImportResult.entries.length">
-          <span v-if="bulkImportResult.entries.some((e) => rows.some((r) => r.ip === e.ip))" class="bulk-hint">
-            将覆盖 {{ bulkImportResult.entries.filter((e) => rows.some((r) => r.ip === e.ip)).length }} 条现有主机凭据
-          </span>
+        <div v-if="bulkSummary" class="bulk-summary">{{ bulkSummary }}</div>
+        <div v-for="w in bulkHostnameWarnings" :key="w.ip" class="bulk-warn">
+          第 {{ w.line }} 行：主机键 {{ w.ip }} 不是 IP，将按主机名原样保存
         </div>
         <div v-for="err in bulkImportResult.errors" :key="err.line" class="bulk-error">
           第 {{ err.line }} 行：{{ err.reason }}
@@ -288,7 +327,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, h, type VNode } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, toRaw, h, type VNode } from 'vue'
 import { message, Tooltip } from 'ant-design-vue'
 import { SettingOutlined } from '@ant-design/icons-vue'
 import { showOverlayModal } from '@/composables/useOverlayModal'
@@ -297,15 +336,26 @@ import { onBeforeRouteLeave } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
 import AnsibleAdvancedFields from '@/components/AnsibleAdvancedFields.vue'
 import MonacoEditor from '@/components/MonacoEditor.vue'
-import { getInventory, parseInventory, renderInventory, saveInventory } from '@/api/ansibleInventory'
-import type { InventoryHostEntry, InventorySavePayload } from '@/api/ansibleInventory'
+import {
+  getInventory,
+  parseInventory,
+  renderInventory,
+  saveInventory,
+  listBackups,
+  readBackupContent,
+  restoreBackup,
+} from '@/api/ansibleInventory'
+import type { InventoryHostEntry, InventorySavePayload, InventoryBackup } from '@/api/ansibleInventory'
+import { formatDateTime, formatFileSize } from '@/utils/format'
 import {
   ADVANCED_FIELDS,
   apiDetail,
   applyGroupCreds,
   assembleHosts,
+  collectAdvancedErrors,
   credString,
   extraVarKeys,
+  isEmptyStructureParse,
   mergeBulkEntries,
   parseBulkHosts,
   toBool,
@@ -340,6 +390,7 @@ const saving = ref(false)
 const switching = ref(false)
 const showUnknownHint = ref(true)
 const sourceErrors = ref<string[]>([])
+const lastModified = ref<string | null>(null)
 
 const extraVars = computed(() => extraVarKeys(baseVars.value))
 
@@ -484,37 +535,83 @@ function deleteGroupVars(): void {
   })
 }
 
-/** 保存前逐行校验高级字段，返回错误信息列表（空数组=通过）。 */
-function validateRowsAdvanced(): string[] {
-  const errors: string[] = []
-  rows.value.forEach((row, idx) => {
-    for (const def of ADVANCED_FIELDS) {
-      const err = validateAdvancedField(def.key, row[def.key])
-      if (err) errors.push(`第 ${idx + 1} 行（${row.ip || '未填 IP'}）：${err}`)
-    }
-  })
+/** 行内标红错误：rowKey → { 字段键 → 原因 }（保存校验失败时写入，行内 AnsibleAdvancedFields 展示）。 */
+const advancedErrorMap = ref<Record<number, Record<string, string>>>({})
+
+function rowAdvancedErrors(rowKey: number): Record<string, string> | undefined {
+  return advancedErrorMap.value[rowKey]
+}
+
+/** 组级行内标红错误（键同主机行：字段键 → 原因）。 */
+const groupAdvancedErrors = ref<Record<string, string>>({})
+
+/**
+ * 保存前高级字段校验（批 2 结构化）：返回行定位错误列表，并写入行内标红映射。
+ * 空数组 = 通过。
+ */
+function validateRowsAdvanced(): { rowIndex: number; key: string; message: string }[] {
+  const errors = collectAdvancedErrors(rows.value)
+  const map: Record<number, Record<string, string>> = {}
+  for (const e of errors) {
+    const rowKey = rowKeyOf(rows.value[e.rowIndex])
+    ;(map[rowKey] ||= {})[e.key] = e.message
+  }
+  advancedErrorMap.value = map
   return errors
 }
 
-/** 保存前校验组级高级字段（与主机行同口径）。 */
+/** 组级高级字段校验（与主机行同口径），错误写入组级行内标红。 */
 function validateGroupAdvanced(): string[] {
   const errors: string[] = []
+  const map: Record<string, string> = {}
   for (const def of ADVANCED_FIELDS) {
     const err = validateAdvancedField(def.key, baseVars.value[def.key])
-    if (err) errors.push(`组级变量 ${def.key}：${err}`)
+    if (err) {
+      errors.push(`组级变量 ${def.key}：${err}`)
+      map[def.key] = err
+    }
   }
+  groupAdvancedErrors.value = map
   return errors
 }
 
-// 行键：WeakMap 身份键，避免用 ip 作键（新增行 IP 可能为空或临时重复）
+/** 滚动定位 + 高亮既有行（校验失败定位首错行；复用新增行的视觉语言）。 */
+function locateRow(rowKey: number): void {
+  void nextTick(() => {
+    const el = document.querySelector(`tr[data-row-key="${rowKey}"]`)
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    highlightKeys.value = [...highlightKeys.value, rowKey]
+    setTimeout(() => {
+      highlightKeys.value = highlightKeys.value.filter((k) => k !== rowKey)
+    }, 2000)
+  })
+}
+
+// 行键：WeakMap 身份键，避免用 ip 作键（新增行 IP 可能为空或临时重复）。
+// 加载期行先注册「稳定键」（index+ip 哈希，批 3）：保存后重载重建行对象时
+// 同名主机取回同键 → a-table 展开态与滚动定位跨保存保持；新增行走自增兜底。
 const rowKeyMap = new WeakMap<object, number>()
-let rowKeySeq = 0
+let rowKeySeq = 1000000
+
+function stableRowKey(index: number, ip: string): number {
+  let h = 2166136261
+  const s = `${index}|${ip}`
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i)
+    h = Math.imul(h, 16777619)
+  }
+  return h >>> 0
+}
+
 function rowKeyOf(record: object): number {
-  let k = rowKeyMap.get(record)
+  // 归一到 raw：模板/a-table 侧拿到的是 reactive 代理，注册侧（applyServerStructure /
+  // appendAndLocate）是 raw——不经 toRaw 会双侧各注册一份，展开态跨重载丢失
+  const raw = toRaw(record)
+  let k = rowKeyMap.get(raw) ?? rowKeyMap.get(record)
   if (k === undefined) {
     rowKeySeq += 1
     k = rowKeySeq
-    rowKeyMap.set(record, k)
+    rowKeyMap.set(raw, k)
   }
   return k
 }
@@ -527,7 +624,7 @@ function syncGroupCreds(): void {
 }
 
 function applyServerStructure(hosts: InventoryHostEntry[], vars: Record<string, unknown>): void {
-  rows.value = hosts.map((h) => {
+  rows.value = hosts.map((h, index) => {
     const row: InventoryHostEntry = { ...h }
     // 源码模式可能写出的字符串形态规范化，供表格控件直接绑定
     if ('ansible_port' in row) {
@@ -539,6 +636,8 @@ function applyServerStructure(hosts: InventoryHostEntry[], vars: Record<string, 
     if ('ansible_become' in row) {
       row['ansible_become'] = toBool(row['ansible_become'])
     }
+    // 稳定行键（批 3）：同名主机跨保存重载保持键值 → 展开态不丢
+    rowKeyMap.set(row, stableRowKey(index, String(row.ip || '')))
     return row
   })
   baseVars.value = { ...vars }
@@ -555,7 +654,10 @@ async function load(): Promise<void> {
     unknownKeys.value = res.data.unknown_keys || []
     unmanagedIps.value = res.data.unmanaged_ips || []
     loadErrors.value = res.data.errors || []
+    lastModified.value = (res.data as { last_modified?: string | null }).last_modified ?? null
     sourceErrors.value = []
+    advancedErrorMap.value = {}
+    groupAdvancedErrors.value = {}
     // 文件解析失败时表格为空，强制进入源码视图展示真实文件内容供修复
     // （避免切到源码时被空表格渲染出的骨架覆盖掉原文）
     if (loadErrors.value.length) viewMode.value = 'source'
@@ -611,7 +713,12 @@ async function switchTo(target: ViewMode): Promise<void> {
       const res = await parseInventory(sourceDraft.value)
       if (res.data.errors.length) {
         sourceErrors.value = res.data.errors
-        message.warning('源码存在解析错误，已阻止切换，请先修正')
+        // 空清单（hosts/vars 全空）引导文案替代裸结构错误（批 2）
+        if (isEmptyStructureParse(res.data)) {
+          message.warning('清单为空：请补全 hosts 段后切换表格视图；如确要清空清单，请直接「保存生效」')
+        } else {
+          message.warning('源码存在解析错误，已阻止切换，请先修正')
+        }
         return
       }
       applyServerStructure(res.data.hosts, res.data.vars)
@@ -644,11 +751,27 @@ async function save(): Promise<void> {
   if (viewMode.value === 'table') {
     const advancedErrors = validateRowsAdvanced()
     if (advancedErrors.length) {
-      message.warning(advancedErrors.join('；'))
+      // 定位首错行：展开 + 滚动高亮 + 行内标红（toast 汇总仅辅助）
+      const first = advancedErrors[0]
+      const firstRow = rows.value[first.rowIndex]
+      const firstKey = rowKeyOf(firstRow)
+      if (!expandedKeys.value.includes(firstKey)) expandedKeys.value = [...expandedKeys.value, firstKey]
+      locateRow(firstKey)
+      message.warning(
+        advancedErrors
+          .map((e) => {
+            const row = rows.value[e.rowIndex]
+            return `第 ${e.rowIndex + 1} 行（${row.ip || '未填 IP'}）：${e.message}`
+          })
+          .join('；'),
+      )
       return
     }
     const groupErrors = validateGroupAdvanced()
     if (groupErrors.length) {
+      if (!groupExpandedKeys.value.includes(GROUP_ROW_KEY)) {
+        groupExpandedKeys.value = [GROUP_ROW_KEY]
+      }
       message.warning(groupErrors.join('；'))
       return
     }
@@ -664,15 +787,78 @@ async function save(): Promise<void> {
   saving.value = true
   try {
     await saveInventory(payload)
-    message.success('已生效')
-    // 成功后重新 GET 刷新双份草稿
+    // 成功后重新 GET 刷新双份草稿（顺带拿真实主机数做规模化反馈）
     await load()
+    message.success(`已保存并生效：${rows.value.length} 台主机`)
   } catch (err: unknown) {
-    // 失败展示后端 detail（可能含 第 N 行 / 删除保护 / 409 任务互斥提示）
+    // 失败展示后端 detail（可能含 第 N 行 / 409 任务互斥提示）
     message.error(apiDetail(err, '保存失败'), 8)
   } finally {
     saving.value = false
   }
+}
+
+// ── 恢复记录（保存时自动备份：列表 / 预览 / 一键恢复） ────────────────
+
+const backupsOpen = ref(false)
+const backups = ref<InventoryBackup[]>([])
+const backupsLoading = ref(false)
+const previewName = ref('')
+const previewText = ref('')
+
+async function refreshBackups(): Promise<void> {
+  backupsLoading.value = true
+  try {
+    const res = await listBackups()
+    backups.value = res.data.backups || []
+  } catch (err: unknown) {
+    message.error(apiDetail(err, '加载备份列表失败'))
+  } finally {
+    backupsLoading.value = false
+  }
+}
+
+async function openBackups(): Promise<void> {
+  backupsOpen.value = true
+  previewName.value = ''
+  await refreshBackups()
+}
+
+async function togglePreview(name: string): Promise<void> {
+  if (previewName.value === name) {
+    previewName.value = ''
+    return
+  }
+  try {
+    const res = await readBackupContent(name)
+    previewText.value = res.data.raw_text
+    previewName.value = name
+  } catch (err: unknown) {
+    message.error(apiDetail(err, '读取备份内容失败'))
+  }
+}
+
+/** 恢复确认：覆盖语义 + 可逆说明（服务端恢复前会把当前清单自动备份）。 */
+function restoreClicked(bk: InventoryBackup): void {
+  showOverlayModal({
+    title: '恢复此备份？',
+    content:
+      `将把 ${formatDateTime(bk.saved_at)} 的备份恢复为当前清单，将覆盖当前清单的全部内容。` +
+      '恢复前当前清单会先被自动备份（可再次恢复回来）；如有节点任务正在运行，恢复会被拒绝。',
+    okText: '确认恢复',
+    okDanger: true,
+    cancelText: '取消',
+    onOk: async () => {
+      try {
+        await restoreBackup(bk.name)
+        message.success('已恢复，清单立即生效')
+        previewName.value = ''
+        await Promise.all([load(), refreshBackups()])
+      } catch (err: unknown) {
+        message.error(apiDetail(err, '恢复失败'), 8)
+      }
+    },
+  })
 }
 
 // ── 表格行操作 ───────────────────────────────────────────────────────
@@ -723,6 +909,21 @@ const bulkImportText = ref('')
 
 const bulkImportResult = computed(() => parseBulkHosts(bulkImportText.value))
 
+/** 双摘要（批 2）：将新增 N 台 + 将覆盖 M 条（errors 非空或无条目时不展示）。 */
+const bulkSummary = computed(() => {
+  if (bulkImportResult.value.errors.length || !bulkImportResult.value.entries.length) return ''
+  const existing = rows.value.map((r) => r.ip)
+  const newCount = bulkImportResult.value.entries.filter((e) => !existing.includes(e.ip)).length
+  const overwriteCount = bulkImportResult.value.entries.length - newCount
+  const parts: string[] = []
+  if (newCount) parts.push(`将新增 ${newCount} 台主机`)
+  if (overwriteCount) parts.push(`将覆盖 ${overwriteCount} 条现有主机凭据`)
+  return parts.join(' · ')
+})
+
+/** 非 IP 主机键警示行（批 2）：合法主机名按原样保存，必须显式提示不得静默。 */
+const bulkHostnameWarnings = computed(() => bulkImportResult.value.entries.filter((e) => e.isHostnameKey))
+
 function openBulkImport(): void {
   bulkImportVisible.value = true
   bulkImportText.value = ''
@@ -771,6 +972,10 @@ function removeRow(row: InventoryHostEntry): void {
 
 function goNodes(): void {
   void router.push('/nodes')
+}
+
+function goAuditLog(): void {
+  void router.push('/audit-log')
 }
 
 // ── 未保存离开护栏 ───────────────────────────────────────────────────
@@ -837,6 +1042,20 @@ onUnmounted(() => {
 
 .dirty-tag {
   cursor: default;
+}
+
+/* 元数据行（批 2）：最后修改 · 主机数 · 操作日志 */
+.inv-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: -12px;
+}
+.inv-meta a {
+  cursor: pointer;
+  white-space: nowrap;
 }
 
 .alert-desc-row {
@@ -956,13 +1175,81 @@ onUnmounted(() => {
   }
 }
 
+/* 恢复记录抽屉 */
+.bk-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.bk-empty {
+  color: var(--muted);
+  font-size: 13px;
+  padding: 12px 0;
+}
+.bk-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+}
+.bk-item.expanded {
+  border-color: oklch(56% 0.16 210 / 35%);
+}
+.bk-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.bk-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+.bk-time {
+  font-size: 13px;
+  font-weight: 500;
+}
+.bk-size {
+  font-size: 12px;
+  color: var(--muted);
+}
+.bk-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.bk-preview {
+  margin: 10px 0 0;
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.7;
+  background: var(--bg-subtle, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+}
+
 /* 批量导入预览 */
 .bulk-preview {
   margin-top: 12px;
   font-size: 13px;
 }
-.bulk-hint {
+.bulk-summary {
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+.bulk-warn {
   color: #fa8c16;
+  font-size: 12px;
+  line-height: 1.8;
+}
+.bulk-hint {
+  color: var(--muted);
   margin-bottom: 4px;
 }
 .bulk-error {

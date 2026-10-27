@@ -4,7 +4,12 @@
     宿主只负责提供取值对象与写回回调，字段定义/帮助文案/联动禁用规则全部收敛在此。
   -->
   <div class="advanced-grid">
-    <div v-for="def in ADVANCED_FIELDS" :key="def.key" class="advanced-field">
+    <div
+      v-for="def in ADVANCED_FIELDS"
+      :key="def.key"
+      class="advanced-field"
+      :class="{ 'has-error': !!errors?.[def.key] }"
+    >
       <label class="advanced-label">
         {{ def.label }}
         <a-tooltip v-if="def.hint" :title="def.hint"><span class="hint-mark">?</span></a-tooltip>
@@ -73,6 +78,7 @@
         allow-clear
         @change="(e: Event) => emit('change', def.key, (e.target as HTMLInputElement).value)"
       />
+      <div v-if="errors?.[def.key]" class="field-error">{{ errors[def.key] }}</div>
     </div>
   </div>
 </template>
@@ -81,8 +87,8 @@
 import { message } from 'ant-design-vue'
 import { ADVANCED_FIELDS, toBool } from '@/utils/ansibleInventory'
 
-/** 取值对象：主机行传行记录本身，组级行传 edge_cluster.vars。 */
-const props = defineProps<{ values: Record<string, unknown> }>()
+/** 取值对象：主机行传行记录本身，组级行传 edge_cluster.vars。errors：字段键 → 错误原因（行内标红）。 */
+const props = defineProps<{ values: Record<string, unknown>; errors?: Record<string, string> }>()
 
 /** 字段写回：宿主负责落值与标脏（空值语义由宿主决定）。 */
 const emit = defineEmits<{ change: [key: string, value: unknown] }>()
@@ -124,6 +130,17 @@ function copyText(text: string): void {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+/* 行内校验错误（批 2）：字段容器描边 + 下方红字原因 */
+.advanced-field.has-error :deep(.ant-input-number),
+.advanced-field.has-error :deep(.ant-input),
+.advanced-field.has-error :deep(.ant-select) {
+  border-color: #ff4d4f;
+}
+.field-error {
+  color: #ff4d4f;
+  font-size: 12px;
+  line-height: 1.5;
 }
 .advanced-label {
   font-size: 12px;

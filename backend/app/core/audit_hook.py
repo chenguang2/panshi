@@ -176,6 +176,7 @@ ROUTE_MAP: dict[tuple[str, str], tuple[str, str, bool]] = {
     ("PUT", "/api/v1/clickhouse/connections/{conn_id}"): ("clickhouse_config", "update", False),
     ("DELETE", "/api/v1/clickhouse/connections/{conn_id}"): ("clickhouse_config", "delete", False),
     ("PUT", "/api/v1/ansible/inventory"): ("ansible_inventory", "save", False),
+    ("POST", "/api/v1/ansible/inventory/backups/{name}/restore"): ("ansible_inventory", "restore", False),
     ("POST", "/api/v1/ansible/inventory/parse"): ("ansible_inventory", "parse", False),
     ("POST", "/api/v1/ansible/inventory/render"): ("ansible_inventory", "render", False),
     ("POST", "/api/v1/clusters/{cluster_id}/node-tasks"): ("node_task", "create", False),

@@ -24,6 +24,8 @@ interface InventoryData {
   unmanaged_ips: string[]
   /** 文件存在但解析失败时的错误信息（空数组 = 正常）。 */
   errors: string[]
+  /** 文件最后修改时间（naive UTC isoformat；文件不存在为 null）。 */
+  last_modified: string | null
 }
 
 /** 保存载荷二选一：源码模式传 raw_text；表格模式传 hosts + vars。 */
@@ -38,6 +40,13 @@ interface InventoryParseResult {
   vars: Record<string, unknown>
   unknown_keys: string[]
   errors: string[]
+}
+
+/** 保存时自动备份（恢复记录抽屉）。saved_at 为 naive UTC isoformat。 */
+export interface InventoryBackup {
+  name: string
+  saved_at: string
+  size_bytes: number
 }
 
 export function getInventory(): Promise<AxiosResponse<InventoryData>> {
@@ -57,4 +66,19 @@ export function renderInventory(
 
 export function parseInventory(rawText: string): Promise<AxiosResponse<InventoryParseResult>> {
   return api.post('/ansible/inventory/parse', { raw_text: rawText })
+}
+
+/** 备份列表（时间倒序）。 */
+export function listBackups(): Promise<AxiosResponse<{ backups: InventoryBackup[] }>> {
+  return api.get('/ansible/inventory/backups')
+}
+
+/** 备份内容只读预览。 */
+export function readBackupContent(name: string): Promise<AxiosResponse<{ raw_text: string }>> {
+  return api.get(`/ansible/inventory/backups/${encodeURIComponent(name)}/content`)
+}
+
+/** 一键恢复：以备份内容走保存全护栏（服务端），恢复前当前清单自动备份。 */
+export function restoreBackup(name: string): Promise<AxiosResponse<{ ok: boolean }>> {
+  return api.post(`/ansible/inventory/backups/${encodeURIComponent(name)}/restore`)
 }

@@ -66,9 +66,9 @@ describe('L10 备份空态引导', () => {
 })
 
 describe('L11 明文密码教育说明', () => {
-  it('清单页说明明文为有意设计（含脱敏历史教训）', () => {
+  it('清单页说明明文为有意设计（批 2 精简：仅保留口径说明，历史教训移出页面文案）', () => {
     const s = src('views', 'AnsibleInventory.vue')
-    expect(s).toMatch(/明文/)
-    expect(s).toMatch(/脱敏/)
+    expect(s).toMatch(/明文存储与展示/)
+    expect(s).toMatch(/不做掩码/)
   })
 })

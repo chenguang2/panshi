@@ -10,7 +10,7 @@ import os
 import re
 import shutil
 import tempfile
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -36,6 +36,54 @@ _HOST_KEY_RE = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$")
 _NULL_HOST_LINE_RE = re.compile(r"^        ([^\s:]+): null$", flags=re.M)
 
 _BACKUP_KEEP = 10
+
+# 备份文件名形态：host.bak.<YYYYMMDDHHmmss>（save_inventory 生成；其余文件一律不认）
+_BACKUP_NAME_RE = re.compile(r"^host\.bak\.(\d{14})$")
+
+
+def _backup_dir() -> Path:
+    return _inventory_path().parent / "backups"
+
+
+def _backup_file(name: str) -> Path:
+    """Resolve a backup file by name; non-conforming name or missing file → FileNotFoundError."""
+    if not _BACKUP_NAME_RE.match(name):
+        raise FileNotFoundError(name)
+    path = _backup_dir() / name
+    if not path.exists():
+        raise FileNotFoundError(name)
+    return path
+
+
+def list_backups() -> list[dict[str, Any]]:
+    """List automatic save backups (newest first) for the inventory page 恢复记录 drawer."""
+    items: list[dict[str, Any]] = []
+    backup_dir = _backup_dir()
+    if backup_dir.is_dir():
+        for f in backup_dir.glob("host.bak.*"):
+            m = _BACKUP_NAME_RE.match(f.name)
+            if not m:
+                continue
+            ts = m.group(1)
+            # 文件名是 save_inventory 的服务器本地墙钟；返回值统一全站口径
+            # naive UTC（#26），否则前端按 UTC 解析会 +8h（2026-10-27 实测）。
+            saved_at = (
+                datetime.strptime(ts, "%Y%m%d%H%M%S")
+                .astimezone(timezone.utc)
+                .replace(tzinfo=None)
+                .isoformat()
+            )
+            items.append({
+                "name": f.name,
+                "saved_at": saved_at,
+                "size_bytes": f.stat().st_size,
+            })
+    return sorted(items, key=lambda x: x["name"], reverse=True)
+
+
+def read_backup(name: str) -> str:
+    """Read a backup file's raw text (restore preview / restore payload)."""
+    return _backup_file(name).read_text(encoding="utf-8")
 
 
 def _inventory_path() -> Path:
@@ -77,6 +125,15 @@ def _fail(message: str) -> dict[str, Any]:
     return {"hosts": [], "vars": {}, "unknown_keys": [], "errors": [message]}
 
 
+def strip_trailing_whitespace(raw_text: str) -> str:
+    """剥每行行尾空白（含制表符）。行尾空白对 YAML 无语义，剥离后不影响引号内
+    内容，也不改变行号（不增删行）。运维编辑器常留下行尾制表符，PyYAML 会拒绝
+    （"found character '\\t' that cannot start any token"）导致整个文件解析失败。
+    parse 与结构校验共用（主规格：解析容忍行尾制表符）。
+    """
+    return "\n".join(line.rstrip() for line in raw_text.split("\n"))
+
+
 def parse_inventory(raw_text: str) -> dict[str, Any]:
     """Parse inventory YAML text into a structured document.
 
@@ -89,12 +146,8 @@ def parse_inventory(raw_text: str) -> dict[str, Any]:
     SSH 密码的凭据管理模块，掩码会把 ``******`` 写回清单文件导致连接异常
     （曾误存为掩码值、真实密码不可恢复）。
     """
-    # 运维编辑器常留下行尾制表符，PyYAML 会拒绝（"found character '\\t' that
-    # cannot start any token"）导致整个文件解析失败。行尾空白对 YAML 无语义，
-    # 剥离后再解析；不影响引号内内容，也不改变行号（不增删行）。
-    raw_text = "\n".join(line.rstrip() for line in raw_text.split("\n"))
     try:
-        data = yaml.safe_load(raw_text)
+        data = yaml.safe_load(strip_trailing_whitespace(raw_text))
     except yaml.YAMLError as exc:
         line = _yaml_error_line(exc)
         problem = getattr(exc, "problem", None) or str(exc)
@@ -226,16 +279,15 @@ def render_inventory(hosts: list[dict[str, Any]], vars_: dict[str, Any] | None) 
     return _NULL_HOST_LINE_RE.sub(r"        \1:", text)
 
 
-def validate_structure(
-    doc: dict[str, Any], platform_node_ips: list[str] | None = None
-) -> list[str]:
-    """Structural validation + deletion protection for a parsed inventory doc.
+def validate_structure(doc: dict[str, Any]) -> list[str]:
+    """Structural validation for a parsed inventory doc.
 
     Returns a list of error messages (empty when valid):
     - host key must look like an IPv4 address or hostname;
-    - host value must be a mapping or null (inherit group vars);
-    - deletion protection: platform node IPs absent from the submitted hosts
-      are listed so the caller can reject the save (400).
+    - host value must be a mapping or null (inherit group vars).
+
+    删除保护已移除（2026-10-27 用户二次裁决）：清单与节点管理解耦，
+    移除平台已录入的 IP 直接保存生效，不再校验提交内容与节点表的交集。
     """
     errors: list[str] = []
 
@@ -244,25 +296,15 @@ def validate_structure(
     if not isinstance(hosts, dict):
         return ["结构错误: all.children.edge_cluster.hosts 必须是映射"]
 
-    submitted_ips: set[str] = set()
     for raw_key, entry in hosts.items():
         key = str(raw_key)
         if not _HOST_KEY_RE.match(key):
             errors.append(f"主机键不合法（须为 IPv4 或主机名）: {key}")
             continue
-        submitted_ips.add(key)
         if entry is not None and not isinstance(entry, dict):
             errors.append(
                 f"主机 {key} 的值必须是映射或空（空值继承组级默认凭据）"
             )
-
-    missing = sorted(ip for ip in (platform_node_ips or []) if ip not in submitted_ips)
-    if missing:
-        errors.append(
-            "删除保护：以下平台节点 IP 已从清单中移除，但节点管理仍存在记录："
-            + "、".join(missing)
-            + "。请先在节点管理删除或停用这些节点，再保存清单"
-        )
     return errors
 
 

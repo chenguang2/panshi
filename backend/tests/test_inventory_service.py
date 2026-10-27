@@ -1,6 +1,6 @@
 """inventory_service 单元测试（TDD，任务 1.1–1.5）。
 
-覆盖：解析（含真实文件样例）、渲染（往返幂等）、结构校验+删除保护、
+覆盖：解析（含真实文件样例）、渲染（往返幂等）、结构校验、
 备份轮转与原子写回。
 """
 
@@ -136,7 +136,7 @@ class TestValidateStructure:
         from app.services.inventory_service import validate_structure
 
         doc = yaml.safe_load(SAMPLE_INVENTORY)
-        errors = validate_structure(doc, platform_node_ips=["192.168.1.1"])
+        errors = validate_structure(doc)
         assert errors == []
 
     def test_host_value_must_be_dict_or_null(self):
@@ -147,7 +147,7 @@ class TestValidateStructure:
         doc = yaml.safe_load(
             "all:\n  children:\n    edge_cluster:\n      hosts:\n        10.0.0.5: bad_scalar\n"
         )
-        errors = validate_structure(doc, platform_node_ips=[])
+        errors = validate_structure(doc)
         assert len(errors) == 1
         assert "10.0.0.5" in errors[0]
 
@@ -159,22 +159,9 @@ class TestValidateStructure:
         doc = yaml.safe_load(
             "all:\n  children:\n    edge_cluster:\n      hosts:\n        bad key!: {}\n"
         )
-        errors = validate_structure(doc, platform_node_ips=[])
+        errors = validate_structure(doc)
         assert len(errors) == 1
         assert "bad key!" in errors[0]
-
-    def test_deletion_protection_lists_missing_platform_ips(self):
-        import yaml
-
-        from app.services.inventory_service import validate_structure
-
-        doc = yaml.safe_load(SAMPLE_INVENTORY)  # 只有 1.1 / 1.2 两台
-        errors = validate_structure(
-            doc, platform_node_ips=["192.168.1.9", "192.168.1.7"]
-        )
-        # 两个平台节点 IP 都不在提交的清单中 → 删除保护
-        joined = "；".join(errors)
-        assert "192.168.1.9" in joined and "192.168.1.7" in joined
 
 
 class TestSaveInventory:
@@ -476,3 +463,52 @@ class TestNormalizeHosts:
         ])
         assert hosts == []
         assert len(errors) == 2
+
+
+class TestListBackupsSavedAtUtc:
+    """恢复记录 saved_at 必须是全站口径 naive UTC（#26）。
+
+    备份文件名是 save_inventory 的服务器本地墙钟（datetime.now()），
+    list_backups 若原样透出，前端 parseBackendDate 按 UTC 解析会 +8h
+    （2026-10-27 实测 12:35:32 显示成 20:35:32）。
+    """
+
+    @pytest.fixture()
+    def inv_env(self, tmp_path, monkeypatch):
+        from app.services import ansible_service
+
+        backup_dir = tmp_path / "inventory" / "backups"
+        backup_dir.mkdir(parents=True)
+        (backup_dir / "host.bak.20261027123532").write_text("all:\n", encoding="utf-8")
+        monkeypatch.setattr(
+            ansible_service, "_INVENTORY_PATH", tmp_path / "inventory" / "host")
+        return backup_dir
+
+    @pytest.mark.parametrize(
+        "tz,expected",
+        [
+            ("Asia/Shanghai", "2026-10-27T04:35:32"),  # 本地 12:35 CST → naive UTC
+            ("UTC", "2026-10-27T12:35:32"),            # 服务器本身 UTC → 原值
+        ],
+        ids=["cst", "utc"],
+    )
+    def test_saved_at_is_naive_utc(self, inv_env, monkeypatch, tz, expected):
+        import os
+        import time
+
+        from app.services.inventory_service import list_backups
+
+        old_tz = os.environ.get("TZ")
+        try:
+            monkeypatch.setenv("TZ", tz)
+            time.tzset()
+            items = list_backups()
+        finally:
+            if old_tz is None:
+                os.environ.pop("TZ", None)
+            else:
+                os.environ["TZ"] = old_tz
+            time.tzset()
+
+        assert len(items) == 1
+        assert items[0]["saved_at"] == expected

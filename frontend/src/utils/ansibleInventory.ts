@@ -172,6 +172,34 @@ export function validateAdvancedField(key: string, value: unknown): string | nul
   return null
 }
 
+/** 行定位的高级字段错误（批 2：校验失败自动展开首错行 + 行内标红）。 */
+interface AdvancedFieldError {
+  rowIndex: number
+  key: string
+  message: string
+}
+
+/** 逐行收集高级字段错误（结构化返回；纯函数，页面据此定位展开与标红）。 */
+export function collectAdvancedErrors(rows: InventoryHostEntry[]): AdvancedFieldError[] {
+  const errors: AdvancedFieldError[] = []
+  rows.forEach((row, rowIndex) => {
+    for (const def of ADVANCED_FIELDS) {
+      const err = validateAdvancedField(def.key, row[def.key])
+      if (err) errors.push({ rowIndex, key: def.key, message: err })
+    }
+  })
+  return errors
+}
+
+/** 源码 → 表格切换的空清单引导判定：hosts/vars 全空且存在结构错误（引导文案替代裸结构错误）。 */
+export function isEmptyStructureParse(result: {
+  hosts: InventoryHostEntry[]
+  vars: Record<string, unknown>
+  errors: string[]
+}): boolean {
+  return result.hosts.length === 0 && Object.keys(result.vars).length === 0 && result.errors.length > 0
+}
+
 /** 该行的自定义字段（除 ip 与两个凭据字段外的所有键）。 */
 export function unknownKeysOf(entry: InventoryHostEntry): string[] {
   return Object.keys(entry).filter((k) => !(KNOWN_HOST_KEYS as readonly string[]).includes(k))
@@ -265,6 +293,10 @@ interface BulkHostEntry {
   ip: string
   ansible_ssh_user?: string
   ansible_ssh_pass?: string
+  /** 主机键首次出现的物理行号（1 起）。 */
+  line: number
+  /** 主机键不是 IPv4 形态（合法主机名按原样保存，导入预览需警示）。 */
+  isHostnameKey: boolean
 }
 
 interface BulkParseResult {
@@ -276,6 +308,9 @@ interface BulkParseResult {
 
 /** 主机键口径：与后端 inventory_service._HOST_KEY_RE 完全一致（宽松的 IPv4/主机名形态校验）。 */
 const HOST_KEY_RE = /^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$/
+
+/** IPv4 点分形态（宽松——合法性仍以主机键口径为准；用于「非 IP 主机键」警示）。 */
+const IPV4_RE = /^\d{1,3}(\.\d{1,3}){3}$/
 
 export function parseBulkHosts(text: string): BulkParseResult {
   const errors: BulkParseError[] = []
@@ -297,7 +332,11 @@ export function parseBulkHosts(text: string): BulkParseResult {
       errors.push({ line: i + 1, reason: `IP 不符合主机键口径（IPv4 或主机名）: ${tokens[0]}` })
       continue
     }
-    const entry: BulkHostEntry = { ip: tokens[0] }
+    const entry: BulkHostEntry = {
+      ip: tokens[0],
+      line: i + 1,
+      isHostnameKey: !IPV4_RE.test(tokens[0]),
+    }
     if (tokens[1] !== undefined) entry.ansible_ssh_user = tokens[1]
     if (tokens[2] !== undefined) entry.ansible_ssh_pass = tokens[2]
     if (byIp.has(tokens[0])) duplicatesInText += 1
