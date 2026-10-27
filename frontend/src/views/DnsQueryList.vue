@@ -1,14 +1,23 @@
 <template>
   <div class="dq-page">
-    <PageHeader title="DNS 代理（HTTP）" description="管理 DNS 查询路由规则，基于 dns_upstream 插件实现域名解析转发">
+    <PageHeader
+      title="DNS 代理（HTTP）"
+      description="管理 DNS 代理路由（DoH 域名解析转发），基于 dns_upstream 插件实现"
+    >
       <template #actions>
-        <button class="btn btn-primary" @click="openCreateForm">+ 新建 DNS 查询</button>
+        <button class="btn btn-primary" @click="openCreateForm">+ 新建 DNS 代理路由</button>
       </template>
     </PageHeader>
 
     <div class="dq-header-actions">
       <div class="search-input-wrap">
-        <input v-model="searchText" type="text" placeholder="搜索路由名称..." class="form-input" @input="onSearch" />
+        <input
+          v-model="searchText"
+          type="text"
+          placeholder="搜索 DNS 代理路由名称..."
+          class="form-input"
+          @input="onSearch"
+        />
         <span class="search-icon">&#128269;</span>
       </div>
       <select v-model="groupFilter" class="form-input" style="width: 140px; flex-shrink: 0" @change="onGroupChange">
@@ -20,25 +29,24 @@
         <option value="">全部集群</option>
         <option v-for="c in filteredClusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
       </select>
-      <span class="text-sm text-muted">共 {{ totalCount }} 条 DNS 查询</span>
+      <span class="text-sm text-muted">共 {{ totalCount }} 条 DNS 代理路由</span>
     </div>
 
     <div v-if="loading" class="loading-state">加载中...</div>
     <div v-else-if="routes.length === 0" class="dq-empty">
       <div class="dq-empty-icon">&#9635;</div>
-      <div class="dq-empty-text">暂无 DNS 查询路由</div>
-      <button class="btn btn-primary" style="margin-top: 12px" @click="openCreateForm">+ 新建 DNS 查询路由</button>
+      <div class="dq-empty-text">暂无 DNS 代理路由</div>
+      <button class="btn btn-primary" style="margin-top: 12px" @click="openCreateForm">+ 新建 DNS 代理路由</button>
     </div>
     <div v-else class="dq-grid">
       <div v-for="r in sortedRoutes" :key="r.id" class="dq-card" :style="getCardBorderStyle(r.cluster_group_name)">
         <div class="dq-card-topbar" :style="getGroupColorStyle(r.cluster_group_name)">
-          <span class="dq-topbar-uri">{{ r.uri }}</span>
+          <span class="dq-topbar-name">{{ r.name }}</span>
           <span class="dns-badge">DNS</span>
           <span v-if="r.cluster_group_name" class="group-badge">{{ r.cluster_group_name }}</span>
         </div>
         <div class="dq-card-header">
           <div class="dq-card-info">
-            <div class="dq-card-name">{{ r.name }}</div>
             <div v-if="r.description" class="dq-card-desc">{{ r.description }}</div>
           </div>
           <div class="dq-card-meta">
@@ -59,15 +67,22 @@
             <span class="dq-detail-label">集群</span>
             <span class="dq-detail-value">{{ r.cluster_name || '-' }}</span>
           </div>
+          <div class="dq-detail-row">
+            <span class="dq-detail-label">URI</span>
+            <span class="dq-detail-value dq-uri" :title="'DoH 请求入口路径（DNS over HTTP 客户端访问的路径）'">{{
+              r.uri
+            }}</span>
+          </div>
         </div>
 
         <div class="dq-card-hosts" v-if="dnsHosts(r)">
+          <div class="dq-hosts-count">{{ dnsDomainCount(r) }} 个域名</div>
           <div v-for="(host, domain) in dnsHosts(r)" :key="domain" class="dq-host-domain">
             <div class="dq-host-domain-name">{{ domain }}</div>
             <div class="dq-host-domain-lb">
               <span class="dq-algo-tag">{{ dnsLbLabel(host.type) }}</span>
               <span v-if="host.ttl_valid != null" class="dq-ttl-tag">TTL: {{ host.ttl_valid }}s</span>
-              <span v-if="host.checks" class="dq-check-tag">{{ host.checks.type || 'http' }}</span>
+              <span v-if="host.checks" class="dq-check-tag">{{ dnsCheckLabel(host.checks.type) }}</span>
             </div>
             <div class="dq-host-nodes">
               <span v-for="(cidrs, nodeIp) in host.nodes" :key="nodeIp" class="dq-node-tag">{{ nodeIp }}</span>
@@ -75,7 +90,7 @@
           </div>
         </div>
         <div v-else class="dq-card-hosts dq-hosts-empty">
-          <span class="dq-no-hosts">无 DNS 配置</span>
+          <span class="dq-no-hosts">无域名配置</span>
         </div>
 
         <div class="dq-card-actions">
@@ -111,7 +126,7 @@
 
     <PublishConfirmModal
       v-model:visible="publishVisible"
-      title="发布 DNS 查询路由"
+      title="发布 DNS 代理路由"
       :cluster-id="publishClusterId"
       @confirm="onPublishConfirm"
       @cancel="publishVisible = false"
@@ -122,7 +137,7 @@
       <div class="modal-overlay" :style="{ display: viewVisible ? 'flex' : 'none' }">
         <div class="modal" style="max-width: 640px">
           <div class="modal-header">
-            <h2>查看 DNS 查询路由 - {{ viewingRoute?.name }}</h2>
+            <h2>查看 DNS 代理路由 - {{ viewingRoute?.name }}</h2>
             <button class="modal-close" @click="viewVisible = false">&times;</button>
           </div>
           <div class="modal-body">
@@ -133,7 +148,9 @@
               </div>
               <div class="view-field">
                 <span class="view-label">URI</span>
-                <span class="view-value view-mono">{{ viewingRoute.uri }}</span>
+                <span class="view-value view-mono" title="DoH 请求入口路径（DNS over HTTP 客户端访问的路径）">{{
+                  viewingRoute.uri
+                }}</span>
               </div>
               <div class="view-field">
                 <span class="view-label">集群</span>
@@ -186,6 +203,7 @@
           </div>
           <div class="modal-footer">
             <button class="btn btn-secondary" @click="viewVisible = false">关闭</button>
+            <button class="btn btn-primary" @click="editFromView">编辑</button>
           </div>
         </div>
       </div>
@@ -245,9 +263,21 @@ function dnsLbLabel(algo: string | undefined): string {
   const map: Record<string, string> = {
     roundrobin: '轮询',
     chash: '一致性哈希',
+    ewma: 'EWMA',
     least_conn: '最少连接',
   }
   return map[algo || ''] || algo || '轮询'
+}
+
+// 批 3：健康检查类型规范化显示（https→HTTPS；未知值原样）
+function dnsCheckLabel(type: string | undefined): string {
+  const t = type || 'http'
+  return /^https?$/i.test(t) ? t.toUpperCase() : t
+}
+
+function dnsDomainCount(r: any): number {
+  const hosts = dnsHosts(r)
+  return hosts ? Object.keys(hosts).length : 0
 }
 
 interface DnsHostEntry {
@@ -286,7 +316,7 @@ async function loadRoutes() {
     totalCount.value = res.data.total || 0
   } catch (e: any) {
     const detail = e?.response?.data?.detail
-    const msg = typeof detail === 'string' ? detail : e?.message || '加载 DNS 查询路由失败'
+    const msg = typeof detail === 'string' ? detail : e?.message || '加载 DNS 代理路由失败'
     message.error(msg)
   } finally {
     loading.value = false
@@ -327,6 +357,14 @@ const viewDnsHosts = computed(() => {
 function viewRoute(r: any) {
   viewingRoute.value = r
   viewVisible.value = true
+}
+
+// 批 3：查看 → 编辑一次直达（关闭查看、打开编辑同一路由）
+function editFromView() {
+  if (!viewingRoute.value) return
+  const r = viewingRoute.value
+  viewVisible.value = false
+  editRoute(r)
 }
 
 // ── Form ──
@@ -386,7 +424,7 @@ async function onPublishConfirm(nodeIds: number[]) {
   const r = publishingRoute.value
   if (!r) return
   await executePublish({
-    title: `发布 DNS 查询路由: ${r.name}`,
+    title: `发布 DNS 代理路由: ${r.name}`,
     apiEndpoint: `/clusters/${r.cluster_id}/routes/${r.id}/publish`,
     nodeIds,
     refreshFn: loadRoutes,
@@ -405,12 +443,12 @@ async function deleteRoute(r: any) {
   }
 
   showDeleteConfirm({
-    title: `确定要删除 DNS 查询路由 "${r.name}" 吗？`,
+    title: `确定要删除 DNS 代理路由 "${r.name}" 吗？`,
     apiEndpoint: `/clusters/${r.cluster_id}/routes/${r.id}`,
     nodes,
     onOk: async (deleteDb, deleteEdge, nodeIds) => {
       await executeDeleteWithProgress({
-        title: `删除 DNS 查询路由: ${r.name}`,
+        title: `删除 DNS 代理路由: ${r.name}`,
         apiEndpoint: `/clusters/${r.cluster_id}/routes/${r.id}`,
         cluster: { id: r.cluster_id, nodes },
         deleteDb,
@@ -495,13 +533,17 @@ onMounted(async () => {
   align-items: center;
   gap: 6px;
 }
-.dq-topbar-uri {
-  font-family: var(--font-mono);
+.dq-topbar-name {
   font-weight: 600;
-  font-size: 11px;
+  font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.dq-hosts-count {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 6px;
 }
 .group-badge {
   display: inline-block;

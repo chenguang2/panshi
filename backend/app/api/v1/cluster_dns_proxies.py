@@ -287,6 +287,13 @@ async def rollback_dns_proxy(
             proxy.timeout = json.dumps(cfg["timeout"]) if isinstance(cfg["timeout"], dict) else cfg["timeout"]
         if "keepalive_pool" in cfg:
             proxy.keepalive_pool = json.dumps(cfg["keepalive_pool"]) if isinstance(cfg["keepalive_pool"], dict) else cfg["keepalive_pool"]
+        # 2026-10-26 修复：DNS 代理回滚全量恢复——dns_config（域名映射，本页面核心内容）
+        # 与 checks（健康检查）此前不在白名单，回滚后仍是最新内容，发布推的即「最新版本」。
+        # 快照含两列（StreamProxyResponse 全量序列化）；四层代理端点的部分恢复语义（已批 D3）不受影响。
+        if "dns_config" in cfg:
+            proxy.dns_config = json.dumps(cfg["dns_config"]) if isinstance(cfg["dns_config"], dict) else cfg["dns_config"]
+        if "checks" in cfg:
+            proxy.checks = json.dumps(cfg["checks"]) if isinstance(cfg["checks"], dict) else cfg["checks"]
 
     await edge_sync.rollback_resource(
         db, StreamProxy, resource_type="stream_proxy", resource_id=proxy_id, version=version,
