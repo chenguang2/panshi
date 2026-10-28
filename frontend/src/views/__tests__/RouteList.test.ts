@@ -548,6 +548,15 @@ describe('RouteList.vue 服务端排序（batch1 组5）', () => {
     wrapper.unmount()
   })
 
+  it('列宽：发布状态定宽 160（日期超宽走省略+tooltip）、操作列 110 容纳行内发布+菜单（拍平后不挤）', async () => {
+    const wrapper = await mountPage()
+    const cols = (wrapper.vm as any).columns as Array<Record<string, unknown>>
+    const byKey = (k: string) => cols.find((c) => c.key === k) as Record<string, unknown> | undefined
+    expect(byKey('publish_status')?.width).toBe(160)
+    expect(byKey('actions')?.width).toBe(110)
+    wrapper.unmount()
+  })
+
   it('表头排序透传服务端参数：ascend→sort_by=name&sort_order=asc；descend→desc', async () => {
     const wrapper = await mountPage()
     await clickSort(wrapper, 'sort-name-asc')
@@ -1145,6 +1154,122 @@ describe('RouteList.vue 独立页 DNS 行操作禁用与指路（batch1 7.9）',
     expect(normalBtn.exists()).toBe(true)
     expect(normalBtn.attributes('disabled')).toBeUndefined()
     expect(rows[1].find('.mock-tooltip').exists()).toBe(false)
+    wrapper.unmount()
+  })
+})
+
+describe('RouteList.vue 行内发布拍平（列表操作统一·方案 A）', () => {
+  const flatStubs = {
+    ...stubs,
+    'a-table': {
+      template:
+        '<table class="mock-a-table"><tbody><tr v-for="r in dataSource" :key="r.id"><td><slot name="bodyCell" :record="r" :column="{ key: \'actions\' }" /></td></tr></tbody></table>',
+      props: ['columns', 'dataSource', 'loading', 'rowKey', 'pagination', 'size'],
+    },
+    'a-dropdown': { template: '<div class="mock-dropdown"><slot /><slot name="overlay" /></div>' },
+    'a-menu': { template: '<div class="mock-menu"><slot /></div>' },
+    'a-menu-item': {
+      template: '<div class="mock-menu-item" @click="$emit(\'click\', $event)"><slot /></div>',
+      emits: ['click'],
+    },
+    'a-tooltip': { template: '<span class="mock-tooltip" :title="title"><slot /></span>', props: ['title'] },
+    'a-button': {
+      template: '<button class="mock-btn" :disabled="disabled" @click="$emit(\'click\', $event)"><slot /></button>',
+      props: ['disabled', 'type', 'size', 'danger'],
+      emits: ['click'],
+    },
+    PublishConfirmModal: {
+      name: 'MockPublishConfirmModal',
+      template: '<div class="mock-publish-modal" v-if="visible" />',
+      props: ['visible', 'title', 'clusterId'],
+      emits: ['confirm', 'cancel', 'update:visible'],
+    },
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockRouteQuery = {}
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/routes')
+        return Promise.resolve({
+          data: {
+            total: 2,
+            page: 1,
+            page_size: 20,
+            items: [
+              {
+                id: 3,
+                name: 'DNS查询',
+                uri: '/dns-query',
+                methods: 'GET',
+                cluster_id: 1,
+                cluster_name: '生产集群',
+                plugins: [{ plugin_name: 'dns_upstream' }],
+                priority: 0,
+                status: 1,
+              },
+              {
+                id: 1,
+                name: '普通路由',
+                uri: '/api/*',
+                methods: 'GET',
+                cluster_id: 1,
+                cluster_name: '生产集群',
+                priority: 0,
+                status: 1,
+              },
+            ],
+          },
+        })
+      if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, display_name: '生产集群' }] } })
+      if (url === '/plugins/builtin') return Promise.resolve({ data: { plugins: [] } })
+      return Promise.reject(new Error('unexpected GET: ' + url))
+    })
+  })
+
+  it('普通行：行内「发布」按钮可达，点击打开发布确认弹窗', async () => {
+    const RouteList = (await import('../RouteList.vue')).default
+    const wrapper = mount(RouteList, { global: { stubs: flatStubs } })
+    await flushPromises()
+
+    const rows = wrapper.findAll('.mock-a-table tbody tr')
+    const normalRow = rows[1]
+    const pubBtn = normalRow.findAll('button.mock-btn').find((b) => b.text() === '发布')
+    expect(pubBtn, '行内应有「发布」按钮（不再收进菜单）').toBeTruthy()
+    expect(pubBtn!.attributes('disabled')).toBeUndefined()
+
+    await pubBtn!.trigger('click')
+    await flushPromises()
+    const modal = wrapper.findComponent({ name: 'MockPublishConfirmModal' })
+    expect(modal.exists()).toBe(true)
+    expect((modal.props('title') as string) || '').toContain('普通路由')
+  })
+
+  it('菜单收敛为 编辑/版本管理/复制路由/删除（与上游页同序，发布移出行内）', async () => {
+    const RouteList = (await import('../RouteList.vue')).default
+    const wrapper = mount(RouteList, { global: { stubs: flatStubs } })
+    await flushPromises()
+
+    const rows = wrapper.findAll('.mock-a-table tbody tr')
+    const menuItems = rows[1].findAll('.mock-menu-item').map((i) => i.text())
+    expect(menuItems).toEqual(['编辑', '版本管理', '复制路由', '删除'])
+    expect(menuItems).not.toContain('发布')
+  })
+
+  it('DNS 行：发布与 ⋯ 全部禁用 + tooltip 指路（7.9 模式延伸到拍平按钮）', async () => {
+    const RouteList = (await import('../RouteList.vue')).default
+    const wrapper = mount(RouteList, { global: { stubs: flatStubs } })
+    await flushPromises()
+
+    const rows = wrapper.findAll('.mock-a-table tbody tr')
+    const dnsRow = rows[0]
+    const btns = dnsRow.findAll('button.mock-btn')
+    expect(btns.length).toBe(2) // 发布 + ⋯
+    for (const b of btns) expect(b.attributes('disabled')).toBeDefined()
+    const tips = dnsRow.findAll('.mock-tooltip')
+    expect(tips.length).toBe(2)
+    for (const t of tips) expect(t.attributes('title')).toBe('DNS 路由请在「DNS 代理」页管理')
     wrapper.unmount()
   })
 })

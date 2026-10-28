@@ -78,7 +78,7 @@
 
           <template v-if="column.key === 'actions'">
             <div class="action-cell">
-              <a-button type="primary" size="small" @click="openPublishModal(record)">发布</a-button>
+              <a-button size="small" @click="openPublishModal(record)">发布</a-button>
               <a-dropdown :trigger="['click']">
                 <a-button type="text" size="small" class="action-trigger-btn">⋯</a-button>
                 <template #overlay>

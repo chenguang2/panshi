@@ -141,24 +141,32 @@
 
           <template v-if="column.key === 'actions'">
             <template v-if="hasDnsPlugin(record)">
-              <!-- 7.9：DNS 路由禁用行内操作 + tooltip 指路（替代 toast 拦截） -->
-              <a-tooltip :title="DNS_ROUTE_HINT" placement="top">
-                <a-button type="text" size="small" class="action-trigger-btn" disabled>⋯</a-button>
-              </a-tooltip>
+              <!-- 7.9：DNS 路由禁用行内操作 + tooltip 指路（替代 toast 拦截）；拍平后发布与菜单一并禁用 -->
+              <div class="action-cell">
+                <a-tooltip :title="DNS_ROUTE_HINT" placement="top">
+                  <a-button size="small" disabled>发布</a-button>
+                </a-tooltip>
+                <a-tooltip :title="DNS_ROUTE_HINT" placement="top">
+                  <a-button type="text" size="small" class="action-trigger-btn" disabled>⋯</a-button>
+                </a-tooltip>
+              </div>
             </template>
             <template v-else>
-              <a-dropdown :trigger="['click']">
-                <a-button type="text" size="small" class="action-trigger-btn">⋯</a-button>
-                <template #overlay>
-                  <a-menu>
-                    <a-menu-item @click="copyRoute(record)">复制路由</a-menu-item>
-                    <a-menu-item @click="editRoute(record)">编辑</a-menu-item>
-                    <a-menu-item @click="publishRoute(record)">发布</a-menu-item>
-                    <a-menu-item @click="openVersionManagement(record)">版本管理</a-menu-item>
-                    <a-menu-item danger @click="deleteRoute(record)">删除</a-menu-item>
-                  </a-menu>
-                </template>
-              </a-dropdown>
+              <div class="action-cell">
+                <!-- 列表操作统一（方案 A）：发布为高频动作行内拍平，与上游/四层/DNS 页对齐 -->
+                <a-button size="small" @click="publishRoute(record)">发布</a-button>
+                <a-dropdown :trigger="['click']">
+                  <a-button type="text" size="small" class="action-trigger-btn">⋯</a-button>
+                  <template #overlay>
+                    <a-menu>
+                      <a-menu-item @click="editRoute(record)">编辑</a-menu-item>
+                      <a-menu-item @click="openVersionManagement(record)">版本管理</a-menu-item>
+                      <a-menu-item @click="copyRoute(record)">复制路由</a-menu-item>
+                      <a-menu-item danger @click="deleteRoute(record)">删除</a-menu-item>
+                    </a-menu>
+                  </template>
+                </a-dropdown>
+              </div>
             </template>
           </template>
         </template>
@@ -302,6 +310,9 @@ const columns = [
   {
     title: '发布状态',
     key: 'publish_status',
+    // 定宽收敛（用户反馈：auto 宽度挤压行内发布后的操作列）；已发布态的完整时间在 ps-date
+    // 省略号截断，悬浮 title 已带全量时间（PublishStatusTag 内建）
+    width: 160,
   },
   {
     title: '创建时间',
@@ -309,7 +320,7 @@ const columns = [
     key: 'created_at',
     sorter: true,
   },
-  { title: '操作', key: 'actions', width: 80 },
+  { title: '操作', key: 'actions', width: 110 },
 ]
 
 // 7.3：chips 收敛为常驻高频项（全部/GET/POST/PUT/DELETE/PATCH）；全量方法入口
@@ -723,6 +734,27 @@ onUnmounted(() => {
   background: transparent !important;
   font-size: 16px !important;
   color: var(--muted) !important;
+}
+
+.action-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 发布状态列定宽 160 后：已发布态「vX + 完整时间」超宽走省略号（PublishStatusTag 的
+   ps-date 自带 title 悬浮全量时间），避免换行撑高行 */
+:deep(.publish-status) {
+  max-width: 100%;
+  white-space: nowrap;
+}
+
+:deep(.ps-date) {
+  display: inline-block;
+  vertical-align: bottom;
+  max-width: 112px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .dns-route-badge {

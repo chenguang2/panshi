@@ -52,7 +52,8 @@ const vmModalStub = {
 const stubs = {
   PageHeader: { template: '<div class="page-header"><slot name="actions" /></div>', props: ['title', 'description'] },
   AButton: {
-    template: '<button class="mock-btn" @click="$emit(\'click\')"><slot /></button>',
+    template:
+      "<button class=\"mock-btn\" :class=\"type === 'primary' ? 'mock-btn-primary' : ''\" @click=\"$emit('click')\"><slot /></button>",
     props: ['type', 'size', 'loading'],
   },
   ATable: upstreamTableStub,
@@ -570,5 +571,29 @@ describe('UpstreamList.vue - 序号列跨页计数（upstream-list-index-column�
     expect(rows2.length).toBe(5)
     expect(rows2[0].findAll('td')[1].text()).toBe('21')
     expect(rows2[0].text()).toContain('svc-21')
+  })
+})
+
+describe('UpstreamList.vue 行内发布按钮样式归一（方案 A：primary → 次级）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/upstreams')
+        return Promise.resolve({
+          data: { total: 1, page: 1, page_size: 20, items: [{ id: 1, name: 'demo', cluster_id: 1 }] },
+        })
+      if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, display_name: '生产集群' }] } })
+      return Promise.reject(new Error('unknown url'))
+    })
+  })
+
+  it('发布按钮不再用 primary（与四层/DNS/静态资源页的次级发布按钮对齐）', async () => {
+    const UpstreamList = (await import('../UpstreamList.vue')).default
+    const wrapper = mount(UpstreamList, { global: { stubs } })
+    await flushPromises()
+    const pubBtn = wrapper.findAll('button').find((b) => b.text() === '发布')
+    expect(pubBtn, '行内应有「发布」按钮').toBeTruthy()
+    expect(pubBtn!.classes().includes('mock-btn-primary')).toBe(false)
   })
 })
