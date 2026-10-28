@@ -5,6 +5,12 @@ import { setActivePinia, createPinia } from 'pinia'
 const mockApiGet = vi.fn()
 const mockApiPost = vi.fn()
 
+// 深链预选用例经此注入 route.query（AuditLog 用 useRoute 读 ?resource=）
+const routerState = vi.hoisted(() => ({ query: {} as Record<string, unknown> }))
+vi.mock('vue-router', () => ({
+  useRoute: () => ({ query: routerState.query }),
+}))
+
 vi.mock('@/api', () => ({
   default: {
     get: (...args: unknown[]) => mockApiGet(...args),
@@ -70,10 +76,19 @@ const MOCK_PAGE = {
   ],
 }
 
+async function mountPage() {
+  const AuditLog = (await import('../AuditLog.vue')).default
+  const wrapper = mount(AuditLog, { global: { stubs } })
+  await flushPromises()
+  await wrapper.vm.$nextTick()
+  return wrapper
+}
+
 describe('AuditLog.vue 详情抽屉', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
+    routerState.query = {}
     mockApiGet.mockImplementation((url: string) => {
       if (url === '/system/operations') return Promise.resolve({ data: MOCK_PAGE })
       if (url === '/system/operations/meta')
@@ -85,13 +100,7 @@ describe('AuditLog.vue 详情抽屉', () => {
     mockApiPost.mockResolvedValue({ data: {} })
   })
 
-  async function mountPage() {
-    const AuditLog = (await import('../AuditLog.vue')).default
-    const wrapper = mount(AuditLog, { global: { stubs } })
-    await flushPromises()
-    await wrapper.vm.$nextTick()
-    return wrapper
-  }
+  void mountPage
 
   it('序号列解剖与全站一致：首列 { title: "#", key: "index", width: 45 }（table-index-column-consistency）', async () => {
     const wrapper = await mountPage()
@@ -124,5 +133,43 @@ describe('AuditLog.vue 详情抽屉', () => {
     await link.trigger('click')
     await wrapper.vm.$nextTick()
     expect(wrapper.find('.mock-drawer').exists()).toBe(false)
+  })
+})
+
+describe('AuditLog.vue 深链预选资源（?resource=，各页「操作日志」入口）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    routerState.query = {}
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/system/operations') return Promise.resolve({ data: MOCK_PAGE })
+      if (url === '/system/operations/meta')
+        return Promise.resolve({
+          data: { users: ['admin'], actions: ['route_create'], resources: ['route'], total: 3, oldest: null },
+        })
+      return Promise.reject(new Error('unknown url'))
+    })
+    mockApiPost.mockResolvedValue({ data: {} })
+  })
+
+  it('?resource=autostart → 首次列表加载即按资源过滤，词表无该资源时补进下拉 options', async () => {
+    routerState.query = { resource: 'autostart' }
+    const wrapper = await mountPage()
+
+    // 首次列表请求已带 resource 过滤
+    const listCall = mockApiGet.mock.calls.find((c: unknown[]) => c[0] === '/system/operations')
+    expect(listCall).toBeTruthy()
+    expect((listCall![1] as { params: Record<string, unknown> }).params.resource).toBe('autostart')
+
+    // 资源下拉包含补进的选项且按词表显示中文（第三个 select：用户/操作/资源）
+    const resourceSelect = wrapper.findAll('select.form-input')[2]
+    expect(resourceSelect.exists()).toBe(true)
+    expect(resourceSelect.text()).toContain('自启动')
+  })
+
+  it('无 query → 行为不变（资源过滤为空）', async () => {
+    await mountPage()
+    const listCall = mockApiGet.mock.calls.find((c: unknown[]) => c[0] === '/system/operations')
+    expect((listCall![1] as { params: Record<string, unknown> }).params.resource).toBeUndefined()
   })
 })

@@ -97,21 +97,31 @@ async def node_autostart_defaults(node_id: int, db: AsyncSession = Depends(get_d
 
 @router.get("/autostart/records")
 async def autostart_records(db: AsyncSession = Depends(get_db)):
-    """Return all nodes' persisted autostart records (read from DB)."""
-    result = await db.execute(select(NodeAutostart))
-    rows = result.scalars().all()
-    return {"items": [
-        {
-            "node_id": r.node_id,
-            "cluster_id": r.cluster_id,
-            "status": r.status,
-            "action": r.action,
-            "command": r.command,
-            "rc": r.rc,
-            "updated_at": r.updated_at.isoformat() if r.updated_at else None,
-        }
-        for r in rows
-    ]}
+    """Return every node's autostart record (LEFT-JOIN：无记录节点也有一行 status=None）。
+
+    - 状态/操作字段来自 `ps_node_autostart`（读库展示）；
+    - in_inventory：设计 D4 预检——纯内存清单文件检查（零外部 IO），供前端就地禁用
+      不在 ansible 主机清单中的节点的三个操作（启用/禁用/查询一体拦截，与 POST 400 分支同口径）。
+    - 无记录节点仅返回 in_inventory（前端按 status=None 显示「未查询」，预检不缺位）。
+    """
+    nodes_result = await db.execute(select(Node))
+    all_nodes = nodes_result.scalars().all()
+    records = (await db.execute(select(NodeAutostart))).scalars().all()
+    record_by_node = {r.node_id: r for r in records}
+    items = []
+    for n in all_nodes:
+        r = record_by_node.get(n.id)
+        items.append({
+            "node_id": n.id,
+            "cluster_id": n.cluster_id,
+            "status": r.status if r else None,
+            "action": r.action if r else None,
+            "command": r.command if r else None,
+            "rc": r.rc if r else None,
+            "updated_at": r.updated_at.isoformat() if r and r.updated_at else None,
+            "in_inventory": is_node_in_inventory(n.ip),
+        })
+    return {"items": items}
 
 
 @router.post("/{node_id}/autostart")
@@ -179,6 +189,12 @@ async def node_autostart(
         for line in (result.get("stdout") or "").splitlines():
             if line.strip():
                 q.put(line)
+        # rc≠0 时把 stderr（sshpass 合并诊断，含「密码认证也失败」标记）也送入日志流：
+        # 前端终态失败归类按流日志匹配真实标记（design D6），stderr 不入流则归类失效
+        if rc != 0:
+            for line in (result.get("stderr") or "").splitlines():
+                if line.strip():
+                    q.put(line)
         q.put(sentinel)
 
         percent = 0

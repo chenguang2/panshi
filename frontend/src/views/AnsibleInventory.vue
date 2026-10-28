@@ -43,7 +43,12 @@
     <div class="inv-meta">
       <span v-if="lastModified">清单最后修改：{{ formatDateTime(lastModified) }}</span>
       <span>{{ rows.length }} 台主机</span>
-      <a @click="goAuditLog">操作日志</a>
+      <router-link
+        v-if="canViewAudit"
+        :to="{ path: '/audit-log', query: { resource: 'ansible_inventory' } }"
+        class="btn btn-secondary btn-sm"
+        >操作日志</router-link
+      >
     </div>
 
     <a-spin :spinning="loading || switching" tip="正在与服务器同步...">
@@ -332,6 +337,7 @@ import { message, Tooltip } from 'ant-design-vue'
 import { SettingOutlined } from '@ant-design/icons-vue'
 import { showOverlayModal } from '@/composables/useOverlayModal'
 import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 import { onBeforeRouteLeave } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
 import AnsibleAdvancedFields from '@/components/AnsibleAdvancedFields.vue'
@@ -366,6 +372,9 @@ import {
 type ViewMode = 'table' | 'source'
 
 const router = useRouter()
+const authStore = useAuthStore()
+/** 「操作日志」入口仅对持 audit_logs 权限的用户可见（审计页路由同门控） */
+const canViewAudit = computed(() => authStore.hasPermission('audit_logs'))
 
 // ── 草稿状态：表格与源码共享同一份草稿，切换经服务端转换 ──────────────
 const viewMode = ref<ViewMode>('table')
@@ -973,11 +982,6 @@ function removeRow(row: InventoryHostEntry): void {
 function goNodes(): void {
   void router.push('/nodes')
 }
-
-function goAuditLog(): void {
-  void router.push('/audit-log')
-}
-
 // ── 未保存离开护栏 ───────────────────────────────────────────────────
 
 onBeforeRouteLeave(() => {

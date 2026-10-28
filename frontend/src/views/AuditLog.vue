@@ -150,6 +150,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
 import type { Dayjs } from 'dayjs'
+import { useRoute } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
 import {
   archiveAuditLogs,
@@ -172,6 +173,9 @@ import { auditActionLabel, auditResourceLabel, auditResourceLink } from '@/confi
 const rows = ref<AuditLogItem[]>([])
 const loading = ref(false)
 const exporting = ref(false)
+const route = useRoute()
+/** 深链预选资源（/audit-log?resource=autostart 等，各页「操作日志」入口携带） */
+const requestedResource = typeof route.query.resource === 'string' ? route.query.resource : ''
 const meta = reactive<AuditLogMeta>({ users: [], actions: [], resources: [] })
 const filters = reactive<{ user: string; action: string; resource: string }>({ user: '', action: '', resource: '' })
 const dateRange = ref<[Dayjs, Dayjs] | null>(null)
@@ -302,6 +306,14 @@ async function loadMeta(): Promise<void> {
   meta.resources = r.data.resources
   metaTotal.value = r.data.total ?? null
   metaOldest.value = r.data.oldest ?? null
+  // 深链预选（/audit-log?resource=autostart 等，各页「操作日志」入口）：资源下拉来自库内去重，
+  // 目标资源可能尚无记录——补进 options 防止原生 select 值不在 options 时整块空白
+  if (requestedResource) {
+    if (!meta.resources.includes(requestedResource)) {
+      meta.resources = [...meta.resources, requestedResource].sort()
+    }
+    filters.resource = requestedResource
+  }
 }
 
 async function reload(targetPage = page.value): Promise<void> {

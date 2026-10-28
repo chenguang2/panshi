@@ -251,6 +251,40 @@ def test_autostart_records_read(db_env):
             assert any(it["node_id"] == 1 and it["status"] == "enabled" for it in items)
 
 
+# ── 批 2 · task 2.1：records 响应增加 in_inventory（预检，design D4）──────────
+
+def test_autostart_records_in_inventory(db_env):
+    """GET /nodes/autostart/records 每条记录 SHALL 带 in_inventory 布尔（内存清单检查）。"""
+    import asyncio
+    from app.api.v1 import edge_autostart as mod
+    from app.models.autostart import NodeAutostart
+
+    app, S, AUTH = db_env
+
+    async def _seed():
+        async with S() as s:
+            s.add(NodeAutostart(node_id=1, cluster_id=1, status="enabled", action="enable",
+                                command="sshpass -p ***** ssh ...", rc=0))
+            await s.commit()
+    asyncio.run(_seed())
+
+    with patch.object(mod, "is_node_in_inventory", side_effect=lambda ip: True) as inv:
+        with AuthedTestClient(app, headers=AUTH) as c:
+            resp = c.get("/api/v1/nodes/autostart/records")
+            assert resp.status_code == 200
+            items = resp.json()["items"]
+            target = [it for it in items if it["node_id"] == 1][0]
+            assert target["in_inventory"] is True
+            assert inv.call_count == 1
+
+    with patch.object(mod, "is_node_in_inventory", return_value=False):
+        with AuthedTestClient(app, headers=AUTH) as c:
+            resp = c.get("/api/v1/nodes/autostart/records")
+            assert resp.status_code == 200
+            target = [it for it in resp.json()["items"] if it["node_id"] == 1][0]
+            assert target["in_inventory"] is False
+
+
 # ── fix-autostart-perm-status：统一持久化规则（以内容为准 + 失败不覆盖）──────────
 
 def _seed_autostart_row(S, status, node_id=1, cluster_id=1):
@@ -425,3 +459,46 @@ def test_autostart_first_event_direct_omits_via(db_env, monkeypatch):
     first = _first_event(_post_autostart_status(app, AUTH))
     assert first["route"] == "direct"
     assert "relay_via" not in first
+
+
+# ── rc≠0 时 stderr 入日志流（autostart-ux-review-fixes 2.5/2.6）──
+
+def test_autostart_failure_streams_stderr_for_classify(db_env, monkeypatch):
+    """rc≠0 时 SSE 日志流必须包含 stderr——前端终态失败归类按流日志匹配
+    「密码认证也失败」等真实标记（design D6），而该标记只存在于
+    _run_ssh_with_fallback 返回的合并 stderr 里；stderr 不入流则
+    root 认证失败永远归类不出（退回「操作失败: failed」原样透出）。"""
+    import json
+
+    import app.api.v1.edge_autostart as mod
+
+    app, _, AUTH = db_env
+
+    async def fake_autostart(ip, action, edge_service_content, ssh_user, ssh_pass, on_line):
+        return {
+            "rc": 255,
+            "status": "failed",
+            "stdout": "",
+            "stderr": "免密登录失败: Permission denied\n--- 密码认证也失败 ---\nPermission denied (publickey,password).",
+            "command": "sshpass -p *** ssh root@1.2.3.4 systemctl is-enabled edge",
+        }
+
+    with (
+        patch.object(mod, "is_node_in_inventory", return_value=True),
+        patch.object(mod._ansible_service, "edge_autostart", side_effect=fake_autostart),
+    ):
+        with AuthedTestClient(app, headers=AUTH) as c:
+            resp = c.post(
+                "/api/v1/nodes/1/autostart",
+                json={"action": "status", "root_user": "root", "root_password": "bad"},
+            )
+            assert resp.status_code == 200
+            body = resp.text
+
+    line_events = [
+        json.loads(chunk[len("data: "):])
+        for chunk in body.split("\n\n")
+        if chunk.startswith("data: ") and '"line"' in chunk
+    ]
+    streamed = "\n".join(e["line"] for e in line_events)
+    assert "密码认证也失败" in streamed, f"stderr 未入日志流，前端无法归类: {streamed!r}"

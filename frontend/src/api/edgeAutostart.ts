@@ -16,9 +16,20 @@ export function autostartUrl(nodeId: number): string {
 
 import api from '@/api/index'
 
-interface AutostartRecord {
+export interface AutostartRecord {
+  /** 节点 DB id */
   node_id: number
-  status: AutostartStatus | string
+  cluster_id: number
+  status: AutostartStatus | string | null
+  /** 最近操作：enable | disable | status */
+  action: string | null
+  /** 脱敏命令（审计口径） */
+  command: string | null
+  rc: number | null
+  /** naive UTC（isoformat 无时区后缀，展示走 utils/format.ts） */
+  updated_at: string | null
+  /** 节点是否在 ansible 主机清单（预检，无记录节点也返回） */
+  in_inventory?: boolean
 }
 
 export function listAutostartRecords() {

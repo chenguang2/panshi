@@ -152,7 +152,12 @@
                     </div>
                   </div>
 
-                  <div v-if="result" style="color: var(--muted); font-size: 12px">返回码 (rc): {{ result.rc }}</div>
+                  <div
+                    v-if="result && result.rc !== null && result.rc !== undefined"
+                    style="color: var(--muted); font-size: 12px"
+                  >
+                    返回码 (rc): {{ result.rc }}
+                  </div>
                 </template>
 
                 <div v-if="logs.length > 0" style="margin-top: 12px">

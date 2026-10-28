@@ -8,6 +8,8 @@
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import { setActivePinia, createPinia } from 'pinia'
+import { useAuthStore } from '@/stores/auth'
 
 const mockGetInventory = vi.fn()
 const mockListBackups = vi.fn()
@@ -66,6 +68,10 @@ function btnIn(scope: { findAll: (sel: string) => { text: () => string }[] }, te
 }
 
 async function openPage() {
+  setActivePinia(createPinia())
+  // 「操作日志」入口有 audit_logs 权限门控：种 admin 身份使其可见
+  const auth = useAuthStore()
+  auth.user = { id: 1, username: 'admin', role: 'admin', status: 1 }
   const w = mount(AnsibleInventory, {
     global: {
       stubs: {
