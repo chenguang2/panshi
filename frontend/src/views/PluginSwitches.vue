@@ -2,7 +2,12 @@
   <div class="plugin-switches">
     <PageHeader title="插件开关" description="控制各插件在新配置中的可选性；禁用不影响既有配置">
       <template #actions>
-        <router-link class="audit-link" to="/audit-log">操作日志</router-link>
+        <router-link
+          v-if="canViewAudit"
+          :to="{ path: '/audit-log', query: { resource: 'plugin_switch' } }"
+          class="btn btn-secondary"
+          >操作日志</router-link
+        >
       </template>
     </PageHeader>
 
@@ -180,6 +185,7 @@ import { message } from 'ant-design-vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import api from '@/api'
 import PageHeader from '@/components/PageHeader.vue'
+import { useAuthStore } from '@/stores/auth'
 
 interface RefCounts {
   routes: number
@@ -212,6 +218,10 @@ const searchText = ref('')
 const activeCategory = ref('all')
 const statusFilter = ref('all')
 const openSchemas = reactive<Record<string, boolean>>({})
+
+/** 「操作日志」入口仅对持 audit_logs 权限的用户可见（审计页路由同门控） */
+const authStore = useAuthStore()
+const canViewAudit = computed(() => authStore.hasPermission('audit_logs'))
 
 const CATEGORY_CONFIG: Record<string, string> = {
   flow: '流量控制',
@@ -495,15 +505,6 @@ defineExpose({ requestLeave })
 }
 .ssb-count strong {
   font-family: var(--font-mono);
-}
-
-.audit-link {
-  font-size: 13px;
-  color: var(--accent);
-  text-decoration: none;
-}
-.audit-link:hover {
-  text-decoration: underline;
 }
 
 .plugin-categories {

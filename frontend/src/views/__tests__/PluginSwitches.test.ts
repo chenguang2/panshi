@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { setActivePinia, createPinia } from 'pinia'
+import { useAuthStore } from '@/stores/auth'
 
 const mockApiGet = vi.fn()
 const mockApiPut = vi.fn()
@@ -27,7 +29,7 @@ const stubs = {
     props: ['title', 'description'],
   },
   RouterLink: {
-    template: '<a class="mock-router-link" :data-to="to"><slot /></a>',
+    template: '<a class="mock-router-link" :data-to="typeof to === \'string\' ? to : JSON.stringify(to)"><slot /></a>',
     props: ['to'],
   },
   ASwitch: {
@@ -83,6 +85,10 @@ function visibleModal(wrapper: ReturnType<typeof mount>) {
 
 describe('PluginSwitches.vue', () => {
   beforeEach(() => {
+    setActivePinia(createPinia())
+    // 页头「操作日志」入口带 canViewAudit 门控：测试身份给 admin（hasPermission 直通）
+    const authStore = useAuthStore()
+    authStore.user = { id: 1, username: 'admin', role: 'admin' } as never
     vi.clearAllMocks()
     mockApiGet.mockImplementation((url: string) => {
       if (url === '/plugin-switches') {
@@ -489,10 +495,13 @@ describe('PluginSwitches.vue', () => {
     // 空 schema 卡显示 无参数
     const emptyCard = wrapper.findAll('.plugin-card').find((c) => c.text().includes('Basic 认证'))!
     expect(emptyCard.find('.plugin-schema-none').exists()).toBe(true)
-    // 操作日志入口
+    // 操作日志入口：按钮形态 + 审计页深链携带资源预选（与自启动/主机清单/ClickHouse 同机制）
     const auditLink = wrapper.findAll('.mock-router-link').find((a) => a.text().includes('操作日志'))
     expect(auditLink).toBeDefined()
-    expect(auditLink!.attributes('data-to')).toBe('/audit-log')
+    const toVal = JSON.parse(auditLink!.attributes('data-to')!)
+    expect(toVal.path).toBe('/audit-log')
+    expect(toVal.query).toEqual({ resource: 'plugin_switch' })
+    expect(auditLink!.classes()).toContain('btn-secondary')
   })
 
   it('离开守卫：三动作（取消/离开/保存并离开），保存并离开先 PUT 再放行', async () => {
