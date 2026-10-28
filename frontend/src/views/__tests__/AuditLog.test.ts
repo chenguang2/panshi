@@ -84,6 +84,30 @@ async function mountPage() {
   return wrapper
 }
 
+describe('AuditLog.vue 页头操作区层级（全站页头按钮规范）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiGet.mockResolvedValue({ data: { items: [], total: 0, page: 1, page_size: 20 } })
+  })
+
+  it('导出为数据取出类动作：CSV/Excel 均为次级（primary 留给唯一主写操作），归档清理保持危险轮廓', async () => {
+    const wrapper = await mountPage()
+    const header = wrapper.find('.page-header')
+    const csvBtn = header.findAll('button').find((b) => b.text() === '导出 CSV')
+    const xlsBtn = header.findAll('button').find((b) => b.text() === '导出 Excel')
+    const archiveBtn = header.findAll('button').find((b) => b.text() === '归档清理')
+    expect(csvBtn, '应有导出 CSV 按钮').toBeTruthy()
+    expect(xlsBtn, '应有导出 Excel 按钮').toBeTruthy()
+    expect(archiveBtn, '应有归档清理按钮').toBeTruthy()
+    expect(csvBtn!.classes()).not.toContain('btn-primary')
+    expect(csvBtn!.classes()).toContain('btn-secondary')
+    expect(xlsBtn!.classes()).not.toContain('btn-primary')
+    expect(xlsBtn!.classes()).toContain('btn-secondary')
+    expect(archiveBtn!.classes()).toContain('btn-danger-outline')
+  })
+})
+
 describe('AuditLog.vue 详情抽屉', () => {
   beforeEach(() => {
     setActivePinia(createPinia())

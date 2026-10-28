@@ -2,8 +2,8 @@
   <div class="audit-log">
     <PageHeader title="审计日志" description="记录全部增删改操作的审计轨迹，支持筛选、追溯与导出">
       <template #actions>
-        <button class="btn btn-primary" :disabled="exporting" @click="handleExport('csv')">导出 CSV</button>
-        <button class="btn btn-primary" :disabled="exporting" @click="handleExport('xlsx')">导出 Excel</button>
+        <button class="btn btn-secondary" :disabled="exporting" @click="handleExport('csv')">导出 CSV</button>
+        <button class="btn btn-secondary" :disabled="exporting" @click="handleExport('xlsx')">导出 Excel</button>
         <span class="action-sep" aria-hidden="true" />
         <button class="btn btn-danger-outline" @click="archiveOpen = true">归档清理</button>
       </template>

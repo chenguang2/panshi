@@ -2,7 +2,7 @@
   <div class="ssl-page">
     <PageHeader title="服务器证书" description="部署在 Edge 网关上的 TLS 证书 · 由平台发布到节点">
       <template #actions>
-        <button class="btn btn-primary" @click="openCreateDrawer">+ 添加已有证书</button>
+        <button class="btn btn-secondary" @click="openCreateDrawer">+ 添加已有证书</button>
         <button class="btn btn-primary" style="margin-left: 8px" @click="openGenerateDialog">生成证书</button>
       </template>
     </PageHeader>

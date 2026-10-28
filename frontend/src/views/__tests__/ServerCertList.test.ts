@@ -143,6 +143,17 @@ describe('ServerCertList 分发警示页（ssl-cert-management）', () => {
     expect(w.text()).toContain('共 1 个服务器证书')
   })
 
+  it('页头层级（全站规范）：生成证书=唯一 primary（平台主路径），添加已有证书=次级', async () => {
+    const w = await mountPage()
+    const addBtn = w.findAll('button').find((b) => b.text().includes('添加已有证书'))
+    const genBtn = w.findAll('button').find((b) => b.text() === '生成证书')
+    expect(addBtn, '应有添加已有证书按钮').toBeTruthy()
+    expect(genBtn, '应有生成证书按钮').toBeTruthy()
+    expect(addBtn!.classes()).not.toContain('btn-primary')
+    expect(addBtn!.classes()).toContain('btn-secondary')
+    expect(genBtn!.classes()).toContain('btn-primary')
+  })
+
   it('无筛选空态「暂无服务器证书」；筛选空态含「清除筛选」', async () => {
     setupGet([caCert])
     const w = await mountPage()
