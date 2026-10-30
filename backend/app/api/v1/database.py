@@ -305,7 +305,18 @@ def _do_test_sync(conn: ConnectionConfig):
         engine.dispose()
         return True, "连接成功"
     except Exception as e:
-        return False, str(e)
+        # 失败 detail 中文分类转译（database-mgmt-ux-review-fixes 1.4）：英文异常串对非技术用户不可读
+        msg = str(e)
+        low = msg.lower()
+        if "connection refused" in low:
+            return False, "连接被拒绝（数据库服务未启动或端口错误）"
+        if "authentication" in low or ("password" in low and "failed" in low):
+            return False, "用户名或密码错误"
+        if "does not exist" in low and "database" in low:
+            return False, "数据库不存在"
+        if "timeout" in low or "timed out" in low:
+            return False, "连接超时"
+        return False, "连接失败：" + msg
 
 
 async def _do_test(conn: ConnectionConfig):

@@ -50,13 +50,16 @@
           class="connection-table"
         >
           <template #bodyCell="{ record, column }">
+            <template v-if="column.key === 'status'">
+              <span class="status-dot" :class="dotClass(record)" :title="dotTitle(record)"></span>
+            </template>
             <template v-if="column.key === 'type'">
               <a-tag :color="record.type === 'postgres' ? 'blue' : 'orange'">{{
                 record.type === 'postgres' ? 'PostgreSQL' : 'SQLite'
               }}</a-tag>
             </template>
             <template v-else-if="column.key === 'address'">
-              <span>{{ record.display_address || '-' }}</span>
+              <span class="addr-cell" :title="record.display_address || ''">{{ record.display_address || '-' }}</span>
             </template>
             <template v-else-if="column.key === 'username'">
               <span>{{ record.username || '-' }}</span>
@@ -69,15 +72,22 @@
               <div class="table-actions">
                 <button class="btn btn-secondary btn-sm test-conn-btn" @click="handleTest(record)">测试</button>
                 <button
-                  class="btn btn-sm set-current"
-                  :class="isActive(record) ? 'btn-secondary' : 'btn-primary'"
+                  class="btn btn-sm btn-secondary set-current"
                   :disabled="isActive(record)"
                   @click="openSwitchModal(record)"
                 >
                   设为当前
                 </button>
                 <button class="btn btn-secondary btn-sm" @click="openEditModal(record)">编辑</button>
-                <button class="btn btn-danger btn-sm delete-conn-btn" @click="handleDelete(record)">删除</button>
+                <span class="tip-host" :title="isActive(record) ? '当前连接不可删除，请先切换到其他连接' : ''">
+                  <button
+                    class="btn btn-danger btn-sm delete-conn-btn"
+                    :disabled="isActive(record)"
+                    @click="handleDelete(record)"
+                  >
+                    删除
+                  </button>
+                </span>
               </div>
             </template>
           </template>
@@ -112,7 +122,12 @@
             </div>
             <div class="form-group">
               <label class="form-label">名称 <span class="required">*</span></label>
-              <input v-model="connModal.form.name" type="text" class="form-input" placeholder="连接名称" />
+              <input
+                v-model="connModal.form.name"
+                type="text"
+                class="form-input"
+                placeholder="如：生产 PG / 本机 SQLite"
+              />
             </div>
           </div>
           <template v-if="connModal.form.type === 'sqlite'">
@@ -159,11 +174,16 @@
                 autocomplete="new-password"
               />
             </div>
+            <div class="form-group">
+              <label class="form-check">
+                <input v-model="connModal.form.ssl" type="checkbox" />
+                启用 SSL 连接
+              </label>
+            </div>
           </template>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="connModal.open = false">取消</button>
-          <button class="btn btn-secondary" @click="handleTestDraft">测试连接</button>
           <button class="btn btn-primary save-conn-btn" @click="handleSaveConnection">保存</button>
         </div>
       </div>
@@ -231,6 +251,7 @@ const authStore = useAuthStore()
 const featuresStore = useFeaturesStore()
 
 const connectionColumns = [
+  { title: '', key: 'status', width: 30 },
   { title: '名称', dataIndex: 'name', key: 'name' },
   { title: '类型', key: 'type' },
   { title: '地址', key: 'address' },
@@ -323,19 +344,15 @@ function openEditModal(record: DbConnection) {
   connModal.open = true
 }
 
-async function handleTestDraft() {
-  // Test the draft connection using its raw fields is not supported by API (test needs a saved id).
-  // Validate name before allowing persistence.
+async function handleSaveConnection() {
   if (!connModal.form.name.trim()) {
     message.error('请输入连接名称')
     return
   }
-  message.info('请先保存连接，再点击「测试」验证连接可用性')
-}
-
-async function handleSaveConnection() {
-  if (!connModal.form.name.trim()) {
-    message.error('请输入连接名称')
+  // 重名软校验（database-mgmt-ux-review-fixes 2.3）：编辑排除自身
+  const dup = connections.value.some((c) => c.name === connModal.form.name.trim() && c.id !== connModal.editingId)
+  if (dup) {
+    message.error('已存在同名连接')
     return
   }
   if (connModal.editing) {
@@ -362,7 +379,7 @@ async function handleSaveConnection() {
       password: connModal.form.password || null,
       ssl: connModal.form.type === 'postgres' ? connModal.form.ssl : false,
     })
-    message.success('连接已添加')
+    message.success('连接已添加，可点击列表中「测试」验证可用性')
   }
   connModal.open = false
   await loadData()
@@ -370,11 +387,29 @@ async function handleSaveConnection() {
 
 async function handleTest(record: DbConnection) {
   const res = await testConnection(record.id)
+  // 状态点三态（database-mgmt-ux-review-fixes 2.4）：内存会话态，刷新重置
+  testResults.value[record.id] = res.data.success ? 'ok' : 'fail'
   if (res.data.success) {
     message.success(res.data.detail)
   } else {
     message.error(res.data.detail)
   }
+}
+
+const testResults = ref<Record<string, 'ok' | 'fail'>>({})
+
+function dotClass(record: DbConnection): string {
+  const r = testResults.value[record.id]
+  if (r === 'ok') return 'online'
+  if (r === 'fail') return 'verified-fail'
+  return 'unverified'
+}
+
+function dotTitle(record: DbConnection): string {
+  const r = testResults.value[record.id]
+  if (r === 'ok') return '已验证连通'
+  if (r === 'fail') return '验证失败'
+  return '未验证连通性'
 }
 
 function openSwitchModal(record: DbConnection) {
@@ -413,7 +448,6 @@ defineExpose({
   switchModal,
   openCreateModal,
   handleSaveConnection,
-  handleTestDraft,
   handleTest,
   handleSwitch,
   handleDelete,
@@ -425,6 +459,45 @@ defineExpose({
   display: flex;
   flex-direction: column;
   gap: 20px;
+}
+
+/* ── 连接行状态点三态（database-mgmt-ux-review-fixes 2.4） ── */
+.connection-table .status-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+.status-dot.online {
+  background: #52c41a;
+}
+.status-dot.verified-fail {
+  background: #ff4d4f;
+}
+.status-dot.unverified {
+  background: var(--border);
+}
+/* 地址列省略（2.2） */
+.addr-cell {
+  display: inline-block;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+/* SSL 开关（1.3） */
+.form-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--fg);
+  cursor: pointer;
+}
+/* 禁用删除 tooltip 宿主 */
+.tip-host {
+  display: inline-block;
 }
 
 /* ── 当前数据库 ── */

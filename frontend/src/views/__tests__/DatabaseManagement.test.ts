@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { message } from 'ant-design-vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { useFeaturesStore } from '@/stores/features'
@@ -69,6 +70,7 @@ function tableStub() {
     template: `
       <div class="ant-table">
         <div v-for="r in dataSource" :key="r[rowKey]" class="table-row">
+          <slot name="bodyCell" :record="r" :column="{ key: 'status' }" />
           <slot name="bodyCell" :record="r" :column="{ key: 'type' }" />
           <slot name="bodyCell" :record="r" :column="{ key: 'address' }" />
           <slot name="bodyCell" :record="r" :column="{ key: 'username' }" />
@@ -427,5 +429,140 @@ describe('DatabaseManagement', () => {
       const wrapper2 = await mountPage()
       expect(wrapper2.find('.pending-restart-badge').exists()).toBe(false)
     })
+  })
+})
+
+describe('database-mgmt-ux-review-fixes（2026-10-30 UX 评审，裁决全 A）', () => {
+  // 本 describe 与主 describe 平级：自带 beforeEach（不依赖前序用例的残留 pinia/auth 状态）
+  beforeEach(() => {
+    vi.clearAllMocks()
+    setActivePinia(createPinia())
+    localStorage.clear()
+    seedAuth()
+    seedFeatures()
+    mocks.getStatus.mockResolvedValue({ data: { active: conn(), connections_count: 1, version: 1 } })
+    mocks.listConnections.mockResolvedValue({ data: [conn()] })
+    mocks.getRunningTasks.mockResolvedValue({
+      data: {
+        migration: { in_progress: false, source_id: null, target_id: null, started_at: null },
+        tasks: [],
+      },
+    })
+    mocks.getHistory.mockResolvedValue({ data: [] })
+    mocks.testConnection.mockResolvedValue({ data: { success: true, detail: '连接成功' } })
+    backupMocks.getConfig.mockResolvedValue({ data: { config: null } })
+  })
+
+  async function mountWith2() {
+    mocks.listConnections.mockResolvedValue({
+      data: [
+        conn(),
+        conn({
+          id: 'conn_2',
+          name: '目标 PG',
+          type: 'postgres',
+          host: '10.0.0.5',
+          path: null,
+          display_address: '10.0.0.5:5432/panshi',
+          username: 'postgres',
+          ssl: true,
+        }),
+      ],
+    })
+    return mountPage()
+  }
+
+  it('当前激活连接行删除按钮禁用且有 tooltip', async () => {
+    const wrapper = await mountPage()
+    const btn = wrapper.find('.delete-conn-btn')
+    expect(btn.attributes('disabled')).toBeDefined()
+    const host = btn.element.closest('.tip-host') as HTMLElement | null
+    expect(host?.getAttribute('title')).toContain('当前连接不可删除')
+    // 非当前行不禁用
+    await mountWith2()
+  })
+
+  it('非当前行删除可点', async () => {
+    const wrapper = await mountWith2()
+    const btns = wrapper.findAll('.delete-conn-btn')
+    expect(btns[1].attributes('disabled')).toBeUndefined()
+  })
+
+  it('新建弹窗不再提供假「测试连接」按钮', async () => {
+    const wrapper = await mountPage()
+    await wrapper.vm.openCreateModal()
+    await wrapper.vm.$nextTick()
+    const texts = wrapper.findAll('.modal-footer button').map((b) => b.text())
+    expect(texts).not.toContain('测试连接')
+  })
+
+  it('postgres 表单提供 SSL 开关且编辑回显', async () => {
+    const wrapper = await mountWith2()
+    const rows = wrapper.vm.connections
+    expect(rows[1].ssl).toBe(true)
+    wrapper.vm.openEditModal(rows[1])
+    await wrapper.vm.$nextTick()
+    const cb = wrapper.find('.modal input[type="checkbox"]')
+    expect(cb.exists()).toBe(true)
+    expect((cb.element as HTMLInputElement).checked).toBe(true)
+  })
+
+  it('sqlite 表单不渲染 SSL 开关', async () => {
+    const wrapper = await mountPage()
+    wrapper.vm.openEditModal(wrapper.vm.connections[0])
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.modal input[type="checkbox"]').exists()).toBe(false)
+  })
+
+  it('保存重名校验：同名阻断且不调 API', async () => {
+    const wrapper = await mountPage()
+    await wrapper.vm.openCreateModal()
+    wrapper.vm.connModal.form.name = '本地库'
+    wrapper.vm.connModal.form.path = '/tmp/x.db'
+    mocks.createConnection.mockClear()
+    await wrapper.vm.handleSaveConnection()
+    expect(vi.mocked(message.error)).toHaveBeenCalledWith('已存在同名连接')
+    expect(mocks.createConnection).not.toHaveBeenCalled()
+  })
+
+  it('编辑时重名校验排除自身', async () => {
+    const wrapper = await mountPage()
+    await wrapper.vm.openEditModal(wrapper.vm.connections[0])
+    wrapper.vm.connModal.form.name = '本地库'
+    mocks.updateConnection.mockResolvedValue({ data: {} })
+    await wrapper.vm.handleSaveConnection()
+    expect(vi.mocked(message.error)).not.toHaveBeenCalledWith('已存在同名连接')
+    expect(mocks.updateConnection).toHaveBeenCalled()
+  })
+
+  it('测试成功后状态点变绿（verified-ok）', async () => {
+    const wrapper = await mountPage()
+    mocks.testConnection.mockResolvedValue({ data: { success: true, detail: '连接成功' } })
+    await wrapper.vm.handleTest(wrapper.vm.connections[0])
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.connection-table .status-dot.online').exists()).toBe(true)
+  })
+
+  it('测试失败后状态点变红（verified-fail）', async () => {
+    const wrapper = await mountPage()
+    mocks.testConnection.mockResolvedValue({ data: { success: false, detail: '连接超时' } })
+    await wrapper.vm.handleTest(wrapper.vm.connections[0])
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.connection-table .status-dot.verified-fail').exists()).toBe(true)
+  })
+
+  it('未测试时状态点为中性（unverified）', async () => {
+    const wrapper = await mountPage()
+    expect(wrapper.find('.connection-table .status-dot.unverified').exists()).toBe(true)
+    expect(wrapper.find('.connection-table .status-dot.online').exists()).toBe(false)
+  })
+
+  it('「设为当前」非当前行为次级按钮', async () => {
+    const wrapper = await mountWith2()
+    const btns = wrapper.findAll('.set-current')
+    expect(btns[0].classes()).not.toContain('btn-primary') // 当前行禁用且次级
+    expect(btns[0].attributes('disabled')).toBeDefined()
+    expect(btns[1].classes()).not.toContain('btn-primary')
+    expect(btns[1].classes()).toContain('btn-secondary')
   })
 })
