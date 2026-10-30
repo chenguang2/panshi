@@ -18,26 +18,16 @@
 
     <!-- Filter Bar -->
     <div class="user-filter-bar">
-      <div class="search-input-wrap">
-        <input
-          v-model="searchText"
-          type="text"
-          placeholder="搜索用户名..."
-          class="form-input"
-          @input="onFilterChange"
-        />
-        <span class="search-icon">🔍</span>
-      </div>
-      <select v-model="roleFilter" class="form-input" style="width: 120px" @change="onFilterChange">
-        <option value="">全部角色</option>
-        <option value="admin">管理员</option>
-        <option value="user">普通用户</option>
-      </select>
-      <select v-model="statusFilter" class="form-input" style="width: 120px" @change="onFilterChange">
-        <option value="">全部状态</option>
-        <option :value="1">启用</option>
-        <option :value="0">禁用</option>
-      </select>
+      <a-input-search
+        v-model:value="searchText"
+        class="search-input-wrap"
+        style="width: 240px"
+        placeholder="搜索用户名"
+        @input="onSearchInput"
+        @search="onSearchNow"
+      />
+      <a-select v-model:value="roleFilter" style="width: 130px" :options="roleOptions" @change="onFilterChange" />
+      <a-select v-model:value="statusFilter" style="width: 130px" :options="statusOptions" @change="onFilterChange" />
       <span class="text-muted text-sm">共 {{ totalCount }} 个用户</span>
     </div>
 
@@ -68,11 +58,13 @@
             </span>
           </template>
 
-          <!-- 状态列 -->
+          <!-- 状态列：显式开关（user-management-ux-review-fixes 批 2：状态与操作合一，点击弹确认） -->
           <template v-if="column.key === 'status'">
-            <BadgeStatus
-              :text="record.status === 1 ? '启用' : '禁用'"
-              :status="record.status === 1 ? 'online' : 'offline'"
+            <a-switch
+              :checked="record.status === 1"
+              checked-children="启"
+              un-checked-children="禁"
+              @change="onStatusToggle(record, $event)"
             />
           </template>
 
@@ -127,16 +119,13 @@
             <span class="cell-secondary">{{ record.created_at ? formatDate(record.created_at) : '-' }}</span>
           </template>
 
-          <!-- 操作列 -->
+          <!-- 操作列（⋯ 只留删除——禁用/启用已迁至状态开关） -->
           <template v-if="column.key === 'actions' && isAdmin">
             <a-button type="link" size="small" @click="editUser(record)">编辑</a-button>
             <a-dropdown :trigger="['click']">
               <a-button type="text" size="small" class="action-trigger-btn">⋯</a-button>
               <template #overlay>
                 <a-menu>
-                  <a-menu-item @click="toggleUserStatus(record)">
-                    {{ record.status === 1 ? '禁用' : '启用' }}
-                  </a-menu-item>
                   <a-menu-item danger @click="deleteUser(record)">删除</a-menu-item>
                 </a-menu>
               </template>
@@ -144,11 +133,15 @@
           </template>
         </template>
 
-        <!-- 空状态 -->
+        <!-- 空状态双形态（批 1）：有筛选 → 无匹配用户 + 清除筛选；真空库 → 暂无用户 -->
         <template #emptyText>
           <div class="empty-state">
             <div class="empty-state-icon">◎</div>
-            <p>暂无用户</p>
+            <template v-if="hasActiveFilters">
+              <p>无匹配用户</p>
+              <button class="btn btn-secondary btn-sm" style="margin-top: 8px" @click="clearFilters">清除筛选</button>
+            </template>
+            <p v-else>暂无用户</p>
           </div>
         </template>
       </a-table>
@@ -255,7 +248,7 @@
                 <span v-if="!selectedClusterIds.length" class="text-muted text-sm" style="padding: 4px 0"
                   >暂未选择集群</span
                 >
-                <span class="select-clusters-btn" @click="clusterPickerVisible = true">+ 选择集群</span>
+                <span class="select-clusters-btn" @click="openClusterPicker">+ 选择集群</span>
               </div>
             </div>
           </template>
@@ -302,10 +295,10 @@
         </div>
         <div class="picker-actions">
           <span style="font-size: 12px; color: var(--muted); margin-right: auto"
-            >已选 {{ selectedClusterIds.length }} 个集群</span
+            >已选 {{ pickerDraft.length }} 个集群</span
           >
-          <button class="btn btn-secondary" @click="clusterPickerVisible = false">取消</button>
-          <button class="btn btn-primary" @click="clusterPickerVisible = false">确认</button>
+          <button class="btn btn-secondary" @click="cancelPicker">取消</button>
+          <button class="btn btn-primary" @click="confirmPicker">确认</button>
         </div>
       </div>
     </div>
@@ -319,12 +312,32 @@
         </div>
         <div class="modal-body">
           <p style="font-size: 13px; color: var(--muted); line-height: 1.6">
-            确定删除用户 "{{ deleteConfirm.username }}" 吗？
+            确定删除用户 "{{ deleteConfirm.username }}" 吗？<br />
+            将一并清除其资源权限与集群授权，且<b style="color: var(--danger)">不可恢复</b>。
           </p>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="deleteConfirm.visible = false">取消</button>
           <button class="btn btn-danger" @click="executeDeleteUser">删除</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 通用危险操作确认（批 2/3：禁用/启用、重置密码——单一状态机避免三份弹窗重复） -->
+    <div class="modal-overlay" :style="{ display: confirmState.visible ? 'flex' : 'none' }">
+      <div class="modal" style="max-width: 420px">
+        <div class="modal-header">
+          <h2>{{ confirmState.title }}</h2>
+          <button class="modal-close" @click="cancelConfirm">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p style="font-size: 13px; color: var(--muted); line-height: 1.6">{{ confirmState.body }}</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="cancelConfirm">取消</button>
+          <button class="btn" :class="confirmState.danger ? 'btn-danger' : 'btn-primary'" @click="runConfirm">
+            {{ confirmState.confirmText }}
+          </button>
         </div>
       </div>
     </div>
@@ -353,8 +366,8 @@ import type { User } from '@/types'
 import { PAGE_SIZE_TABLE } from '@/constants'
 import { useAuthStore } from '@/stores/auth'
 import { useFeaturesStore } from '@/stores/features'
+import { PERMISSION_GROUPS, permissionKeyToLabel as permissionKeyToLabelMap } from '@/config/permissionGroups'
 import PageHeader from '@/components/PageHeader.vue'
-import BadgeStatus from '@/components/BadgeStatus.vue'
 
 // ── Auth ──────────────────────────────────────────────────────────────────
 const authStore = useAuthStore()
@@ -377,31 +390,17 @@ const page = ref(1)
 const pageSize = ref(PAGE_SIZE_TABLE)
 const totalCount = ref(0)
 
-// 表格列定义
+// 表格列定义（排序语义唯一 = 后端返回顺序；user-management-ux-review-fixes 批 2 移除前端 sorter——
+// 后端 list_users 无排序参数，本页排序只重排当前页、跨页语义错误）
 const columns = computed(() => {
   const cols: any[] = [
     { title: '#', key: 'index', width: 45 },
-    {
-      title: '用户名',
-      dataIndex: 'username',
-      key: 'username',
-      sorter: (a: User, b: User) => a.username.localeCompare(b.username),
-    },
-    { title: '角色', dataIndex: 'role', key: 'role', sorter: (a: User, b: User) => a.role.localeCompare(b.role) },
-    {
-      title: '状态',
-      dataIndex: 'status',
-      key: 'status',
-      sorter: (a: User, b: User) => (a.status || 0) - (b.status || 0),
-    },
+    { title: '用户名', dataIndex: 'username', key: 'username' },
+    { title: '角色', dataIndex: 'role', key: 'role' },
+    { title: '状态', dataIndex: 'status', key: 'status', width: 90 },
     { title: '权限', key: 'permissions' },
     { title: '可访问集群', key: 'clusters' },
-    {
-      title: '创建时间',
-      dataIndex: 'created_at',
-      key: 'created_at',
-      sorter: (a: User, b: User) => (a.created_at || '').localeCompare(b.created_at || ''),
-    },
+    { title: '创建时间', dataIndex: 'created_at', key: 'created_at' },
   ]
   if (isAdmin.value) {
     cols.push({ title: '操作', key: 'actions', width: 80 })
@@ -420,36 +419,42 @@ function onFilterChange() {
   loadUsers()
 }
 
-// ── Columns 辅助数据 ──────────────────────────────────────────────────────
-const permissionKeyToLabel: Record<string, string> = {
-  clusters: '集群管理',
-  nodes: '节点管理',
-  upstreams: '上游管理',
-  routes: '路由管理',
-  plugin_groups: '插件组管理',
-  global_rules: '全局规则管理',
-  plugin_metadata: '插件元数据',
-  static_resources: '静态资源',
-  ssl_cert: 'SSL 证书',
-  edge_env: 'edge.env 配置',
-  stream_proxy: '四层代理',
-  dns_proxy_udp: 'DNS代理[UDP]',
-  dns_proxy_http: 'DNS代理[HTTP]',
-  central_management: '统一管理',
-  metrics: '指标查询/总览',
-  edge_nodes: 'Edge直连',
-  edge_import: '数据导入',
-  tools: '工具箱',
-  edge_autostart: '自启动管理',
-  ansible_inventory: 'Ansible 主机清单',
-  task_center: '节点任务',
-  database_management: '数据库管理',
-  db_migration: '数据迁移',
-  db_backup: '备份与容灾',
-  clickhouse_config: 'ClickHouse 配置',
-  audit_logs: '审计日志',
-  relay_gateway: '中继区域管理',
+// 搜索：300ms 防抖（@input），回车立即执行（a-input-search @search）——消灭每键一请求（批 1）
+let searchTimer: ReturnType<typeof setTimeout> | undefined
+function onSearchInput() {
+  clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => onFilterChange(), 300)
 }
+function onSearchNow() {
+  clearTimeout(searchTimer)
+  onFilterChange()
+}
+
+// 空态双形态 + 清除筛选（批 1）
+const hasActiveFilters = computed(() => !!(searchText.value.trim() || roleFilter.value || statusFilter.value !== ''))
+function clearFilters() {
+  searchText.value = ''
+  roleFilter.value = ''
+  statusFilter.value = ''
+  page.value = 1
+  loadUsers()
+}
+
+const roleOptions = [
+  { label: '全部角色', value: '' },
+  { label: '管理员', value: 'admin' },
+  { label: '普通用户', value: 'user' },
+]
+const statusOptions = [
+  { label: '全部状态', value: '' },
+  { label: '启用', value: 1 },
+  { label: '禁用', value: 0 },
+]
+
+// ── Columns 辅助数据 ──────────────────────────────────────────────────────
+// 权限分组与键标签 = 单一事实源 @/config/permissionGroups（照 AppSidebar 菜单结构，
+// 源码守卫 permissionGroups.source.test.ts 强制同步——菜单改版测试立即红）
+const permissionKeyToLabel: Record<string, string> = permissionKeyToLabelMap
 
 const clusters = ref<{ id: number; name: string; display_name?: string; group_name?: string }[]>([])
 
@@ -492,94 +497,19 @@ const deleteConfirm = reactive({
   username: '',
 })
 
-const permissionFeatureMap: Record<string, string> = {
-  edge_nodes: 'edge_client',
-  edge_import: 'edge_import',
-  tools: 'tools',
-  stream_proxy: 'stream_proxy',
-  dns_proxy_udp: 'dns_proxy_udp',
-  ssl_cert: 'ssl_cert',
-  dns_proxy_http: 'dns_proxy_http',
-  edge_env: 'edge_env',
-  metrics: 'metrics',
-  task_center: 'task_center',
-  audit_logs: 'audit_log',
-  database_management: 'database_management',
-  db_migration: 'db_migration',
-  db_backup: 'db_backup',
-}
-
 interface PermItem {
   key: string
   label: string
 }
 
-// 资源权限按左侧菜单分类分组（与 AppSidebar.vue 的 navSections 一致）
+// 资源权限分组 = 单一事实源 @/config/permissionGroups（照 AppSidebar navSections，
+// 守卫测试强制同步），按特性开关过滤后渲染
 const permissionGroups = computed(() => {
-  const rawGroups: { title: string; items: PermItem[] }[] = [
-    {
-      title: '核心功能',
-      items: [
-        { key: 'clusters', label: '集群管理' },
-        { key: 'nodes', label: '节点管理' },
-        { key: 'upstreams', label: '上游管理' },
-        { key: 'routes', label: '路由管理' },
-        { key: 'plugin_groups', label: '插件组管理' },
-        { key: 'plugin_metadata', label: '插件元数据' },
-        { key: 'global_rules', label: '全局规则管理' },
-        { key: 'static_resources', label: '静态资源' },
-        { key: 'ssl_cert', label: 'SSL 证书' },
-      ],
-    },
-    {
-      title: '边缘网络',
-      items: [
-        { key: 'edge_env', label: 'edge.env 配置' },
-        { key: 'stream_proxy', label: '四层代理' },
-        { key: 'dns_proxy_udp', label: 'DNS代理[UDP]' },
-        { key: 'dns_proxy_http', label: 'DNS代理[HTTP]' },
-      ],
-    },
-    {
-      title: '综合',
-      items: [
-        { key: 'central_management', label: '统一管理' },
-        { key: 'metrics', label: '指标查询/总览' },
-      ],
-    },
-    {
-      title: '系统管理',
-      items: [
-        { key: 'database_management', label: '数据库管理' },
-        { key: 'db_migration', label: '数据迁移' },
-        { key: 'db_backup', label: '备份与容灾' },
-        { key: 'clickhouse_config', label: 'ClickHouse 配置' },
-        { key: 'audit_logs', label: '审计日志' },
-        { key: 'relay_gateway', label: '中继区域管理' },
-      ],
-    },
-    {
-      title: '运维管理',
-      items: [
-        { key: 'edge_nodes', label: 'Edge直连' },
-        { key: 'edge_import', label: '数据导入' },
-        { key: 'tools', label: '工具箱' },
-        { key: 'edge_autostart', label: '自启动管理' },
-        { key: 'ansible_inventory', label: 'Ansible 主机清单' },
-        { key: 'task_center', label: '节点任务' },
-      ],
-    },
-  ]
   const featuresStore = useFeaturesStore()
-  return rawGroups
-    .map((g) => ({
-      ...g,
-      items: g.items.filter((p) => {
-        const feature = permissionFeatureMap[p.key]
-        return !feature || featuresStore.has(feature)
-      }),
-    }))
-    .filter((g) => g.items.length > 0)
+  return PERMISSION_GROUPS.map((g) => ({
+    title: g.title,
+    items: g.items.filter((p) => !p.feature || featuresStore.has(p.feature)) as PermItem[],
+  })).filter((g) => g.items.length > 0)
 })
 
 const selectedPermKeys = ref<string[]>([])
@@ -608,10 +538,10 @@ function togglePermGroup(items: PermItem[]) {
   }
 }
 
+// 角色切换不清空权限勾选（批 3）：admin 时权限区不渲染但内存保留，切回恢复——
+// 原实现切 admin 清空 selectedPermKeys，普通用户误切 admin 再切回、保存即丢全部权限
 function onRoleChange() {
-  if (formState.role === 'admin') {
-    selectedPermKeys.value = []
-  }
+  // no-op：权限勾选由 selectedPermKeys 持有，保存时按角色决定是否提交
 }
 
 function openAddModal() {
@@ -669,10 +599,33 @@ async function handleSave() {
         role: formState.role,
         status: formState.status ? 1 : 0,
       })
+      // 分步失败定位（批 3）：update → permissions → clusters 串行，中途失败明示哪步没成、弹窗保留可重试
+      let permFail = false
+      let clusterFail = false
       if (formState.role !== 'admin') {
-        await updateUserPermissions(editingUser.value.id, selectedPermKeys.value)
+        try {
+          await updateUserPermissions(editingUser.value.id, selectedPermKeys.value)
+        } catch {
+          permFail = true
+        }
       }
-      await updateUserClusters(editingUser.value.id, selectedClusterIds.value)
+      try {
+        await updateUserClusters(editingUser.value.id, selectedClusterIds.value)
+      } catch {
+        clusterFail = true
+      }
+      if (permFail && clusterFail) {
+        message.warning('用户基础信息已保存，但权限与集群授权更新失败，请重试')
+        return
+      }
+      if (permFail) {
+        message.warning('用户基础信息已保存，但权限更新失败，请重试')
+        return
+      }
+      if (clusterFail) {
+        message.warning('用户基础信息已保存，但集群授权更新失败，请重试')
+        return
+      }
       message.success('用户已更新')
     } else {
       const res = await createUser({
@@ -682,15 +635,28 @@ async function handleSave() {
         status: formState.status ? 1 : 0,
       })
       const newUserId = res.data?.id
+      let followUpFail = false
       if (newUserId && formState.role !== 'admin') {
         if (selectedPermKeys.value.length > 0) {
-          await updateUserPermissions(newUserId, selectedPermKeys.value)
+          try {
+            await updateUserPermissions(newUserId, selectedPermKeys.value)
+          } catch {
+            followUpFail = true
+          }
         }
         if (selectedClusterIds.value.length > 0) {
-          await updateUserClusters(newUserId, selectedClusterIds.value)
+          try {
+            await updateUserClusters(newUserId, selectedClusterIds.value)
+          } catch {
+            followUpFail = true
+          }
         }
       }
-      message.success('用户已创建')
+      if (followUpFail) {
+        message.warning(`用户 "${formState.username}" 已创建，但部分授权更新失败，可在列表中编辑该用户重新保存`)
+      } else {
+        message.success('用户已创建')
+      }
     }
     closeModal()
     loadUsers()
@@ -726,6 +692,25 @@ const selectedClusterIds = ref<number[]>([])
 const clusterPickerVisible = ref(false)
 const clusterSearchText = ref('')
 
+// 暂存态（批 3）：打开时快照，勾选作用于副本，「确认」应用 / 「取消」还原——
+// 原实现勾选即时生效，「取消」按钮不还原、与语义相悖
+const pickerDraft = ref<number[]>([])
+
+function openClusterPicker(): void {
+  pickerDraft.value = [...selectedClusterIds.value]
+  clusterPickerVisible.value = true
+}
+
+function confirmPicker(): void {
+  selectedClusterIds.value = [...pickerDraft.value]
+  clusterPickerVisible.value = false
+}
+
+function cancelPicker(): void {
+  clusterPickerVisible.value = false
+  pickerDraft.value = []
+}
+
 const groupedClusters = computed(() => {
   const map = new Map<string, typeof clusters.value>()
   for (const c of clusters.value) {
@@ -745,42 +730,82 @@ const filteredGroupedClusters = computed(() => {
 })
 
 function isClusterSelected(id: number) {
-  return selectedClusterIds.value.includes(id)
+  return pickerDraft.value.includes(id)
 }
 
 function toggleCluster(id: number) {
-  const idx = selectedClusterIds.value.indexOf(id)
-  if (idx >= 0) selectedClusterIds.value.splice(idx, 1)
-  else selectedClusterIds.value.push(id)
+  const idx = pickerDraft.value.indexOf(id)
+  if (idx >= 0) pickerDraft.value.splice(idx, 1)
+  else pickerDraft.value.push(id)
 }
 
 function isGroupAllSelected(group: typeof clusters.value) {
-  return group.every((c) => selectedClusterIds.value.includes(c.id))
+  return group.every((c) => pickerDraft.value.includes(c.id))
 }
 
 function toggleGroup(group: typeof clusters.value) {
   const allSelected = isGroupAllSelected(group)
   for (const c of group) {
-    const idx = selectedClusterIds.value.indexOf(c.id)
-    if (allSelected && idx >= 0) selectedClusterIds.value.splice(idx, 1)
-    else if (!allSelected && idx < 0) selectedClusterIds.value.push(c.id)
+    const idx = pickerDraft.value.indexOf(c.id)
+    if (allSelected && idx >= 0) pickerDraft.value.splice(idx, 1)
+    else if (!allSelected && idx < 0) pickerDraft.value.push(c.id)
   }
 }
 
 // ── Actions ───────────────────────────────────────────────────────────────
-async function toggleUserStatus(user: UserWithExt) {
-  if (user.role === 'admin' && user.id === 1 && user.status === 1) {
+// 通用危险操作确认状态机（批 2/3：禁用/启用、重置密码共用——单一弹窗避免重复）
+const confirmState = reactive({
+  visible: false,
+  title: '',
+  body: '',
+  confirmText: '',
+  danger: true,
+  run: () => {},
+})
+
+function cancelConfirm(): void {
+  confirmState.visible = false
+  confirmState.run = () => {}
+}
+
+async function runConfirm(): Promise<void> {
+  const run = confirmState.run
+  confirmState.visible = false
+  confirmState.run = () => {}
+  await run()
+}
+
+// 状态开关（批 2）：禁用即时生效（后端 get_current_user 对 status≠1 立即 401，已登录会话即刻失效）
+// ——高危操作必须确认并说明语义
+function onStatusToggle(user: UserWithExt, checked: boolean): void {
+  const target = checked ? 1 : 0
+  if (target === user.status) return
+  if (user.role === 'admin' && user.id === 1 && target === 0) {
     message.error('不能禁用初始管理员')
     return
   }
-  try {
-    const newStatus = user.status === 1 ? 0 : 1
-    await updateUser(user.id, { status: newStatus })
-    message.success(newStatus === 1 ? '用户已启用' : '用户已禁用')
-    loadUsers()
-  } catch {
-    message.error('操作失败')
+  if (target === 0) {
+    confirmState.title = '禁用用户'
+    confirmState.body = `确定禁用用户 "${user.username}" 吗？该用户将立即下线且无法登录，直到重新启用。`
+    confirmState.confirmText = '确认禁用'
+    confirmState.danger = true
+  } else {
+    confirmState.title = '启用用户'
+    confirmState.body = `确定启用用户 "${user.username}" 吗？启用后可正常登录。`
+    confirmState.confirmText = '确认启用'
+    confirmState.danger = false
   }
+  confirmState.run = async () => {
+    try {
+      await updateUser(user.id, { status: target })
+      user.status = target
+      message.success(target === 1 ? '用户已启用' : '用户已禁用')
+      loadUsers()
+    } catch {
+      message.error(target === 1 ? '启用用户失败，请重试' : '禁用用户失败，请重试')
+    }
+  }
+  confirmState.visible = true
 }
 
 function deleteUser(user: UserWithExt) {
@@ -802,35 +827,45 @@ async function executeDeleteUser() {
     loadUsers()
   } catch (error: any) {
     const detail = error.response?.data?.detail
-    message.error(typeof detail === 'string' ? detail : '删除用户失败')
+    message.error(typeof detail === 'string' ? detail : '删除用户失败，请重试')
   }
 }
 
 // ── Reset Password ────────────────────────────────────────────────────────
 const resetPwdValue = ref('')
 
-async function handleResetPassword() {
+// 重置密码二次确认（批 3）：账号接管高危，且按钮紧邻「保存」易误触
+async function handleResetPassword(): Promise<void> {
   if (!editingUser.value) return
   if (!resetPwdValue.value || resetPwdValue.value.length < 6) {
     message.error('密码至少 6 位字符')
     return
   }
-  try {
-    await updateUserPassword(editingUser.value.id, resetPwdValue.value)
-    message.success('密码重置成功')
-    resetPwdValue.value = ''
-  } catch {
-    message.error('重置密码失败')
+  const target = editingUser.value
+  confirmState.title = '重置密码'
+  confirmState.body = `确定重置用户 "${target.username}" 的密码吗？该用户当前密码将立即失效，请将新密码告知用户。`
+  confirmState.confirmText = '确认重置'
+  confirmState.danger = true
+  confirmState.run = async () => {
+    try {
+      await updateUserPassword(target.id, resetPwdValue.value)
+      message.success('密码重置成功')
+      resetPwdValue.value = ''
+    } catch {
+      message.error('密码重置失败，请重试')
+    }
   }
+  confirmState.visible = true
 }
 
 // ── Utils ─────────────────────────────────────────────────────────────────
 
 // ── Load ──────────────────────────────────────────────────────────────────
-// 组装后端查询参数：空值不传（后端按缺省处理）
+// 组装后端查询参数：空值不传（后端按缺省处理）；keyword 去首尾空格（批 1）
 function buildListParams(): ListUsersParams {
   const params: ListUsersParams = { page: page.value, page_size: pageSize.value }
-  if (searchText.value) params.keyword = searchText.value
+  const kw = searchText.value.trim()
+  if (kw) params.keyword = kw
   if (roleFilter.value) params.role = roleFilter.value
   if (statusFilter.value !== '') params.status = Number(statusFilter.value)
   return params
@@ -853,7 +888,7 @@ async function loadUsers() {
     }
     clusters.value = clusterRes.data.items || []
   } catch {
-    message.error('加载用户列表失败')
+    message.error('加载用户列表失败，请刷新重试；持续失败请检查后端服务')
   } finally {
     loading.value = false
   }

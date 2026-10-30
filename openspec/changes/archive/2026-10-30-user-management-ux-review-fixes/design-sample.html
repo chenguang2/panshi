@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>用户管理 · 优化后页面结构样例（user-management-ux-review-fixes）</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --surface: #fff; --border: #e5e7eb; --muted: #8a919c;
+    --text: #23272e; --primary: #0e7a8d; --danger: #c2483c; --success: #2e8b57;
+    --danger-bg: #fdf1f0; --mono: ui-monospace, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { font: 13px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); padding: 24px 32px; }
+  .note { background: #fffbe6; border: 1px solid #f5e6a8; border-radius: 6px; padding: 8px 14px; margin-bottom: 16px; color: #8a6d1a; font-size: 12px; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .desc { color: var(--muted); margin-bottom: 18px; }
+  .actions { float: right; }
+  .btn { border: 1px solid var(--border); background: var(--surface); border-radius: 6px; padding: 6px 14px; cursor: pointer; font-size: 13px; }
+  .btn.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .btn.danger { background: var(--danger); color: #fff; border-color: var(--danger); }
+  .btn.link { border: none; background: none; color: var(--primary); padding: 2px 6px; }
+  .filter-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
+  .sel, .input { border: 1px solid var(--border); background: var(--surface); border-radius: 6px; padding: 6px 10px; font-size: 13px; }
+  .counter { color: var(--muted); font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: 8px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+  th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--border); font-size: 13px; }
+  th { color: var(--muted); font-weight: 500; background: #fafbfc; white-space: nowrap; }
+  tr:hover td { background: #f8fafb; }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+  .tag.admin { background: rgba(14,122,141,.1); color: var(--primary); }
+  .tag.user { background: rgba(46,139,87,.1); color: var(--success); }
+  .perm-tag { display: inline-block; padding: 1px 7px; margin: 1px; border-radius: 3px; font-size: 11px; border: 1px solid var(--border); color: var(--muted); }
+  .perm-tag.active { border-color: rgba(14,122,141,.3); background: rgba(14,122,141,.06); color: var(--primary); }
+  /* 开关 */
+  .switch { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+  .switch .track { width: 32px; height: 18px; border-radius: 9px; background: var(--primary); position: relative; }
+  .switch .track::after { content: ""; position: absolute; top: 2px; right: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; }
+  .switch.off .track { background: #c3c9d1; }
+  .switch.off .track::after { right: auto; left: 2px; }
+  .switch .lbl { font-size: 12px; color: var(--muted); }
+  /* 确认弹窗示意 */
+  .modal-demo { display: inline-block; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.12); width: 380px; margin: 18px 12px 0 0; vertical-align: top; }
+  .modal-demo h4 { font-size: 14px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .modal-demo .body { padding: 12px 16px; font-size: 13px; color: var(--muted); }
+  .modal-demo .body b { color: var(--text); }
+  .modal-demo .foot { padding: 10px 16px; border-top: 1px solid var(--border); text-align: right; display: flex; gap: 8px; justify-content: flex-end; }
+</style>
+</head>
+<body>
+  <div class="note">静态样例 · 仅展示优化后的页面结构与文案形态，非可运行页面（openspec: user-management-ux-review-fixes）</div>
+
+  <div class="actions"><button class="btn primary">+ 新建用户</button></div>
+  <h1>用户管理</h1>
+  <div class="desc">管理系统用户、角色分配和资源权限</div>
+
+  <div class="filter-bar">
+    <input class="input" style="width:220px" placeholder="搜索用户名，回车搜索">
+    <select class="sel" style="width:130px"><option>全部角色</option></select>
+    <select class="sel" style="width:130px"><option>全部状态</option></select>
+    <span class="counter">共 3 个用户</span>
+  </div>
+
+  <table>
+    <thead><tr><th style="width:40px">#</th><th>用户名</th><th style="width:100px">角色</th><th style="width:90px">状态</th><th>权限</th><th>可访问集群</th><th style="width:110px">创建时间</th><th style="width:110px">操作</th></tr></thead>
+    <tbody>
+      <tr><td class="counter">1</td><td><b>admin</b></td><td><span class="tag admin">管理员</span></td>
+          <td><span class="switch"><span class="track"></span><span class="lbl">启用</span></span></td>
+          <td><span class="counter">全部权限</span></td><td><span class="counter">全部集群</span></td><td class="counter">2026-07-22</td>
+          <td><button class="btn link">编辑</button> <button class="btn link">⋯</button></td></tr>
+      <tr><td class="counter">2</td><td><b>qcg</b></td><td><span class="tag user">普通用户</span></td>
+          <td><span class="switch"><span class="track"></span><span class="lbl">启用</span></span></td>
+          <td><span class="perm-tag active">节点任务</span></td><td><span class="perm-tag">test</span></td><td class="counter">2026-08-06</td>
+          <td><button class="btn link">编辑</button> <button class="btn link">⋯</button></td></tr>
+      <tr><td class="counter">3</td><td><b>ux_accept_tmp</b></td><td><span class="tag user">普通用户</span></td>
+          <td><span class="switch"><span class="track"></span><span class="lbl">启用</span></span></td>
+          <td><span class="perm-tag active">集群管理</span><span class="perm-tag active">路由管理</span></td>
+          <td><span class="perm-tag">测试DNStest</span><span class="perm-tag">jd</span></td><td class="counter">2026-10-10</td>
+          <td><button class="btn link">编辑</button> <button class="btn link">⋯</button></td></tr>
+    </tbody>
+  </table>
+  <div class="counter" style="text-align:right;margin-top:10px">共 3 个用户 · 20 条/页</div>
+
+  <div class="modal-demo">
+    <h4>禁用用户</h4>
+    <div class="body">确定禁用用户 <b>"qcg"</b> 吗？<br>该用户将<b>立即下线且无法登录</b>，直到重新启用。</div>
+    <div class="foot"><button class="btn">取消</button><button class="btn danger">确认禁用</button></div>
+  </div>
+
+  <div class="modal-demo">
+    <h4>删除用户</h4>
+    <div class="body">确定删除用户 <b>"ux_accept_tmp"</b> 吗？<br>将一并清除其资源权限与集群授权，且<b>不可恢复</b>。</div>
+    <div class="foot"><button class="btn">取消</button><button class="btn danger">删除</button></div>
+  </div>
+
+  <div class="modal-demo">
+    <h4>重置密码</h4>
+    <div class="body">确定重置用户 <b>"qcg"</b> 的密码吗？<br>该用户当前密码将<b>立即失效</b>，请将新密码告知用户。</div>
+    <div class="foot"><button class="btn">取消</button><button class="btn danger">确认重置</button></div>
+  </div>
+</body>
+</html>

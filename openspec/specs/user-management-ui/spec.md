@@ -126,8 +126,8 @@
 
 ## Purpose
 
-
 用户管理 UI：管理员角色包含审计日志权限，审计日志模块受特性开关控制，前端按权限展示入口。
+
 ## Requirements
 
 ### Requirement: Admin user management includes audit log permission
@@ -162,3 +162,86 @@ The system SHALL add `audit_log` feature flag in `features.yaml` to gate the aud
 #### Scenario: Feature enabled shows module per permission
 - **WHEN** `features.yaml` has `audit_log: true`
 - **THEN** menu visibility follows `system_audit` permission
+
+### Requirement: 集群选择器暂存语义
+
+编辑用户弹窗的集群选择器 SHALL 为暂存态语义：打开时快照当前已选集群，选择过程中的勾选/取消仅作用于暂存副本，「确认」将副本应用到表单，「取消」丢弃副本还原打开时状态（2026-10-30 UX 评审：原实现选择即时生效，「取消」按钮不还原，与按钮语义相悖）。既有「编辑用户时分配集群」requirement（分组展示/组选/搜索/保存时 `PUT /admin/users/{id}/clusters` 提交）保持不变。
+
+#### 集群选择弹窗快照
+- **WHEN** 管理员点击「选择集群」打开弹窗
+- **THEN** 弹窗按 `group_name` 分组展示所有集群，支持组选和搜索
+- **THEN** 打开时以当前已选集群为初始快照
+
+#### 取消还原
+- **WHEN** 管理员在集群选择弹窗中勾选/取消若干集群后点击「取消」
+- **THEN** 已选集群集合还原为打开弹窗时的快照，勾选过程不生效
+
+#### 确认应用
+- **WHEN** 管理员点击「确认」
+- **THEN** 弹窗关闭，勾选结果应用为表单的已选集群
+
+### Requirement: 用户列表排序语义唯一
+
+用户列表 SHALL 恒按后端返回顺序（创建顺序）展示，表头不提供列排序控件（后端 `list_users` 无排序参数，前端 sorter 只重排当前页，跨页语义错误——2026-10-30 UX 评审，与 audit-log-ui 裁决同型）。
+
+#### Scenario: 无列头排序控件
+- **WHEN** 管理员打开 `/users`
+- **THEN** 用户名/角色/状态/创建时间表头无排序箭头
+
+### Requirement: 状态切换需确认且说明即时生效语义
+
+状态列 SHALL 提供显式切换控件（a-switch）；点击后 SHALL 弹出确认，文案说明禁用立即生效——该用户将立即下线且无法登录（后端 `get_current_user` 对 status≠1 返回 401，已登录会话即刻失效）。初始管理员（id=1）不可禁用，尝试时提示「不能禁用初始管理员」。
+
+#### Scenario: 禁用用户需确认
+- **WHEN** 管理员将启用用户的状态开关切为禁用
+- **THEN** 弹出确认「确定禁用用户 xxx 吗？该用户将立即下线且无法登录」
+- **WHEN** 确认
+- **THEN** 调用更新接口，成功后状态列与 toast 同步
+
+#### Scenario: 取消不生效
+- **WHEN** 管理员在确认弹窗点击取消
+- **THEN** 开关回弹，不发请求
+
+#### Scenario: 初始管理员保护
+- **WHEN** 管理员尝试禁用 id=1 的初始管理员
+- **THEN** 提示「不能禁用初始管理员」，不发请求
+
+### Requirement: 删除用户需说明级联后果
+
+删除用户确认弹窗 SHALL 说明级联清除后果：「将一并清除其资源权限与集群授权，且不可恢复」（后端 delete 级联删除 `sys_user_permission`/`sys_user_cluster`）。管理员用户（role=admin）不可删除，尝试时提示「不能删除管理员用户」。
+
+#### Scenario: 删除确认含后果说明
+- **WHEN** 管理员点击删除用户
+- **THEN** 确认弹窗显示用户名与级联清除、不可恢复说明
+- **WHEN** 确认
+- **THEN** 删除成功后列表刷新
+
+### Requirement: 重置密码需二次确认
+
+编辑弹窗的「重置密码」SHALL 在执行前弹出二次确认，说明「该用户当前密码将立即失效，请将新密码告知用户」。取消则不调用接口。
+
+#### Scenario: 重置密码确认
+- **WHEN** 管理员输入新密码点击「重置」
+- **THEN** 弹出确认弹窗
+- **WHEN** 确认
+- **THEN** 调用重置接口，成功后清空输入框并提示成功
+
+### Requirement: 角色切换保留权限勾选
+
+新建/编辑弹窗中切换角色（admin↔user）SHALL 保留已勾选的资源权限（admin 角色下权限区不渲染但内存保留，切回 user 恢复显示与勾选）；保存时 admin 角色不提交权限（现状后端仅非 admin 提交）。禁止在角色切换时静默清空勾选（2026-10-30 UX 评审：原实现清空 `selectedPermKeys`，普通用户误切 admin 再切回、保存即丢全部权限——数据丢失风险）。
+
+#### Scenario: 切换角色不清空勾选
+- **WHEN** 管理员编辑已勾选权限的普通用户，角色切到管理员再切回普通用户
+- **THEN** 原勾选完整恢复
+
+### Requirement: 筛选与反馈文案
+
+搜索 SHALL 为 a-input-search（回车/防抖触发，300ms，查询前去首尾空格）；角色/状态筛选 SHALL 为可搜索 a-select。列表空态 SHALL 双形态：有筛选时「无匹配用户」+ 清除筛选按钮（点击清空全部筛选并刷新），真空库才显示「暂无用户」。错误提示 SHALL 说明原因或下一步动作，禁止裸「操作失败」。
+
+#### Scenario: 搜索防抖与空态
+- **WHEN** 管理员连续输入关键字
+- **THEN** 停止输入 300ms 后才发起一次请求
+- **WHEN** 筛选无结果
+- **THEN** 显示「无匹配用户」与「清除筛选」按钮
+- **WHEN** 点击清除筛选
+- **THEN** 搜索框/角色/状态全部还原，列表刷新

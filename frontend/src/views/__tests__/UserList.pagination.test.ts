@@ -78,6 +78,35 @@ const stubs = {
     template: '<input type="checkbox" :checked="checked" @change="$emit(\'update:checked\', $event.target.checked)" />',
     props: ['checked', 'indeterminate'],
   },
+  AInputSearch: {
+    props: ['value', 'placeholder'],
+    emits: ['update:value', 'input', 'search'],
+    setup(_: unknown, { emit }: { emit: (e: string, v?: unknown) => void }) {
+      const onInput = (e: Event): void => {
+        emit('update:value', (e.target as HTMLInputElement).value)
+        emit('input', e)
+      }
+      return { onInput }
+    },
+    template:
+      '<div class="search-input-wrap"><input class="mock-search" :value="value" @input="onInput" @keyup.enter="$emit(\'search\')" /></div>',
+  },
+  ASelect: {
+    props: ['value', 'options', 'placeholder'],
+    emits: ['update:value', 'change'],
+    setup(
+      props: { options?: Array<{ label: string; value: unknown }> },
+      { emit }: { emit: (e: string, v?: unknown) => void },
+    ) {
+      const pick = (v: unknown): void => {
+        emit('update:value', v)
+        emit('change', v)
+      }
+      return { pick }
+    },
+    template:
+      '<div class="mock-a-select"><span v-for="o in options || []" :key="String(o.value)" class="mock-option" @click="pick(o.value)">{{ o.label }}</span></div>',
+  },
 }
 
 async function mountPage() {
@@ -158,27 +187,36 @@ describe('UserList.vue 真后端分页', () => {
     expect(table.props('dataSource')).toHaveLength(26)
   })
 
-  it('关键词筛选：重置到第 1 页并携带 keyword', async () => {
+  it('关键词筛选：重置到第 1 页并携带 keyword（回车立即触发）', async () => {
     const wrapper = await mountPage()
     const table = getTable(wrapper)
     table.vm.$emit('change', { current: 2, pageSize: 20 })
     await flushPromises()
     await wrapper.find('.search-input-wrap input').setValue('disabled')
+    await wrapper.find('.search-input-wrap input').trigger('keyup.enter')
     await flushPromises()
     expect(lastListCallParams()).toEqual({ page: 1, page_size: 20, keyword: 'disabled' })
     expect(table.props('dataSource')).toHaveLength(1)
   })
 
-  it('角色筛选：携带 role 并重置页码', async () => {
+  it('角色筛选：携带 role 并重置页码（a-select 点选）', async () => {
     const wrapper = await mountPage()
-    await wrapper.findAll('select')[0].setValue('admin')
+    const roleOpt = wrapper
+      .findAll('.mock-a-select')[0]
+      .findAll('.mock-option')
+      .find((o) => o.text() === '管理员')!
+    await roleOpt.trigger('click')
     await flushPromises()
     expect(lastListCallParams()).toEqual({ page: 1, page_size: 20, role: 'admin' })
   })
 
-  it('状态筛选：携带数值型 status 并重置页码', async () => {
+  it('状态筛选：携带数值型 status 并重置页码（a-select 点选）', async () => {
     const wrapper = await mountPage()
-    await wrapper.findAll('select')[1].setValue('0')
+    const statusOpt = wrapper
+      .findAll('.mock-a-select')[1]
+      .findAll('.mock-option')
+      .find((o) => o.text() === '禁用')!
+    await statusOpt.trigger('click')
     await flushPromises()
     expect(lastListCallParams()).toEqual({ page: 1, page_size: 20, status: 0 })
   })
