@@ -210,7 +210,8 @@ class EdgeClient:
         self,
         method: str,
         path: str,
-        body: dict | None = None
+        body: dict | None = None,
+        timeout: float = 5.0,
     ) -> dict[str, Any]:
         """
         Make an encrypted request to the edge server.
@@ -219,6 +220,8 @@ class EdgeClient:
             method: HTTP method (GET, POST, PUT, PATCH, DELETE)
             path: API path (e.g., /edge/admin/upstreams)
             body: Request body dict (will be encrypted and sent as JSON string)
+            timeout: 请求超时秒数；默认 5s 满足常规 CRUD，已知慢端点单独放宽
+                （plugins/reload 热重载 30s，静态资源 raw_put 30s）
 
         Returns:
             Decrypted response dictionary
@@ -235,18 +238,18 @@ class EdgeClient:
 
         try:
             if method == "GET":
-                response = httpx.get(url, headers=headers, timeout=5.0, trust_env=False)
+                response = httpx.get(url, headers=headers, timeout=timeout, trust_env=False)
             elif method == "POST":
                 encrypted_body = self._encrypt(json.dumps(body).encode())
-                response = httpx.post(url, headers=headers, content=encrypted_body, timeout=5.0, trust_env=False)
+                response = httpx.post(url, headers=headers, content=encrypted_body, timeout=timeout, trust_env=False)
             elif method == "PUT":
                 encrypted_body = self._encrypt(json.dumps(body).encode())
-                response = httpx.put(url, headers=headers, content=encrypted_body, timeout=5.0, trust_env=False)
+                response = httpx.put(url, headers=headers, content=encrypted_body, timeout=timeout, trust_env=False)
             elif method == "PATCH":
                 encrypted_body = self._encrypt(json.dumps(body).encode())
-                response = httpx.patch(url, headers=headers, content=encrypted_body, timeout=5.0, trust_env=False)
+                response = httpx.patch(url, headers=headers, content=encrypted_body, timeout=timeout, trust_env=False)
             elif method == "DELETE":
-                response = httpx.delete(url, headers=headers, timeout=5.0, trust_env=False)
+                response = httpx.delete(url, headers=headers, timeout=timeout, trust_env=False)
             else:
                 raise ValueError(f"Unsupported HTTP method: {method}")
         except httpx.TimeoutException as e:
@@ -719,8 +722,13 @@ class EdgeClient:
         return json.loads(response.text)
 
     def reload_plugins(self) -> dict[str, Any]:
-        """Reload plugins on edge server."""
-        return self._request("PUT", "/edge/admin/plugins/reload", {})
+        """Reload plugins on edge server.
+
+        插件热重载是已知慢端点：节点磁盘慢/负载高时可远超常规 CRUD 耗时
+        （2026-10-30 用户在 10.6.98.224 本地实测 20s），5s 必假失败（服务端
+        重载实际完成、平台报超时）——单独放宽到 30s，对齐 raw_put 静态资源通道。
+        """
+        return self._request("PUT", "/edge/admin/plugins/reload", {}, timeout=30.0)
 
     def list_available_plugins(self) -> list[str]:
         """List available plugin names from edge server."""
