@@ -67,6 +67,10 @@ class ClusterResponse(BaseModel):
     region_code: Optional[str] = None
     # 集群配置（edge.env）版本；子资源发布不推进此版本（cluster-ux-close-loop 3.1 透传）
     current_version: Optional[int] = None
+    # 集群卡片发布状态口径：任一资源有 ConfigVersion 即已发布（2026-10-30 用户裁决 A）——
+    # current_version 仅反映 edge.env 发布（resource_id=cluster_id 的 entity 即集群行），
+    # 上游/路由发布写各自表，用它判定会让「发布过上游/路由」的集群永远显示「未发布」
+    has_published: bool = False
     created_at: Optional[str] = None
     node_count: int = 0
     healthy_node_count: int = 0

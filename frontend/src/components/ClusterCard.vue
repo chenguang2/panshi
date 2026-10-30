@@ -149,12 +149,20 @@ const nameTitle = computed(
   () => `集群名: ${props.cluster.display_name || props.cluster.name} · ID: ${props.cluster.id}`,
 )
 
-/** 发布状态微标（cluster-ux-close-loop 3.2）：独立迷你徽章，不复用 PublishStatusTag */
-const VERSION_CHIP_TOOLTIP = '集群配置（edge.env）版本；子资源发布不推进此版本'
-const versionChip = computed(() => ({
-  text: props.cluster.current_version ? `配置 v${props.cluster.current_version}` : '未发布',
-  published: !!props.cluster.current_version,
-}))
+/** 发布状态微标（cluster-ux-close-loop 3.2；2026-10-30 裁决 A 扩口径）：
+ *  配置 vN = edge.env 版本（唯一写集群行的发布链路）；has_published = 任一资源有 ConfigVersion；
+ *  两者皆无 = 未发布。上游/路由发布写各自表、不回写集群行，故不能用 current_version 单独判定 */
+const VERSION_CHIP_TOOLTIP =
+  '「配置 vN」= edge.env 配置版本；「已发布」= 集群下有已发布资源（上游/路由等）；两者皆无 = 未发布'
+const versionChip = computed(() => {
+  if (props.cluster.current_version) {
+    return { text: `配置 v${props.cluster.current_version}`, published: true }
+  }
+  if (props.cluster.has_published) {
+    return { text: '已发布', published: true }
+  }
+  return { text: '未发布', published: false }
+})
 
 /** 健康节点格分级（cluster-ux-close-loop 3.3）：0 健康红 / 不足橙 / 全健康默认（无节点不告警） */
 const healthCls = computed(() => {

@@ -309,12 +309,20 @@ describe('ClusterCard - 统计格点击接管（statClick prop · 方案 A）', 
   })
 })
 
-describe('ClusterCard - 发布状态微标（cluster-ux-close-loop 3.2）', () => {
-  it('current_version 有值 → 「配置 vN」绿色微标', () => {
+describe('ClusterCard - 发布状态微标（cluster-ux-close-loop 3.2 + 2026-10-30 裁决 A）', () => {
+  it('current_version 有值 → 「配置 vN」绿色微标（edge.env 发布态）', () => {
     const w = mountCard(makeCluster({ current_version: 3 }))
     const chip = w.find('.cl-version-chip')
     expect(chip.exists()).toBe(true)
     expect(chip.text()).toBe('配置 v3')
+    expect(chip.classes()).toContain('is-published')
+  })
+
+  it('current_version 空但 has_published → 「已发布」绿色微标（任一资源已发布，2026-10-30 用户报告：发布上游/路由不回写集群行）', () => {
+    const w = mountCard(makeCluster({ current_version: null, has_published: true }))
+    const chip = w.find('.cl-version-chip')
+    expect(chip.exists()).toBe(true)
+    expect(chip.text()).toBe('已发布')
     expect(chip.classes()).toContain('is-published')
   })
 
@@ -327,9 +335,11 @@ describe('ClusterCard - 发布状态微标（cluster-ux-close-loop 3.2）', () =
     expect(chip.classes()).not.toContain('is-published')
   })
 
-  it('微标 tooltip 固定为集群配置版本语义说明', () => {
+  it('微标 tooltip 说明双态语义', () => {
     const w = mountCard(makeCluster({ current_version: 7 }))
-    expect(w.find('.cl-version-chip').attributes('title')).toBe('集群配置（edge.env）版本；子资源发布不推进此版本')
+    expect(w.find('.cl-version-chip').attributes('title')).toBe(
+      '「配置 vN」= edge.env 配置版本；「已发布」= 集群下有已发布资源（上游/路由等）；两者皆无 = 未发布',
+    )
   })
 })
 

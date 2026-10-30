@@ -401,3 +401,48 @@ async def test_create_cluster_with_empty_fields(async_authed_client):
         json={"name": "", "admin_url": "", "admin_key": "", "status": 1},
     )
     assert response.status_code in [400, 422]
+
+
+@pytest.mark.asyncio
+async def test_cluster_list_has_published_true_with_any_config_version(async_authed_client, isolated_session):
+    """has_published：任一资源有 ConfigVersion → True（集群卡片发布状态口径）。
+
+    背景（2026-10-30 用户报告）：卡片「未发布」读 ps_cluster.current_version，
+    其唯一写入者是 edge.env 发布（resource_id=cluster_id 的 entity 即集群行）——
+    发布上游/路由写各自表，不回写集群行，出现「上游/路由全发布仍显示未发布」。
+    修法（用户裁决 A）：列表端点回填 has_published = 存在任一 ConfigVersion。
+    """
+    async with isolated_session() as session:
+        cluster = Cluster(name="has-pub-cluster", display_name="HasPub")
+        session.add(cluster)
+        await session.commit()
+        await session.refresh(cluster)
+        cid = cluster.id
+        session.add(ConfigVersion(cluster_id=cid, resource_type="upstream", resource_id=9999, version=1, config="{}"))
+        await session.commit()
+
+    ac = async_authed_client
+    resp = await ac.get("/api/v1/clusters")
+    assert resp.status_code == 200
+    target = next((i for i in resp.json()["items"] if i["id"] == cid), None)
+    assert target is not None, "测试集群未在返回列表中找到"
+    assert target["has_published"] is True
+    assert target["current_version"] is None  # edge.env 从未发布，字段保持 None
+
+
+@pytest.mark.asyncio
+async def test_cluster_list_has_published_false_without_config_versions(async_authed_client, isolated_session):
+    """无任何 ConfigVersion 的集群 has_published=False（真·未发布）。"""
+    async with isolated_session() as session:
+        cluster = Cluster(name="never-pub-cluster", display_name="NeverPub")
+        session.add(cluster)
+        await session.commit()
+        await session.refresh(cluster)
+        cid = cluster.id
+
+    ac = async_authed_client
+    resp = await ac.get("/api/v1/clusters")
+    assert resp.status_code == 200
+    target = next((i for i in resp.json()["items"] if i["id"] == cid), None)
+    assert target is not None, "测试集群未在返回列表中找到"
+    assert target["has_published"] is False

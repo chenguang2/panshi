@@ -49,8 +49,13 @@ async def list_my_clusters(
     (node_counts, healthy_counts, up_counts, rt_counts, pc_counts,
      gr_counts, sr_counts, pm_counts, nodes_by_cluster) = await edge_sync.batch_load_cluster_stats(db, clusters, cids)
 
+    # has_published：存在任一 ConfigVersion 的集群集合（单查询全量 map，集群卡片发布 chip 判定口径；
+    # 列表与 my 两个入口同口径）
+    published_ids = set((await db.execute(select(ConfigVersion.cluster_id).distinct())).scalars().all())
+
     for c in clusters:
         cluster_resp = ClusterResponse.model_validate(c)
+        cluster_resp.has_published = c.id in published_ids
         cluster_resp.node_count = node_counts.get(c.id, 0)
         cluster_resp.healthy_node_count = healthy_counts.get(c.id, 0)
         cluster_resp.upstream_count = up_counts.get(c.id, 0)
@@ -97,8 +102,13 @@ async def list_clusters(
     (node_counts, healthy_counts, up_counts, rt_counts, pc_counts,
      gr_counts, sr_counts, pm_counts, nodes_by_cluster) = await edge_sync.batch_load_cluster_stats(db, clusters, cids)
 
+    # has_published：存在任一 ConfigVersion 的集群集合（单查询全量 map，集群卡片发布 chip 判定口径；
+    # 列表与 my 两个入口同口径）
+    published_ids = set((await db.execute(select(ConfigVersion.cluster_id).distinct())).scalars().all())
+
     for c in clusters:
         cluster_resp = ClusterResponse.model_validate(c)
+        cluster_resp.has_published = c.id in published_ids
         cluster_resp.node_count = node_counts.get(c.id, 0)
         cluster_resp.healthy_node_count = healthy_counts.get(c.id, 0)
         cluster_resp.upstream_count = up_counts.get(c.id, 0)

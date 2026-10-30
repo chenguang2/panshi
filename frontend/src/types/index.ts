@@ -41,6 +41,8 @@ export interface Cluster {
   region_code?: string | null
   /** 集群配置（edge.env）版本；子资源发布不推进此版本 */
   current_version?: number | null
+  /** 任一资源有 ConfigVersion 即 true（集群卡片发布 chip 判定口径，2026-10-30 裁决 A） */
+  has_published?: boolean
   admin_key?: string
   created_at?: string
   node_count: number
