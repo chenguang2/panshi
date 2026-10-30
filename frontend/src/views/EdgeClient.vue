@@ -45,9 +45,9 @@
         <input
           v-model="manualNode"
           class="form-input"
-          placeholder="192.168.100.235:11999"
+          placeholder="192.168.0.14:16620"
           style="width: 250px"
-          @blur="onManualInput"
+          @keyup.enter="startQuery"
         />
       </template>
 
@@ -58,13 +58,33 @@
       </span>
     </div>
 
+    <!-- 查询失败聚合反馈（edge-client-ux-review-fixes 1.4） -->
+    <a-alert
+      v-if="queryError"
+      :message="queryError"
+      type="error"
+      show-icon
+      closable
+      style="margin-bottom: 16px"
+      @close="queryError = ''"
+    />
+    <a-alert
+      v-if="queryPartial"
+      :message="queryPartial"
+      type="warning"
+      show-icon
+      closable
+      style="margin-bottom: 16px"
+      @close="queryPartial = ''"
+    />
+
     <a-tabs v-model:activeKey="activeTab" style="margin-top: 16px">
       <a-tab-pane key="upstreams" tab="上游">
         <div class="table-toolbar">
           <button class="btn btn-primary" @click="showUpstreamModal('create')"><PlusOutlined /> 添加上游</button>
           <div class="search-input-wrap">
             <input v-model="upstreamSearch" class="form-input" placeholder="搜索上游..." style="width: 240px" />
-            <span class="search-icon">🔍</span>
+            <SearchOutlined class="search-icon" />
           </div>
         </div>
         <div class="table-container">
@@ -83,7 +103,7 @@
             rowKey="key"
           >
             <template #emptyText>
-              <div class="ec-empty-guide">未查询到数据，请确认节点可达或更换节点后重试</div>
+              <div class="ec-empty-guide">{{ emptyGuideText }}</div>
             </template>
             <template #bodyCell="{ column, record, index }">
               <template v-if="column.key === 'index'">
@@ -121,7 +141,7 @@
           <button class="btn btn-primary" @click="showRouteModal('create')"><PlusOutlined /> 添加路由</button>
           <div class="search-input-wrap">
             <input v-model="routeSearch" class="form-input" placeholder="搜索路由..." style="width: 240px" />
-            <span class="search-icon">🔍</span>
+            <SearchOutlined class="search-icon" />
           </div>
         </div>
         <div class="table-container">
@@ -139,7 +159,7 @@
             rowKey="key"
           >
             <template #emptyText>
-              <div class="ec-empty-guide">未查询到数据，请确认节点可达或更换节点后重试</div>
+              <div class="ec-empty-guide">{{ emptyGuideText }}</div>
             </template>
             <template #bodyCell="{ column, record, index }">
               <template v-if="column.key === 'index'">
@@ -179,7 +199,7 @@
           <button class="btn btn-primary" @click="showGlobalRuleModal('create')"><PlusOutlined /> 添加规则</button>
           <div class="search-input-wrap">
             <input v-model="globalRuleSearch" class="form-input" placeholder="搜索规则..." style="width: 240px" />
-            <span class="search-icon">🔍</span>
+            <SearchOutlined class="search-icon" />
           </div>
         </div>
         <div class="table-container">
@@ -199,7 +219,7 @@
             rowKey="key"
           >
             <template #emptyText>
-              <div class="ec-empty-guide">未查询到数据，请确认节点可达或更换节点后重试</div>
+              <div class="ec-empty-guide">{{ emptyGuideText }}</div>
             </template>
             <template #bodyCell="{ column, record, index }">
               <template v-if="column.key === 'index'">
@@ -234,7 +254,7 @@
           <button class="btn btn-primary" @click="showPluginConfigModal('create')"><PlusOutlined /> 添加插件组</button>
           <div class="search-input-wrap">
             <input v-model="pluginConfigSearch" class="form-input" placeholder="搜索插件组..." style="width: 240px" />
-            <span class="search-icon">🔍</span>
+            <SearchOutlined class="search-icon" />
           </div>
         </div>
         <div class="table-container">
@@ -254,7 +274,7 @@
             rowKey="key"
           >
             <template #emptyText>
-              <div class="ec-empty-guide">未查询到数据，请确认节点可达或更换节点后重试</div>
+              <div class="ec-empty-guide">{{ emptyGuideText }}</div>
             </template>
             <template #bodyCell="{ column, record, index }">
               <template v-if="column.key === 'index'">
@@ -302,7 +322,7 @@
           </button>
           <div class="search-input-wrap">
             <input v-model="pluginMetadataSearch" class="form-input" placeholder="搜索..." style="width: 200px" />
-            <span class="search-icon">🔍</span>
+            <SearchOutlined class="search-icon" />
           </div>
         </div>
         <div class="table-container">
@@ -318,7 +338,7 @@
             rowKey="key"
           >
             <template #emptyText>
-              <div class="ec-empty-guide">未查询到数据，请确认节点可达或更换节点后重试</div>
+              <div class="ec-empty-guide">{{ emptyGuideText }}</div>
             </template>
             <template #bodyCell="{ column, record, index }">
               <template v-if="column.key === 'index'">
@@ -358,7 +378,7 @@
             :row-key="(_record: any, index: number) => index"
           >
             <template #emptyText>
-              <div class="ec-empty-guide">未查询到数据，请确认节点可达或更换节点后重试</div>
+              <div class="ec-empty-guide">{{ emptyGuideText }}</div>
             </template>
             <template #bodyCell="{ column, record, index }">
               <template v-if="column.key === 'index'">
@@ -378,7 +398,7 @@
           </button>
           <div class="search-input-wrap">
             <input v-model="streamRouteSearch" class="form-input" placeholder="搜索四层代理..." style="width: 200px" />
-            <span class="search-icon">🔍</span>
+            <SearchOutlined class="search-icon" />
           </div>
         </div>
         <div class="table-container">
@@ -398,7 +418,7 @@
             rowKey="key"
           >
             <template #emptyText>
-              <div class="ec-empty-guide">未查询到数据，请确认节点可达或更换节点后重试</div>
+              <div class="ec-empty-guide">{{ emptyGuideText }}</div>
             </template>
             <template #bodyCell="{ column, record, index }">
               <template v-if="column.key === 'index'">
@@ -453,7 +473,7 @@
         <div class="table-toolbar">
           <div class="search-input-wrap">
             <input v-model="sslSearch" class="form-input" placeholder="搜索 SSL 证书..." style="width: 200px" />
-            <span class="search-icon">🔍</span>
+            <SearchOutlined class="search-icon" />
           </div>
         </div>
         <div class="table-container">
@@ -467,7 +487,7 @@
             rowKey="key"
           >
             <template #emptyText>
-              <div class="ec-empty-guide">未查询到数据，请确认节点可达或更换节点后重试</div>
+              <div class="ec-empty-guide">{{ emptyGuideText }}</div>
             </template>
             <template #bodyCell="{ column, record, index }">
               <template v-if="column.key === 'index'">{{ index + 1 }}</template>
@@ -497,6 +517,7 @@
           <button class="modal-close" @click="upstreamModalVisible = false">&times;</button>
         </div>
         <div class="modal-body">
+          <div class="debug-note"><InfoOutlined /> 调试模式：修改将直接写入边缘节点，绕过平台同步流程</div>
           <div class="form-group">
             <label class="form-label">名称</label>
             <input v-model="upstreamForm.name" class="form-input" placeholder="上游名称" />
@@ -565,6 +586,7 @@
           <button class="modal-close" @click="routeModalVisible = false">&times;</button>
         </div>
         <div class="modal-body">
+          <div class="debug-note"><InfoOutlined /> 调试模式：修改将直接写入边缘节点，绕过平台同步流程</div>
           <div class="form-group">
             <label class="form-label">名称</label>
             <input v-model="routeForm.name" class="form-input" placeholder="路由名称" />
@@ -740,6 +762,7 @@
           <button class="modal-close" @click="streamRouteModalVisible = false">&times;</button>
         </div>
         <div class="modal-body">
+          <div class="debug-note"><InfoOutlined /> 调试模式：修改将直接写入边缘节点，绕过平台同步流程</div>
           <div class="stream-route-hint">
             直连写入 Edge 节点，绕过平台同步流程；如需纳入平台管理，请在集群侧创建后发布。
           </div>
@@ -854,6 +877,7 @@
           <button class="modal-close" @click="globalRuleModalVisible = false">&times;</button>
         </div>
         <div class="modal-body">
+          <div class="debug-note"><InfoOutlined /> 调试模式：修改将直接写入边缘节点，绕过平台同步流程</div>
           <div class="form-group">
             <label class="form-label">规则ID</label>
             <input
@@ -895,6 +919,7 @@
           <button class="modal-close" @click="pluginConfigModalVisible = false">&times;</button>
         </div>
         <div class="modal-body">
+          <div class="debug-note"><InfoOutlined /> 调试模式：修改将直接写入边缘节点，绕过平台同步流程</div>
           <div class="form-group">
             <label class="form-label">配置ID</label>
             <input
@@ -936,6 +961,7 @@
           <button class="modal-close" @click="pluginMetadataModalVisible = false">&times;</button>
         </div>
         <div class="modal-body">
+          <div class="debug-note"><InfoOutlined /> 调试模式：修改将直接写入边缘节点，绕过平台同步流程</div>
           <div class="form-group">
             <label class="form-label">插件名称</label>
             <input
@@ -975,6 +1001,7 @@ import { showOverlayModal } from '@/composables/useOverlayModal'
 import { paginationProps } from '@/composables/usePagination'
 import { PAGE_SIZE_TABLE } from '@/constants'
 import {
+  InfoOutlined,
   ReloadOutlined,
   PlusOutlined,
   CloseCircleOutlined,
@@ -1191,98 +1218,119 @@ const onNodeChange = async () => {
   await loadAllData()
 }
 
-const onManualInput = () => {
-  const value = manualNode.value.trim()
-  if (value && value.includes(':')) {
-    selectedNode.value = value
-  }
-}
+// 手动输入直读后不再需要 blur 中间态（保留函数空实现避免残留引用报错；模板已移除 @blur）
 
-// 单独加载各标签页数据
-const loadUpstreams = async (ip: string, port: string) => {
+// 单独加载各标签页数据（edge-client-ux-review-fixes：返回成败供聚合反馈，失败不再纯静默）
+const failedLabels: string[] = []
+
+const loadUpstreams = async (ip: string, port: string): Promise<boolean> => {
   try {
     const res = await api.get(`/edge-client/nodes/${ip}/${port}/upstreams`, { signal: currentSignal.value })
     upstreams.value = res.data.upstreams || []
     routeInfo.value = { route: res.data.route, relay_via: res.data.relay_via }
+    return true
   } catch (error: any) {
-    if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') return
+    if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') return false
     console.error('[DEBUG] loadUpstreams error:', error)
+    failedLabels.push('上游')
+    return false
   }
 }
 
-const loadRoutes = async (ip: string, port: string) => {
+const loadRoutes = async (ip: string, port: string): Promise<boolean> => {
   try {
     const res = await api.get(`/edge-client/nodes/${ip}/${port}/routes`, { signal: currentSignal.value })
     routes.value = res.data.routes || []
     routeInfo.value = { route: res.data.route, relay_via: res.data.relay_via }
+    return true
   } catch (error: any) {
-    if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') return
+    if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') return false
     console.error('[DEBUG] loadRoutes error:', error)
+    failedLabels.push('路由')
+    return false
   }
 }
 
-const loadGlobalRules = async (ip: string, port: string) => {
+const loadGlobalRules = async (ip: string, port: string): Promise<boolean> => {
   try {
     const res = await api.get(`/edge-client/nodes/${ip}/${port}/global_rules`, { signal: currentSignal.value })
     globalRules.value = res.data.global_rules || []
     routeInfo.value = { route: res.data.route, relay_via: res.data.relay_via }
+    return true
   } catch (error: any) {
-    if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') return
+    if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') return false
     console.error('[DEBUG] loadGlobalRules error:', error)
+    failedLabels.push('全局规则')
+    return false
   }
 }
 
-const loadPluginConfigs = async (ip: string, port: string) => {
+const loadPluginConfigs = async (ip: string, port: string): Promise<boolean> => {
   try {
     const res = await api.get(`/edge-client/nodes/${ip}/${port}/plugin_configs`, { signal: currentSignal.value })
     pluginConfigs.value = res.data.plugin_configs || []
     routeInfo.value = { route: res.data.route, relay_via: res.data.relay_via }
+    return true
   } catch (error: any) {
-    if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') return
+    if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') return false
     console.error('[DEBUG] loadPluginConfigs error:', error)
+    failedLabels.push('插件组')
+    return false
   }
 }
 
-const loadPluginMetadata = async (ip: string, port: string) => {
+const loadPluginMetadata = async (ip: string, port: string): Promise<boolean> => {
   try {
     const res = await api.get(`/edge-client/nodes/${ip}/${port}/plugin_metadata`, { signal: currentSignal.value })
     pluginMetadataList.value = res.data.plugin_metadata || []
     routeInfo.value = { route: res.data.route, relay_via: res.data.relay_via }
+    return true
   } catch (error: any) {
-    if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') return
+    if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') return false
     console.error('[DEBUG] loadPluginMetadata error:', error)
+    failedLabels.push('插件元数据')
+    return false
   }
 }
 
-const loadPluginList = async (ip: string, port: string) => {
+const loadPluginList = async (ip: string, port: string): Promise<boolean> => {
   try {
     const res = await api.get(`/edge-client/nodes/${ip}/${port}/plugins/list`, { signal: currentSignal.value })
     pluginList.value = res.data.plugins || []
     routeInfo.value = { route: res.data.route, relay_via: res.data.relay_via }
+    return true
   } catch (error: any) {
     console.error('[DEBUG] loadPluginList error:', error)
+    failedLabels.push('插件列表')
+    return false
   }
 }
 
-const loadStreamRoutes = async (ip: string, port: string) => {
+const loadStreamRoutes = async (ip: string, port: string): Promise<boolean> => {
   try {
     const res = await api.get(`/edge-client/nodes/${ip}/${port}/stream-routes`, { signal: currentSignal.value })
     streamRoutes.value = res.data.stream_routes || []
     routeInfo.value = { route: res.data.route, relay_via: res.data.relay_via }
+    return true
   } catch (error: any) {
-    if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') return
+    if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') return false
     console.error('[DEBUG] loadStreamRoutes error:', error)
+    failedLabels.push('四层代理')
+    return false
   }
 }
 
-const loadSslCertificates = async (ip: string, port: string) => {
+const loadSslCertificates = async (ip: string, port: string): Promise<boolean> => {
   try {
     const res = await api.get(`/edge-client/nodes/${ip}/${port}/ssl`, { signal: currentSignal.value })
     sslList.value = res.data.ssl_certificates || []
     routeInfo.value = { route: res.data.route, relay_via: res.data.relay_via }
+    return true
   } catch (error: any) {
-    if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') return
+    if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') return false
     console.error('[DEBUG] loadSslCertificates error:', error)
+    failedLabels.push('SSL 证书')
+    return false
   }
 }
 
@@ -1314,9 +1362,32 @@ const deleteSslCert = (record: any) => {
 }
 
 // 预加载所有标签页数据（并行）
+// 节点解析（edge-client-ux-review-fixes 1.3：manual 直读输入框当前值，移除 blur 依赖）
+function resolveNode(): string {
+  const raw = inputMode.value === 'manual' ? manualNode.value.trim() : selectedNode.value
+  return raw
+}
+
+const queryError = ref('')
+const queryPartial = ref('')
+
+// 空态三态（edge-client-ux-review-fixes 2.3）：未连接 / 连接失败 / 节点无数据
+const emptyGuideText = computed(() => {
+  if (queryError.value) return '节点不可达，请检查地址与端口'
+  if (!loadedNode.value) return '请先选择节点后查询'
+  return '该节点上无此类配置'
+})
+
 const loadAllData = async () => {
-  const node = inputMode.value === 'manual' ? manualNode.value.trim() : selectedNode.value
-  if (!node) return
+  const node = resolveNode()
+  if (!node) {
+    message.warning('请先选择节点')
+    return
+  }
+  if (inputMode.value === 'manual' && !/^\d{1,3}(\.\d{1,3}){3}:\d+$/.test(node)) {
+    message.warning('请输入 ip:port 格式的节点地址')
+    return
+  }
 
   const [ip, port] = node.split(':')
 
@@ -1325,9 +1396,12 @@ const loadAllData = async () => {
   currentSignal.value = abortController.signal
 
   loading.value = true
+  queryError.value = ''
+  queryPartial.value = ''
+  failedLabels.length = 0
 
   try {
-    await Promise.all([
+    const results = await Promise.all([
       loadUpstreams(ip, port),
       loadRoutes(ip, port),
       loadGlobalRules(ip, port),
@@ -1337,13 +1411,31 @@ const loadAllData = async () => {
       loadStreamRoutes(ip, port),
       loadSslCertificates(ip, port),
     ])
-    loadedNode.value = `${ip}:${port}`
-  } catch (error: any) {
-    console.error('[DEBUG] loadAllData error:', error)
-    message.error('加载数据失败: ' + (error.response?.data?.detail || error.message))
+    const failedCount = failedLabels.length
+    if (failedCount === 8 || results.every((r) => !r)) {
+      // 全失败：不设「已连接」，清数据 + 错误横幅（edge-client-ux-review-fixes 1.1）
+      clearAllData()
+      queryError.value = `节点不可达或端口错误（${ip}:${port}），请检查后重试`
+    } else {
+      loadedNode.value = `${ip}:${port}`
+      if (failedCount > 0) {
+        queryPartial.value = `${failedCount} 类配置获取失败：${failedLabels.join('、')}（其余已正常加载）`
+      }
+    }
   } finally {
     loading.value = false
   }
+}
+
+function clearAllData(): void {
+  upstreams.value = []
+  routes.value = []
+  globalRules.value = []
+  pluginConfigs.value = []
+  pluginMetadataList.value = []
+  pluginList.value = []
+  streamRoutes.value = []
+  sslList.value = []
 }
 
 // 单个标签页加载（保留用于切换标签时快速刷新）
@@ -2189,6 +2281,20 @@ watch(selectedNode, async (_newNode) => {
 </script>
 
 <style scoped>
+/* 编辑弹窗调试模式警示（edge-client-ux-review-fixes 2.2） */
+.debug-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  background: #e6f7ff;
+  border: 1px solid #91d5ff;
+  border-radius: 6px;
+  color: #096dd9;
+  font-size: 13px;
+}
+
 /* ── 四层代理添加/编辑弹窗的作用域提示 ── */
 .stream-route-hint {
   margin-bottom: 14px;

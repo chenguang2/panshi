@@ -28,9 +28,8 @@ async function mountAndQuery(extra: Record<string, unknown>) {
 
   // 切换到手动输入模式并填入节点地址
   await wrapper.findAll('select')[0].setValue('manual')
-  const input = wrapper.find('input[placeholder="192.168.100.235:11999"]')
+  const input = wrapper.find('input[placeholder="192.168.0.14:16620"]')
   await input.setValue(NODE)
-  await input.trigger('blur')
 
   // 点击「查询」（精确匹配，避开「取消查询」按钮）
   const queryBtn = wrapper.findAll('button').find((b) => b.text().trim() === '查询')

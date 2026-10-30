@@ -68,9 +68,8 @@ async function mountWithSsl(count: number) {
   await flushPromises()
 
   await wrapper.findAll('select')[0].setValue('manual')
-  const input = wrapper.find('input[placeholder="192.168.100.235:11999"]')
+  const input = wrapper.find('input[placeholder="192.168.0.14:16620"]')
   await input.setValue(NODE)
-  await input.trigger('blur')
 
   const queryBtn = wrapper.findAll('button').find((b) => b.text().trim() === '查询')
   await queryBtn!.trigger('click')
