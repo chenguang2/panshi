@@ -27,6 +27,7 @@ const stubs = {
             </tr>
           </tbody>
         </table>
+        <div class="ant-pagination" />
       </div>
     `,
   },
@@ -34,13 +35,14 @@ const stubs = {
 
 const state = vi.hoisted(() => ({
   nodes: [] as Array<Record<string, unknown>>,
+  records: [] as Array<Record<string, unknown>>,
 }))
 
 vi.mock('@/api/edgeAutostart', async () => {
   const actual = await vi.importActual<typeof import('@/api/edgeAutostart')>('@/api/edgeAutostart')
   return {
     ...actual,
-    listAutostartRecords: vi.fn(() => Promise.resolve({ data: { items: [] } })),
+    listAutostartRecords: vi.fn(() => Promise.resolve({ data: { items: state.records } })),
     listAutostartDefaults: vi.fn(() => Promise.resolve({ data: {} })),
     getNodeAutostartDefaults: vi.fn(() => Promise.resolve({ data: {} })),
   }
@@ -64,6 +66,13 @@ function createMemoryRouter() {
     history: createMemoryHistory(),
     routes: [{ path: '/:pathMatch(.*)*', component: { template: '<div/>' } }],
   })
+}
+
+/** 钉位用例需挂到 document（组件内部走 document.querySelector('.ant-pagination')，VTU 默认游离树查不到） */
+async function mountAttached() {
+  const EdgeAutostart = (await import('@/views/EdgeAutostart.vue')).default
+  const router = createMemoryRouter()
+  return mount(EdgeAutostart, { attachTo: document.body, global: { plugins: [Antd, router], components: stubs } })
 }
 
 describe('EdgeAutostart 客户端分页切片', () => {
@@ -123,5 +132,108 @@ describe('EdgeAutostart 客户端分页切片', () => {
     const table = wrapper.findComponent({ name: 'ATable' })
     expect(table.props('pagination')).toMatchObject({ current: 1 })
     expect(table.props('dataSource')).toHaveLength(1)
+  })
+})
+
+/**
+ * autostart-pager-jump-fix · 状态列行高稳定
+ *
+ * meta 行（时间 · 最后操作）曾按 autostart_record 条件渲染：无记录行单行高、有记录行双行高，
+ * 每页混排比例不同 → 翻页表格总高漂移 → 下方分页条瞬间弹开（2026-10-29 用户实测「页面会跳」；
+ * 上游管理因第二行恒渲染 `|| '-'` 无此现象）。修法：meta 行无条件渲染，无记录显示 — 占位。
+ */
+describe('EdgeAutostart 状态列行高稳定（meta 行恒渲染）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    state.nodes = [
+      { id: 1, cluster_id: 1, ip: '10.0.0.1', edge_path: '/edge' },
+      { id: 2, cluster_id: 1, ip: '10.0.0.2', edge_path: '/edge' },
+    ]
+    // autostart_record 由页面经 listAutostartRecords 按 node_id 合并（不在 listNodes 载荷上）
+    state.records = [
+      {
+        node_id: 2,
+        cluster_id: 1,
+        status: 'enabled',
+        action: 'disable',
+        command: null,
+        rc: 0,
+        updated_at: '2026-10-27T16:28:18',
+        in_inventory: true,
+      },
+    ]
+  })
+
+  it('无记录节点也渲染 meta 行（— 占位），全部行恒定双行高度', async () => {
+    const wrapper = await mountView()
+    await flushPromises()
+    const metas = wrapper.findAll('.status-meta')
+    expect(metas).toHaveLength(2)
+    expect(metas[0].text()).toBe('—')
+    expect(metas[1].text()).toContain('·')
+    expect(metas[1].text()).toContain('禁用自启动')
+  })
+})
+
+/**
+ * autostart-pager-pin · 翻页分页条钉位
+ *
+ * 行高统一后残存「末页少一行」固有几何：39 节点 @20/页 = 20+19，末页（第 2 页）19 行，
+ * 回第 1 页表格多一行 → 分页条下移 67px、脱离光标（2026-10-29 用户实测「点第一页页面跳了」）。
+ * 修法：翻页时若分页条在视口内，渲染后按分页条位移补偿 scrollBy，钉在原屏幕位置。
+ */
+describe('EdgeAutostart 翻页分页条钉位', () => {
+  let pagerTop: number
+  let realGBCR: typeof Element.prototype.getBoundingClientRect
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    state.nodes = Array.from({ length: 25 }, (_, i) => ({
+      id: i + 1,
+      cluster_id: 1,
+      ip: `10.0.0.${i + 1}`,
+      edge_path: '/edge',
+    }))
+    state.records = []
+    pagerTop = 500
+    realGBCR = Element.prototype.getBoundingClientRect
+    // 仅拦 .ant-pagination 的 rect（可控分页条位置），其余元素走原生（jsdom 全零）
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      if (typeof this.className === 'string' && this.className.includes('ant-pagination')) {
+        return { top: pagerTop, bottom: pagerTop + 32, height: 32 } as unknown as DOMRect
+      }
+      return realGBCR.call(this)
+    })
+    ;(window as any).scrollBy = vi.fn()
+  })
+
+  afterEach(() => {
+    Element.prototype.getBoundingClientRect = realGBCR
+    document.body.innerHTML = ''
+  })
+
+  it('翻页时分页条在视口内 → 渲染后按位移补偿 scrollBy（分页条钉位）', async () => {
+    const wrapper = await mountAttached()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const flip = vm.onTableChange({ current: 2, pageSize: 20 })
+    // 布局变化后分页条下移 67px（模拟回首页多一行）
+    pagerTop = 567
+    await flip
+    expect(window.scrollBy).toHaveBeenCalledWith(0, 67)
+    wrapper.unmount()
+  })
+
+  it('分页条不在视口内 → 不补偿滚动', async () => {
+    pagerTop = 2000 // 视口（innerHeight=768）之外
+    const wrapper = await mountAttached()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    pagerTop = 2067
+    await vm.onTableChange({ current: 2, pageSize: 20 })
+    expect(window.scrollBy).not.toHaveBeenCalled()
+    wrapper.unmount()
   })
 })

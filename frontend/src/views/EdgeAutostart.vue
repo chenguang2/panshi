@@ -95,9 +95,16 @@
                 statusTag(record).label
               }}</a-tag>
             </a-tooltip>
-            <div v-if="record.autostart_record && record.autostart_record.updated_at" class="status-meta">
-              {{ formatDateTime(record.autostart_record.updated_at) }} ·
-              {{ autostartActionLabel(record.autostart_record.action).replace('最后操作：', '') }}
+            <!-- meta 行恒渲染（无记录显示 —）：行高全表一致，翻页表格总高不漂移、分页条不跳动
+                 （对齐上游管理 `|| '-'` 模式；条件渲染会让每页行高混排不同 → 分页条弹开） -->
+            <div class="status-meta">
+              {{
+                record.autostart_record && record.autostart_record.updated_at
+                  ? `${formatDateTime(record.autostart_record.updated_at)} · ${autostartActionLabel(
+                      record.autostart_record.action,
+                    ).replace('最后操作：', '')}`
+                  : '—'
+              }}
             </div>
           </template>
           <template v-else-if="column.key === 'edge_path'">
@@ -407,7 +414,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
 import { message } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import NodeExecutionResultDrawer from '@/components/NodeExecutionResultDrawer.vue'
@@ -488,15 +495,25 @@ watch(
   },
 )
 
-function onTableChange(p: { current?: number; pageSize?: number }) {
+async function onTableChange(p: { current?: number; pageSize?: number }) {
+  // 翻页前记录分页条视口位置：末页行数不满页时（如 39 节点 = 20+19）表格总高变化，
+  // 分页条会位移/弹出视口——渲染后按位移补偿 scrollBy 钉位（2026-10-29 用户实测「点第一页页面跳了」）
+  const rect = document.querySelector('.ant-pagination')?.getBoundingClientRect() ?? null
+  const pagerVisible = rect != null && rect.top < window.innerHeight && rect.bottom > 0
   // antdv 的 change 事件恒带 pageSize：仅在 pageSize 实际变化（用户改每页条数）时才回第 1 页，
   // 否则翻页动作会被「pageSize 未变也重置」吞掉——点击页码永远无反应（2026-10-27 用户实测）
   if (p.pageSize && p.pageSize !== pageSize.value) {
     pageSize.value = p.pageSize
     page.value = 1
-    return
+  } else if (p.current) {
+    page.value = p.current
   }
-  if (p.current) page.value = p.current
+  if (!pagerVisible || !rect) return
+  await nextTick()
+  const after = document.querySelector('.ant-pagination')?.getBoundingClientRect()
+  if (!after) return
+  const delta = after.top - rect.top
+  if (delta !== 0) window.scrollBy(0, delta)
 }
 
 /**
