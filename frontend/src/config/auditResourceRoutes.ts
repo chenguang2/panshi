@@ -92,9 +92,11 @@ const AUDIT_VERB_LABELS: Record<string, string> = {
   test: '测试',
   query: '查询',
   cleanup: '清理',
+  backup: '备份',
+  verify: '校验',
 }
 
-/** 旧命名全量中文表（历史存量行：verb_resource 动词在前，如 create_route） */
+/** 旧命名全量中文表（历史存量行：verb_resource 动词在前，如 create_route）+ 规范命名外的特殊形态（真实 meta 词表实测） */
 const LEGACY_ACTION_LABELS: Record<string, string> = {
   archive: '归档清理',
   create_route: '路由 创建',
@@ -118,9 +120,79 @@ const LEGACY_ACTION_LABELS: Record<string, string> = {
   import_database: '数据库 导入',
   edge_import_execute: 'Edge 导入 执行',
   export_cluster: '集群 导出',
+  download_key: '下载密钥',
+  db_backup_manual_backup: '数据库备份 备份',
+  db_backup_restore_verify: '数据库备份恢复 校验',
+  relay_gateway_push_config: '中继网关 下发',
 }
 
-/** action（如 route_batch_delete / create_route）→ 中文标签（未知动作原样返回） */
+/** 特殊形态动作的资源段（auditActionResource 优先查；无法解析的动作只在「全部操作」出现） */
+const ACTION_RESOURCE_OVERRIDES: Record<string, string | null> = {
+  download_key: null,
+  db_backup_manual_backup: 'db_backup',
+  db_backup_restore_verify: 'db_backup',
+  relay_gateway_push_config: 'relay_gateway',
+}
+
+/** action → 所属资源段（resource_verb 规范命名解析；特殊形态查覆盖表；解析不出返回 null） */
+export function auditActionResource(action: string | null | undefined): string | null {
+  if (!action) return null
+  if (action in ACTION_RESOURCE_OVERRIDES) return ACTION_RESOURCE_OVERRIDES[action]
+  const verbs = Object.keys(AUDIT_VERB_LABELS).sort((a, b) => b.length - a.length)
+  for (const verb of verbs) {
+    if (action.endsWith(`_${verb}`)) return action.slice(0, action.length - verb.length - 1)
+  }
+  return null
+}
+
+/** 动作语义分族 → 标签色调（design §7：删除系 danger / 创建系 success / 其余中性；仅删除系用警示红避免全页焦虑） */
+const DANGER_VERBS = new Set(['delete', 'batch_delete', 'history_delete', 'cleanup', 'archive'])
+const SUCCESS_VERBS = new Set(['create', 'batch_create', 'import', 'generate', 'generate_ca', 'upload'])
+
+export type AuditActionTone = 'danger' | 'success' | 'neutral'
+
+/**
+ * 动作 → 标签色调。提取 verb 的策略与 auditActionLabel 一致（新命名 resource_verb 后缀最长匹配），
+ * 兼顾旧命名动词在前（delete_route）与裸词 tombstone（archive）。
+ */
+export function auditActionTone(action: string | null | undefined): AuditActionTone {
+  if (!action) return 'neutral'
+  const verbs = Object.keys(AUDIT_VERB_LABELS).sort((a, b) => b.length - a.length)
+  for (const verb of verbs) {
+    if (action === verb || action.endsWith(`_${verb}`)) return toneOfVerb(verb)
+  }
+  // 旧命名动词在前（delete_route）与裸词 tombstone（archive）：首个 token / 整词直接查分族
+  const first = action.split('_')[0]
+  if (DANGER_VERBS.has(first) || DANGER_VERBS.has(action)) return 'danger'
+  if (SUCCESS_VERBS.has(first) || SUCCESS_VERBS.has(action)) return 'success'
+  return 'neutral'
+}
+
+function toneOfVerb(verb: string): AuditActionTone {
+  if (DANGER_VERBS.has(verb)) return 'danger'
+  if (SUCCESS_VERBS.has(verb)) return 'success'
+  return 'neutral'
+}
+
+/** action → 动词中文（仅动词部分；表格操作标签用——资源名由资源列承载，避免整列重复，2026-10-29 UX） */
+export function auditVerbLabel(action: string | null | undefined): string {
+  if (!action) return '-'
+  // 旧命名/裸词直查旧表：取最后一个空格后的动词段（'archive' → '归档清理'，无空格全取）
+  const legacy = LEGACY_ACTION_LABELS[action]
+  if (legacy) return legacy.includes(' ') ? legacy.slice(legacy.lastIndexOf(' ') + 1) : legacy
+  // 规范命名 resource_verb：最长后缀匹配取动词
+  const verbs = Object.keys(AUDIT_VERB_LABELS).sort((a, b) => b.length - a.length)
+  for (const verb of verbs) {
+    if (action.endsWith(`_${verb}`)) return AUDIT_VERB_LABELS[verb]
+  }
+  // 旧命名 verb_resource：首个 token 即动词
+  const first = action.split('_')[0]
+  if (first && AUDIT_VERB_LABELS[first]) return AUDIT_VERB_LABELS[first]
+  if (AUDIT_VERB_LABELS[action]) return AUDIT_VERB_LABELS[action]
+  return `未识别（${action}）`
+}
+
+/** action（如 route_batch_delete / create_route）→ 中文标签（未知动作显示「未识别（raw）」而非裸英文） */
 export function auditActionLabel(action: string | null | undefined): string {
   if (!action) return '-'
   // 旧命名（动词在前）直查中文表
@@ -134,7 +206,7 @@ export function auditActionLabel(action: string | null | undefined): string {
       if (resLabel) return `${resLabel} ${AUDIT_VERB_LABELS[verb]}`
     }
   }
-  return action
+  return `未识别（${action}）`
 }
 
 /** resource → 中文标签（未知原样返回） */
@@ -143,12 +215,20 @@ export function auditResourceLabel(resource: string | null | undefined): string 
   return AUDIT_RESOURCE_LABELS[resource] ?? resource
 }
 
-/** 资源 → 前端路由映射（可点击跳转；无映射返回 null） */
-const AUDIT_RESOURCE_ROUTES: Record<string, (id: number) => string> = {
+/** 资源 → 前端路由映射（audit-log-ux-review-fixes 批 2：cluster 锚定详情页；其余高频资源映射到其列表页——
+ * 这些资源无 per-条目详情页。跳转走 SPA router.push，不再 window.location.href 整页刷新） */
+const AUDIT_RESOURCE_ROUTES: Record<string, (id: number | null) => string> = {
   cluster: (id) => `/clusters/${id}`,
+  upstream: () => '/upstreams',
+  route: () => '/routes',
+  user: () => '/users',
+  ssl_cert: () => '/ssl',
+  node_task: () => '/node-tasks',
+  autostart: () => '/edge-autostart',
 }
 
 export function auditResourceLink(resource: string, resourceId: number | null): string | null {
   const fn = AUDIT_RESOURCE_ROUTES[resource]
-  return resourceId && fn ? fn(resourceId) : null
+  if (!fn || resourceId == null) return null
+  return fn(resourceId)
 }

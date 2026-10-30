@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>审计日志 · 优化后页面结构样例（audit-log-ux-review-fixes）</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --surface: #fff; --border: #e5e7eb; --muted: #8a919c;
+    --text: #23272e; --primary: #0e7a8d; --danger: #c2483c; --success: #2e8b57;
+    --danger-bg: #fdf1f0; --success-bg: #eef7f1; --mono: ui-monospace, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { font: 13px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); padding: 24px 32px; }
+  .note { background: #fffbe6; border: 1px solid #f5e6a8; border-radius: 6px; padding: 8px 14px; margin-bottom: 16px; color: #8a6d1a; font-size: 12px; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .desc { color: var(--muted); margin-bottom: 18px; }
+  .actions { float: right; display: flex; gap: 8px; align-items: center; }
+  .btn { border: 1px solid var(--border); background: var(--surface); border-radius: 6px; padding: 6px 14px; cursor: pointer; font-size: 13px; }
+  .btn.danger-outline { color: var(--danger); border-color: #e4b7b2; }
+  .sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
+  .filter-bar { display: flex; gap: 10px; align-items: center; flex-wrap: nowrap; margin-bottom: 10px; }
+  .sel, .input { border: 1px solid var(--border); background: var(--surface); border-radius: 6px; padding: 6px 10px; font-size: 13px; color: var(--text); }
+  .presets { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .presets span { padding: 6px 12px; cursor: pointer; background: var(--surface); border-right: 1px solid var(--border); font-size: 12px; }
+  .presets span:last-child { border-right: none; }
+  .presets span.on { background: var(--primary); color: #fff; }
+  .range { border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; background: var(--surface); color: var(--text); }
+  .counter { color: var(--muted); font-size: 12px; margin-bottom: 12px; }
+  .counter b { color: var(--text); font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: 8px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+  th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--border); font-size: 13px; }
+  th { color: var(--muted); font-weight: 500; background: #fafbfc; white-space: nowrap; }
+  td.mono { font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+  tr:hover td { background: #f8fafb; }
+  a { color: var(--primary); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .tag { display: inline-block; padding: 1px 10px; border-radius: 10px; font-size: 12px; line-height: 20px; white-space: nowrap; }
+  .tag.neutral { color: #5a6472; background: transparent; border: 1px solid #d6dae0; }
+  .tag.danger { color: var(--danger); background: var(--danger-bg); border: 1px solid #f0d2ce; }
+  .tag.success { color: var(--success); background: var(--success-bg); border: 1px solid #cfe6d8; }
+  .muted { color: var(--muted); }
+  .pager { display: flex; gap: 6px; justify-content: flex-end; align-items: center; margin-top: 14px; color: var(--muted); font-size: 12px; }
+  .pager .pg { border: 1px solid var(--border); background: var(--surface); border-radius: 4px; padding: 3px 9px; }
+  .pager .pg.on { background: var(--primary); color: #fff; border-color: var(--primary); }
+  /* 归档历史抽屉（示意） */
+  .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 440px; background: var(--surface); box-shadow: -6px 0 24px rgba(0,0,0,.12); padding: 20px 22px; display: none; }
+  .drawer.open { display: block; }
+  .drawer h3 { font-size: 15px; margin-bottom: 14px; }
+  .archive-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+  .archive-row .meta { color: var(--muted); }
+</style>
+</head>
+<body>
+  <div class="note">静态样例 · 仅展示优化后的页面结构与文案形态，非可运行页面（openspec: audit-log-ux-review-fixes）</div>
+
+  <div class="actions">
+    <button class="btn">导出 CSV</button>
+    <button class="btn">导出 Excel</button>
+    <span class="sep"></span>
+    <button class="btn" onclick="document.getElementById('drawer').classList.toggle('open')">归档历史</button>
+    <button class="btn danger-outline">归档清理</button>
+  </div>
+  <h1>审计日志</h1>
+  <div class="desc">记录全部增删改操作的审计轨迹，支持筛选、追溯与导出</div>
+
+  <div class="filter-bar">
+    <select class="sel"><option>全部用户</option><option>admin</option></select>
+    <select class="sel" style="min-width:150px"><option>全部操作</option><option>自启动 设置（autostart_set）</option></select>
+    <select class="sel"><option>全部资源</option><option>自启动</option><option>路由</option></select>
+    <select class="sel"><option>全部 IP</option><option>127.0.0.1</option><option>192.168.0.13</option></select>
+    <span class="presets"><span>今天</span><span class="on">近 7 天</span><span>近 30 天</span></span>
+    <span class="range">2026-10-23 → 2026-10-29 📅</span>
+    <input class="input" style="width:200px" placeholder="搜索详情 / 资源ID，回车执行">
+  </div>
+  <div class="counter">筛选结果 <b>312</b> 条 · 全库共 <b>1477</b> 条（最早 2026-10-03 07:06:45）</div>
+
+  <table>
+    <thead><tr><th style="width:40px">#</th><th>时间</th><th style="width:80px">用户</th><th style="width:120px">操作</th><th style="width:150px">资源</th><th>详情</th><th style="width:120px">IP</th></tr></thead>
+    <tbody>
+      <tr><td class="mono muted">1</td><td class="mono">2026-10-29 09:20:37</td><td>admin</td><td><span class="tag neutral">激活</span></td><td>ClickHouse 配置</td><td class="muted">激活 ClickHouse 连接「默认连接（示例）」127.0.0.1:9000…</td><td class="mono">127.0.0.1</td></tr>
+      <tr><td class="mono muted">2</td><td class="mono">2026-10-28 08:53:04</td><td>admin</td><td><span class="tag neutral">设置</span></td><td>自启动 #8</td><td class="muted">—</td><td class="mono">127.0.0.1</td></tr>
+      <tr><td class="mono muted">3</td><td class="mono">2026-10-27 16:28:18</td><td>admin</td><td><span class="tag danger">删除</span></td><td><a href="#">路由 #12</a></td><td class="muted">—</td><td class="mono">192.168.0.13</td></tr>
+      <tr><td class="mono muted">4</td><td class="mono">2026-10-27 15:02:41</td><td>admin</td><td><span class="tag success">创建</span></td><td><a href="#">上游 #5</a></td><td class="muted">—</td><td class="mono">127.0.0.1</td></tr>
+      <tr><td class="mono muted">5</td><td class="mono">2026-10-27 11:10:09</td><td>admin</td><td><span class="tag neutral">发布</span></td><td><a href="#">集群 #2</a></td><td class="muted">—</td><td class="mono">127.0.0.1</td></tr>
+    </tbody>
+  </table>
+  <div class="pager">共 312 条记录 <span class="pg">←</span><span class="pg on">1</span><span class="pg">2</span><span class="pg">3</span><span class="pg">…</span><span class="pg">16</span><span class="pg">→</span> 20 条/页</div>
+
+  <div class="drawer" id="drawer">
+    <h3>归档历史</h3>
+    <div class="archive-row">
+      <div><div>audit_archive_20261028_180501.csv</div><div class="meta">2.1 MB · 归档于 2026-10-28 18:05</div></div>
+      <button class="btn">下载</button>
+    </div>
+    <div class="archive-row">
+      <div><div>audit_archive_20260930_090012.csv</div><div class="meta">0.8 MB · 归档于 2026-09-30 09:00</div></div>
+      <button class="btn">下载</button>
+    </div>
+    <p class="muted" style="margin-top:14px;font-size:12px">存档为归档清理时点的全量 CSV 快照；删除库内记录不影响此处文件。</p>
+  </div>
+</body>
+</html>

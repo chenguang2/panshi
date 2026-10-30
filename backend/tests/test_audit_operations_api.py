@@ -112,6 +112,8 @@ async def test_operations_meta(async_authed_client, isolated_session, monkeypatc
     assert set(meta["users"]) == {"admin", "op"}
     assert set(meta["resources"]) == {"route", "cluster"}
     assert "route_create" in meta["actions"]
+    # audit-log-ux-review-fixes 批 2：meta 增 ips（distinct 非空 IP）
+    assert set(meta["ips"]) == {"10.0.0.1", "10.0.0.2"}
 
 
 @pytest.mark.asyncio
@@ -157,7 +159,11 @@ async def test_feature_flag_off_returns_404(async_authed_client, isolated_sessio
     _patch_features(monkeypatch, feature_on=False)
 
     c = async_authed_client
-    for path in ("/api/v1/system/operations", "/api/v1/system/operations/meta"):
+    for path in (
+        "/api/v1/system/operations",
+        "/api/v1/system/operations/meta",
+        "/api/v1/system/operations/archives",
+    ):
         r = await c.get(path)
         assert r.status_code == 404, path
     r = await c.post("/api/v1/system/operations/export", json={"format": "csv"})
@@ -229,9 +235,14 @@ async def test_archive_deletes_and_keeps_tombstone(async_authed_client, isolated
     assert tomb.resource == "audit_logs"
     assert "2 条" in (tomb.detail or "")
 
-    # 服务端留存归档文件
+    # 服务端留存归档文件；文件名时间戳为本地时间（2026-10-30 用户裁决：与界面「归档于」一致，不再是 UTC）
     files = list(tmp_path.glob("audit_archive_*.csv"))
     assert len(files) == 1
+    from datetime import datetime as _dt
+
+    ts = _dt.strptime(files[0].name, "audit_archive_%Y%m%d_%H%M%S.csv")
+    now_local = _dt.now()
+    assert abs((now_local - ts).total_seconds()) < 10, f"文件名时间应≈本地当前时间: {files[0].name} vs {now_local}"
 
 
 @pytest.mark.asyncio
@@ -351,3 +362,90 @@ async def test_export_xlsx_neutralizes_formula_injection(
     ws = wb.active or wb.create_sheet()
     for row in ws.iter_rows(min_row=2, values_only=True):
         _assert_neutralized(row[6])
+
+
+# ── audit-log-ux-review-fixes 批 3：IP/keyword 筛选 + 归档历史 ──
+
+
+@pytest.mark.asyncio
+async def test_list_filters_by_ip(async_authed_client, isolated_session, monkeypatch):
+    await _seed_default(isolated_session)
+    _patch_features(monkeypatch)
+
+    c = async_authed_client
+    r = await c.get("/api/v1/system/operations", params={"ip": "10.0.0.2"})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["total"] == 1
+    assert data["items"][0]["ip_address"] == "10.0.0.2"
+
+
+@pytest.mark.asyncio
+async def test_list_keyword_matches_detail(async_authed_client, isolated_session, monkeypatch):
+    await _seed_default(isolated_session)
+    _patch_features(monkeypatch)
+
+    c = async_authed_client
+    r = await c.get("/api/v1/system/operations", params={"keyword": "路由"})
+    assert r.status_code == 200
+    assert r.json()["total"] == 2  # 新增路由 /a/* + 删除路由 /b/*
+
+
+@pytest.mark.asyncio
+async def test_list_keyword_pure_number_matches_resource_id(async_authed_client, isolated_session, monkeypatch):
+    """纯数字 keyword：detail 子串 OR resource_id 精确（design §5-3 裁决）。"""
+    await _seed_default(isolated_session)
+    _patch_features(monkeypatch)
+
+    c = async_authed_client
+    r = await c.get("/api/v1/system/operations", params={"keyword": "3"})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["total"] == 1
+    assert data["items"][0]["resource_id"] == 3
+
+
+@pytest.mark.asyncio
+async def test_archives_list_and_download(async_authed_client, isolated_session, monkeypatch, tmp_path):
+    await _seed_default(isolated_session)
+    _patch_features(monkeypatch)
+    import app.api.v1.system as system_mod
+
+    monkeypatch.setattr(system_mod, "_ARCHIVE_DIR", str(tmp_path))
+    (tmp_path / "audit_archive_20261028_180501.csv").write_text("a,b\n1,2", encoding="utf-8-sig")
+    (tmp_path / "audit_archive_20260930_090012.csv").write_text("a,b\n3,4", encoding="utf-8-sig")
+    # 共享目录干扰项（实测 data/archives/ 还存放数据库归档等他模块文件，2026-10-29 真实 UI 验收发现）
+    (tmp_path / "schema.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "panshi-backup-20261027-121915.zip").write_text("zip", encoding="utf-8")
+    (tmp_path / "other_export.csv").write_text("x", encoding="utf-8")
+
+    c = async_authed_client
+    r = await c.get("/api/v1/system/operations/archives")
+    assert r.status_code == 200
+    items = r.json()["items"]
+    assert [i["filename"] for i in items] == [
+        "audit_archive_20261028_180501.csv",
+        "audit_archive_20260930_090012.csv",
+    ]  # 只列审计归档（audit_archive_*.csv），共享目录内他模块文件不出现
+    assert items[0]["size"] > 0
+    # created_at 必须 naive UTC（全站约定 #26）：钉 mtime=2026-10-28T10:50:01Z → 原样返回（无时区后缀）；
+    # 曾用 fromtimestamp 本地墙上时间（CST +8）致前端按 UTC 解析再 +8 显示漂移 16h（2026-10-30 用户实测）
+    import os as _os
+
+    fixed = 1793184601.0  # 2026-10-28T10:50:01Z
+    _os.utime(tmp_path / "audit_archive_20261028_180501.csv", (fixed, fixed))
+    r1b = await c.get("/api/v1/system/operations/archives")
+    assert r1b.json()["items"][0]["created_at"] == "2026-10-28T10:50:01"
+
+    r2 = await c.get("/api/v1/system/operations/archives/audit_archive_20261028_180501.csv/download")
+    assert r2.status_code == 200
+    assert "a,b" in r2.text
+    # BOM 必须保留（utf-8-sig 落盘 → 读取时被剥 → 下载响应须补回）：Excel 依赖它识别 UTF-8，
+    # 缺 BOM 双击打开汉字乱码（2026-10-30 用户实测）
+    assert r2.text.startswith("﻿")
+    assert r2.headers["content-disposition"].startswith("attachment")
+
+    assert (await c.get("/api/v1/system/operations/archives/missing.csv/download")).status_code == 404
+    # 路径穿越拒绝
+    r4 = await c.get("/api/v1/system/operations/archives/..%2Fsecret.csv/download")
+    assert r4.status_code in (404, 422)

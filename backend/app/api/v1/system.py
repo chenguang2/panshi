@@ -4,7 +4,7 @@ import csv
 import io
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse, Response
@@ -159,6 +159,8 @@ async def list_recent_operations(
     user: str | None = None,
     action: str | None = None,
     resource: str | None = None,
+    ip: str | None = None,
+    keyword: str | None = None,
     start: str | None = None,
     end: str | None = None,
     db: AsyncSession = Depends(get_db),
@@ -173,6 +175,15 @@ async def list_recent_operations(
         stmt = stmt.where(AuditLog.action == action)
     if resource:
         stmt = stmt.where(AuditLog.resource == resource)
+    if ip:
+        stmt = stmt.where(AuditLog.ip_address == ip)
+    # 关键字：detail 子串（不分大小写）；纯数字时 OR resource_id 精确（audit-log-ux-review-fixes 批 3）
+    kw = (keyword or "").strip()
+    if kw:
+        cond = AuditLog.detail.ilike(f"%{kw}%")
+        if kw.isdigit():
+            cond = cond | (AuditLog.resource_id == int(kw))
+        stmt = stmt.where(cond)
     try:
         if start:
             stmt = stmt.where(AuditLog.created_at >= datetime.fromisoformat(start))
@@ -215,12 +226,14 @@ async def operations_meta(
     users = (await db.execute(select(AuditLog.username).distinct())).scalars().all()
     actions = (await db.execute(select(AuditLog.action).distinct())).scalars().all()
     resources = (await db.execute(select(AuditLog.resource).distinct())).scalars().all()
+    ips = (await db.execute(select(AuditLog.ip_address).distinct())).scalars().all()
     total = (await db.execute(select(func.count(AuditLog.id)))).scalar() or 0
     oldest = (await db.execute(select(func.min(AuditLog.created_at)))).scalar()
     return {
         "users": sorted(u for u in users if u),
         "actions": sorted(a for a in actions if a),
         "resources": sorted(r for r in resources if r),
+        "ips": sorted(i for i in ips if i),
         "total": total,
         "oldest": _iso_z(oldest),
     }
@@ -239,10 +252,25 @@ async def operations_export(
         raise HTTPException(status_code=400, detail="format 仅支持 csv / xlsx")
 
     stmt = select(AuditLog)
-    for field, column in (("user", AuditLog.username), ("action", AuditLog.action), ("resource", AuditLog.resource)):
+    for field, column in (
+        ("user", AuditLog.username),
+        ("action", AuditLog.action),
+        ("resource", AuditLog.resource),
+        ("ip", AuditLog.ip_address),
+    ):
         v = (body or {}).get(field)
         if v:
             stmt = stmt.where(column == v)
+    # 时间范围与列表口径一致（批 2：导出范围感知——UI 明示「导出当前筛选结果 N 条」必须含日期过滤）
+    try:
+        start = (body or {}).get("start")
+        end = (body or {}).get("end")
+        if start:
+            stmt = stmt.where(AuditLog.created_at >= datetime.fromisoformat(start))
+        if end:
+            stmt = stmt.where(AuditLog.created_at <= datetime.fromisoformat(end))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="时间格式非法（ISO 格式）")
 
     rows = (await db.execute(stmt.order_by(AuditLog.id.desc()).limit(50000))).scalars().all()
 
@@ -297,7 +325,8 @@ async def archive_operations(
     content = _audit_csv(rows)
 
     os.makedirs(_ARCHIVE_DIR, exist_ok=True)
-    filename = f"audit_archive_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv"
+    # 文件名时间戳用本地时间（2026-10-30 用户裁决）：与界面「归档于」、用户墙上时钟一致，不再是 UTC
+    filename = f"audit_archive_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
     with open(os.path.join(_ARCHIVE_DIR, filename), "w", encoding="utf-8-sig", newline="") as f:
         f.write(content)
 
@@ -324,6 +353,58 @@ async def archive_operations(
     await db.commit()
 
     return {"archived": len(rows), "task_id": task_id, "file": filename}
+
+
+@router.get("/operations/archives")
+async def list_audit_archives(_guard=Depends(require_permission('audit_logs'))):
+    """归档历史（audit-log-ux-review-fixes 批 3）：列出服务端留存的存档文件，供再次下载。"""
+    _require_audit_feature()
+    items = []
+    if os.path.isdir(_ARCHIVE_DIR):
+        for name in os.listdir(_ARCHIVE_DIR):
+            # data/archives/ 为共享目录（数据库归档/备份等他模块文件同目录）——只认审计归档命名
+            if not name.startswith("audit_archive_") or not name.endswith(".csv"):
+                continue
+            path = os.path.join(_ARCHIVE_DIR, name)
+            if not os.path.isfile(path):
+                continue
+            items.append(
+                {
+                    "filename": name,
+                    "size": os.path.getsize(path),
+                    # 全站时间约定：naive UTC（前端 parseBackendDate 按无后缀=UTC 解析、Asia/Shanghai 展示）。
+                    # fromtimestamp 本地时区墙上时间曾致显示 +8h 漂移（2026-10-30 用户实测）
+                    "created_at": datetime.fromtimestamp(os.path.getmtime(path), tz=timezone.utc)
+                    .replace(tzinfo=None)
+                    .isoformat(),
+                }
+            )
+    items.sort(key=lambda x: x["filename"], reverse=True)  # 时间戳命名：文件名倒序 = 时间倒序
+    return {"total": len(items), "items": items}
+
+
+@router.get("/operations/archives/{filename}/download")
+async def download_audit_archive(filename: str, _guard=Depends(require_permission('audit_logs'))):
+    """下载历史存档（blob + Authorization；文件名白名单校验拒绝路径穿越）。"""
+    _require_audit_feature()
+    safe_name = os.path.basename(filename)
+    # 白名单：仅审计归档命名（共享目录防越界下载他模块文件）
+    if safe_name != filename or not safe_name.startswith("audit_archive_") or not safe_name.endswith(".csv"):
+        raise HTTPException(status_code=404, detail="存档文件不存在")
+    path = os.path.join(_ARCHIVE_DIR, safe_name)
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="存档文件不存在")
+    with open(path, "r", encoding="utf-8-sig") as f:
+        content = f.read()
+    # utf-8-sig 读取会剥掉 BOM → 下载响应补回：Excel 依赖 BOM 识别 UTF-8，缺则双击打开汉字乱码
+    # （与 operations_export_download 同款守卫）
+    if not content.startswith("﻿"):
+        content = "﻿" + content
+    return PlainTextResponse(
+        content=content,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{safe_name}"'},
+    )
 
 
 @router.get("/operations/export/{task_id}")

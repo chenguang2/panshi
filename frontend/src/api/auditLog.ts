@@ -25,6 +25,8 @@ export interface AuditLogMeta {
   users: string[]
   actions: string[]
   resources: string[]
+  /** 去重非空 IP（批 2：IP 筛选下拉） */
+  ips: string[]
   /** 库内总条数（D：用量提示，供归档决策参考） */
   total?: number
   /** 最早记录时间（ISO 字符串，空库为 null） */
@@ -37,6 +39,7 @@ export interface AuditLogQuery {
   user?: string
   action?: string
   resource?: string
+  ip?: string
   start?: string
   end?: string
 }
@@ -54,6 +57,9 @@ export function exportAuditLogs(payload: {
   user?: string
   action?: string
   resource?: string
+  ip?: string
+  start?: string
+  end?: string
 }) {
   return api.post<{ task_id: string; status: string; rows: number }>('/system/operations/export', payload)
 }
@@ -70,6 +76,24 @@ export interface AuditArchivePreview {
   count: number
   oldest: string | null
   newest: string | null
+}
+
+export interface AuditArchiveItem {
+  filename: string
+  size: number
+  created_at: string
+}
+
+/** 归档历史（批 3）：服务端留存的存档文件列表，供再次下载 */
+export function listAuditArchives() {
+  return api.get<{ total: number; items: AuditArchiveItem[] }>('/system/operations/archives')
+}
+
+export async function downloadAuditArchive(filename: string) {
+  const res = await api.get<Blob>(`/system/operations/archives/${encodeURIComponent(filename)}/download`, {
+    responseType: 'blob',
+  })
+  return res.data
 }
 
 /** 归档预览（只读）：统计 before（不含当日）之前的条数与时间范围 */

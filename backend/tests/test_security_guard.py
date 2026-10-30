@@ -65,6 +65,9 @@ UNAUTHENTICATED_SAMPLES = [
     # 审计归档清理（admin + audit_logs）：误开放即为审计链漏洞，须匿名拒绝
     ("post", "/api/v1/system/operations/archive/preview"),
     ("post", "/api/v1/system/operations/archive"),
+    # 审计归档历史列表/下载（2026-10 audit-log-ux-review-fixes 批 3：存档含全量审计快照，须匿名拒绝）
+    ("get", "/api/v1/system/operations/archives"),
+    ("get", "/api/v1/system/operations/archives/audit_archive_20261028_180501.csv/download"),
     # 任务留档文件删除（2026-09-12 task-files 端点）
     ("delete", "/api/v1/node-tasks/task-files/1/some-file"),
     # 数据迁移独立权限域（2026-10，db_migration 键）采样

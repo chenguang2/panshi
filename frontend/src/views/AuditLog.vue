@@ -5,32 +5,69 @@
         <button class="btn btn-secondary" :disabled="exporting" @click="handleExport('csv')">导出 CSV</button>
         <button class="btn btn-secondary" :disabled="exporting" @click="handleExport('xlsx')">导出 Excel</button>
         <span class="action-sep" aria-hidden="true" />
+        <button class="btn btn-secondary" @click="archiveHistoryOpen = true">归档历史</button>
         <button class="btn btn-danger-outline" @click="archiveOpen = true">归档清理</button>
       </template>
     </PageHeader>
 
     <!-- 筛选条（对齐路由管理页 filter-bar 风格） -->
     <div class="audit-filter-bar">
-      <select v-model="filters.user" class="form-input" style="width: 130px" @change="onFilterChange">
-        <option value="">全部用户</option>
-        <option v-for="u in meta.users" :key="u" :value="u">{{ u }}</option>
-      </select>
-      <select v-model="filters.action" class="form-input" style="width: 190px" @change="onFilterChange">
-        <option value="">全部操作</option>
-        <option v-for="a in meta.actions" :key="a" :value="a">{{ auditActionLabel(a) }}（{{ a }}）</option>
-      </select>
-      <select v-model="filters.resource" class="form-input" style="width: 150px" @change="onFilterChange">
-        <option value="">全部资源</option>
-        <option v-for="r in meta.resources" :key="r" :value="r">{{ auditResourceLabel(r) }}</option>
-      </select>
-      <a-range-picker v-model:value="dateRange" size="small" style="width: 240px" @change="onFilterChange" />
+      <a-select
+        v-model:value="filters.user"
+        class="audit-select"
+        style="width: 130px"
+        show-search
+        :popup-match-select-width="false"
+        :options="userOptions"
+        @change="onFilterChange"
+      />
+      <a-select
+        v-model:value="filters.resource"
+        class="audit-select"
+        style="width: 150px"
+        show-search
+        :popup-match-select-width="false"
+        :options="resourceOptions"
+        @change="onFilterChange"
+      />
+      <a-select
+        v-model:value="filters.action"
+        class="audit-select"
+        style="width: 200px"
+        show-search
+        :popup-match-select-width="false"
+        :options="actionOptions"
+        @change="onFilterChange"
+      />
+      <a-select
+        v-model:value="filters.ip"
+        class="audit-select"
+        style="width: 140px"
+        show-search
+        :popup-match-select-width="false"
+        :options="ipOptions"
+        @change="onFilterChange"
+      />
+      <input
+        v-model="keyword"
+        class="form-input keyword-input"
+        style="width: 200px"
+        placeholder="搜索详情 / 资源ID"
+        @keyup.enter="onKeywordSearch"
+      />
+      <a-range-picker
+        v-model:value="dateRange"
+        size="small"
+        style="width: 240px"
+        :presets="datePresets"
+        @change="onFilterChange"
+      />
       <span class="text-muted text-sm">
-        共 {{ total }} 条记录
-        <template v-if="metaTotal !== null">
-          · 库内累计 {{ metaTotal }} 条<template v-if="metaOldest"
+        筛选结果 {{ total }} 条<template v-if="metaTotal !== null">
+          · 全库共 {{ metaTotal }} 条<template v-if="metaOldest"
             >（最早 {{ formatDateTimeDash(metaOldest) }}）</template
-          >
-        </template>
+          ></template
+        >
       </span>
       <span v-if="archiveHint" class="archive-hint">记录量较大，建议归档历史数据</span>
     </div>
@@ -55,16 +92,21 @@
             <span class="text-mono">{{ formatDateTimeDash(record.created_at) }}</span>
           </template>
           <template v-else-if="column.key === 'action'">
-            <a-tooltip :title="record.action">
-              {{ auditActionLabel(record.action) }}
+            <a-tooltip :title="`${auditActionLabel(record.action)}（${record.action}）`">
+              <span class="action-tag" :class="`tone-${auditActionTone(record.action)}`">{{
+                auditVerbLabel(record.action)
+              }}</span>
             </a-tooltip>
           </template>
           <template v-else-if="column.key === 'resource'">
-            <a v-if="auditResourceLink(record.resource, record.resource_id)" href="#" @click.prevent="goto(record)">{{
-              auditResourceLabel(record.resource)
-            }}</a>
+            <a v-if="auditResourceLink(record.resource, record.resource_id)" href="#" @click.prevent="goto(record)"
+              >{{ auditResourceLabel(record.resource) }} #{{ record.resource_id }}</a
+            >
             <a-tooltip v-else :title="record.resource">
-              {{ auditResourceLabel(record.resource) }}
+              <span
+                >{{ auditResourceLabel(record.resource)
+                }}<template v-if="record.resource_id != null"> #{{ record.resource_id }}</template></span
+              >
             </a-tooltip>
           </template>
           <template v-else-if="column.key === 'detail'">
@@ -105,6 +147,23 @@
           </div>
           <pre class="detail-body">{{ current.detail || '-' }}</pre>
         </div>
+      </template>
+    </a-drawer>
+    <!-- 归档历史（批 3）：服务端留存存档的再下载入口，与归档清理相邻 -->
+    <a-drawer v-model:open="archiveHistoryOpen" title="归档历史" width="480" placement="right">
+      <div v-if="archiveLoading" class="muted">加载中…</div>
+      <template v-else>
+        <div v-if="!archives.length" class="archive-empty">暂无归档存档 · 执行「归档清理」后存档会保留在这里</div>
+        <div v-for="f in archives" :key="f.filename" class="archive-row">
+          <div>
+            <div class="archive-name">{{ f.filename }}</div>
+            <div class="archive-meta">{{ formatFileSize(f.size) }} · 归档于 {{ formatDateTimeDash(f.created_at) }}</div>
+          </div>
+          <button class="btn btn-secondary" @click="downloadArchive(f)">下载</button>
+        </div>
+        <p v-if="archives.length" class="muted" style="margin-top: 14px; font-size: 12px">
+          存档为归档清理时点的全量 CSV 快照；删除库内记录不影响此处文件。
+        </p>
       </template>
     </a-drawer>
     <!-- 归档清理弹窗（视图级内联，先存档后删除 + tombstone 审计） -->
@@ -149,36 +208,75 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
-import type { Dayjs } from 'dayjs'
-import { useRoute } from 'vue-router'
+import dayjs, { type Dayjs } from 'dayjs'
+import { useRoute, useRouter } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
 import {
   archiveAuditLogs,
+  downloadAuditArchive,
   downloadExport,
   exportAuditLogs,
   getAuditLogMeta,
   getExportStatus,
+  listAuditArchives,
   listAuditLogs,
   previewArchiveAuditLogs,
+  type AuditArchiveItem,
   type AuditArchivePreview,
   type AuditLogItem,
   type AuditLogMeta,
 } from '@/api/auditLog'
 import { downloadBlob } from '@/utils/download'
-import { exportToCsv } from '@/utils/export'
-import { formatDateTimeDash } from '@/utils/format'
+import { formatDateTimeDash, formatFileSize } from '@/utils/format'
 import { paginationProps } from '@/composables/usePagination'
-import { auditActionLabel, auditResourceLabel, auditResourceLink } from '@/config/auditResourceRoutes'
+import {
+  auditActionLabel,
+  auditActionResource,
+  auditActionTone,
+  auditResourceLabel,
+  auditResourceLink,
+  auditVerbLabel,
+} from '@/config/auditResourceRoutes'
 
 const rows = ref<AuditLogItem[]>([])
 const loading = ref(false)
 const exporting = ref(false)
 const route = useRoute()
+const router = useRouter()
 /** 深链预选资源（/audit-log?resource=autostart 等，各页「操作日志」入口携带） */
 const requestedResource = typeof route.query.resource === 'string' ? route.query.resource : ''
-const meta = reactive<AuditLogMeta>({ users: [], actions: [], resources: [] })
-const filters = reactive<{ user: string; action: string; resource: string }>({ user: '', action: '', resource: '' })
-const dateRange = ref<[Dayjs, Dayjs] | null>(null)
+const meta = reactive<AuditLogMeta>({ users: [], actions: [], resources: [], ips: [] })
+const filters = reactive<{ user: string; action: string; resource: string; ip: string }>({
+  user: '',
+  action: '',
+  resource: '',
+  ip: '',
+})
+
+// a-select showSearch 选项（批 2：原生 select 不可搜索，动作 40+ 项时只能滚动找）
+const userOptions = computed(() => [
+  { label: '全部用户', value: '' },
+  ...meta.users.map((u) => ({ label: u, value: u })),
+])
+const actionOptions = computed(() => {
+  const all = meta.actions.map((a) => ({ label: `${auditActionLabel(a)}（${a}）`, value: a }))
+  // 资源已选时动作按所属资源段联动（2026-10-29 用户验收反馈）；无法解析资源段的动作只在「全部操作」出现
+  if (!filters.resource) return [{ label: '全部操作', value: '' }, ...all]
+  return [{ label: '全部操作', value: '' }, ...all.filter((o) => auditActionResource(o.value) === filters.resource)]
+})
+const resourceOptions = computed(() => [
+  { label: '全部资源', value: '' },
+  ...meta.resources.map((r) => ({ label: auditResourceLabel(r), value: r })),
+])
+const ipOptions = computed(() => [{ label: '全部 IP', value: '' }, ...meta.ips.map((i) => ({ label: i, value: i }))])
+// 默认近 7 天（主 spec「Default time range is last 7 days」的漂移修复；含当天）
+const dateRange = ref<[Dayjs, Dayjs] | null>([dayjs().subtract(6, 'day'), dayjs()])
+/** 时间快捷项（design §4）：今天 / 近 7 天 / 近 30 天 */
+const datePresets = [
+  { label: '今天', value: (): [Dayjs, Dayjs] => [dayjs(), dayjs()] },
+  { label: '近 7 天', value: (): [Dayjs, Dayjs] => [dayjs().subtract(6, 'day'), dayjs()] },
+  { label: '近 30 天', value: (): [Dayjs, Dayjs] => [dayjs().subtract(29, 'day'), dayjs()] },
+]
 const page = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
@@ -206,9 +304,45 @@ watch(archiveDate, async (d) => {
     const r = await previewArchiveAuditLogs(d.format('YYYY-MM-DD'))
     archivePreview.value = r.data
   } catch {
-    message.error('归档预览失败')
+    message.error('归档预览失败，请稍后重试；持续失败请检查后端服务')
   }
 })
+
+const keyword = ref('')
+function onKeywordSearch(): void {
+  reload(1)
+}
+
+// ── 归档历史（批 3）：服务端留存存档的列表与再下载 ─────────────────
+const archiveHistoryOpen = ref(false)
+const archives = ref<AuditArchiveItem[]>([])
+const archiveLoading = ref(false)
+
+watch(archiveHistoryOpen, async (open) => {
+  if (open) await loadArchives()
+})
+
+async function loadArchives(): Promise<void> {
+  archiveLoading.value = true
+  try {
+    const r = await listAuditArchives()
+    archives.value = r.data.items ?? []
+  } catch {
+    message.error('归档历史加载失败，请稍后重试')
+    archives.value = []
+  } finally {
+    archiveLoading.value = false
+  }
+}
+
+async function downloadArchive(f: AuditArchiveItem): Promise<void> {
+  try {
+    const blob = await downloadAuditArchive(f.filename)
+    downloadBlob(blob, f.filename)
+  } catch {
+    message.error('存档下载失败，请重试')
+  }
+}
 
 async function doArchive(): Promise<void> {
   if (!archiveDate.value || !canArchive.value) return
@@ -234,49 +368,14 @@ async function doArchive(): Promise<void> {
 
 const columns = [
   { title: '#', key: 'index', width: 45 },
-  {
-    title: '时间',
-    key: 'created_at',
-    dataIndex: 'created_at',
-    width: 165,
-    sorter: (a: AuditLogItem, b: AuditLogItem) => (a.created_at || '').localeCompare(b.created_at || ''),
-  },
-  {
-    title: '用户',
-    key: 'username',
-    dataIndex: 'username',
-    width: 90,
-    sorter: (a: AuditLogItem, b: AuditLogItem) => (a.username || '').localeCompare(b.username || ''),
-  },
-  {
-    title: '操作',
-    key: 'action',
-    dataIndex: 'action',
-    width: 130,
-    sorter: (a: AuditLogItem, b: AuditLogItem) => (a.action || '').localeCompare(b.action || ''),
-  },
-  {
-    title: '资源',
-    key: 'resource',
-    dataIndex: 'resource',
-    width: 100,
-    sorter: (a: AuditLogItem, b: AuditLogItem) => (a.resource || '').localeCompare(b.resource || ''),
-  },
-  {
-    title: '资源ID',
-    key: 'resource_id',
-    dataIndex: 'resource_id',
-    width: 80,
-    sorter: (a: AuditLogItem, b: AuditLogItem) => (a.resource_id || 0) - (b.resource_id || 0),
-  },
+  // 列序 = 自然语序「何时·谁·对哪个资源·做了什么」（2026-10-29 UX 评审批后调整）
+  // 排序语义唯一为「时间倒序」（后端 id desc）——本页前端 sorter 只会重排当前页、跨页语义错误（audit-log-ux-review-fixes 批 2）
+  { title: '时间', key: 'created_at', dataIndex: 'created_at', width: 165 },
+  { title: '用户', key: 'username', dataIndex: 'username', width: 90 },
+  { title: '资源', key: 'resource', dataIndex: 'resource', width: 160 },
+  { title: '操作', key: 'action', dataIndex: 'action', width: 150 },
   { title: '详情', key: 'detail', dataIndex: 'detail', ellipsis: true },
-  {
-    title: 'IP',
-    key: 'ip_address',
-    dataIndex: 'ip_address',
-    width: 130,
-    sorter: (a: AuditLogItem, b: AuditLogItem) => (a.ip_address || '').localeCompare(b.ip_address || ''),
-  },
+  { title: 'IP', key: 'ip_address', dataIndex: 'ip_address', width: 130 },
 ]
 
 /** 默认模板（后端兜底生成）与操作/资源/ID 三列语义完全重复 → 详情列显示 '—' */
@@ -296,14 +395,15 @@ function truncate(s: string | null, n: number): string {
 
 function goto(record: AuditLogItem): void {
   const link = auditResourceLink(record.resource, record.resource_id)
-  if (link) window.location.href = link
+  if (link) router.push(link)
 }
 
 async function loadMeta(): Promise<void> {
   const r = await getAuditLogMeta()
-  meta.users = r.data.users
-  meta.actions = r.data.actions
-  meta.resources = r.data.resources
+  meta.users = r.data.users ?? []
+  meta.actions = r.data.actions ?? []
+  meta.resources = r.data.resources ?? []
+  meta.ips = r.data.ips ?? []
   metaTotal.value = r.data.total ?? null
   metaOldest.value = r.data.oldest ?? null
   // 深链预选（/audit-log?resource=autostart 等，各页「操作日志」入口）：资源下拉来自库内去重，
@@ -326,6 +426,8 @@ async function reload(targetPage = page.value): Promise<void> {
       user: filters.user || undefined,
       action: filters.action || undefined,
       resource: filters.resource || undefined,
+      ip: filters.ip || undefined,
+      keyword: keyword.value.trim() || undefined,
     }
     if (dateRange.value) {
       params.start = dateRange.value[0].startOf('day').toISOString()
@@ -340,6 +442,10 @@ async function reload(targetPage = page.value): Promise<void> {
 }
 
 function onFilterChange(): void {
+  // 资源切换后，已选动作若不再属于该资源则清掉（a-select 会显示悬空原始值）
+  if (filters.resource && filters.action && auditActionResource(filters.action) !== filters.resource) {
+    filters.action = ''
+  }
   reload(1)
 }
 
@@ -363,45 +469,24 @@ function handleTableChange(pagination: TablePaginationConfig): void {
 async function handleExport(format: 'csv' | 'xlsx'): Promise<void> {
   exporting.value = true
   try {
-    if (format === 'csv' && total.value <= 5000) {
-      // 小数据量：前端分页拉全量后直出 CSV（spec：复用共享导出工具）
-      const all: AuditLogItem[] = []
-      const base: Record<string, unknown> = {
-        page_size: 200,
-        user: filters.user || undefined,
-        action: filters.action || undefined,
-        resource: filters.resource || undefined,
-      }
-      if (dateRange.value) {
-        base.start = dateRange.value[0].startOf('day').toISOString()
-        base.end = dateRange.value[1].endOf('day').toISOString()
-      }
-      const pages = Math.max(1, Math.ceil(total.value / 200))
-      for (let p = 1; p <= pages; p++) {
-        const r = await listAuditLogs({ ...base, page: p } as never)
-        all.push(...r.data.items)
-      }
-      const rowsForCsv = all.map((x) => ({
-        时间: formatDateTimeDash(x.created_at),
-        用户: x.username ?? '',
-        操作: auditActionLabel(x.action),
-        原始操作: x.action,
-        资源: auditResourceLabel(x.resource),
-        资源ID: x.resource_id ?? '',
-        详情: x.detail ?? '',
-        IP: x.ip_address ?? '',
-      }))
-      exportToCsv(rowsForCsv, `audit-log-${Date.now()}.csv`)
-      message.success('已开始下载 CSV')
-      return
+    // 范围感知（audit-log-ux-review-fixes 批 2）：后端上限 50000，超出部分静默截断 → 明示
+    if (total.value > 50000) message.warning('筛选结果超过 50000 条，仅导出最近 50000 条')
+    message.info(`将导出当前筛选结果 ${total.value} 条`)
+    const payload = {
+      format,
+      user: filters.user,
+      action: filters.action,
+      resource: filters.resource,
+      ip: filters.ip,
+      ...(dateRange.value
+        ? { start: dateRange.value[0].startOf('day').toISOString(), end: dateRange.value[1].endOf('day').toISOString() }
+        : {}),
     }
-    // 大数据量（Excel / CSV >5000 行）：后端生成文件后 blob 下载（带 Authorization）
-    const payload = { format, user: filters.user, action: filters.action, resource: filters.resource }
     const r = await exportAuditLogs(payload)
     const taskId = r.data.task_id
     const st = await getExportStatus(taskId)
     if (st.data.status !== 'ready') {
-      message.warning('导出尚未就绪，请稍后重试')
+      message.warning(`导出任务未完成（状态：${st.data.status}），请重新点击导出`)
       return
     }
     const blob = await downloadExport(taskId)
@@ -418,7 +503,7 @@ async function copyDetail(): Promise<void> {
     await navigator.clipboard.writeText(current.value.detail)
     message.success('已复制')
   } catch {
-    message.error('复制失败')
+    message.error('复制失败：浏览器未授权剪贴板，请手动选择详情文本复制')
   }
 }
 
@@ -459,6 +544,31 @@ onMounted(async () => {
 
 .detail-cell {
   cursor: default;
+}
+
+/* 操作标签三态（design §7）：删除系 danger / 创建系 success / 其余中性——仅删除系用警示红 */
+.action-tag {
+  display: inline-block;
+  padding: 1px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 20px;
+  white-space: nowrap;
+}
+.tone-danger {
+  color: var(--danger);
+  background: var(--danger-bg, #fdf1f0);
+  border: 1px solid #f0d2ce;
+}
+.tone-success {
+  color: var(--success, #2e8b57);
+  background: var(--success-bg, #eef7f1);
+  border: 1px solid #cfe6d8;
+}
+.tone-neutral {
+  color: #5a6472;
+  background: transparent;
+  border: 1px solid #d6dae0;
 }
 
 .audit-table :deep(.ant-table) {
@@ -560,6 +670,34 @@ onMounted(async () => {
 .archive-hint {
   font-size: 12px;
   color: var(--danger);
+}
+
+/* 归档历史抽屉（批 3） */
+.archive-empty {
+  color: var(--muted);
+  font-size: 13px;
+  padding: 24px 0;
+  text-align: center;
+}
+
+.archive-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.archive-name {
+  font-size: 13px;
+  word-break: break-all;
+}
+
+.archive-meta {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 2px;
 }
 
 /* 操作区分隔线：常规导出组与破坏性归档清理分区 */
