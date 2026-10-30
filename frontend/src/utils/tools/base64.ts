@@ -14,6 +14,6 @@ export function decode(input: string): string {
   try {
     return decodeURIComponent(escape(atob(input.trim())))
   } catch {
-    return '解码失败：输入不是有效的 Base64 字符串'
+    return '解码失败：输入不是有效的 Base64 字符串（常见原因：含空格、换行或非 Base64 字符）'
   }
 }

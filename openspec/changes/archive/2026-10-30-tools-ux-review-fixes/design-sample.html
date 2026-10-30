@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>工具箱优化样例 — tools-ux-review-fixes</title>
+<style>
+:root { --bg:#f5f7fa; --border:#e2e8f0; --muted:#8a94a6; --primary:#0e7490; --warn-bg:#fffbeb; --warn-border:#fde68a; --warn-text:#92400e; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: #1f2937; padding: 24px; }
+h1 { font-size: 18px; margin-bottom: 4px; }
+.sub { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+.layout { display: flex; gap: 16px; height: 620px; }
+/* 导航栏：图标+文字（132px） */
+.nav { width: 132px; background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 8px; display: flex; flex-direction: column; gap: 4px; }
+.nav-item { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 4px; border-radius: 8px; cursor: pointer; color: var(--muted); font-size: 12px; }
+.nav-item svg { width: 20px; height: 20px; }
+.nav-item:hover { background: #f0f9ff; color: var(--primary); }
+.nav-item.active { background: #e0f2fe; color: var(--primary); font-weight: 600; }
+/* 工作区 */
+.panel-wrap { flex: 1; background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 20px; display: flex; flex-direction: column; }
+.tool-header { display: flex; align-items: baseline; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+.tool-header h2 { font-size: 16px; }
+.tool-header .hint { color: var(--muted); font-size: 12px; }
+.tool-header .spacer { flex: 1; }
+.btn-clear { border: 1px solid var(--border); background: #fff; color: var(--muted); border-radius: 6px; padding: 4px 12px; font-size: 12px; cursor: pointer; }
+.btn-clear:hover { color: #dc2626; border-color: #dc2626; }
+.dual { display: grid; grid-template-columns: 1fr 120px 1fr; gap: 12px; flex: 1; }
+.pane { display: flex; flex-direction: column; }
+.pane-label { font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+textarea { flex: 1; border: 1px solid var(--border); border-radius: 8px; padding: 10px; font-family: ui-monospace, monospace; font-size: 13px; resize: none; min-height: 300px; }
+textarea:focus { outline: 2px solid #bae6fd; border-color: var(--primary); }
+.actions { display: flex; flex-direction: column; justify-content: center; gap: 10px; }
+.btn { border: 1px solid var(--border); background: #fff; border-radius: 8px; padding: 8px 10px; font-size: 13px; cursor: pointer; }
+.btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+.copy-row { display: flex; gap: 8px; margin-top: 8px; }
+.copy-row .btn { font-size: 12px; padding: 4px 12px; }
+/* SM4 警告条 */
+.warn-banner { background: var(--warn-bg); border: 1px solid var(--warn-border); color: var(--warn-text); border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-bottom: 12px; display: flex; gap: 8px; align-items: center; }
+.key-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.key-row input { border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; width: 260px; font-family: ui-monospace, monospace; }
+.note { margin-top: 18px; background: #fff; border: 1px dashed var(--border); border-radius: 10px; padding: 14px 18px; font-size: 13px; color: var(--muted); }
+.note b { color: #1f2937; }
+.badge { display: inline-block; background: #e0f2fe; color: var(--primary); border-radius: 4px; padding: 1px 6px; font-size: 11px; margin-right: 6px; }
+</style>
+</head>
+<body>
+<h1>工具箱 — 优化后形态样例（SM4 面板 + 导航栏）</h1>
+<div class="sub">tools-ux-review-fixes · 图标+文字导航 / 深链 /tools?tool=sm4 / 短密钥黄条 / 清空按钮 / 复制粘贴 http 兼容（样例为静态展示）</div>
+
+<div class="layout">
+  <div class="nav">
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 9l-4 3 4 3M16 9l4 3-4 3M14 5l-4 14"/></svg>Lua 互转</div>
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 14a5 5 0 007 0l3-3a5 5 0 00-7-7l-2 2M14 10a5 5 0 00-7 0l-3 3a5 5 0 007 7l2-2"/></svg>URL 编解码</div>
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H6a2 2 0 00-2 2v14a2 2 0 002 2h12a2 2 0 002-2V9z"/><path d="M14 3v6h6M9 13h6M9 17h6"/></svg>JSON 格式化</div>
+    <div class="nav-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>SM4 加解密</div>
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M4 12h16M12 3c3 3 3 15 0 18-3-3-3-15 0-18z"/></svg>Base64</div>
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>YAML 格式化</div>
+    <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>JSON 对比</div>
+  </div>
+
+  <div class="panel-wrap">
+    <div class="tool-header">
+      <h2>SM4 加解密（ECB + PKCS7）</h2>
+      <span class="hint">用于调试平台 ↔ Edge 通道的加密链路</span>
+      <span class="spacer"></span>
+      <button class="btn-clear">清空</button>
+    </div>
+
+    <div class="warn-banner">⚠ <span>密钥非 16 字节（实际 5 字节），已自动补齐/截断——与 Edge 通道真实加解密行为可能不一致</span></div>
+
+    <div class="key-row">
+      <span style="font-size:13px;color:var(--muted)">密钥：</span>
+      <input type="password" value="short">
+      <span style="font-size:12px;color:var(--muted)">16 字符</span>
+      <button class="btn" title="恢复为 Edge 通道默认 SM4 密钥（调试平台↔Edge 加密链路用）">恢复默认</button>
+    </div>
+
+    <div class="dual">
+      <div class="pane">
+        <div class="pane-label">明文</div>
+        <textarea placeholder="输入明文">secret data</textarea>
+        <div class="copy-row"><button class="btn">复制</button><button class="btn">粘贴</button></div>
+      </div>
+      <div class="actions">
+        <button class="btn primary">加密 →</button>
+        <button class="btn">→ 解密</button>
+      </div>
+      <div class="pane">
+        <div class="pane-label">密文（Base64）</div>
+        <textarea placeholder="输入 Base64 密文">vMuPW8TipWm9ao3Lvpd2PQ==</textarea>
+        <div class="copy-row"><button class="btn">复制</button><button class="btn">粘贴</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <b>改造点对照</b>（编号对应 proposal）：<br>
+  <span class="badge">1.1</span>复制/粘贴 http 兼容（execCommand 回退，样例环境即 http——原版点「复制」必报「复制失败」） ·
+  <span class="badge">1.2</span>YAML 输入框复制对象修复 ·
+  <span class="badge">2.1</span>导航栏图标+文字（56→132px） ·
+  <span class="badge">2.2</span>深链 <code>/tools?tool=sm4</code>（刷新保持、可分享） ·
+  <span class="badge">2.3</span>短密钥黄条（不阻断） ·
+  <span class="badge">2.4</span>面板「清空」按钮 ·
+  <span class="badge">3.2</span>「恢复默认」tooltip 说明密钥用途 ·
+  <span class="badge">3.4</span>头部用途说明副行
+</div>
+</body>
+</html>
