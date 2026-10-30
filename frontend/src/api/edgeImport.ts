@@ -105,6 +105,8 @@ export interface ImportResponse {
   success: boolean
   import_log_id: number
   imported_counts: ImportedCounts
+  /** 分类跳过明细（后端一直返回；2026-10-30 起结果弹窗消费展示） */
+  skipped_counts?: Partial<ImportedCounts>
   plugin_summary: PluginSummary
   message: string
   /** 导入来源节点的实际执行路径（后端提供；缺失时不显示标签） */

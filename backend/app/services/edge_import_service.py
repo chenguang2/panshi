@@ -133,63 +133,50 @@ class EdgeImportService:
 
     def test_connection(self) -> dict:
         import time
+        from concurrent.futures import ThreadPoolExecutor
         try:
-            start = time.time()
-            routes_data = self.client.list_routes()
-            route_count = self._count_list(routes_data)
+            # monotonic：不受系统时钟回拨影响（WSL/NTP 校正时会产出负耗时，2026-10-30 实测）
+            start = time.monotonic()
 
-            raw_upstreams = self.client.list_upstreams()
-            upstream_nodes = self._parse_resource_list(raw_upstreams)
-            upstream_list = self._unwrap_panshi_items(upstream_nodes)
-            upstream_count = len(upstream_list)
+            # 并行探测（edge-import-ux-review-fixes：原串行 9 次 HTTP 在慢网络节点实测 42-44s；
+            # EdgeClient._request 每次新建 httpx 连接，线程安全）。关键路（routes/upstreams）
+            # 失败 → success False（语义与原外层 try 一致）；可选路失败兜底 0。
+            def run(value_fn):
+                try:
+                    return value_fn(), None
+                except Exception as e:
+                    return None, str(e)
 
-            try:
-                plugins_list = self.client.list_available_plugins()
-                plugin_count = self._count_list(plugins_list)
-            except Exception:
-                plugin_count = 0
+            with ThreadPoolExecutor(max_workers=9) as pool:
+                f_routes = pool.submit(run, lambda: self._parse_resource_list(self.client.list_routes()))
+                f_upstream_raw = pool.submit(run, lambda: self.client.list_upstreams())
+                f_plugins = pool.submit(run, lambda: self._count_list(self.client.list_available_plugins()))
+                f_pc = pool.submit(run, lambda: self._count_list(self.client.list_plugin_configs()))
+                f_gr = pool.submit(run, lambda: self._count_list(self.client.list_global_rules()))
+                f_pm = pool.submit(run, lambda: self._count_list(self.client.list_plugin_metadata()))
+                f_sp = pool.submit(run, lambda: len(self._unwrap_panshi_items(self.client.list_stream_routes())))
+                f_ssl = pool.submit(run, lambda: len(self._parse_resource_list(self.client._request("GET", "/edge/admin/ssl"))))
+                f_ver = pool.submit(run, lambda: (self.client._request("GET", "/edge/server_info") or {}).get("version", "unknown"))
 
-            try:
-                pc_data = self.client.list_plugin_configs()
-                plugin_config_count = self._count_list(pc_data)
-            except Exception:
-                plugin_config_count = 0
+                routes_data, route_err = f_routes.result()
+                raw_upstreams, up_err = f_upstream_raw.result()
+                if route_err or up_err:
+                    return {"success": False, "message": route_err or up_err}
+                route_count = self._count_list(routes_data)
 
-            try:
-                gr_data = self.client.list_global_rules()
-                global_rule_count = self._count_list(gr_data)
-            except Exception:
-                global_rule_count = 0
+                upstream_nodes = self._parse_resource_list(raw_upstreams)
+                upstream_list = self._unwrap_panshi_items(upstream_nodes)
+                upstream_count = len(upstream_list)
 
-            try:
-                pm_data = self.client.list_plugin_metadata()
-                plugin_metadata_count = self._count_list(pm_data)
-            except Exception:
-                plugin_metadata_count = 0
+                plugin_count = f_plugins.result()[0] or 0
+                plugin_config_count = f_pc.result()[0] or 0
+                global_rule_count = f_gr.result()[0] or 0
+                plugin_metadata_count = f_pm.result()[0] or 0
+                stream_proxy_count = f_sp.result()[0] or 0
+                ssl_certificate_count = f_ssl.result()[0] or 0
+                version = f_ver.result()[0] or "unknown"
 
-            try:
-                sp_data = self.client.list_stream_routes()
-                sp_list = self._unwrap_panshi_items(sp_data)
-                stream_proxy_count = len(sp_list)
-            except Exception:
-                stream_proxy_count = 0
-
-            try:
-                ssl_data = self.client._request("GET", "/edge/admin/ssl")
-                ssl_list = self._parse_resource_list(ssl_data)
-                ssl_certificate_count = len(ssl_list)
-            except Exception:
-                ssl_certificate_count = 0
-
-            version = "unknown"
-            try:
-                raw = self.client._request("GET", "/edge/server_info")
-                if isinstance(raw, dict):
-                    version = raw.get("version", "unknown")
-            except Exception:
-                pass
-
-            elapsed = int((time.time() - start) * 1000)
+            elapsed = int((time.monotonic() - start) * 1000)
 
             return {
                 "success": True,
@@ -245,68 +232,70 @@ class EdgeImportService:
         return []
 
     def fetch_edge_data(self) -> dict:
-        upstreams: list = []
-        routes: list = []
-        plugin_configs: list = []
-        global_rules: list = []
-        plugin_metadata: list = []
-        ssl_certificates: list = []
-        stream_proxies: list = []
+        """并行抓取各类配置（edge-import-ux-review-fixes：原串行 7 路，慢节点预览同样 40s+）。
+
+        每路独立 guard——单路失败记 warning 不阻塞其余（语义与原逐路 try/except 一致）。
+        """
+        from concurrent.futures import ThreadPoolExecutor
+
+        def run(value_fn):
+            try:
+                return value_fn(), None
+            except Exception as e:
+                return None, str(e)
+
+        def routes_fn():
+            raw = self.client.list_routes()
+            return self._unwrap_panshi_items(raw) if isinstance(raw, list) else []
+
+        with ThreadPoolExecutor(max_workers=7) as pool:
+            f_up = pool.submit(run, lambda: self._unwrap_panshi_items(self._parse_resource_list(self.client.list_upstreams())))
+            f_routes = pool.submit(run, routes_fn)
+            f_pc = pool.submit(run, lambda: self._parse_resource_list(self.client.list_plugin_configs()))
+            f_gr = pool.submit(run, lambda: self._parse_resource_list(self.client.list_global_rules()))
+            f_pm = pool.submit(run, lambda: self._parse_resource_list(self.client.list_plugin_metadata()))
+            f_ssl = pool.submit(run, lambda: self._parse_resource_list(self.client._request("GET", "/edge/admin/ssl")))
+            f_sp = pool.submit(run, lambda: self._unwrap_panshi_items(self.client.list_stream_routes()))
+
+            upstreams, up_err = f_up.result()
+            routes, routes_err = f_routes.result()
+            plugin_configs, pc_err = f_pc.result()
+            global_rules, gr_err = f_gr.result()
+            plugin_metadata, pm_err = f_pm.result()
+            ssl_certificates, ssl_err = f_ssl.result()
+            stream_proxies, sp_err = f_sp.result()
+
         warnings: list[str] = []
+        if up_err:
+            logger.warning("fetch_edge_data: upstreams failed — %s", up_err)
+            upstreams = []
+            warnings.append(f"上游获取失败: {up_err}")
+        if routes_err:
+            logger.warning("fetch_edge_data: routes failed — %s", routes_err)
+            routes = []
+            warnings.append(f"路由获取失败: {routes_err}")
+        if pc_err:
+            logger.warning("fetch_edge_data: plugin_configs failed — %s", pc_err)
+            plugin_configs = []
+            warnings.append(f"插件组获取失败: {pc_err}")
+        if gr_err:
+            logger.warning("fetch_edge_data: global_rules failed — %s", gr_err)
+            global_rules = []
+            warnings.append(f"全局规则获取失败: {gr_err}")
+        if pm_err:
+            logger.warning("fetch_edge_data: plugin_metadata failed — %s", pm_err)
+            plugin_metadata = []
+            warnings.append(f"插件元数据获取失败: {pm_err}")
+        if ssl_err:
+            logger.warning("fetch_edge_data: ssl failed — %s", ssl_err)
+            ssl_certificates = []
+            warnings.append(f"SSL 证书获取失败: {ssl_err}")
+        if sp_err:
+            logger.warning("fetch_edge_data: stream_routes failed — %s", sp_err)
+            stream_proxies = []
+            warnings.append(f"四层代理获取失败: {sp_err}")
 
-        try:
-            raw_upstreams = self.client.list_upstreams()
-            upstreams = self._unwrap_panshi_items(
-                self._parse_resource_list(raw_upstreams)
-            )
-        except Exception as e:
-            logger.warning("fetch_edge_data: upstreams failed — %s", e)
-            warnings.append(f"上游获取失败: {e}")
-
-        try:
-            raw_routes = self.client.list_routes()
-            if isinstance(raw_routes, list):
-                routes = self._unwrap_panshi_items(raw_routes)
-        except Exception as e:
-            logger.warning("fetch_edge_data: routes failed — %s", e)
-            warnings.append(f"路由获取失败: {e}")
-
-        try:
-            raw_pc = self.client.list_plugin_configs()
-            plugin_configs = self._parse_resource_list(raw_pc)
-        except Exception as e:
-            logger.warning("fetch_edge_data: plugin_configs failed — %s", e)
-            warnings.append(f"插件组获取失败: {e}")
-
-        try:
-            raw_gr = self.client.list_global_rules()
-            global_rules = self._parse_resource_list(raw_gr)
-        except Exception as e:
-            logger.warning("fetch_edge_data: global_rules failed — %s", e)
-            warnings.append(f"全局规则获取失败: {e}")
-
-        try:
-            raw_pm = self.client.list_plugin_metadata()
-            plugin_metadata = self._parse_resource_list(raw_pm)
-        except Exception as e:
-            logger.warning("fetch_edge_data: plugin_metadata failed — %s", e)
-            warnings.append(f"插件元数据获取失败: {e}")
-
-        try:
-            raw_ssl = self.client._request("GET", "/edge/admin/ssl")
-            ssl_certificates = self._parse_resource_list(raw_ssl)
-        except Exception as e:
-            logger.warning("fetch_edge_data: ssl failed — %s", e)
-            warnings.append(f"SSL 证书获取失败: {e}")
-
-        try:
-            raw_sp = self.client.list_stream_routes()
-            if isinstance(raw_sp, list):
-                stream_proxies = self._unwrap_panshi_items(raw_sp)
-        except Exception as e:
-            logger.warning("fetch_edge_data: stream_routes failed — %s", e)
-            warnings.append(f"四层代理获取失败: {e}")
-
+        # routes 原语义：仅 list 结果为 list 时采用（非 list 置空），这里保持结构化解包后一致
         return {
             "upstreams": upstreams,
             "routes": routes,

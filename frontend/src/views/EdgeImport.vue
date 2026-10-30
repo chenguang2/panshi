@@ -40,7 +40,11 @@
 
           <a-form-item label="节点 Admin Key">
             <div style="display: flex; gap: 8px">
-              <a-input-password v-model:value="adminKey" placeholder="输入节点 Admin Key..." style="max-width: 300px" />
+              <a-input-password
+                v-model:value="adminKey"
+                placeholder="留空则使用节点已配置的 Admin Key"
+                style="max-width: 300px"
+              />
               <a-button
                 type="primary"
                 :loading="testingConnection"
@@ -49,6 +53,9 @@
               >
                 测试连接
               </a-button>
+            </div>
+            <div v-if="testingConnection" class="testing-hint">
+              正在连接节点并统计配置数据，约需数秒至 1 分钟（视节点网络而定）……
             </div>
           </a-form-item>
         </a-form>
@@ -83,7 +90,9 @@
       </a-card>
 
       <div class="step-actions">
-        <a-button type="primary" :disabled="!connectionTested" @click="goToStep(1)"> 下一步 </a-button>
+        <span class="tip-host" title="请先完成连接测试">
+          <a-button type="primary" :disabled="!connectionTested" @click="goToStep(1)"> 下一步 </a-button>
+        </span>
       </div>
     </div>
 
@@ -179,7 +188,7 @@
             :columns="conflictColumns"
             :data-source="previewData.conflicts"
             :pagination="false"
-            rowKey="resource"
+            :rowKey="(r: any) => `${r.type}-${r.resource}`"
             size="small"
           >
             <template #bodyCell="{ column, record }">
@@ -200,241 +209,75 @@
         </div>
       </a-card>
 
-      <!-- 导入项选择 -->
+      <!-- 导入项选择（v-for 统一结构；空数据 section 单行提示——tools-ux 同款降噪） -->
+      <div class="section-toolbar">
+        <span class="text-muted text-sm">勾选要导入的配置类型：</span>
+        <button class="btn-link" @click="setAllSections(true)">全选</button>
+        <button class="btn-link" @click="setAllSections(false)">全不选</button>
+      </div>
       <div class="section-list">
-        <!-- 上游 -->
-        <div class="section-card">
+        <div v-for="sec in sectionDefs" :key="sec.key" class="section-card">
           <div class="section-header">
-            <a-checkbox v-model:checked="selections.upstreams" />
-            <span class="section-title">上游（{{ previewData?.upstreams?.length || 0 }} 个）</span>
-            <a-button size="small" @click="expandedSections.upstreams = !expandedSections.upstreams">
-              {{ expandedSections.upstreams ? '收起详情' : '预览详情' }}
-            </a-button>
+            <a-checkbox v-model:checked="selections[sec.key]" />
+            <span class="section-title"
+              >{{ sec.label }}（{{ (previewData?.[sec.dataKey] || []).length }} {{ sec.unit }}）</span
+            >
+            <template v-if="(previewData?.[sec.dataKey] || []).length > 0">
+              <a-button size="small" @click="expandedSections[sec.key] = !expandedSections[sec.key]">
+                {{ expandedSections[sec.key] ? '收起详情' : '预览详情' }}
+              </a-button>
+            </template>
           </div>
-          <div v-if="expandedSections.upstreams" class="section-body">
+          <div v-if="(previewData?.[sec.dataKey] || []).length === 0" class="section-empty">
+            {{ sec.label }}：0 {{ sec.unit }}（节点上无此类配置）
+          </div>
+          <div v-else-if="expandedSections[sec.key]" class="section-body">
             <a-table
-              :columns="upstreamColumns"
-              :data-source="previewData?.upstreams || []"
+              :columns="sec.columns"
+              :data-source="previewData?.[sec.dataKey] || []"
               :pagination="false"
-              rowKey="id"
+              :rowKey="sec.rowKey"
               size="small"
             >
               <template #bodyCell="{ column, record }">
-                <template v-if="column.key === 'name'">
-                  {{ record.name || record.id || '-' }}
-                </template>
-                <template v-if="column.key === 'type'">
-                  {{ record.type || '-' }}
-                </template>
                 <template v-if="column.key === 'nodes'">
                   <span v-if="record.nodes"> {{ getNodeCount(record.nodes) }} 个节点 </span>
                   <span v-else>-</span>
                 </template>
-              </template>
-            </a-table>
-          </div>
-        </div>
-
-        <!-- 路由 -->
-        <div class="section-card">
-          <div class="section-header">
-            <a-checkbox v-model:checked="selections.routes" />
-            <span class="section-title">路由（{{ previewData?.routes?.length || 0 }} 条）</span>
-            <a-button size="small" @click="expandedSections.routes = !expandedSections.routes">
-              {{ expandedSections.routes ? '收起详情' : '预览详情' }}
-            </a-button>
-          </div>
-          <div v-if="expandedSections.routes" class="section-body">
-            <a-table
-              :columns="routeColumns"
-              :data-source="previewData?.routes || []"
-              :pagination="false"
-              rowKey="id"
-              size="small"
-            >
-              <template #bodyCell="{ column, record }">
-                <template v-if="column.key === 'name'">
-                  {{ record.name || record.id || '-' }}
-                </template>
-                <template v-if="column.key === 'uri'">
-                  {{ record.uri || record.uris?.[0] || '-' }}
-                </template>
-                <template v-if="column.key === 'methods'">
+                <template v-else-if="column.key === 'methods'">
                   <a-tag v-for="m in record.methods || []" :key="m" color="blue">
                     {{ m }}
                   </a-tag>
                   <span v-if="!record.methods || record.methods.length === 0">-</span>
                 </template>
-                <template v-if="column.key === 'upstream'">
-                  {{ record.upstream_id || '-' }}
-                </template>
-              </template>
-            </a-table>
-          </div>
-        </div>
-
-        <!-- 插件组 -->
-        <div class="section-card">
-          <div class="section-header">
-            <a-checkbox v-model:checked="selections.plugin_configs" />
-            <span class="section-title">插件组（{{ previewData?.plugin_configs?.length || 0 }} 个）</span>
-            <a-button size="small" @click="expandedSections.plugin_configs = !expandedSections.plugin_configs">
-              {{ expandedSections.plugin_configs ? '收起详情' : '预览详情' }}
-            </a-button>
-          </div>
-          <div v-if="expandedSections.plugin_configs" class="section-body">
-            <a-table
-              :columns="pluginConfigColumns"
-              :data-source="previewData?.plugin_configs || []"
-              :pagination="false"
-              rowKey="id"
-              size="small"
-            >
-              <template #bodyCell="{ column, record }">
-                <template v-if="column.key === 'id'">
-                  <span style="font-size: 12px">{{ record.id }}</span>
-                </template>
-                <template v-if="column.key === 'desc'">
-                  {{ record.desc || record.name || '-' }}
-                </template>
-                <template v-if="column.key === 'plugins'">
+                <template v-else-if="column.key === 'plugins'">
                   <a-tag v-if="record.plugins"> {{ Object.keys(record.plugins).length }} 个插件 </a-tag>
                   <span v-else>-</span>
                 </template>
-              </template>
-            </a-table>
-          </div>
-        </div>
-
-        <!-- 全局规则 -->
-        <div class="section-card">
-          <div class="section-header">
-            <a-checkbox v-model:checked="selections.global_rules" />
-            <span class="section-title">全局规则（{{ previewData?.global_rules?.length || 0 }} 个）</span>
-            <a-button size="small" @click="expandedSections.global_rules = !expandedSections.global_rules">
-              {{ expandedSections.global_rules ? '收起详情' : '预览详情' }}
-            </a-button>
-          </div>
-          <div v-if="expandedSections.global_rules" class="section-body">
-            <a-table
-              :columns="globalRuleColumns"
-              :data-source="previewData?.global_rules || []"
-              :pagination="false"
-              rowKey="id"
-              size="small"
-            >
-              <template #bodyCell="{ column, record }">
-                <template v-if="column.key === 'id'">
-                  <span style="font-size: 12px">{{ record.id }}</span>
-                </template>
-                <template v-if="column.key === 'desc'">
-                  {{ record.desc || record.name || '-' }}
-                </template>
-                <template v-if="column.key === 'plugins'">
-                  <a-tag v-if="record.plugins"> {{ Object.keys(record.plugins).length }} 个插件 </a-tag>
+                <template v-else-if="column.key === 'targets'">
+                  <span v-if="record.targets && record.targets.length">{{ record.targets.length }} 个目标</span>
                   <span v-else>-</span>
                 </template>
-              </template>
-            </a-table>
-          </div>
-        </div>
-
-        <!-- 插件元数据 -->
-        <div class="section-card">
-          <div class="section-header">
-            <a-checkbox v-model:checked="selections.plugin_metadata" />
-            <span class="section-title">插件元数据（{{ previewData?.plugin_metadata?.length || 0 }} 个）</span>
-            <a-button size="small" @click="expandedSections.plugin_metadata = !expandedSections.plugin_metadata">
-              {{ expandedSections.plugin_metadata ? '收起详情' : '预览详情' }}
-            </a-button>
-          </div>
-          <div v-if="expandedSections.plugin_metadata" class="section-body">
-            <a-table
-              :columns="pluginMetadataColumns"
-              :data-source="previewData?.plugin_metadata || []"
-              :pagination="false"
-              rowKey="plugin_name"
-              size="small"
-            >
-              <template #bodyCell="{ column, record }">
-                <template v-if="column.key === 'plugin_name'">
-                  {{ record.plugin_name || '-' }}
-                </template>
-                <template v-if="column.key === 'config_data'">
+                <template v-else-if="column.key === 'config_data'">
                   <a-tag v-if="record.config_data && Object.keys(record.config_data).length">
                     {{ Object.keys(record.config_data).length }} 个插件
                   </a-tag>
                   <span v-else>-</span>
                 </template>
-              </template>
-            </a-table>
-          </div>
-        </div>
-        <!-- 四层代理 -->
-        <div class="section-card">
-          <div class="section-header">
-            <a-checkbox v-model:checked="selections.stream_proxy" />
-            <span class="section-title">四层代理（{{ previewData?.stream_proxies?.length || 0 }} 个）</span>
-            <a-button size="small" @click="expandedSections.stream_proxy = !expandedSections.stream_proxy">
-              {{ expandedSections.stream_proxy ? '收起详情' : '预览详情' }}
-            </a-button>
-          </div>
-          <div v-if="expandedSections.stream_proxy" class="section-body">
-            <a-table
-              :columns="streamProxyColumns"
-              :data-source="previewData?.stream_proxies || []"
-              :pagination="false"
-              rowKey="edge_uuid"
-              size="small"
-            >
-              <template #bodyCell="{ column, record }">
-                <template v-if="column.key === 'name'">
-                  {{ record.name || '-' }}
-                </template>
-                <template v-if="column.key === 'listen_port'">
-                  <span class="text-mono">{{ record.listen_port }}</span>
-                </template>
-                <template v-if="column.key === 'load_balance'">
-                  {{ record.load_balance || '-' }}
-                </template>
-                <template v-if="column.key === 'scheme'">
+                <template v-else-if="column.key === 'scheme'">
                   {{ record.scheme || 'tcp' }}
                 </template>
-                <template v-if="column.key === 'targets'">
-                  <span v-if="record.targets && record.targets.length">{{ record.targets.length }} 个目标</span>
-                  <span v-else>-</span>
+                <template v-else-if="column.key === 'desc'">
+                  {{ record.desc || record.name || '-' }}
                 </template>
-              </template>
-            </a-table>
-          </div>
-        </div>
-
-        <!-- SSL 证书 -->
-        <div class="section-card">
-          <div class="section-header">
-            <a-checkbox v-model:checked="selections.ssl_certificates" />
-            <span class="section-title">SSL 证书（{{ previewData?.ssl_certificates?.length || 0 }} 个）</span>
-            <a-button size="small" @click="expandedSections.ssl_certificates = !expandedSections.ssl_certificates">
-              {{ expandedSections.ssl_certificates ? '收起详情' : '预览详情' }}
-            </a-button>
-          </div>
-          <div v-if="expandedSections.ssl_certificates" class="section-body">
-            <a-table
-              :columns="sslCertificateColumns"
-              :data-source="previewData?.ssl_certificates || []"
-              :pagination="false"
-              rowKey="edge_uuid"
-              size="small"
-            >
-              <template #bodyCell="{ column, record }">
-                <template v-if="column.key === 'name'">
-                  {{ record.name || '-' }}
+                <template v-else-if="column.key === 'name'">
+                  {{ record.name || record.id || '-' }}
                 </template>
-                <template v-if="column.key === 'sni'">
-                  {{ record.sni || '-' }}
+                <template v-else-if="column.key === 'id'">
+                  <span style="font-size: 12px">{{ record.id }}</span>
                 </template>
-                <template v-if="column.key === 'cert_type'">
-                  {{ record.cert_type || '-' }}
+                <template v-else>
+                  {{ record[column.key] || '-' }}
                 </template>
               </template>
             </a-table>
@@ -449,8 +292,8 @@
 
       <div class="step-actions">
         <a-button @click="goToStep(1)">上一步</a-button>
-        <a-button @click="handleCancel">取消</a-button>
-        <a-button type="primary" :loading="importing" @click="handleImport"> 确认导入 </a-button>
+        <a-button @click="confirmCancel">取消</a-button>
+        <a-button type="primary" :loading="importing" @click="confirmImport"> 确认导入 </a-button>
       </div>
     </div>
   </div>
@@ -595,6 +438,56 @@ const sslCertificateColumns = [
   { title: '类型', key: 'cert_type' },
 ]
 
+// 统一 section 渲染元数据（v-for 重构，消除 7 段手写重复）
+const sectionDefs = [
+  { key: 'upstreams', label: '上游', unit: '个', dataKey: 'upstreams', columns: upstreamColumns, rowKey: 'id' },
+  { key: 'routes', label: '路由', unit: '条', dataKey: 'routes', columns: routeColumns, rowKey: 'id' },
+  {
+    key: 'plugin_configs',
+    label: '插件组',
+    unit: '个',
+    dataKey: 'plugin_configs',
+    columns: pluginConfigColumns,
+    rowKey: 'id',
+  },
+  {
+    key: 'global_rules',
+    label: '全局规则',
+    unit: '个',
+    dataKey: 'global_rules',
+    columns: globalRuleColumns,
+    rowKey: 'id',
+  },
+  {
+    key: 'plugin_metadata',
+    label: '插件元数据',
+    unit: '个',
+    dataKey: 'plugin_metadata',
+    columns: pluginMetadataColumns,
+    rowKey: 'plugin_name',
+  },
+  {
+    key: 'stream_proxy',
+    label: '四层代理',
+    unit: '个',
+    dataKey: 'stream_proxies',
+    columns: streamProxyColumns,
+    rowKey: 'edge_uuid',
+  },
+  {
+    key: 'ssl_certificates',
+    label: 'SSL 证书',
+    unit: '张',
+    dataKey: 'ssl_certificates',
+    columns: sslCertificateColumns,
+    rowKey: 'edge_uuid',
+  },
+] as const
+
+function setAllSections(v: boolean): void {
+  for (const sec of sectionDefs) selections[sec.key] = v
+}
+
 // ---- Data Loading ----
 
 const loadClusters = async () => {
@@ -620,7 +513,7 @@ const loadNodes = async (clusterId: number) => {
     const res = await api.get('/clusters/' + clusterId + '/nodes')
     nodes.value = res.data?.items || res.data || []
   } catch (error: any) {
-    message.error('加载节点列表失败: ' + (error.response?.data?.detail || error.message))
+    message.error('获取节点列表失败，请刷新重试（' + (error.response?.data?.detail || error.message) + '）')
   } finally {
     loadingNodes.value = false
   }
@@ -663,10 +556,10 @@ const handleTestConnection = async () => {
 // ---- Navigation ----
 
 const goToStep = async (step: number) => {
-  // Going back to step 0: clear node selection and connection test
+  // 回到 step 0（edge-import-ux-review-fixes 2.5）：保留已选集群与节点列表——换节点重测不必重选集群；
+  // 仅重置节点选择、连接态与预览
   if (step === 0 && currentStep.value > 0) {
     selectedNodeId.value = null
-    nodes.value = []
     connectionResult.value = null
     connectionError.value = ''
     connectionTested.value = false
@@ -684,12 +577,20 @@ const goToStep = async (step: number) => {
     try {
       const res = await getPreview(selectedClusterId.value, selectedNodeId.value, adminKey.value)
       previewData.value = res.data
+      // 默认展开有数据的 section；0 项收起（edge-import-ux-review-fixes 3.1）
+      for (const sec of sectionDefs) {
+        expandedSections[sec.key] = (res.data[sec.dataKey] || []).length > 0
+      }
       // Auto-expand conflict section if conflicts exist
       if (res.data.conflicts && res.data.conflicts.length > 0) {
         showConflicts.value = true
       }
     } catch (error: any) {
-      message.error('获取预览数据失败: ' + (error.response?.data?.detail || error.message))
+      message.error(
+        '获取预览数据失败：该节点的部分配置无法读取（' +
+          (error.response?.data?.detail || error.message) +
+          '），可返回上一步重试',
+      )
       // Stay on step 2 if preview fetch fails
       return
     } finally {
@@ -698,6 +599,17 @@ const goToStep = async (step: number) => {
   }
 
   currentStep.value = step
+}
+
+// 取消确认（edge-import-ux-review-fixes 2.6）
+const confirmCancel = (): void => {
+  showOverlayModal({
+    title: '取消导入',
+    content: '取消将丢弃已选配置与预览数据，确定取消？',
+    showCancel: true,
+    okText: '确定取消',
+    onOk: () => handleCancel(),
+  })
 }
 
 const handleCancel = () => {
@@ -738,6 +650,18 @@ function showImportResult(result: ImportResponse | null, error: string) {
       ]
       if (counts.skipped > 0) {
         lines.push(`跳过：${counts.skipped} 项（冲突）`)
+        // 分类明细（edge-import-ux-review-fixes 2.3：后端 skipped_counts 一直有，前端未消费）
+        const sc = result.skipped_counts
+        if (sc) {
+          const detail: string[] = []
+          if (sc.upstreams) detail.push(`上游跳过 ${sc.upstreams} 个`)
+          if (sc.routes) detail.push(`路由跳过 ${sc.routes} 条`)
+          if (sc.plugin_configs) detail.push(`插件组跳过 ${sc.plugin_configs} 个`)
+          if (sc.global_rules) detail.push(`全局规则跳过 ${sc.global_rules} 个`)
+          if ((sc as any).stream_proxies) detail.push(`四层代理跳过 ${(sc as any).stream_proxies} 个`)
+          if ((sc as any).ssl_certificates) detail.push(`SSL 证书跳过 ${(sc as any).ssl_certificates} 张`)
+          lines.push(...detail)
+        }
       }
       children.push(
         h(
@@ -752,6 +676,16 @@ function showImportResult(result: ImportResponse | null, error: string) {
           ],
         ),
         h('div', { style: 'margin-top:8px;' }, [
+          h(
+            'a',
+            {
+              style: 'color:var(--accent);cursor:pointer;text-decoration:underline;margin-right:16px;',
+              onClick: () => {
+                handleCancel()
+              },
+            },
+            '继续导入 →',
+          ),
           h(
             'a',
             {
@@ -854,6 +788,25 @@ const handleImport = async () => {
   }
 }
 
+// 导入前摘要确认（edge-import-ux-review-fixes 2.2）：写库操作应有摩擦；确认后方执行
+const confirmImport = (): void => {
+  if (!previewData.value) {
+    message.warning('预览数据缺失，请重新进入预览')
+    return
+  }
+  const selected = sectionDefs
+    .filter((s) => selections[s.key])
+    .map((s) => `${s.label} ${(previewData.value?.[s.dataKey] || []).length} ${s.unit}`)
+    .join('、')
+  showOverlayModal({
+    title: '确认导入',
+    content: `将导入以下配置到本地数据库：${selected}。冲突项将自动跳过，不影响其余数据。`,
+    showCancel: true,
+    okText: '确认导入',
+    onOk: () => handleImport(),
+  })
+}
+
 const getNodeCount = (nodes: any) => {
   if (Array.isArray(nodes)) return nodes.length
   if (typeof nodes === 'object' && nodes !== null) return Object.keys(nodes).length
@@ -912,6 +865,50 @@ onMounted(() => {
   gap: 12px;
   margin-top: 24px;
   justify-content: flex-end;
+}
+
+/* 测试连接过程提示（edge-import-ux-review-fixes 1.4） */
+.testing-hint {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: #e6f7ff;
+  border: 1px solid #91d5ff;
+  border-radius: 6px;
+  color: #096dd9;
+  font-size: 13px;
+}
+
+/* 禁用按钮 tooltip 载体（disabled 元素不冒鼠标事件，需宿主承载） */
+.tip-host {
+  display: inline-block;
+  cursor: not-allowed;
+}
+
+/* 预览 section 工具条与空态（edge-import-ux-review-fixes 3.2/3.3） */
+.section-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.btn-link {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0;
+}
+
+.btn-link:hover {
+  text-decoration: underline;
+}
+
+.section-empty {
+  padding: 12px 16px;
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .section-list {
