@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 
 from app.core import db_config
@@ -79,6 +79,13 @@ def release_inflight() -> None:
 
 def inflight_busy() -> bool:
     return _INFLIGHT_LOCK.locked()
+
+
+def migration_in_progress() -> bool:
+    """数据库迁移是否进行中（单点助手）：调度跳过与 status.suspended_reason 共用判定。"""
+    from app.core import maintenance
+
+    return maintenance._migration_lock.is_set()
 
 
 def _backend_root() -> Path:
@@ -324,9 +331,48 @@ _SSH_BASE_OPTS = [
 ]
 
 
+# ── SSH 错误中文归因（设计 D7，单点定义）────────────────────────────────────
+
+
+# (匹配关键词组, 首句模板)；{endpoint} 由 host:port 填充
+_ERROR_ATTRIBUTION_RULES: list[tuple[tuple[str, ...], str]] = [
+    (("Connection refused",),
+     "连接备份位置失败：无法建立到 {endpoint} 的 SSH 连接（连接被拒绝），请检查 IP、端口与防火墙设置"),
+    (("Permission denied", "Authentication failed"),
+     "备份位置认证失败：{endpoint} 拒绝了提供的凭据，请检查用户名与密码/私钥是否正确"),
+    (("Could not resolve hostname", "Name or service not known"),
+     "无法解析备份位置主机：{endpoint} 的主机名无法解析，请检查 IP/域名与 DNS 配置"),
+    (("timed out",),
+     "连接备份位置超时：{endpoint} 在限定时间内无响应，请检查网络可达性与防火墙设置"),
+    (("No such file or directory",),
+     "远端目录不存在：{endpoint} 上的目录无法访问，请检查备份位置的远端目录配置"),
+    (("No space left on device",),
+     "备份位置磁盘空间不足：{endpoint} 的远端磁盘已满，请清理远端磁盘或更换远端目录"),
+]
+
+
+def attribute_remote_error(message: str, host: Optional[str] = None, port: Optional[int] = None) -> str:
+    """把远端失败按 errno/输出关键词归类为「中文首句 + 可操作建议 + 原始错误详情」。
+
+    - 命中类别：``{中文首句（含 host:port 与「请检查…」建议）}。原始错误：{原文}``
+    - 未命中任何类别：原样返回（不扭曲未知错误）
+    - host 不可得（无 target 场景，如 _require_sshpass）不经此函数
+    """
+    endpoint = f"{host}:{port or 22}" if host else "备份位置"
+    for keywords, template in _ERROR_ATTRIBUTION_RULES:
+        if any(k in message for k in keywords):
+            return f"{template.format(endpoint=endpoint)}。原始错误：{message}"
+    return message
+
+
 def _require_sshpass(password: Optional[str]) -> None:
     if password and not _sshpass_available():
-        raise RuntimeError("未安装 sshpass，无法使用密码认证（sudo apt-get install sshpass）")
+        raise RuntimeError(
+            "无法使用密码认证：平台后端服务器未安装 sshpass 组件"
+            "（该组件装在运行本平台的后端服务器上，不是你当前操作的电脑）。"
+            "请在平台后端服务器上执行 sudo apt-get install sshpass 安装；"
+            "或改用密钥认证：在备份位置编辑中把认证方式切为「密钥」并填写私钥路径。"
+        )
 
 
 def _ssh_argv(target: dict, remote_cmd: str, password: Optional[str], key_path: Optional[str] = None):
@@ -389,7 +435,12 @@ async def _remote_exec(target: dict, remote_cmd: str, password: Optional[str],
     argv, env = _ssh_argv(target, remote_cmd, password, key_path)
     rc, out, err = await _run(argv, env=env, timeout=timeout)
     if rc != 0:
-        raise RuntimeError(f"远程命令失败（rc={rc}）: {err or out}")
+        # 中文归因（设计 D7）：首句可操作导向，原始错误串保留为详情
+        raise RuntimeError(
+            attribute_remote_error(
+                f"远程命令失败（rc={rc}）: {err or out}", target.get("host"), target.get("port")
+            )
+        )
     return out
 
 
@@ -406,7 +457,12 @@ async def push_package(target: dict, local_path: str, remote_dir: str, package_n
     argv, env = _scp_argv(target, local_path, part, password, key_path)
     rc, out, err = await _run(argv, env=env, timeout=600)
     if rc != 0:
-        raise RuntimeError(f"备份包上传失败: {err or out}")
+        # 中文归因（设计 D7）：与 _remote_exec 同一单点映射
+        raise RuntimeError(
+            attribute_remote_error(
+                f"备份包上传失败: {err or out}", target.get("host"), target.get("port")
+            )
+        )
     await _remote_exec(target, f"mv {part} {final}", password, key_path)
 
 
@@ -839,8 +895,8 @@ async def _perform_backup_locked(trigger: str, db=None) -> dict:
                 cfg_row.last_success_at = finished
         await session.commit()
 
-    if status == "failed":
-        raise RuntimeError(summary_error or "备份失败")
+    # 三态一律 return 结构化结果（design D2）：failed 也带 targets/error/package_name
+    # 等字段，HTTP 409 仅保留给「任务冲突」语义（perform_backup 入口 acquire 失败时 raise）
     return {
         "id": history_id,
         "status": status,
@@ -853,6 +909,41 @@ async def _perform_backup_locked(trigger: str, db=None) -> dict:
         "error": summary_error,
         "targets": target_results,
     }
+
+
+# ── 历史清理（design D12，db-backup-dr-ux-optimization）────────────────────
+
+
+async def cleanup_history(db, keep_last: Optional[int] = None, purge_all: bool = False) -> int:
+    """清理备份历史：purge_all 清空全部，否则按 id 倒序保留最近 keep_last 条。
+
+    - 主记录与关联子结果（DbBackupHistoryTarget）同删
+    - **不在本函数内 commit**：审计骨架与删除须经端点同事务合并后一次提交
+      （参照 database.py cleanup_migration_history 的注释模式，约定 #37/#29）
+    - 返回删除的主记录条数
+    """
+    from app.models.db_backup import DbBackupHistory, DbBackupHistoryTarget
+
+    if purge_all:
+        ids = list(
+            (await db.execute(select(DbBackupHistory.id))).scalars().all()
+        )
+    else:
+        ids = list(
+            (
+                await db.execute(
+                    select(DbBackupHistory.id)
+                    .order_by(DbBackupHistory.id.desc())
+                    .offset(keep_last)
+                )
+            ).scalars().all()
+        )
+    if not ids:
+        return 0
+    # 先删子结果再删主表（同一事务，由端点提交）
+    await db.execute(delete(DbBackupHistoryTarget).where(DbBackupHistoryTarget.history_id.in_(ids)))
+    await db.execute(delete(DbBackupHistory).where(DbBackupHistory.id.in_(ids)))
+    return len(ids)
 
 
 # ── 调度循环（main.py lifespan 拉起，与 _relay_refresh_loop 同款）────────────
@@ -872,11 +963,10 @@ async def backup_scheduler_loop(interval: float = 30.0) -> None:
 
 async def scheduler_tick() -> bool:
     """单次调度判定。返回是否触发（主要用于测试）。"""
-    from app.core import maintenance
     from app.core.database import AsyncSessionLocal
     from app.models.db_backup import DbBackupConfig
 
-    if maintenance._migration_lock.is_set():
+    if migration_in_progress():
         return False
     if inflight_busy():
         return False

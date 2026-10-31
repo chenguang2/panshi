@@ -48,6 +48,8 @@ export interface DbBackupStatusInfo {
   next_run_at: string | null
   last_success_at: string | null
   last_status: string | null
+  /** 调度因维护窗口（数据库迁移进行中）暂停时的显式原因；常态缺省（D8 前端半消费） */
+  suspended_reason?: string | null
 }
 
 export interface DbBackupConfigResponse {
@@ -130,6 +132,18 @@ export interface DbBackupHistoryPage {
   page: number
   page_size: number
   items: DbBackupHistoryItem[]
+}
+
+/** POST /db-backup/history/cleanup 载荷——keep_last 与 purge_all 二选一（同一请求恰有一类成立，否则 422） */
+export interface DbBackupHistoryCleanupPayload {
+  keep_last?: number
+  purge_all?: boolean
+}
+
+/** POST /db-backup/history/cleanup 返回（物理删除仅影响操作历史，不动远端备份包） */
+export interface DbBackupHistoryCleanupResult {
+  deleted: number
+  remaining: number
 }
 
 /** POST /db-backup/targets/test 载荷（可先于保存测试；未填字段后端回退既有配置语义不适用——按载荷直测） */
@@ -246,9 +260,13 @@ export interface RestoreExecutePayload {
 
 export interface RestoreExecuteResult {
   success: boolean
+  /** 恢复后是否成功激活新库（服务层透传） */
+  activated?: boolean
   active_connection_id: string | null
   restored_databases: Record<string, unknown>[]
   message: string
+  /** 恢复前活动库的 .pre-restore 备份文件路径（服务层透传） */
+  pre_restore_file?: string | null
   /** 以下为 db-restore-schema-reconcile 新增契约字段（向后兼容：旧响应可能缺省，消费方按可选处理） */
   /** 本次恢复是否执行了 schema 补齐（检测有落差或空跑均算执行） */
   schema_reconciled?: boolean

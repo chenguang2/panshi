@@ -60,8 +60,10 @@ describe('L7 集群卡片按钮主次', () => {
 })
 
 describe('L10 备份空态引导', () => {
-  it('从未备份时提示开启自动调度', () => {
-    expect(src('components', 'DbBackupCard.vue')).toContain('从未备份（建议在「策略与保留」中开启自动调度）')
+  it('从未备份时提示开启自动调度（D4 拆分：统计格只留状态，建议语并入 statusHint 行）', () => {
+    const s = src('components', 'DbBackupCard.vue')
+    expect(s).toContain("'从未备份'")
+    expect(s).toContain('尚未成功备份过，建议在「策略与保留」中开启定时备份')
   })
 })
 

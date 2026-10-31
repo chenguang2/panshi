@@ -682,8 +682,10 @@ class TestPerformBackup:
             from app.core.database import AsyncSessionLocal
             from app.models.db_backup import DbBackupConfig, DbBackupHistory, DbBackupHistoryTarget
 
-            with pytest.raises(RuntimeError, match="active|活动"):
-                await svc.perform_backup(trigger="scheduled")
+            # 新语义（design D2）：failed 不再 raise，返回结构化结果（409 仅任务冲突）
+            result = await svc.perform_backup(trigger="scheduled")
+            assert result["status"] == "failed"
+            assert "活动" in (result["error"] or "")
 
             async with AsyncSessionLocal() as s:
                 from sqlalchemy import select
@@ -956,8 +958,9 @@ class TestFanoutBackup:
             {"name": "a", "host": "192.0.2.10"},
             {"name": "b", "host": "10.8.0.2"},
         ])
-        with pytest.raises(RuntimeError):
-            await svc.perform_backup(trigger="manual")
+        # 新语义（design D2）：推送全败返回结构化 failed 结果（不再 raise）
+        result = await svc.perform_backup(trigger="manual")
+        assert result["status"] == "failed"
         rows, subs, cfg = await self._history_state()
         assert rows[0].status == "failed"
         assert len(subs) == 2 and all(s.status == "failed" for s in subs)
@@ -977,8 +980,10 @@ class TestFanoutBackup:
         monkeypatch.setattr(svc, "_run", fake.run)
         # 位置种子不触碰 load_config（保持 nope.cfg 指向缺失库）
         await _seed_world_async(targets=[{"name": "a", "host": "192.0.2.10"}])
-        with pytest.raises(RuntimeError, match="active|活动"):
-            await svc.perform_backup(trigger="manual")
+        # 新语义（design D2）：构建失败返回结构化 failed 结果（不再 raise）
+        result = await svc.perform_backup(trigger="manual")
+        assert result["status"] == "failed"
+        assert "活动" in (result["error"] or "")
         rows, subs, cfg = await self._history_state()
         assert rows[0].status == "failed"
         assert subs == []  # 无子结果行

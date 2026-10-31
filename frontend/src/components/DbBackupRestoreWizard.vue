@@ -930,7 +930,8 @@ watch(
 
 /** 开门初始化：通用入口仅加载位置列表；历史「恢复此包」直达（preselectTargetId）
  *  切已配置位置模式、选中该位置并自动列包——位置已被删除时回退「全部位置」聚合。
- *  列包成功后由既有 preselectPackageName 逻辑自动选中目标包并进入第 2 步。 */
+ *  列包成功后由既有 preselectPackageName 逻辑自动选中目标包并进入第 2 步；
+ *  D11：直达且预选包命中列表时自动发起校验（与手动同路径同标注，安全闸不减）。 */
 async function initSource(): Promise<void> {
   const directId = props.preselectTargetId
   if (directId == null) {
@@ -939,10 +940,14 @@ async function initSource(): Promise<void> {
   }
   // loadTargets 会把 sourceMode/selectedTargetId 复位（'all' 或手动），预选须在其后应用
   await loadTargets()
-  if (targets.value.some((t) => t.id === directId)) {
+  const directHit = targets.value.some((t) => t.id === directId)
+  if (directHit) {
     selectedTargetId.value = String(directId)
   }
   if (targetReady.value) await handleList()
+  if (directHit && !!props.preselectPackageName && selected.value === props.preselectPackageName) {
+    void doVerify({ target_id: directId })
+  }
 }
 </script>
 

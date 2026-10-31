@@ -159,6 +159,8 @@ ROUTE_MAP: dict[tuple[str, str], tuple[str, str, bool]] = {
     ("POST", "/api/v1/db-backup/restore/list"): ("db_backup", "restore_list", True),
     ("POST", "/api/v1/db-backup/restore/verify"): ("db_backup", "restore_verify", True),
     ("POST", "/api/v1/db-backup/restore/execute"): ("db_backup", "restore_execute", False),
+    # 历史清理（db-backup-dr-ux-optimization D12；删路由时手工清理——rule #37）
+    ("POST", "/api/v1/db-backup/history/cleanup"): ("db_backup", "history_cleanup", False),
     ("POST", "/api/v1/database/history/cleanup"): ("db_migration_log", "cleanup", True),
     ("DELETE", "/api/v1/database/history/{log_id}"): ("db_migration_log", "delete", False),
     # 审计/系统

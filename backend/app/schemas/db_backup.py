@@ -4,7 +4,7 @@ import re
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class DbBackupConfigUpdate(BaseModel):
@@ -170,6 +170,25 @@ class DbBackupHistoryPage(BaseModel):
     page: int
     page_size: int
     items: List[DbBackupHistoryItem]
+
+
+class DbBackupHistoryCleanupRequest(BaseModel):
+    """POST /db-backup/history/cleanup 载荷（design D12）：二选一条件。
+
+    keep_last（保留最近 N 条，N ≥ 1）与 purge_all（清空全部）恰取其一——
+    缺失或同时成立均拒绝（ValueError → FastAPI 422）。
+    """
+
+    keep_last: Optional[int] = Field(None, ge=1)
+    purge_all: Optional[bool] = None
+
+    @model_validator(mode="after")
+    def _check_exclusive(self) -> "DbBackupHistoryCleanupRequest":
+        has_keep = self.keep_last is not None
+        has_purge = bool(self.purge_all)
+        if has_keep == has_purge:
+            raise ValueError("清理条件二选一：keep_last（保留最近 N 条）或 purge_all（清空全部）")
+        return self
 
 
 class DbBackupTestRequest(BaseModel):

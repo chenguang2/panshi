@@ -2,6 +2,8 @@ import api from '@/api/index'
 import type {
   DbBackupConfigResponse,
   DbBackupConfigUpdate,
+  DbBackupHistoryCleanupPayload,
+  DbBackupHistoryCleanupResult,
   DbBackupHistoryPage,
   DbBackupRunResult,
   DbBackupTarget,
@@ -61,7 +63,12 @@ export function testDbBackupTarget(data: DbBackupTargetTestPayload) {
   return api.post<DbBackupTestResult>('/db-backup/targets/test', data)
 }
 
-/** 立即备份（不要求 enabled，但要求至少一个启用位置；进行中返回 409） */
+/**
+ * 立即备份（不要求 enabled，但要求至少一个启用位置）。
+ * 三态反馈一律 HTTP 200 + 结构化结果（D2）：status='success' / 'partial' / 'failed'
+ * （failed = 构建成功但全部位置推送失败，targets 携带逐位置子结果）；
+ * 409 仅保留「已有备份/恢复任务进行中」冲突语义。
+ */
 export function runDbBackupNow() {
   return api.post<DbBackupRunResult>('/db-backup/run', {}, { timeout: BACKUP_RUN_TIMEOUT })
 }
@@ -71,6 +78,11 @@ export function getDbBackupHistory(page: number, pageSize: number) {
   return api.get<DbBackupHistoryPage>('/db-backup/history', {
     params: { page, page_size: pageSize },
   })
+}
+
+/** 清理备份历史（keep_last / purge_all 二选一；物理删除不可恢复，仅影响操作历史） */
+export function cleanupDbBackupHistory(data: DbBackupHistoryCleanupPayload) {
+  return api.post<DbBackupHistoryCleanupResult>('/db-backup/history/cleanup', data)
 }
 
 /**

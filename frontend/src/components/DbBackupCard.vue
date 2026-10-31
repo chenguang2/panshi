@@ -7,7 +7,7 @@
           <div class="dbb-stat">
             <div class="dbb-stat-label">最近成功备份</div>
             <div class="dbb-stat-value" :class="{ 'dbb-muted': !lastSuccessAt }">
-              {{ lastSuccessAt ? formatDateTime(lastSuccessAt) : '从未备份（建议在「策略与保留」中开启自动调度）' }}
+              {{ lastSuccessAt ? formatDateTime(lastSuccessAt) : '从未备份' }}
             </div>
           </div>
           <div class="dbb-stat">
@@ -24,10 +24,11 @@
               <span v-else class="dbb-muted">尚未运行</span>
             </div>
           </div>
-          <div class="dbb-stat">
+          <div class="dbb-stat dbb-stat-schedule">
             <div class="dbb-stat-label">定时调度</div>
             <div class="dbb-stat-value">
-              <span :class="enabled ? 'badge badge-success' : 'badge badge-neutral'">{{
+              <span v-if="suspendedReason" class="badge badge-warning">{{ suspendedReason }}</span>
+              <span v-else :class="enabled ? 'badge badge-success' : 'badge badge-neutral'">{{
                 enabled ? '已启用' : '未启用'
               }}</span>
             </div>
@@ -47,9 +48,16 @@
           <button class="btn btn-secondary btn-sm" :disabled="configLoading" @click="requestRefresh">
             {{ configLoading ? '刷新中…' : '刷新' }}
           </button>
-          <button class="btn btn-primary btn-sm" :disabled="runDisabled" @click="requestRunNow">
+          <button
+            class="btn btn-primary btn-sm"
+            :disabled="runDisabled"
+            :title="runBlockedReason"
+            :aria-label="runBlockedReason || undefined"
+            @click="requestRunNow"
+          >
             {{ running ? '备份中…' : '立即备份' }}
           </button>
+          <span v-if="loaded && enabledTargetCount === 0" class="dbb-run-blocked-hint">{{ runBlockedReason }}</span>
           <!-- 危险流入口：红色描边（向导内最终「执行恢复」为 btn-danger 实心，形成入口→确认的递进） -->
           <button class="btn btn-danger-outline btn-sm" @click="openWizard">恢复数据…</button>
         </div>
@@ -137,8 +145,10 @@
                           :class="healthDotClass(t.name)"
                           :title="healthTooltip(t.name)"
                         ></span>
-                        <span v-if="recentTestText(t.name)" class="cell-meta">测试 {{ recentTestText(t.name) }}</span>
-                        <span v-else class="cell-meta t-muted">测试 —</span>
+                        <span v-if="healthRelative(t.name)" class="cell-meta dbb-tgt-pushat">{{
+                          healthRelative(t.name)
+                        }}</span>
+                        <span v-else class="cell-meta t-muted">—</span>
                       </td>
                       <td class="num mono dbb-tgt-retain">{{ t.retain_count }}</td>
                       <td>
@@ -191,7 +201,7 @@
                     <input type="checkbox" v-model="form.enabled" />
                     <span class="toggle-slider"></span>
                   </label>
-                  <span class="dbb-enabled-text">{{ form.enabled ? '启用定时备份' : '停用定时备份' }}</span>
+                  <span class="dbb-enabled-text">{{ form.enabled ? '定时备份已启用' : '定时备份未启用' }}</span>
                   <span class="form-hint dbb-inline-hint">「立即备份」不依赖此开关</span>
                 </div>
               </div>
@@ -245,13 +255,18 @@
               停用位置不参与新推送，但其远端已存在的备份包不受影响。
             </div>
           </a-tab-pane>
-          <a-tab-pane key="history" tab="备份历史" force-render>
+          <a-tab-pane key="history" force-render>
+            <template #tab>
+              <span class="dbb-history-tab">备份历史</span>
+              <span v-if="historyDotVisible" class="dbb-history-dot" title="最近一次备份失败，点击查看原因"></span>
+            </template>
             <!-- ═══ 历史区 ═══ -->
             <div class="dbb-history">
               <div class="dbb-history-header">
                 <h4>备份历史</h4>
                 <div class="dbb-hist-toolbar">
                   <span class="dbb-history-count">{{ historyCountText }}</span>
+                  <span class="dbb-hist-limit">仅筛选最近 {{ FILTER_FETCH_LIMIT }} 条</span>
                   <select v-model="historyFilter.status" class="form-input dbb-hist-filter">
                     <option value="all">全部状态</option>
                     <option value="success">成功</option>
@@ -263,6 +278,7 @@
                     <option value="scheduled">定时</option>
                     <option value="manual">手动</option>
                   </select>
+                  <button class="btn btn-secondary btn-sm dbb-cleanup-btn" @click="openCleanupConfirm">清理历史</button>
                 </div>
               </div>
               <div v-if="historyLoading" class="dbb-hist-loading">加载中…</div>
@@ -279,6 +295,7 @@
                   :pagination="historyPagination"
                   :row-expandable="histExpandable"
                   @change="onHistoryTableChange"
+                  @expand="onHistoryExpand"
                 >
                   <template #bodyCell="{ column, record }">
                     <template v-if="column.key === 'started_at'">
@@ -298,12 +315,16 @@
                     <template v-else-if="column.key === 'package_name'">
                       <span class="dbb-pkgname">{{ record.package_name || '-' }}</span>
                       <button
-                        v-if="record.package_name && targets.length > 0"
+                        v-if="canRestoreFromRecord(record)"
                         class="btn btn-secondary btn-sm dbb-restore-pkg-btn"
                         @click="openWizardForPackage(record)"
                       >
                         恢复此包
                       </button>
+                      <div v-else-if="record.package_name" class="dbb-restore-blocked">
+                        该备份包未成功推送到任何备份位置，无法在线恢复
+                      </div>
+                      <div v-else class="dbb-restore-blocked">本次备份构建失败，未生成备份包</div>
                     </template>
                     <template v-else-if="column.key === 'file_size'">
                       <span class="mono t-muted">
@@ -522,7 +543,8 @@
               >
                 <span class="tr-ico">{{ sub.status === 'success' ? '✓' : '✗' }}</span>
                 <span class="tr-name">{{ sub.target_name }}</span>
-                <span class="tr-meta">{{ histSubMeta(sub) }}</span>
+                <span class="tr-meta">{{ runSubMeta(sub) }}</span>
+                <pre v-if="sub.status === 'failed' && sub.error" class="dbb-tr-error">{{ sub.error }}</pre>
               </li>
             </ul>
           </div>
@@ -534,22 +556,66 @@
       </div>
     </div>
   </Teleport>
+
+  <!-- ═══ 历史清理确认弹窗（视图级内联弹窗，#25 例外；物理删除不可恢复必须过确认） ═══ -->
+  <Teleport to="body">
+    <div v-if="cleanupOpen" class="modal-overlay dbb-cleanup-overlay">
+      <div class="modal dbb-cleanup-modal">
+        <div class="modal-header">
+          <h2>清理备份历史</h2>
+          <button class="modal-close" @click="closeCleanupConfirm">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p class="dbb-cleanup-desc">
+            当前共 {{ cleanupTotal }} 条备份记录。删除不可恢复，仅影响操作历史，不影响远端备份包。
+          </p>
+          <div class="dbb-cleanup-options">
+            <label class="dbb-cleanup-opt">
+              <input v-model="cleanupMode" type="radio" value="keep_last" name="dbb-cleanup-mode" />
+              <span>保留最近</span>
+              <input
+                v-model.number="cleanupKeepLast"
+                type="number"
+                class="form-input dbb-cleanup-keep"
+                min="1"
+                :disabled="cleanupMode !== 'keep_last'"
+              />
+              <span>条</span>
+            </label>
+            <label class="dbb-cleanup-opt">
+              <input v-model="cleanupMode" type="radio" value="purge_all" name="dbb-cleanup-mode" />
+              <span>清空全部（{{ cleanupTotal }} 条）</span>
+            </label>
+          </div>
+          <div class="form-hint dbb-cleanup-estimate">本次将删除 {{ cleanupEstimate }} 条记录</div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="closeCleanupConfirm">取消</button>
+          <button class="btn btn-danger" :disabled="cleanupBusy" @click="performCleanup">
+            {{ cleanupBusy ? '清理中…' : '确认清理' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
 import { message } from 'ant-design-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
 import DbBackupRestoreWizard from '@/components/DbBackupRestoreWizard.vue'
 import { showOverlayModal } from '@/composables/useOverlayModal'
 import { paginationProps } from '@/composables/usePagination'
 import { PAGE_SIZE_TABLE } from '@/constants'
-import { formatDateTime, formatFileSize } from '@/utils/format'
+import { formatDateTime, formatFileSize, formatRelativeTime } from '@/utils/format'
 import {
   getDbBackupConfig,
   updateDbBackupConfig,
   runDbBackupNow,
   getDbBackupHistory,
+  cleanupDbBackupHistory,
   createDbBackupTarget,
   updateDbBackupTarget,
   deleteDbBackupTarget,
@@ -629,13 +695,23 @@ const inProgress = computed(() => status.value?.in_progress || false)
 const lastSuccessAt = computed(() => config.value?.last_success_at || null)
 const lastStatus = computed(() => config.value?.last_status || null)
 const running = computed(() => runLoading.value || inProgress.value)
-const runDisabled = computed(() => running.value || configLoading.value)
+const runDisabled = computed(() => running.value || configLoading.value || enabledTargetCount.value === 0)
+/** D3：0 启用位置时按钮禁用原因（title / aria-label / 旁注共用单一文案） */
+const RUN_BLOCKED_REASON = '请先添加并启用备份位置'
+const runBlockedReason = computed(() => (enabledTargetCount.value === 0 ? RUN_BLOCKED_REASON : ''))
 
-/** status.reason 同时承载「不适用原因」与「启用但配置不完整」两种语义，均作为提示展示 */
+/** status.reason 同时承载「不适用原因」与「启用但配置不完整」两种语义，均作为提示展示；
+ *  D4：从未有成功备份时行动建议并入本行（统计格只留「从未备份」状态），共存以「；」连接 */
 const statusHint = computed(() => {
   if (!status.value || !applicable.value) return ''
-  return status.value.reason || ''
+  const parts: string[] = []
+  if (status.value.reason) parts.push(status.value.reason)
+  if (!lastSuccessAt.value) parts.push('尚未成功备份过，建议在「策略与保留」中开启定时备份')
+  return parts.join('；')
 })
+
+/** D8 前端半：调度因维护窗口（数据库迁移进行中）暂停的显式原因；非空时「定时调度」格染黄覆盖绿标 */
+const suspendedReason = computed(() => status.value?.suspended_reason || '')
 
 const nextRunText = computed(() => {
   // H1：状态区单一数据源——只读已保存配置与 status，不受未保存表单修改影响
@@ -743,6 +819,11 @@ function histSubMeta(sub: DbBackupHistoryTargetItem): string {
   if (sub.status === 'failed') parts.push(sub.error || '未知错误')
   if (sub.duration_ms != null) parts.push(formatDurationMs(sub.duration_ms))
   return parts.join(' · ')
+}
+
+/** D2：结果弹窗内失败项的错误另起 dbb-tr-error 独立块（pre-wrap 可读），meta 行仅保留耗时 */
+function runSubMeta(sub: DbBackupHistoryTargetItem): string {
+  return sub.duration_ms != null ? formatDurationMs(sub.duration_ms) : ''
 }
 
 function histSubCount(item: { targets?: DbBackupHistoryTargetItem[] | null }): number {
@@ -904,6 +985,21 @@ const historyCountText = computed(() =>
   filterActive.value ? `${filteredMatches.value.length} 条匹配` : `${history.value.total} 条`,
 )
 
+// ── D8 前端半：最近状态为 failed 时「备份历史」Tab 红点角标（查看失败展开原因或下次成功后清除） ──
+/** 已读键：展开任一 failed 历史行时记下当时的 config.last_run_at */
+const historyReadAt = ref<string | null | undefined>(undefined)
+
+const historyDotVisible = computed(
+  () => lastStatus.value === 'failed' && historyReadAt.value !== (config.value?.last_run_at ?? null),
+)
+
+/** a-table @expand：展开 failed 行 = 已读该失败证据（记下当前 last_run_at；下次失败时间变化红点重现） */
+function onHistoryExpand(expanded: boolean, record: DbBackupHistoryItem): void {
+  if (expanded && record?.status === 'failed' && config.value?.last_run_at) {
+    historyReadAt.value = config.value.last_run_at
+  }
+}
+
 /** M8：从历史行发起恢复——记录预选包名并打开向导 */
 const preselectPkgName = ref<string | null>(null)
 /** 历史直达：该包首个成功位置 id（向导开门即自动列包；null = 通用入口 */
@@ -914,6 +1010,12 @@ function openWizardForPackage(item: DbBackupHistoryItem): void {
   preselectPkgName.value = item.package_name
   preselectTargetId.value = item.targets?.find((t) => t.status === 'success')?.target_id ?? null
   wizardOpen.value = true
+}
+
+/** D6：至少一个位置推送成功才可在线恢复（构建成功但推送全败、无子结果记录同样不可用） */
+function canRestoreFromRecord(item: DbBackupHistoryItem): boolean {
+  if (!item.package_name) return false
+  return (item.targets || []).some((s) => s.status === 'success')
 }
 
 function refreshAll(): void {
@@ -998,6 +1100,22 @@ function requestRefresh(): void {
   }
   refreshAll()
 }
+
+/** D5：存在未保存修改时经侧边栏/路由离开本页，弹与刷新同语义的确认（确认放行、取消留下） */
+onBeforeRouteLeave((_to, _from, next) => {
+  if (!isDirty.value) {
+    next()
+    return
+  }
+  showOverlayModal({
+    title: '离开将丢弃未保存修改',
+    content: '当前有未保存的全局配置修改，离开本页后修改将被丢弃。确定离开？',
+    okText: '丢弃并离开',
+    okDanger: true,
+    onOk: () => next(true),
+    onCancel: () => next(false),
+  })
+})
 
 // ── 位置抽屉逻辑 ──
 
@@ -1163,9 +1281,6 @@ const targetHealth = computed<Map<string, TargetHealth>>(() => {
   return map
 })
 
-/** 最近一次行级测连结果（前端会话内暂存，按位置名） */
-const recentTests = ref<Map<string, { ok: boolean; message: string }>>(new Map())
-
 function healthDotClass(name: string): string {
   const h = targetHealth.value.get(name)
   if (!h) return 'none'
@@ -1179,15 +1294,10 @@ function healthTooltip(name: string): string {
   return `最近推送：${h.pushAt ? formatDateTime(h.pushAt) : '—'} · ${outcome}`
 }
 
-function recentTestText(name: string): string {
-  const e = recentTests.value.get(name)
-  return e ? `${e.ok ? '✓' : '✗'} ${e.message}` : ''
-}
-
-function recordRecentTest(name: string, ok: boolean, msg: string): void {
-  const next = new Map(recentTests.value)
-  next.set(name, { ok, message: msg })
-  recentTests.value = next
+/** D9：推送列相对时间（健康点旁）；无推送记录返回空串（模板以「—」占位） */
+function healthRelative(name: string): string {
+  const h = targetHealth.value.get(name)
+  return h?.pushAt ? formatRelativeTime(h.pushAt) : ''
 }
 
 function targetToPayload(t: DbBackupTarget): DbBackupTargetCreate {
@@ -1248,11 +1358,9 @@ async function testTargetRow(t: DbBackupTarget): Promise<void> {
       remote_dir: t.remote_dir,
     })
     rowTestResult.value = { name: t.name, ok: res.data.ok, message: res.data.message }
-    recordRecentTest(t.name, res.data.ok, res.data.message)
   } catch (err: unknown) {
     const msg = errDetail(err, '测试失败')
     rowTestResult.value = { name: t.name, ok: false, message: msg }
-    recordRecentTest(t.name, false, msg)
   } finally {
     rowTestingId.value = null
   }
@@ -1261,7 +1369,7 @@ async function testTargetRow(t: DbBackupTarget): Promise<void> {
 function confirmDeleteTarget(t: DbBackupTarget): void {
   showOverlayModal({
     title: '删除备份位置',
-    content: `确定删除「${t.name}」吗？该位置将不再接收备份；其远端目录中已有的备份包不会被清理（搁浅语义，需要时请手工处理）。`,
+    content: `确定删除「${t.name}」吗？该位置将不再接收备份；远端已推送的备份包将原样保留、不再自动滚动清理；如不再需要请登录备份机手工删除。`,
     okText: '删除',
     okDanger: true,
     onOk: async () => {
@@ -1280,11 +1388,12 @@ async function doRunNow(): Promise<void> {
   runLoading.value = true
   try {
     const res = await runDbBackupNow()
+    // D2 前端半：success / partial / failed 三态一律 200 + 结构化结果，统一走结果弹窗
     runResult.value = res.data
     await loadConfig()
     await loadHistory()
   } catch (err: unknown) {
-    // 409 冲突等场景优先透传后端 detail（如「已有备份/恢复任务进行中，请稍后再试」），不静默
+    // 仅 409 冲突（已有任务进行中）/ 422 / 网络异常走 toast 兜底，不静默
     message.error(errDetail(err, '备份触发失败，请稍后重试'))
     await loadConfig()
   } finally {
@@ -1292,9 +1401,9 @@ async function doRunNow(): Promise<void> {
   }
 }
 
-/** H2：立即备份守卫——存在未保存修改时先弹三选确认 */
+/** H2：立即备份守卫——0 启用位置/进行中/加载中不触发；存在未保存修改时先弹三选确认 */
 function requestRunNow(): void {
-  if (running.value || configLoading.value) return
+  if (runDisabled.value) return
   if (isDirty.value) {
     runConfirmOpen.value = true
     return
@@ -1323,6 +1432,59 @@ async function saveThenRun(): Promise<void> {
 
 function closeRunResult(): void {
   runResult.value = null
+}
+
+// ── D12：历史清理（组件内联确认弹窗；物理删除不可恢复，MUST NOT 有绕过确认的路径） ──
+const CLEANUP_KEEP_DEFAULT = 50
+const cleanupOpen = ref(false)
+const cleanupMode = ref<'keep_last' | 'purge_all'>('keep_last')
+const cleanupKeepLast = ref<number>(CLEANUP_KEEP_DEFAULT)
+const cleanupBusy = ref(false)
+
+const cleanupTotal = computed(() => history.value.total)
+
+/** 将删除条数实时计算：保留 N → max(0, total - N)；清空 → total */
+const cleanupEstimate = computed(() => {
+  if (cleanupMode.value === 'purge_all') return cleanupTotal.value
+  return Math.max(0, cleanupTotal.value - toInt(cleanupKeepLast.value, 0))
+})
+
+function openCleanupConfirm(): void {
+  cleanupMode.value = 'keep_last'
+  cleanupKeepLast.value = CLEANUP_KEEP_DEFAULT
+  cleanupBusy.value = false
+  cleanupOpen.value = true
+}
+
+function closeCleanupConfirm(): void {
+  if (cleanupBusy.value) return
+  cleanupOpen.value = false
+}
+
+async function performCleanup(): Promise<void> {
+  if (cleanupBusy.value) return
+  const keep = toInt(cleanupKeepLast.value, 0)
+  if (cleanupMode.value === 'keep_last' && keep < 1) {
+    message.error('保留条数必须不小于 1')
+    return
+  }
+  cleanupBusy.value = true
+  try {
+    const payload = cleanupMode.value === 'purge_all' ? { purge_all: true } : { keep_last: keep }
+    const res = await cleanupDbBackupHistory(payload)
+    message.success(`已清理 ${res.data.deleted} 条备份记录`)
+    cleanupOpen.value = false
+    // 列表与状态（含位置健康聚合）随清理刷新；池化筛选视图也需重拉
+    historyPage.value = 1
+    filteredPage.value = 1
+    if (filterActive.value) await loadFilteredHistory()
+    else await loadHistory()
+    await loadConfig()
+  } catch (err: unknown) {
+    message.error(errDetail(err, '清理失败，请稍后重试'))
+  } finally {
+    cleanupBusy.value = false
+  }
 }
 
 function openWizard(): void {
@@ -1429,6 +1591,9 @@ onUnmounted(() => {
   stopPolling()
   stopIdlePolling()
 })
+
+// 测试钩子：aTableStub 不透传 a-table 的 @expand 事件，用例经 wrapper.vm 直接调用行展开处理函数
+defineExpose({ onHistoryExpand })
 </script>
 
 <style scoped>
@@ -1469,6 +1634,11 @@ onUnmounted(() => {
 .dbb-muted {
   color: var(--muted);
 }
+/* D8：暂停原因徽标文案较长，统计格内允许换行保持可读（覆盖徽标默认单行形态） */
+.dbb-stat-schedule .badge {
+  white-space: normal;
+  line-height: 1.6;
+}
 .dbb-spin {
   width: 10px;
   height: 10px;
@@ -1484,6 +1654,12 @@ onUnmounted(() => {
   }
 }
 .dbb-status-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--warning);
+}
+/* D3：0 启用位置时「立即备份」旁注（title/aria-label 同文案） */
+.dbb-run-blocked-hint {
   margin-top: 8px;
   font-size: 12px;
   color: var(--warning);
@@ -1567,6 +1743,12 @@ onUnmounted(() => {
   padding: 4px 8px;
   font-size: 12px;
 }
+/* D10：筛选上限常驻披露（与筛选是否激活无关） */
+.dbb-hist-limit {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
 .hist-error-detail {
   margin: 4px 0 0;
   padding: 8px 12px;
@@ -1584,6 +1766,14 @@ onUnmounted(() => {
 .dbb-restore-pkg-btn {
   display: inline-flex;
   margin-top: 4px;
+}
+/* D6：全败/构建失败记录的替代说明（muted，替代「恢复此包」按钮） */
+.dbb-restore-blocked {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+  max-width: 260px;
 }
 
 /* ── M10 行内开关 ── */
@@ -1962,6 +2152,17 @@ tr.row-disabled td {
   border-radius: 999px;
   padding: 3px 9px;
 }
+/* D8：最近状态为 failed 时「备份历史」Tab 标签的红点角标 */
+.dbb-history-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--danger);
+  box-shadow: 0 0 0 3px oklch(55% 0.18 28 / 15%);
+  vertical-align: middle;
+}
 .dbb-hist-loading {
   padding: 14px 0;
   font-size: 13px;
@@ -2151,6 +2352,22 @@ tr.row-disabled td {
 .dbb-runmodal {
   max-width: 640px;
 }
+/* D2：失败项错误独立块（pre-wrap 可读）；li 允许换行让错误块独占一行 */
+.dbb-runmodal .target-results li {
+  flex-wrap: wrap;
+}
+.dbb-tr-error {
+  flex: 1 1 100%;
+  margin: 2px 0 0;
+  padding: 8px 12px;
+  border: 1px solid oklch(55% 0.18 28 / 25%);
+  border-radius: 6px;
+  background: oklch(55% 0.18 28 / 5%);
+  font-size: 12px;
+  color: var(--danger);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 .dbb-runmodal-summary {
   display: flex;
   align-items: center;
@@ -2168,6 +2385,40 @@ tr.row-disabled td {
   font-size: 13px;
   color: var(--danger);
   word-break: break-all;
+}
+
+/* ── D12 历史清理确认弹窗 ── */
+.dbb-cleanup-modal {
+  max-width: 460px;
+}
+.dbb-cleanup-desc {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--fg);
+  line-height: 1.7;
+}
+.dbb-cleanup-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.dbb-cleanup-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--fg);
+  cursor: pointer;
+}
+.dbb-cleanup-opt input[type='radio'] {
+  accent-color: var(--accent);
+}
+.dbb-cleanup-keep {
+  width: 88px;
+  padding: 4px 8px;
+}
+.dbb-cleanup-estimate {
+  margin-top: 12px;
 }
 
 /* 窄屏时统计条退化为两列 */

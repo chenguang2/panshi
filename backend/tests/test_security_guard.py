@@ -46,6 +46,8 @@ UNAUTHENTICATED_SAMPLES = [
     ("get", "/api/v1/db-backup/history"),
     ("post", "/api/v1/db-backup/run"),
     ("post", "/api/v1/db-backup/restore/list"),
+    # db-backup-dr-ux-optimization D12：历史清理端点采样
+    ("post", "/api/v1/db-backup/history/cleanup"),
     # db-backup-multi-target：位置 CRUD/test 端点采样（rule #19）
     ("get", "/api/v1/db-backup/targets"),
     ("post", "/api/v1/db-backup/targets"),

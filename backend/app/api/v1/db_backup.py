@@ -12,6 +12,7 @@ from app.config import MAX_PAGE_SIZE
 from app.core.deps import require_permission
 from app.core.database import get_db
 from app.schemas.db_backup import (
+    DbBackupHistoryCleanupRequest,
     RestoreExecuteRequest,
     RestoreTarget,
     RestoreVerifyRequest,
@@ -110,6 +111,10 @@ def _status_payload(row, targets: list) -> dict:
 
             next_run_at = anchor + timedelta(minutes=row.interval_minutes or 5)
     in_progress = svc.inflight_busy()
+    # 迁移暂停显式提示（design D8）：仅「本应可调度却被迁移压住」时填充，常态为 None
+    suspended_reason = None
+    if row and row.enabled and applicable and enabled_targets and svc.migration_in_progress():
+        suspended_reason = "数据库迁移进行中，定时备份暂停"
     return {
         "applicable": applicable,
         "reason": reason,
@@ -117,6 +122,7 @@ def _status_payload(row, targets: list) -> dict:
         "next_run_at": next_run_at,
         "last_success_at": row.last_success_at if row else None,
         "last_status": row.last_status if row else None,
+        "suspended_reason": suspended_reason,
     }
 
 
@@ -337,7 +343,11 @@ async def run_backup_now(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(require_db_admin(PERM_DB_BACKUP)),
 ):
-    """立即备份：不要求 enabled，但要求至少一个启用位置；备份/恢复进行中拒绝。"""
+    """立即备份：不要求 enabled，但要求至少一个启用位置；备份/恢复进行中拒绝。
+
+    409 仅表达「任务冲突」语义（design D2）：备份失败（含推送全败/构建失败）
+    以 200 携带结构化结果返回（status=failed + 逐位置子结果）。
+    """
     if svc.inflight_busy():
         raise HTTPException(status_code=409, detail="已有备份/恢复任务进行中，请稍后再试")
     if not await svc.get_enabled_targets(db):
@@ -415,6 +425,32 @@ async def list_backup_history(
             for r in rows
         ],
     }
+
+
+@router.post("/history/cleanup")
+async def cleanup_backup_history(
+    request: Request,
+    payload: DbBackupHistoryCleanupRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(require_db_admin(PERM_DB_BACKUP)),
+):
+    """备份历史清理（design D12）：保留最近 N 条或清空全部（二选一，物理删除不可恢复）。
+
+    仅删操作历史（主记录 + 位置子结果），远端备份包本体不受影响；
+    pydantic 校验失败（条件缺失/同时携带）→ 422。
+    """
+    from app.models.db_backup import DbBackupHistory
+
+    # 删除前的总数（同会话先读，remaining = 总数 - 删除数）
+    total = (await db.execute(select(func.count()).select_from(DbBackupHistory))).scalar() or 0
+    deleted = await svc.cleanup_history(db, keep_last=payload.keep_last, purge_all=bool(payload.purge_all))
+    if payload.purge_all:
+        detail = f"清理备份历史：清空全部（删除 {deleted} 条）"
+    else:
+        detail = f"清理备份历史：删除 {deleted} 条（保留最近 {payload.keep_last} 条）"
+    enrich_audit(request, detail=detail)
+    await db.commit()
+    return {"deleted": deleted, "remaining": total - deleted}
 
 
 @router.post("/test")
@@ -622,10 +658,6 @@ async def restore_execute(
         raise HTTPException(status_code=409, detail=str(exc)[:500])
     enrich_audit(request, detail=f"恢复并激活 active={result.get('active_connection_id')}")
     await db.commit()
-    return {
-        "success": True,
-        "active_connection_id": result.get("active_connection_id"),
-        "restored_databases": result.get("restored_databases", []),
-        "pre_restore_file": result.get("pre_restore_file"),
-        "message": result.get("message", "恢复完成"),
-    }
+    # 响应契约（design D1）：服务层完成态载荷原样透传、不二次裁剪，
+    # 仅补旧前端依赖的 success 标志（纯新增不删减）
+    return {**result, "success": True}

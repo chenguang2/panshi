@@ -363,7 +363,7 @@ describe('H5 位置健康信号（从历史子结果聚合派生）', () => {
     expect(failDot.attributes('title')).toContain('连接超时')
   })
 
-  it('无推送记录的位置显示灰点，行内测试后更新「最近测试」', async () => {
+  it('无推送记录的位置显示灰点，行内测试后结果在行下 testbar（D9：推送列不再混排测试文本）', async () => {
     const wrapper = await mountCard()
     const rows = wrapper.findAll('.dbb-target-table tbody tr')
     expect(rows[0].find('.dbb-health-dot.none').exists()).toBe(true)
@@ -374,7 +374,12 @@ describe('H5 位置健康信号（从历史子结果聚合派生）', () => {
       .trigger('click')
     await settle(wrapper)
     const healthCell = wrapper.findAll('.dbb-target-table tbody tr')[0].find('.dbb-tgt-health')
-    expect(healthCell.text()).toContain('连接成功')
+    expect(healthCell.text()).not.toContain('连接成功')
+    expect(healthCell.text()).not.toContain('测试')
+    const bar = wrapper.find('.dbb-target-testbar')
+    expect(bar.exists()).toBe(true)
+    expect(bar.text()).toContain('局内DR')
+    expect(bar.text()).toContain('连接成功')
   })
 })
 
