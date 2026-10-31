@@ -113,7 +113,8 @@ function badgeClass(s: string): string {
 }
 
 function badgeText(s: string): string {
-  const labels: Record<string, string> = { success: '成功', failed: '失败', cancelled: '已取消' }
+  // 后端仅产 success/failed（design D1：删除永不命中的 cancelled 死映射）
+  const labels: Record<string, string> = { success: '成功', failed: '失败' }
   return labels[s] || s
 }
 
@@ -132,9 +133,11 @@ onMounted(async () => {
     lastRun.value = historyRes?.data?.[0] ?? null
     historyLength.value = historyRes?.data?.length ?? 0
     runningMigration.value = runningRes?.data?.migration ?? null
-  } catch {
+  } catch (err: unknown) {
     // 摘要卡非关键路径：读失败时降级为错误文案，不打断数据库管理页
-    error.value = '迁移状态读取失败，请稍后在数据迁移页重试'
+    // （403 → 权限指引；其余按网络/服务失败处理，design 文案表「摘要卡错误态」）
+    const statusCode = (err as { response?: { status?: number } } | null)?.response?.status
+    error.value = statusCode === 403 ? '无数据迁移查看权限，请联系管理员' : '状态读取失败，请检查网络后刷新重试'
   } finally {
     loaded.value = true
   }

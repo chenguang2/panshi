@@ -13,7 +13,11 @@ import pytest
 
 from app.core import maintenance
 
-MIGRATION_LOCK_DETAIL = "正在迁移数据库，暂时禁止写操作，请稍后重试"
+# 503 锁文案已出口化（db-migration-ux-optimization 2.2）：detail 为动态模板
+# 「数据库迁移进行中（{源} → {目标}），所有写操作暂被锁定，完成后自动恢复；
+# 进度见『数据迁移』页」，本文件置锁未传 source/target（渲染为「未知 → 未知」），
+# 故断言稳定前缀包含 + 旧文案不再出现，不做全等。
+MIGRATION_LOCK_DETAIL = "数据库迁移进行中"
 
 # (方法, 路径)：每个写方法对一个真实注册路由。503 发生在路由/鉴权/审计之前
 # （maintenance_middleware 前置拦截），不会触达 handler 产生任何副作用。
@@ -50,7 +54,9 @@ class TestMigrationWriteLockOnRealApp:
         maintenance.set_migration_in_progress(True)
         resp = getattr(isolated_app, method)(path)
         assert resp.status_code == 503, f"{method.upper()} {path} 迁移中应 503"
-        assert resp.json()["detail"] == MIGRATION_LOCK_DETAIL
+        detail = resp.json()["detail"]
+        assert MIGRATION_LOCK_DETAIL in detail
+        assert "请稍后重试" not in detail
 
     def test_reads_pass_during_migration(self, isolated_app):
         """迁移中：GET 放行——健康检查 200，真实数据端点到达 handler 返回 200。"""
@@ -83,4 +89,6 @@ class TestBackupRestoreBlockedDuringMigration:
         maintenance.set_migration_in_progress(True)
         resp = getattr(isolated_app, method)(path)
         assert resp.status_code == 503, f"{method.upper()} {path} 迁移中应 503"
-        assert resp.json()["detail"] == MIGRATION_LOCK_DETAIL
+        detail = resp.json()["detail"]
+        assert MIGRATION_LOCK_DETAIL in detail
+        assert "请稍后重试" not in detail

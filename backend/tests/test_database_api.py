@@ -11,6 +11,10 @@ from app.core.db_config import DbConfig, ConnectionConfig, encrypt_password
 def _isolate_config(tmp_path, monkeypatch):
     monkeypatch.setattr(db_config, "CONFIG_PATH", str(tmp_path / "db_config.json"))
     monkeypatch.setattr(db_config, "CONFIG_BAK_PATH", str(tmp_path / "db_config.json.bak"))
+    # 切换路径隔离：perform_switch 写 .restart.flag 的路径是本模块级常量（按真实文件位置推导），
+    # 不隔离会在每次跑本文件时把真实 backend/data/.restart.flag 写脏，前端误显「待重启」
+    from app.services import db_switch_service
+    monkeypatch.setattr(db_switch_service, "RESTART_FLAG_PATH", str(tmp_path / ".restart.flag"))
     # seed a default config so endpoints have something to read
     cfg = DbConfig(version=1, active="local_sqlite", connections=[
         ConnectionConfig(id="local_sqlite", type="sqlite", name="本地 SQLite", path=str(tmp_path / "panshi.db")),

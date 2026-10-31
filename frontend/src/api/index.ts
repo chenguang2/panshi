@@ -29,8 +29,45 @@ api.interceptors.request.use(
   },
 )
 
+// ── 迁移锁全局横幅（db-migration-ux-optimization D5：503 事件驱动，零轮询）──
+// 事件走站点既有 window CustomEvent 模式（同 EdgePackManagementDialog）；
+// 组件侧监听见 components/MigrationLockBanner.vue。
+export const MIGRATION_LOCK_SHOW_EVENT = 'panshi:migration-lock-show'
+export const MIGRATION_LOCK_CLEAR_EVENT = 'panshi:migration-lock-clear'
+
+let migrationLockActive = false
+
+const WRITE_METHODS = new Set(['post', 'put', 'patch', 'delete'])
+
+/** 503 迁移锁响应 → 置位并广播拉起横幅（重复 503 幂等；横幅被手动关闭后再次 503 会重新拉起）。 */
+export function notifyMigrationLock(detail: string): void {
+  migrationLockActive = true
+  window.dispatchEvent(new CustomEvent(MIGRATION_LOCK_SHOW_EVENT, { detail }))
+}
+
+/** 写请求成功（2xx）→ 若锁横幅在展示则广播移除；未拉锁时无副作用。 */
+export function notifyMigrationLockCleared(): void {
+  if (!migrationLockActive) return
+  migrationLockActive = false
+  window.dispatchEvent(new CustomEvent(MIGRATION_LOCK_CLEAR_EVENT))
+}
+
+// 兼容新旧 503 文案：以 status 503 + detail 含「迁移」为锁标记（旧文案
+// 「正在迁移数据库，暂时禁止写操作…」/ 新文案「数据库迁移进行中（源 → 目标）…」均命中）
+function isMigrationLockError(error: AxiosError): boolean {
+  if (error.response?.status !== 503) return false
+  const data: unknown = error.response.data
+  if (!data || typeof data !== 'object' || !('detail' in data)) return false
+  const detail = (data as { detail?: unknown }).detail
+  return typeof detail === 'string' && detail.includes('迁移')
+}
+
 api.interceptors.response.use(
   (response) => {
+    const method = (response.config.method || '').toLowerCase()
+    if (WRITE_METHODS.has(method)) {
+      notifyMigrationLockCleared()
+    }
     return response
   },
   (error: AxiosError) => {
@@ -47,6 +84,10 @@ api.interceptors.response.use(
         router.push('/login')
         return Promise.reject(error)
       })
+    }
+    if (isMigrationLockError(error)) {
+      const data = error.response?.data as { detail?: unknown } | undefined
+      notifyMigrationLock(typeof data?.detail === 'string' ? data.detail : '')
     }
     return Promise.reject(error)
   },

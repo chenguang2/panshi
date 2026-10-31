@@ -51,7 +51,9 @@
         >
           <template #bodyCell="{ record, column }">
             <template v-if="column.key === 'status'">
-              <span class="status-dot" :class="dotClass(record)" :title="dotTitle(record)"></span>
+              <a-tag class="conn-status-tag" :color="statusColor(record)" :title="statusTitle(record)">
+                {{ statusText(record) }}
+              </a-tag>
             </template>
             <template v-if="column.key === 'type'">
               <a-tag :color="record.type === 'postgres' ? 'blue' : 'orange'">{{
@@ -140,7 +142,14 @@
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label">主机 <span class="required">*</span></label>
-                <input v-model="connModal.form.host" type="text" class="form-input" placeholder="localhost" />
+                <input
+                  v-model="connModal.form.host"
+                  type="text"
+                  class="form-input"
+                  placeholder="localhost"
+                  @input="clearHostError"
+                />
+                <p v-if="connErrors.host" class="field-error">{{ connErrors.host }}</p>
               </div>
               <div class="form-group">
                 <label class="form-label">端口</label>
@@ -157,7 +166,14 @@
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label">数据库名 <span class="required">*</span></label>
-                <input v-model="connModal.form.database" type="text" class="form-input" placeholder="panshi" />
+                <input
+                  v-model="connModal.form.database"
+                  type="text"
+                  class="form-input"
+                  placeholder="panshi"
+                  @input="clearDatabaseError"
+                />
+                <p v-if="connErrors.database" class="field-error">{{ connErrors.database }}</p>
               </div>
               <div class="form-group">
                 <label class="form-label">用户名</label>
@@ -189,46 +205,25 @@
       </div>
     </div>
 
-    <!-- 切换确认 Modal（4.4） -->
-    <div class="modal-overlay" :style="{ display: switchModal.open ? 'flex' : 'none' }">
-      <div class="modal" style="max-width: 480px">
-        <div class="modal-header">
-          <h2>切换数据库</h2>
-          <button class="modal-close" @click="switchModal.open = false">&times;</button>
-        </div>
-        <div class="modal-body">
-          <div class="switch-body">
-            <a-alert
-              type="warning"
-              show-icon
-              message="切换后需手动重启后端服务方可生效，期间 JWT 会话保持不变。目标库为空时仅保留 admin 账号，其余会话将失效。"
-            />
-            <div class="switch-restart-hint">
-              重启方式：开发环境运行 <code>develop/linux/start.sh</code>；生产环境执行
-              <code>sh stop.sh; sh start.sh</code>。
-            </div>
-            <div class="switch-target">
-              <span>切换至：</span>
-              <strong>{{ switchModal.connection?.name }}</strong>
-              <span class="muted">{{ switchModal.connection?.display_address }}</span>
-            </div>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" @click="switchModal.open = false">取消</button>
-          <button class="btn btn-primary switch-confirm-btn" @click="handleSwitch">确认切换</button>
-        </div>
-      </div>
-    </div>
+    <!-- 切换确认 Modal（db-migration-ux-optimization 9.1：提取为共享组件 SwitchConnectionModal，
+         供迁移页复用；切换成功后关闭、失败保持打开由页面 handleSwitch 控制） -->
+    <SwitchConnectionModal
+      v-model:open="switchModal.open"
+      :connection="switchModal.connection"
+      :active-name="status?.active?.name"
+      @confirm="handleSwitch"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import DbBackupSummaryCard from '@/components/DbBackupSummaryCard.vue'
 import DbMigrationSummaryCard from '@/components/DbMigrationSummaryCard.vue'
+import SwitchConnectionModal from '@/components/SwitchConnectionModal.vue'
 import { showOverlayModal } from '@/composables/useOverlayModal'
 import {
   getDatabaseStatus,
@@ -245,13 +240,14 @@ import type { DbConnection, DbStatus } from '@/types/database'
 
 const status = ref<DbStatus | null>(null)
 const connections = ref<DbConnection[]>([])
+const route = useRoute()
 
 // 摘要卡门控：权限 + 功能开关双条件（对齐菜单/路由口径，关掉的功能不留死入口）
 const authStore = useAuthStore()
 const featuresStore = useFeaturesStore()
 
 const connectionColumns = [
-  { title: '', key: 'status', width: 30 },
+  { title: '状态', key: 'status', width: 84 },
   { title: '名称', dataIndex: 'name', key: 'name' },
   { title: '类型', key: 'type' },
   { title: '地址', key: 'address' },
@@ -289,6 +285,47 @@ const switchModal = reactive<{ open: boolean; connection: DbConnection | null }>
   connection: null,
 })
 
+// 8.1 必填校验前置：PG 主机/数据库名为空在客户端阻断提交，不发请求、不触发后端 422
+const connErrors = reactive<{ host: string; database: string }>({ host: '', database: '' })
+
+// #25：模板内多语句 handler 有 prettier 重排陷阱，清错逻辑提取为 script 函数
+function clearHostError() {
+  connErrors.host = ''
+}
+
+function clearDatabaseError() {
+  connErrors.database = ''
+}
+
+function resetConnErrors() {
+  connErrors.host = ''
+  connErrors.database = ''
+}
+
+/** PG 必填前置校验：返回 false 时已字段级标错，调用方阻断提交 */
+function validatePgRequired(): boolean {
+  if (connModal.form.type !== 'postgres') return true
+  connErrors.host = connModal.form.host.trim() ? '' : '请输入主机'
+  connErrors.database = connModal.form.database.trim() ? '' : '请输入数据库名'
+  return !connErrors.host && !connErrors.database
+}
+
+// 8.2/D8 写操作错误统一分类：axios 拦截器仅全局处理 401，此处是这些错误唯一的用户可见出口。
+// 有 response：4xx/5xx detail 中文直出（503 迁移锁补出口指引）；无 response：网络异常。
+function extractWriteError(err: unknown): string {
+  const resp = (err as { response?: { status?: number; data?: { detail?: unknown } } } | null)?.response
+  if (!resp) return '网络异常，请检查连接后重试'
+  const detail = resp.data?.detail
+  if (typeof detail === 'string' && detail.trim()) {
+    if (resp.status === 503 && detail.includes('迁移')) {
+      // 兼容后端新旧锁文案：新文案已含「数据迁移」页指引则直出，旧文案补一条出口指引
+      return detail.includes('数据迁移') ? detail : `${detail}；迁移完成后自动恢复，进度可前往「数据迁移」页查看`
+    }
+    return detail
+  }
+  return `请求失败（HTTP ${resp.status ?? ''}）`
+}
+
 function emptyForm(): ConnForm {
   return {
     type: 'sqlite',
@@ -324,6 +361,7 @@ function openCreateModal() {
   connModal.editing = false
   connModal.editingId = null
   connModal.form = emptyForm()
+  resetConnErrors()
   connModal.open = true
 }
 
@@ -341,6 +379,7 @@ function openEditModal(record: DbConnection) {
     password: '',
     ssl: record.ssl ?? false,
   }
+  resetConnErrors()
   connModal.open = true
 }
 
@@ -349,67 +388,86 @@ async function handleSaveConnection() {
     message.error('请输入连接名称')
     return
   }
+  // 8.1 必填校验前置：为空阻断提交并字段级标错（红字），不发请求
+  if (!validatePgRequired()) return
   // 重名软校验（database-mgmt-ux-review-fixes 2.3）：编辑排除自身
   const dup = connections.value.some((c) => c.name === connModal.form.name.trim() && c.id !== connModal.editingId)
   if (dup) {
     message.error('已存在同名连接')
     return
   }
-  if (connModal.editing) {
-    await updateConnection(connModal.editingId!, {
-      name: connModal.form.name,
-      path: connModal.form.type === 'sqlite' ? connModal.form.path : null,
-      host: connModal.form.type === 'postgres' ? connModal.form.host : null,
-      port: connModal.form.type === 'postgres' ? normalizePort(connModal.form.port) : null,
-      database: connModal.form.type === 'postgres' ? connModal.form.database : null,
-      username: connModal.form.type === 'postgres' ? connModal.form.username : null,
-      password: connModal.form.password || null,
-      ssl: connModal.form.type === 'postgres' ? connModal.form.ssl : null,
-    })
-    message.success('连接已更新')
-  } else {
-    await createConnection({
-      type: connModal.form.type,
-      name: connModal.form.name,
-      path: connModal.form.type === 'sqlite' ? connModal.form.path : null,
-      host: connModal.form.type === 'postgres' ? connModal.form.host : null,
-      port: connModal.form.type === 'postgres' ? normalizePort(connModal.form.port) : null,
-      database: connModal.form.type === 'postgres' ? connModal.form.database : null,
-      username: connModal.form.type === 'postgres' ? connModal.form.username : null,
-      password: connModal.form.password || null,
-      ssl: connModal.form.type === 'postgres' ? connModal.form.ssl : false,
-    })
-    message.success('连接已添加，可点击列表中「测试」验证可用性')
+  try {
+    if (connModal.editing) {
+      await updateConnection(connModal.editingId!, {
+        name: connModal.form.name,
+        path: connModal.form.type === 'sqlite' ? connModal.form.path : null,
+        host: connModal.form.type === 'postgres' ? connModal.form.host : null,
+        port: connModal.form.type === 'postgres' ? normalizePort(connModal.form.port) : null,
+        database: connModal.form.type === 'postgres' ? connModal.form.database : null,
+        username: connModal.form.type === 'postgres' ? connModal.form.username : null,
+        password: connModal.form.password || null,
+        ssl: connModal.form.type === 'postgres' ? connModal.form.ssl : null,
+      })
+      message.success('连接已更新')
+    } else {
+      await createConnection({
+        type: connModal.form.type,
+        name: connModal.form.name,
+        path: connModal.form.type === 'sqlite' ? connModal.form.path : null,
+        host: connModal.form.type === 'postgres' ? connModal.form.host : null,
+        port: connModal.form.type === 'postgres' ? normalizePort(connModal.form.port) : null,
+        database: connModal.form.type === 'postgres' ? connModal.form.database : null,
+        username: connModal.form.type === 'postgres' ? connModal.form.username : null,
+        password: connModal.form.password || null,
+        ssl: connModal.form.type === 'postgres' ? connModal.form.ssl : false,
+      })
+      message.success('连接已添加，可点击列表中「测试」验证可用性')
+    }
+  } catch (err) {
+    // 8.2：失败时弹窗保持打开，用户修正后可重试
+    message.error(extractWriteError(err))
+    return
   }
   connModal.open = false
   await loadData()
 }
 
 async function handleTest(record: DbConnection) {
-  const res = await testConnection(record.id)
-  // 状态点三态（database-mgmt-ux-review-fixes 2.4）：内存会话态，刷新重置
-  testResults.value[record.id] = res.data.success ? 'ok' : 'fail'
-  if (res.data.success) {
-    message.success(res.data.detail)
-  } else {
-    message.error(res.data.detail)
+  try {
+    const res = await testConnection(record.id)
+    // 状态列三态 tag（db-migration-ux-optimization 8.3）：内存会话态，刷新重置
+    testResults.value[record.id] = res.data.success ? 'ok' : 'fail'
+    if (res.data.success) {
+      message.success(res.data.detail)
+    } else {
+      message.error(res.data.detail)
+    }
+  } catch (err) {
+    message.error(extractWriteError(err))
   }
 }
 
 const testResults = ref<Record<string, 'ok' | 'fail'>>({})
 
-function dotClass(record: DbConnection): string {
+// 8.3 连通性状态列三态 tag：未验证（默认/灰）· 已连通（success/绿）· 验证失败（error/红）
+function statusText(record: DbConnection): string {
   const r = testResults.value[record.id]
-  if (r === 'ok') return 'online'
-  if (r === 'fail') return 'verified-fail'
-  return 'unverified'
+  if (r === 'ok') return '已连通'
+  if (r === 'fail') return '验证失败'
+  return '未验证'
 }
 
-function dotTitle(record: DbConnection): string {
+function statusColor(record: DbConnection): string {
   const r = testResults.value[record.id]
-  if (r === 'ok') return '已验证连通'
-  if (r === 'fail') return '验证失败'
-  return '未验证连通性'
+  if (r === 'ok') return 'success'
+  if (r === 'fail') return 'error'
+  return 'default'
+}
+
+function statusTitle(record: DbConnection): string {
+  const r = testResults.value[record.id]
+  const base = r === 'ok' ? '已验证连通' : r === 'fail' ? '验证失败' : '尚未测试'
+  return `${base}；测试结果仅保留到页面刷新`
 }
 
 function openSwitchModal(record: DbConnection) {
@@ -418,11 +476,17 @@ function openSwitchModal(record: DbConnection) {
 }
 
 async function handleSwitch() {
-  const target = switchModal.connection!
-  const res = await switchDatabase(target.id)
-  message.success(res.data?.message || '已切换，请手动重启后端服务')
-  switchModal.open = false
-  await loadData()
+  const target = switchModal.connection
+  if (!target) return
+  try {
+    const res = await switchDatabase(target.id)
+    message.success(res.data?.message || '已切换，请手动重启后端服务')
+    switchModal.open = false
+    await loadData()
+  } catch (err) {
+    // 8.2：失败弹窗保持打开，可重试或取消
+    message.error(extractWriteError(err))
+  }
 }
 
 async function handleDelete(record: DbConnection) {
@@ -432,15 +496,25 @@ async function handleDelete(record: DbConnection) {
     okText: '删除',
     okDanger: true,
     onOk: async () => {
-      await deleteConnection(record.id)
-      message.success('连接已删除')
-      await loadData()
+      try {
+        await deleteConnection(record.id)
+        message.success('连接已删除')
+        await loadData()
+      } catch (err) {
+        // 8.2：删除失败错误上屏；showOverlayModal 对 rejected onOk 保留弹窗
+        message.error(extractWriteError(err))
+      }
     },
   })
 }
 
 onMounted(() => {
   loadData()
+  // db-migration-ux-optimization 10.2 配套：迁移页「去新建连接」深链 /database-management?wizard=1，
+  // 挂载即打开新建连接弹窗（消费模式对齐 BackupManagement ?wizard=1）
+  if (route.query.wizard === '1' || route.query.wizard === 'true') {
+    openCreateModal()
+  }
 })
 
 defineExpose({
@@ -461,21 +535,15 @@ defineExpose({
   gap: 20px;
 }
 
-/* ── 连接行状态点三态（database-mgmt-ux-review-fixes 2.4） ── */
-.connection-table .status-dot {
-  display: inline-block;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-}
+/* ── 连接行状态列三态 tag（db-migration-ux-optimization 8.3，圆点升级文字 tag） ── */
 .status-dot.online {
   background: #52c41a;
 }
-.status-dot.verified-fail {
-  background: #ff4d4f;
-}
-.status-dot.unverified {
-  background: var(--border);
+/* 8.1 字段级标错（PG 主机/数据库名必填前置） */
+.field-error {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #ff4d4f;
 }
 /* 地址列省略（2.2） */
 .addr-cell {
@@ -582,28 +650,5 @@ defineExpose({
   display: flex;
   align-items: center;
   gap: 6px;
-}
-
-/* ── 切换确认弹窗内容 ── */
-.switch-restart-hint {
-  margin-top: 8px;
-  font-size: 13px;
-  color: var(--muted);
-}
-.switch-restart-hint code {
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: rgba(0, 0, 0, 0.06);
-  font-size: 12px;
-}
-.switch-target {
-  margin-top: 12px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-}
-.switch-target .muted {
-  color: var(--muted);
 }
 </style>

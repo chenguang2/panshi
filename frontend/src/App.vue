@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ConfigProvider } from 'ant-design-vue'
 import zhCN from 'ant-design-vue/es/locale/zh_CN'
+import MigrationLockBanner from '@/components/MigrationLockBanner.vue'
 
 const themeConfig = {
   token: {
@@ -19,6 +20,8 @@ const themeConfig = {
 
 <template>
   <ConfigProvider :theme="themeConfig" :locale="zhCN">
+    <!-- 全局迁移锁横幅：fixed 顶条，不占布局流（D5 事件驱动零轮询） -->
+    <MigrationLockBanner />
     <router-view />
   </ConfigProvider>
 </template>

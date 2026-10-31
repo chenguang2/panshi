@@ -48,7 +48,7 @@ def set_migration_in_progress(on: bool, source_id: Optional[str] = None, target_
             in_progress=True,
             source_id=source_id,
             target_id=target_id,
-            started_at=datetime.now(),
+            started_at=datetime.utcnow(),
         )
     else:
         _migration_lock.clear()
@@ -73,6 +73,28 @@ def migration_in_progress() -> bool:
     return _migration_lock.is_set()
 
 
+def _connection_label(conn_id: Optional[str]) -> str:
+    """连接 ID → 展示名：优先连接名，拿不到回退 ID（读 db_config.json，纯文件读，无网络/DB IO）。"""
+    if not conn_id:
+        return "未知"
+    try:
+        from app.core.db_config import load_config  # 函数内 import 防循环导入
+
+        conn = load_config().get_connection(conn_id)
+        if conn and conn.name:
+            return conn.name
+    except Exception:
+        pass
+    return conn_id
+
+
+def _migration_lock_detail() -> str:
+    state = get_migration_state()
+    src = _connection_label(state.source_id)
+    dst = _connection_label(state.target_id)
+    return f"数据库迁移进行中（{src} → {dst}），所有写操作暂被锁定，完成后自动恢复；进度见『数据迁移』页"
+
+
 async def maintenance_middleware(request, call_next):
     if _migration_lock.is_set() and request.method in WRITE_METHODS:
         from fastapi.responses import JSONResponse
@@ -80,6 +102,6 @@ async def maintenance_middleware(request, call_next):
 
         return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            content={"detail": "正在迁移数据库，暂时禁止写操作，请稍后重试"},
+            content={"detail": _migration_lock_detail()},
         )
     return await call_next(request)

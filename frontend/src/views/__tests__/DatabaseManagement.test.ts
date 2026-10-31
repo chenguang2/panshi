@@ -1,7 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { message } from 'ant-design-vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
+import { createRouter, createWebHistory } from 'vue-router'
 import { useFeaturesStore } from '@/stores/features'
 
 // Mock the database api module.
@@ -102,7 +103,10 @@ const antStubs = {
       '<select :value="modelValue" @change="$emit(\'update:modelValue\', $event.target.value)"><slot /></select>',
   },
   'a-select-option': { props: ['value'], template: '<option :value="value"><slot /></option>' },
-  'a-tag': { template: '<span class="ant-tag"><slot /></span>' },
+  'a-tag': {
+    props: ['color'],
+    template: '<span class="ant-tag" :class="color ? \'ant-tag-\' + color : \'\'"><slot /></span>',
+  },
   'a-progress': { props: ['percent'], template: '<div class="ant-progress">{{ percent }}%</div>' },
   'a-alert': { props: ['message'], template: '<div class="ant-alert"><slot />{{ message }}</div>' },
   'a-space': { template: '<div class="ant-space"><slot /></div>' },
@@ -132,10 +136,20 @@ function conn(overrides: Record<string, any> = {}) {
   }
 }
 
-async function mountPage() {
+async function mountPage(route = '/') {
+  // 真实路由上下文：视图消费 route.query（?wizard=1 深链，对齐 BackupManagement 消费模式）
+  const router = createRouter({
+    history: createWebHistory(),
+    routes: [
+      { path: '/', component: { template: '<div />' } },
+      { path: '/database-management', name: 'DatabaseManagement', component: { template: '<div />' } },
+    ],
+  })
+  await router.push(route)
+  await router.isReady()
   const DatabaseManagement = (await import('../DatabaseManagement.vue')).default
   const wrapper = mount(DatabaseManagement, {
-    global: { stubs: { ...antStubs, teleport: true } },
+    global: { plugins: [router], stubs: { ...antStubs, teleport: true } },
   })
   await flushPromises()
   return wrapper
@@ -320,6 +334,7 @@ describe('DatabaseManagement', () => {
     vm.connModal.form.name = '新库'
     vm.connModal.form.type = 'postgres'
     vm.connModal.form.host = 'localhost'
+    vm.connModal.form.database = 'panshi'
     await vm.handleSaveConnection()
     await flushPromises()
     expect(mocks.createConnection).toHaveBeenCalledWith(expect.objectContaining({ name: '新库', type: 'postgres' }))
@@ -535,26 +550,38 @@ describe('database-mgmt-ux-review-fixes（2026-10-30 UX 评审，裁决全 A）'
     expect(mocks.updateConnection).toHaveBeenCalled()
   })
 
-  it('测试成功后状态点变绿（verified-ok）', async () => {
+  it('测试成功后状态列显示绿色「已连通」tag 并披露结果时效', async () => {
     const wrapper = await mountPage()
     mocks.testConnection.mockResolvedValue({ data: { success: true, detail: '连接成功' } })
     await wrapper.vm.handleTest(wrapper.vm.connections[0])
     await wrapper.vm.$nextTick()
-    expect(wrapper.find('.connection-table .status-dot.online').exists()).toBe(true)
+    const tag = wrapper.find('.connection-table .conn-status-tag')
+    expect(tag.exists()).toBe(true)
+    expect(tag.text()).toContain('已连通')
+    expect(tag.classes()).toContain('ant-tag-success')
+    expect(tag.attributes('title')).toContain('已验证连通')
+    expect(tag.attributes('title')).toContain('测试结果仅保留到页面刷新')
   })
 
-  it('测试失败后状态点变红（verified-fail）', async () => {
+  it('测试失败后状态列显示红色「验证失败」tag 并披露结果时效', async () => {
     const wrapper = await mountPage()
     mocks.testConnection.mockResolvedValue({ data: { success: false, detail: '连接超时' } })
     await wrapper.vm.handleTest(wrapper.vm.connections[0])
     await wrapper.vm.$nextTick()
-    expect(wrapper.find('.connection-table .status-dot.verified-fail').exists()).toBe(true)
+    const tag = wrapper.find('.connection-table .conn-status-tag')
+    expect(tag.text()).toContain('验证失败')
+    expect(tag.classes()).toContain('ant-tag-error')
+    expect(tag.attributes('title')).toContain('测试结果仅保留到页面刷新')
   })
 
-  it('未测试时状态点为中性（unverified）', async () => {
+  it('未测试时状态列显示灰色「未验证」tag', async () => {
     const wrapper = await mountPage()
-    expect(wrapper.find('.connection-table .status-dot.unverified').exists()).toBe(true)
-    expect(wrapper.find('.connection-table .status-dot.online').exists()).toBe(false)
+    const tag = wrapper.find('.connection-table .conn-status-tag')
+    expect(tag.text()).toContain('未验证')
+    expect(tag.classes()).not.toContain('ant-tag-success')
+    expect(tag.classes()).not.toContain('ant-tag-error')
+    expect(tag.attributes('title')).toContain('尚未测试')
+    expect(tag.attributes('title')).toContain('测试结果仅保留到页面刷新')
   })
 
   it('「设为当前」非当前行为次级按钮', async () => {
@@ -564,5 +591,271 @@ describe('database-mgmt-ux-review-fixes（2026-10-30 UX 评审，裁决全 A）'
     expect(btns[0].attributes('disabled')).toBeDefined()
     expect(btns[1].classes()).not.toContain('btn-primary')
     expect(btns[1].classes()).toContain('btn-secondary')
+  })
+})
+
+describe('db-migration-ux-optimization（8 错误反馈/必填校验/状态 tag + 9 共享切换弹窗 + wizard 深链）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    setActivePinia(createPinia())
+    localStorage.clear()
+    seedAuth()
+    seedFeatures()
+    mocks.getStatus.mockResolvedValue({ data: { active: conn(), connections_count: 1, version: 1 } })
+    mocks.listConnections.mockResolvedValue({ data: [conn()] })
+    mocks.getRunningTasks.mockResolvedValue({
+      data: {
+        migration: { in_progress: false, source_id: null, target_id: null, started_at: null },
+        tasks: [],
+      },
+    })
+    mocks.getHistory.mockResolvedValue({ data: [] })
+    mocks.testConnection.mockResolvedValue({ data: { success: true, detail: '连接成功' } })
+    backupMocks.getConfig.mockResolvedValue({ data: { config: null } })
+  })
+
+  afterEach(() => {
+    // showOverlayModal 渲染在 document.body，逐用例清理防泄漏
+    document.body.innerHTML = ''
+  })
+
+  /** 形如 axios 错误：带 response（4xx/5xx） */
+  function axiosError(status: number, detail: unknown) {
+    return { response: { status, data: { detail } }, isAxiosError: true }
+  }
+
+  /** 形如 axios 网络错误：无 response */
+  function networkError() {
+    return { request: {}, isAxiosError: true }
+  }
+
+  /** 两连接页面：conn_1 活动 SQLite + conn_2 非活动 PG */
+  async function mountWith2() {
+    mocks.listConnections.mockResolvedValue({
+      data: [
+        conn(),
+        conn({
+          id: 'conn_2',
+          name: '目标 PG',
+          type: 'postgres',
+          host: '10.0.0.5',
+          path: null,
+          display_address: '10.0.0.5:5432/panshi',
+          username: 'postgres',
+        }),
+      ],
+    })
+    return mountPage()
+  }
+
+  function firstErrorText(): string {
+    const call = vi.mocked(message.error).mock.calls[0]
+    return String(call?.[0] ?? '')
+  }
+
+  // ── 8.1 PG 必填校验前置 ──
+
+  it('PG 表单主机/数据库名为空：阻断提交、不发请求并字段级标错', async () => {
+    const wrapper = await mountPage()
+    const vm = wrapper.vm as any
+    vm.openCreateModal()
+    await flushPromises()
+    vm.connModal.form.type = 'postgres'
+    vm.connModal.form.name = 'PG 新库'
+    vm.connModal.form.host = ''
+    vm.connModal.form.database = ''
+    mocks.createConnection.mockClear()
+    await vm.handleSaveConnection()
+    await flushPromises()
+    expect(mocks.createConnection).not.toHaveBeenCalled()
+    const errs = wrapper.findAll('.field-error').map((e) => e.text())
+    expect(errs).toContain('请输入主机')
+    expect(errs).toContain('请输入数据库名')
+  })
+
+  it('PG 表单填齐必填项后可保存且字段错误清除', async () => {
+    mocks.createConnection.mockResolvedValue({ data: conn({ id: 'conn_9' }) })
+    const wrapper = await mountPage()
+    const vm = wrapper.vm as any
+    vm.openCreateModal()
+    await flushPromises()
+    vm.connModal.form.type = 'postgres'
+    vm.connModal.form.name = 'PG 新库'
+    await vm.handleSaveConnection()
+    await flushPromises()
+    expect(wrapper.findAll('.field-error').map((e) => e.text())).toContain('请输入主机')
+    vm.connModal.form.host = 'localhost'
+    vm.connModal.form.database = 'panshi'
+    await vm.handleSaveConnection()
+    await flushPromises()
+    expect(mocks.createConnection).toHaveBeenCalledWith(
+      expect.objectContaining({ host: 'localhost', database: 'panshi' }),
+    )
+    expect(wrapper.find('.field-error').exists()).toBe(false)
+  })
+
+  it('SQLite 表单不做主机/库名校验（保持既有行为）', async () => {
+    mocks.createConnection.mockResolvedValue({ data: conn({ id: 'conn_9' }) })
+    const wrapper = await mountPage()
+    const vm = wrapper.vm as any
+    vm.openCreateModal()
+    await flushPromises()
+    vm.connModal.form.name = '本地新库'
+    vm.connModal.form.path = '/tmp/new.db'
+    await vm.handleSaveConnection()
+    await flushPromises()
+    expect(mocks.createConnection).toHaveBeenCalled()
+    expect(wrapper.find('.field-error').exists()).toBe(false)
+  })
+
+  // ── 8.2 写操作错误反馈全覆盖 ──
+
+  it('保存失败（400 后端 detail）直出原因且弹窗保持打开', async () => {
+    const wrapper = await mountPage()
+    const vm = wrapper.vm as any
+    vm.openEditModal(vm.connections[0])
+    await flushPromises()
+    mocks.updateConnection.mockRejectedValue(axiosError(400, '有任务正在运行，请等待完成或取消后再切换'))
+    await vm.handleSaveConnection()
+    await flushPromises()
+    expect(vi.mocked(message.error)).toHaveBeenCalledWith('有任务正在运行，请等待完成或取消后再切换')
+    expect(vm.connModal.open).toBe(true)
+  })
+
+  it('保存失败（网络错误）提示网络异常', async () => {
+    const wrapper = await mountPage()
+    const vm = wrapper.vm as any
+    vm.openEditModal(vm.connections[0])
+    await flushPromises()
+    mocks.updateConnection.mockRejectedValue(networkError())
+    await vm.handleSaveConnection()
+    await flushPromises()
+    expect(vi.mocked(message.error)).toHaveBeenCalledWith('网络异常，请检查连接后重试')
+  })
+
+  it('保存失败（503 迁移锁旧文案）追加数据迁移页出口指引', async () => {
+    const wrapper = await mountPage()
+    const vm = wrapper.vm as any
+    vm.openEditModal(vm.connections[0])
+    await flushPromises()
+    mocks.updateConnection.mockRejectedValue(axiosError(503, '正在迁移数据库，暂时禁止写操作，请稍后重试'))
+    await vm.handleSaveConnection()
+    await flushPromises()
+    const errText = firstErrorText()
+    expect(errText).toContain('正在迁移数据库，暂时禁止写操作')
+    expect(errText).toContain('数据迁移')
+  })
+
+  it('保存失败（503 新文案已含出口指引）不重复追加', async () => {
+    const wrapper = await mountPage()
+    const vm = wrapper.vm as any
+    vm.openEditModal(vm.connections[0])
+    await flushPromises()
+    const detail = '数据库迁移进行中（A → B），所有写操作暂被锁定，完成后自动恢复；进度见「数据迁移」页'
+    mocks.updateConnection.mockRejectedValue(axiosError(503, detail))
+    await vm.handleSaveConnection()
+    await flushPromises()
+    expect(vi.mocked(message.error)).toHaveBeenCalledWith(detail)
+  })
+
+  it('切换失败（503 迁移锁）错误上屏且弹窗保持打开', async () => {
+    const wrapper = await mountWith2()
+    const vm = wrapper.vm as any
+    vm.openSwitchModal(vm.connections[1])
+    await flushPromises()
+    mocks.switchDatabase.mockRejectedValue(axiosError(503, '正在迁移数据库，暂时禁止写操作，请稍后重试'))
+    await vm.handleSwitch()
+    await flushPromises()
+    expect(firstErrorText()).toContain('正在迁移数据库')
+    expect(vm.switchModal.open).toBe(true)
+  })
+
+  it('切换失败（400 任务运行中）直出后端原因', async () => {
+    const wrapper = await mountWith2()
+    const vm = wrapper.vm as any
+    vm.openSwitchModal(vm.connections[1])
+    await flushPromises()
+    mocks.switchDatabase.mockRejectedValue(axiosError(400, '有任务正在运行，请等待完成或取消后再切换'))
+    await vm.handleSwitch()
+    await flushPromises()
+    expect(vi.mocked(message.error)).toHaveBeenCalledWith('有任务正在运行，请等待完成或取消后再切换')
+  })
+
+  it('测试连接请求异常（网络错误）提示网络异常', async () => {
+    const wrapper = await mountPage()
+    const vm = wrapper.vm as any
+    mocks.testConnection.mockRejectedValue(networkError())
+    await vm.handleTest(vm.connections[0])
+    await flushPromises()
+    expect(vi.mocked(message.error)).toHaveBeenCalledWith('网络异常，请检查连接后重试')
+  })
+
+  it('删除失败（422 后端 detail）经确认弹窗上屏', async () => {
+    const wrapper = await mountWith2()
+    const vm = wrapper.vm as any
+    mocks.deleteConnection.mockRejectedValue(axiosError(422, '该连接正被引用，无法删除'))
+    await vm.handleDelete(vm.connections[1])
+    await flushPromises()
+    // showOverlayModal 渲染在 document.body：点击危险确认钮触发 onOk
+    const okBtn = Array.from(document.querySelectorAll('.modal-overlay button')).find(
+      (b) => b.textContent?.trim() === '删除',
+    )
+    expect(okBtn).toBeTruthy()
+    okBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    expect(mocks.deleteConnection).toHaveBeenCalledWith('conn_2')
+    expect(vi.mocked(message.error)).toHaveBeenCalledWith('该连接正被引用，无法删除')
+  })
+
+  // ── 9.1 共享切换弹窗接入 ──
+
+  it('切换弹窗使用共享组件：确认后调用切换 API 并刷新', async () => {
+    const wrapper = await mountWith2()
+    const vm = wrapper.vm as any
+    vm.openSwitchModal(vm.connections[1])
+    await flushPromises()
+    const SwitchConnectionModal = (await import('@/components/SwitchConnectionModal.vue')).default
+    const modal = wrapper.findComponent(SwitchConnectionModal)
+    expect(modal.exists()).toBe(true)
+    expect((modal.props('connection') as { id: string }).id).toBe('conn_2')
+    mocks.switchDatabase.mockResolvedValue({ data: { message: '已切换' } })
+    await wrapper.find('.switch-confirm-btn').trigger('click')
+    await flushPromises()
+    expect(mocks.switchDatabase).toHaveBeenCalledWith('conn_2')
+    expect(vi.mocked(message.success)).toHaveBeenCalledWith('已切换')
+    expect(vm.switchModal.open).toBe(false)
+  })
+
+  it('切换弹窗取消：关闭且不发请求', async () => {
+    const wrapper = await mountWith2()
+    const vm = wrapper.vm as any
+    vm.openSwitchModal(vm.connections[1])
+    await flushPromises()
+    // 作用域收窄到共享切换弹窗（页面连接弹窗也有「取消」钮，虽 display:none 但在 DOM 中）
+    const cancelBtn = wrapper
+      .find('.switch-connection-modal')
+      .findAll('button')
+      .find((b) => b.text() === '取消')
+    await cancelBtn!.trigger('click')
+    await flushPromises()
+    expect(vm.switchModal.open).toBe(false)
+    expect(mocks.switchDatabase).not.toHaveBeenCalled()
+  })
+
+  // ── wizard=1 深链（迁移页「去新建连接」配套） ──
+
+  it('?wizard=1 深链：挂载即打开新建连接弹窗', async () => {
+    const wrapper = await mountPage('/database-management?wizard=1')
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(vm.connModal.open).toBe(true)
+    expect(wrapper.find('.modal-overlay').attributes('style')).toContain('flex')
+  })
+
+  it('无 wizard 参数：不自动打开新建连接弹窗', async () => {
+    const wrapper = await mountPage('/database-management')
+    await flushPromises()
+    expect((wrapper.vm as any).connModal.open).toBe(false)
+    expect(wrapper.find('.modal-overlay').attributes('style')).toContain('display: none')
   })
 })

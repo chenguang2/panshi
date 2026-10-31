@@ -173,4 +173,23 @@ describe('DbMigrationSummaryCard 摘要卡', () => {
     const wrapper = await mountCard()
     expect(wrapper.text()).toContain('从未迁移')
   })
+
+  it('状态徽章不含「已取消」死映射（后端仅产 success/failed）', async () => {
+    seedMocks({ history: [historyItem({ status: 'cancelled' })] })
+    const wrapper = await mountCard()
+    expect(wrapper.text()).not.toContain('已取消')
+    expect(wrapper.text()).toContain('cancelled')
+  })
+
+  it('错误态分支：403 → 无数据迁移查看权限文案', async () => {
+    mocks.getStatus.mockRejectedValue({ response: { status: 403 } })
+    const wrapper = await mountCard()
+    expect(wrapper.find('.dbm-sum-error').text()).toContain('无数据迁移查看权限，请联系管理员')
+  })
+
+  it('错误态分支：非 403（网络/服务异常）→ 状态读取失败文案', async () => {
+    mocks.getStatus.mockRejectedValue(new Error('network down'))
+    const wrapper = await mountCard()
+    expect(wrapper.find('.dbm-sum-error').text()).toContain('状态读取失败，请检查网络后刷新重试')
+  })
 })
