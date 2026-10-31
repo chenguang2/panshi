@@ -47,7 +47,7 @@
 ## 9. 就地切换与共享弹窗（P1）
 
 - [x] 9.1 将切换确认弹窗提升为 `SwitchConnectionModal` 共享组件（`DatabaseManagement.vue` 与迁移页复用，对齐 #7 精神），TDD：两处挂载行为用例先红后绿（契约：props open/connection/activeName?，emits confirm 不自关 + cancel；8 组件用例 + 2 接入用例）
-- [ ] 9.2 迁移页结果条「去切换」改为原页弹窗（预选目标连接），切换成功即时展示重启指引横幅（复用既有待重启指引文案）；移除纯跳转行为
+- [x] 9.2 迁移页结果条「去切换」改为原页弹窗（预选目标连接），切换成功即时展示重启指引横幅（复用既有待重启指引文案）；移除纯跳转行为（SwitchConnectionModal 契约消费：connection/activeName 预选；成功 message + a-alert 重启指引 + loadStatus 联动状态带黄标；DbMigrationPage.test.ts 10 用例）
 
 ## 10. 两栏布局与信息层级（P1）
 
