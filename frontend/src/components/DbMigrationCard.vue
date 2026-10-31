@@ -60,72 +60,94 @@
         </div>
       </div>
 
-      <!-- 主区两栏（design D9）：左 = 流向表单，右 = 固定风险与说明面板 -->
+      <!-- 主区两栏（design D9）：左 = 一体化流向面板（方案 A 定稿），右 = 固定风险与说明面板 -->
       <div class="migrate-layout">
         <div class="migrate-form-col">
-          <!-- 源 → 目标 可视化流转 -->
-          <div class="flow-cards">
-            <div class="flow-card">
-              <div class="flow-card-label">源数据库</div>
-              <select v-model="migrateForm.sourceId" class="form-input flow-select" @change="markSourceTouched">
-                <option value="" disabled>选择源数据库</option>
-                <option v-for="c in connections" :key="c.id" :value="c.id">{{ sourceOptionLabel(c) }}</option>
-              </select>
+          <!-- 一体化流向面板：两 select 网格恒等宽、32px 箭头徽章、危险徽签右对齐贴目标列下方、
+               超时 + 日志勾选 + 发起按钮合成 36px 等高控制线 -->
+          <div class="flow-panel">
+            <div class="flow-grid">
+              <div class="flow-unit fu-src">
+                <label class="unit-label" for="migrate-src-select">源数据库</label>
+                <select
+                  id="migrate-src-select"
+                  v-model="migrateForm.sourceId"
+                  class="form-input flow-select"
+                  @change="markSourceTouched"
+                >
+                  <option value="" disabled>选择源数据库</option>
+                  <option v-for="c in connections" :key="c.id" :value="c.id">{{ sourceOptionLabel(c) }}</option>
+                </select>
+              </div>
+              <div class="flow-chip" aria-hidden="true">
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M5 12h14" />
+                  <path d="m12 5 7 7-7 7" />
+                </svg>
+              </div>
+              <div class="flow-unit fu-dst">
+                <label class="unit-label" for="migrate-dst-select">目标数据库</label>
+                <select id="migrate-dst-select" v-model="migrateForm.targetId" class="form-input flow-select">
+                  <option value="" disabled>选择目标数据库</option>
+                  <option v-for="c in connections" :key="c.id" :value="c.id" :disabled="c.id === activeConnId">
+                    {{ targetOptionLabel(c) }}
+                  </option>
+                </select>
+              </div>
+              <div class="danger-note flow-danger">
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 20h16a2 2 0 0 0 1.73-2Z" />
+                  <path d="M12 9v4" />
+                  <path d="M12 17h.01" />
+                </svg>
+                替换模式 · 目标库现有数据将被清空覆盖，不可撤销
+              </div>
             </div>
-            <div class="flow-arrow">
-              <svg
-                width="32"
-                height="32"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
+            <div class="control-line">
+              <label class="unit-label" for="migrate-timeout-select">单阶段超时</label>
+              <select
+                id="migrate-timeout-select"
+                v-model.number="migrateForm.timeout"
+                class="form-input flow-select timeout-select"
+                :disabled="migrating"
               >
-                <path d="M5 12h14" />
-                <path d="m12 5 7 7-7 7" />
-              </svg>
-            </div>
-            <div class="flow-card">
-              <div class="flow-card-label">目标数据库</div>
-              <select v-model="migrateForm.targetId" class="form-input flow-select">
-                <option value="" disabled>选择目标数据库</option>
-                <option v-for="c in connections" :key="c.id" :value="c.id" :disabled="c.id === activeConnId">
-                  {{ targetOptionLabel(c) }}
-                </option>
-              </select>
-            </div>
-          </div>
-
-          <!-- 替换模式危险标签（design 文案表：模式下拉移除，替换语义以危险标签陈述） -->
-          <div class="mode-danger-row">
-            <span class="mode-danger-tag">替换模式 · 目标库现有数据将被清空覆盖，不可撤销</span>
-          </div>
-
-          <div class="migrate-action-row">
-            <div class="flow-card flow-card-timeout">
-              <div class="flow-card-label">单阶段超时</div>
-              <select v-model.number="migrateForm.timeout" class="form-input flow-select" :disabled="migrating">
                 <option :value="60">1 分钟</option>
                 <option :value="180">3 分钟</option>
                 <option :value="300">5 分钟（默认）</option>
                 <option :value="600">10 分钟</option>
                 <option :value="1800">30 分钟</option>
               </select>
+              <label class="checkbox-label">
+                <input type="checkbox" v-model="migrateForm.includeLogs" />
+                <span>包含日志数据</span>
+              </label>
+              <button
+                class="btn btn-primary migrate-btn"
+                :disabled="migrating || !canStartMigration"
+                :title="!canStartMigration ? '可用连接不足' : ''"
+                @click="handleMigrate"
+              >
+                {{ migrating ? '迁移中…' : '开始迁移' }}
+              </button>
             </div>
-            <label class="checkbox-label">
-              <input type="checkbox" v-model="migrateForm.includeLogs" />
-              <span>包含日志数据</span>
-            </label>
-            <button
-              class="btn btn-primary migrate-btn"
-              :disabled="migrating || !canStartMigration"
-              :title="!canStartMigration ? '可用连接不足' : ''"
-              @click="handleMigrate"
-            >
-              {{ migrating ? '迁移中…' : '开始迁移' }}
-            </button>
           </div>
           <p v-if="!canStartMigration" class="flow-hint migrate-insufficient-hint">
             <span>可用连接不足：发起迁移需要 2 个连接，当前 {{ connections.length }} 个</span>
@@ -1010,10 +1032,11 @@ defineExpose({
   margin-left: auto;
 }
 
-/* ── 数据迁移 · 两栏布局（design D9：左流向表单 + 右固定风险面板） ── */
+/* ── 数据迁移 · 两栏布局（design D9）+ 一体化流向面板（方案 A 定稿） ── */
 .migrate-layout {
   display: flex;
-  align-items: flex-start;
+  /* 拉伸：风险面板与左栏（流向面板）等高（用户裁决） */
+  align-items: stretch;
   gap: 20px;
   padding-bottom: 8px;
 }
@@ -1024,77 +1047,134 @@ defineExpose({
   flex-direction: column;
   gap: 14px;
 }
-.flow-cards {
-  display: flex;
-  align-items: stretch;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-.flow-card {
-  flex: 1 1 220px;
-  min-width: 0;
+.flow-panel {
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg, 8px);
-  padding: 14px 16px;
+  padding: 14px 16px 16px;
+}
+/* 两 select 恒等宽（minmax(0,1fr)），长地址由控件自身截断不撑宽 */
+.flow-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 40px minmax(0, 1fr);
+  column-gap: 12px;
+  row-gap: 8px;
+  align-items: start;
+}
+.flow-unit {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
+  min-width: 0;
 }
-.flow-card-timeout {
-  flex: 0 1 220px;
+.flow-unit.fu-src {
+  grid-column: 1;
+  grid-row: 1;
 }
-.flow-card-label {
+.flow-chip {
+  grid-column: 2;
+  grid-row: 1;
+  /* 与下拉控件行平齐（用户裁决）：贴单元格底边（select 底边），32px 徽章对 36px 控件补 2px */
+  align-self: end;
+  margin-bottom: 2px;
+  justify-self: center;
+}
+.flow-unit.fu-dst {
+  grid-column: 3;
+  grid-row: 1;
+}
+/* 危险徽签：网格第二行右对齐（贴目标 select 正下方）；row-gap 8px + margin 4px = 12px 间距 */
+.flow-danger {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  justify-self: end;
+  margin-top: 4px;
+}
+.unit-label {
   font-size: 12px;
   font-weight: 600;
   color: var(--muted);
-  text-transform: uppercase;
   letter-spacing: 0.04em;
+  user-select: none;
 }
 .flow-select {
   width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.flow-arrow {
-  color: var(--muted);
-  flex-shrink: 0;
+/* 箭头徽章：accent 圆片，与控件同尺度（32px）；面板悬停时微移示意流向 */
+.flow-chip {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
+  background: var(--accent-bg, oklch(56% 0.16 210 / 10%));
+  border: 1px solid oklch(56% 0.16 210 / 25%);
+  color: var(--accent);
+  transition: transform 0.2s;
+}
+.flow-chip svg {
+  transition: transform 0.2s;
+  display: block;
+}
+.flow-panel:hover .flow-chip svg {
+  transform: translateX(2px);
+}
+/* 危险徽签（替换模式语义陈述） */
+.danger-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--danger, #ff4d4f);
+  background: oklch(55% 0.18 28 / 8%);
+  border: 1px solid oklch(55% 0.18 28 / 30%);
+  border-radius: var(--radius-md, 6px);
+  padding: 3px 10px;
+}
+.danger-note svg {
+  flex-shrink: 0;
+}
+/* 控制线：同一行 36px 等高，虚线与流向行分隔；发起按钮右对齐落目标列侧 */
+.control-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  row-gap: 10px;
+  border-top: 1px dashed var(--border);
+  margin-top: 12px;
+  padding-top: 12px;
+}
+.control-line .unit-label {
+  flex-shrink: 0;
+}
+.timeout-select {
+  width: 150px;
+  flex: 0 0 auto;
 }
 .checkbox-label {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   font-size: 13px;
   color: var(--fg);
   cursor: pointer;
-  padding-bottom: 10px;
+  user-select: none;
 }
 .checkbox-label input[type='checkbox'] {
+  width: 14px;
+  height: 14px;
   accent-color: var(--accent);
-}
-.migrate-action-row {
-  display: flex;
-  align-items: flex-end;
-  gap: 16px;
-  flex-wrap: wrap;
+  cursor: pointer;
 }
 .migrate-btn {
+  margin-left: auto;
   white-space: nowrap;
-}
-.mode-danger-row {
-  display: flex;
-}
-.mode-danger-tag {
-  display: inline-flex;
-  align-items: center;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--danger, #ff4d4f);
-  background: oklch(62% 0.19 25 / 8%);
-  border: 1px solid oklch(62% 0.19 25 / 30%);
-  border-radius: 6px;
-  padding: 4px 10px;
 }
 .migrate-insufficient-hint {
   margin: 0;
@@ -1111,7 +1191,7 @@ defineExpose({
 
 /* 风险与说明固定面板 */
 .risk-panel {
-  flex: 0 0 320px;
+  flex: 0 0 35%;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg, 8px);
@@ -1150,13 +1230,48 @@ defineExpose({
   color: var(--danger, #ff4d4f);
 }
 
-@media (max-width: 900px) {
+/* <900px：双栏 → 单栏竖排，风险面板移到下方（design D9 断点） */
+@media (max-width: 899.98px) {
   .migrate-layout {
     flex-direction: column;
   }
   .risk-panel {
     flex: 1 1 auto;
     width: 100%;
+  }
+}
+/* <560px：流向网格纵叠，箭头旋转 90° 居中，任何屏宽不溢出（样稿断点行为） */
+@media (max-width: 559.98px) {
+  .flow-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .flow-unit.fu-src {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .flow-chip {
+    grid-column: 1;
+    grid-row: 2;
+    justify-self: center;
+  }
+  .flow-unit.fu-dst {
+    grid-column: 1;
+    grid-row: 3;
+  }
+  .flow-danger {
+    grid-column: 1;
+    grid-row: 4;
+    margin-top: 4px;
+    justify-self: start;
+  }
+  .flow-chip svg {
+    transform: rotate(90deg);
+  }
+  .flow-panel:hover .flow-chip svg {
+    transform: rotate(90deg) translateX(2px);
+  }
+  .migrate-btn {
+    margin-left: 0;
   }
 }
 

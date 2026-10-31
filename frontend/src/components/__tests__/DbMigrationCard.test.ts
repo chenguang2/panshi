@@ -151,10 +151,14 @@ describe('DbMigrationCard', () => {
     expect(wrapper.findAll('option').some((o) => o.text() === '替换（清空目标库）')).toBe(false)
   })
 
-  it('替换语义以危险标签陈述（3.4）', async () => {
+  it('替换语义以危险徽签陈述，且徽签位于流向面板网格内（3.4 / 方案 A）', async () => {
     const wrapper = await mountCard()
-    expect(wrapper.find('.mode-danger-tag').exists()).toBe(true)
-    expect(wrapper.find('.mode-danger-tag').text()).toContain('替换模式 · 目标库现有数据将被清空覆盖，不可撤销')
+    expect(wrapper.find('.danger-note').exists()).toBe(true)
+    expect(wrapper.find('.danger-note').text()).toContain('替换模式 · 目标库现有数据将被清空覆盖，不可撤销')
+    // 一体化流向面板结构：徽签在 flow-grid 第二行（右对齐贴目标列下方），控制线含超时/日志勾选/发起按钮
+    expect(wrapper.find('.flow-panel .flow-grid .danger-note').exists()).toBe(true)
+    expect(wrapper.find('.flow-panel .control-line').exists()).toBe(true)
+    expect(wrapper.find('.control-line .checkbox-label').exists()).toBe(true)
   })
 
   it('非空目标点「开始迁移」先弹确认弹窗，弹窗内确认后才发起（3.1/3.2）', async () => {
