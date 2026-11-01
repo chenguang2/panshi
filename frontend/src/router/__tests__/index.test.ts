@@ -1,5 +1,26 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createRouter, createWebHistory } from 'vue-router'
+import { createPinia, setActivePinia } from 'pinia'
+import { useAuthStore } from '@/stores/auth'
+import { useFeaturesStore } from '@/stores/features'
+
+// ── 路由守卫用例的桩 ──────────────────────────────────────────────────
+// vi.hoisted：@/stores/auth → @/api 静态导入链在导入期就触发 antdv mock 工厂，
+// 顶层 const 尚未初始化，必须用 vi.hoisted 保证先于工厂求值。
+const mockMessage = vi.hoisted(() => ({
+  success: vi.fn(),
+  error: vi.fn(),
+  warning: vi.fn(),
+  info: vi.fn(),
+}))
+vi.mock('ant-design-vue', () => ({ message: mockMessage }))
+
+// 守卫重定向后的重定向目标（'/'）与被拦截路由的懒加载视图全部打桩：
+// beforeEach 在组件解析之前执行，重定向发生时目标组件本就不应被加载。
+vi.mock('@/views/DefaultLayout.vue', () => ({ default: { template: '<router-view />' } }))
+vi.mock('@/views/Dashboard.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/views/NodeTaskCenter.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/views/NodeTaskDetail.vue', () => ({ default: { template: '<div />' } }))
 
 describe('Router', () => {
   it('has /nodes route registered', async () => {
@@ -136,5 +157,50 @@ describe('task_center 详情页路由（node-task-ux-optimization 7.4）', () =>
     const { sectionMap, pageNameMap } = await import('../navMeta')
     expect(sectionMap.NodeTaskDetail).toBe('运维管理')
     expect(pageNameMap.NodeTaskDetail).toBe('节点任务')
+  })
+})
+
+describe('beforeEach 权限拦截的 task_center 二阶提示（node-task-ux-review §11.5）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    localStorage.setItem('token', 'test-token')
+    mockMessage.warning.mockClear()
+  })
+
+  /** 按特性表注册动态路由（node-tasks 属 features.yaml 门控，静态表不含） */
+  async function setupRoutesWithFeatures(featureKeys: string[]) {
+    const featuresStore = useFeaturesStore()
+    featuresStore.loaded = true
+    featuresStore.features = Object.fromEntries(featureKeys.map((k) => [k, true]))
+    const mod = await import('../index')
+    mod.setupDynamicRoutes(mod.default)
+    return mod.default
+  }
+
+  function loginAsNonAdminWithout(permission: string): void {
+    const authStore = useAuthStore()
+    authStore.user = { id: 2, username: 'operator', role: 'viewer', status: 1 }
+    authStore.permissions = ['clusters'].filter((p) => p !== permission)
+  }
+
+  it('无 task_center 权限直达 /node-tasks/1 → 回落首页且 message.warning 中文提示', async () => {
+    loginAsNonAdminWithout('task_center')
+    const router = await setupRoutesWithFeatures(['task_center'])
+
+    await router.push('/node-tasks/1')
+
+    expect(router.currentRoute.value.path).toBe('/')
+    expect(mockMessage.warning).toHaveBeenCalledTimes(1)
+    expect(mockMessage.warning).toHaveBeenCalledWith('暂无节点任务权限，无法访问该页面')
+  })
+
+  it('对照：其它权限路由（/clusters）被拦截仍静默回落首页，不弹提示', async () => {
+    loginAsNonAdminWithout('clusters')
+    const router = await setupRoutesWithFeatures([])
+
+    await router.push('/clusters')
+
+    expect(router.currentRoute.value.path).toBe('/')
+    expect(mockMessage.warning).not.toHaveBeenCalled()
   })
 })

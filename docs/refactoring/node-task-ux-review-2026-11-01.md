@@ -378,6 +378,14 @@ spec「进程重启后任务状态处理」要求标记为 failed **且带「进
 
 ### 11.5 仍未收敛（已知，非本轮范围）
 
-- 无 `task_center` 权限时，详情直达靠 `beforeEach` 跳首页（未加二阶 toast，与本项目其它页一致）。
 - 侧边栏底部 `SQLite · 本地 SQLite` 重复措辞（全站问题，与节点任务无关）。
-- `_execute_distribute_batch` 的取消语义已补齐，但批量腿的日志仍是「同一条日志复制写入每个节点」——需要按节点区分输出才能更准，属后续优化。
+
+### 11.6 11.5 存量收敛（2026-11-01 二轮）
+
+| 项 | 落地 |
+|---|---|
+| 详情页权限 toast | `beforeEach` 权限拦截对 `task_center` 路由补 `message.warning('暂无节点任务权限，无法访问该页面')` 后回首页；其它权限路由维持静默回落（守卫：`router/__tests__/index.test.ts`，含作用域对照用例钉住「只对 task_center 提示」） |
+| 批量分发腿日志按节点区分 | 新增纯函数 `route_distribute_line`，`_execute_distribute_batch._on_log` 按 `[ip]` 前缀路由（判定与 `_parse_distribute_results` 完全同口径）；头部行广播全体。守卫：`backend/tests/test_node_task_distribute_log.py`（执行腿互不混入 + 纯函数边界） |
+| 详情页展示审计历史 | 后端：`create_node_task` 经 `enrich_audit` 补 create 审计 `resource_id`（此前经词汇推断走 "(batch)" 恒 NULL）+ 新端点 `GET /node-tasks/{task_id}/audit`（升序、naive UTC isoformat、安全守卫补采样）；前端：详情页「操作记录」区块（操作中文标签、东八区时间、空态兜底）。实机取证：任务 #19 create 行 `resource_id=19`、详情页区块渲染正确 |
+
+验证基线：后端全量 pytest 2771 passed / 0 failed；前端全量 vitest 2394 passed（--maxWorkers=4）；`vue-tsc -b` 零错误。

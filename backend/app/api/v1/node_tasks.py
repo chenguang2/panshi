@@ -14,7 +14,7 @@ from datetime import date, datetime, time, timezone
 from pathlib import Path
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, File
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select, func, delete, or_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,7 +23,9 @@ from app.config import MAX_PAGE_SIZE
 from app.core.database import get_db
 from app.models.cluster import Cluster
 from app.models.node_task import NodeTask, NodeTaskItem
+from app.models.system import AuditLog
 from app.models.user import User
+from app.services.audit import enrich_audit
 from app.services.node_task_service import (
     RETRY_INVALID_NODES_MESSAGE,
     RETRY_NOT_TERMINAL_MESSAGE,
@@ -642,6 +644,7 @@ async def _list_task_page(db: AsyncSession, stmt, page: int, page_size: int) -> 
 async def create_node_task(
     cluster_id: int,
     body: CreateTaskRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -710,6 +713,16 @@ async def create_node_task(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+    # create 审计补 resource_id：svc.create_task 内部已 commit（审计骨架行以
+    # resource_id=NULL、" (batch)" detail 落库），此处 enrich 同会话身份图里的
+    # 骨架对象再显式 commit，走 UPDATE 落库（参照 clickhouse_config.create_connection）。
+    enrich_audit(
+        request,
+        resource_id=task.id,
+        detail=f"创建节点任务 #{task.id}（{body.task_type}，{len(body.node_ids)} 节点）",
+    )
+    await db.commit()
 
     # Migrate script file after task creation (we need task.id) — only for script_file mode
     if script_upload_id:
@@ -825,6 +838,40 @@ async def get_task_detail(
         cluster_name=_cluster_display_name(row[1], row[2]),
         created_by_name=row[3],
     )
+
+
+@global_router.get("/{task_id}/audit")
+async def get_task_audit(
+    task_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """任务审计历史（详情页时间线）：resource=node_task 且 resource_id=task_id 的审计行。
+
+    按 created_at asc, id asc 升序；created_at 为 naive UTC isoformat（无时区后缀）。
+    """
+    exists = (
+        await db.execute(select(NodeTask.id).where(NodeTask.id == task_id))
+    ).scalar_one_or_none()
+    if exists is None:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    rows = (
+        await db.execute(
+            select(AuditLog)
+            .where(AuditLog.resource == "node_task", AuditLog.resource_id == task_id)
+            .order_by(AuditLog.created_at.asc(), AuditLog.id.asc())
+        )
+    ).scalars().all()
+    return [
+        {
+            "id": r.id,
+            "username": r.username,
+            "action": r.action,
+            "detail": r.detail,
+            "ip_address": r.ip_address,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in rows
+    ]
 
 
 @global_router.post("/{task_id}/cancel")

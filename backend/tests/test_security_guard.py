@@ -41,6 +41,8 @@ UNAUTHENTICATED_SAMPLES = [
     # node-task-ux-optimization 组 4（D10）：日志下载与整任务打包导出（rule #19）
     ("get", "/api/v1/node-tasks/1/items/1/log"),
     ("get", "/api/v1/node-tasks/1/logs/archive"),
+    # 任务审计历史（2026-11 node-task 详情页审计历史，rule #19）
+    ("get", "/api/v1/node-tasks/1/audit"),
     ("get", "/api/v1/edge-client/nodes"),
     ("get", "/api/v1/nodes/autostart/records"),
     ("get", "/api/v1/plugin-switches"),

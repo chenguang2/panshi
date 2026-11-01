@@ -148,6 +148,20 @@
         </div>
       </section>
 
+      <!-- 操作记录 -->
+      <section class="ntd-card ntd-audit">
+        <h2 class="ntd-card-title">操作记录</h2>
+        <p v-if="auditEntries.length === 0" class="ntd-muted">暂无操作记录</p>
+        <div v-else class="ntd-audit-list">
+          <div v-for="a in auditEntries" :key="a.id" class="ntd-audit-row">
+            <span class="ntd-audit-time">{{ formatDateTime(a.created_at) }}</span>
+            <span class="ntd-audit-user">{{ a.username || '—' }}</span>
+            <span class="ntd-audit-action">{{ auditActionLabel(a.action) }}</span>
+            <span class="ntd-audit-detail">{{ a.detail || '—' }}</span>
+          </div>
+        </div>
+      </section>
+
       <NodeTaskLogDrawer
         :open="logOpen"
         :task-id="taskId"
@@ -174,7 +188,9 @@ import {
   deleteNodeTask,
   downloadTaskLogsArchive,
   getNodeTask,
+  getNodeTaskAudit,
   retryNodeTask,
+  type NodeTaskAuditEntry,
   type NodeTaskData,
   type NodeTaskItemData,
 } from '@/composables/useNodeTasks'
@@ -198,6 +214,7 @@ const loading = ref(false)
 const rawOpen = ref(false)
 const logOpen = ref(false)
 const logNodeId = ref<number | null>(null)
+const auditEntries = ref<NodeTaskAuditEntry[]>([])
 
 const TASK_TYPES: Array<{ value: string; label: string }> = [
   { value: 'install_openresty', label: '安装 OpenResty' },
@@ -368,12 +385,33 @@ function openLog(record: NodeTaskItemData) {
   logOpen.value = true
 }
 
+// ── 操作记录 ──
+const AUDIT_ACTION_LABELS: Record<string, string> = {
+  node_task_create: '创建任务',
+  node_task_cancel: '取消任务',
+  node_task_retry: '重试失败节点',
+}
+
+function auditActionLabel(action: string): string {
+  return AUDIT_ACTION_LABELS[action] || action
+}
+
 // ── 数据加载 ──
+/** 操作记录随任务并行加载；404（任务不存在）/接口异常一律置空，绝不影响页面主体渲染 */
+async function loadAudit() {
+  try {
+    auditEntries.value = await getNodeTaskAudit(taskId.value)
+  } catch {
+    auditEntries.value = []
+  }
+}
+
 async function loadTask() {
   if (!taskId.value) return
   loading.value = true
   try {
-    task.value = await getNodeTask(taskId.value)
+    const [fresh] = await Promise.all([getNodeTask(taskId.value), loadAudit()])
+    task.value = fresh
     if (isActive.value) stream.start(taskId.value)
     else stream.stop()
   } catch {
@@ -701,6 +739,53 @@ function confirmDelete() {
   font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.6;
+}
+
+/* ── 操作记录 ── */
+.ntd-audit-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.ntd-audit-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.ntd-audit-row:last-child {
+  border-bottom: none;
+}
+
+.ntd-audit-time {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.ntd-audit-user {
+  flex: 0 0 72px;
+  color: var(--fg);
+}
+
+.ntd-audit-action {
+  flex: 0 0 auto;
+  font-weight: 500;
+  color: var(--fg);
+}
+
+.ntd-audit-detail {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
 }
 
 .ntd-muted {

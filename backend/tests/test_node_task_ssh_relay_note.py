@@ -230,7 +230,7 @@ class TestDistributeCommandPassthrough:
 
         task = SimpleNamespace(id=1)
         item = SimpleNamespace(
-            ip="10.0.0.5", status="pending", rc=None,
+            ip="10.0.0.5", node_id=5, status="pending", rc=None,
             stdout=None, stderr=None, command=None, finished_at=None,
         )
         ansible = AsyncMock()

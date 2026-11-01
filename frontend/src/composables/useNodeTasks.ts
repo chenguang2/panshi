@@ -88,6 +88,21 @@ export async function getNodeTask(taskId: number): Promise<NodeTaskData> {
   return res.data
 }
 
+export interface NodeTaskAuditEntry {
+  id: number
+  username: string | null
+  action: string
+  detail: string | null
+  ip_address: string | null
+  created_at: string
+}
+
+/** 任务操作审计（详情页「操作记录」区块；后端按时间升序返回） */
+export async function getNodeTaskAudit(taskId: number): Promise<NodeTaskAuditEntry[]> {
+  const res = await api.get(`/node-tasks/${taskId}/audit`)
+  return res.data
+}
+
 export async function createNodeTask(
   clusterId: number,
   taskType: string,

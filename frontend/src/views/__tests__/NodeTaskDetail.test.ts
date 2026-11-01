@@ -494,3 +494,107 @@ describe('NodeTaskDetail 动作', () => {
     wrapper.unmount()
   })
 })
+
+describe('NodeTaskDetail 操作记录', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getRegistry.clear()
+    document.body.innerHTML = ''
+  })
+
+  it('用例 A：审计条目渲染中文操作标签、用户与格式化时间', async () => {
+    const wrapper = await mountDetail(makeTask(), {
+      '/node-tasks/12/audit': {
+        data: [
+          {
+            id: 1,
+            username: 'admin',
+            action: 'node_task_create',
+            detail: '创建节点任务',
+            ip_address: '192.168.1.10',
+            created_at: '2026-11-01T10:04:04',
+          },
+          {
+            id: 2,
+            username: 'op',
+            action: 'node_task_cancel',
+            detail: '手动取消',
+            ip_address: '192.168.1.10',
+            created_at: '2026-11-01T10:05:04',
+          },
+        ],
+      },
+    })
+
+    const section = wrapper.find('.ntd-audit')
+    expect(section.exists()).toBe(true)
+    expect(section.find('.ntd-card-title').text()).toBe('操作记录')
+    expect(section.text()).toContain('创建任务')
+    expect(section.text()).toContain('取消任务')
+    // naive UTC → 东 8 区展示（@/utils/format.formatDateTime）
+    expect(section.text()).toContain('2026/11/01 18:04:04')
+    expect(section.text()).toContain('2026/11/01 18:05:04')
+    expect(section.text()).toContain('admin')
+    expect(section.text()).toContain('op')
+    expect(section.text()).toContain('创建节点任务')
+    wrapper.unmount()
+  })
+
+  it('未知 action 原样展示，username/detail 空值用 — 占位', async () => {
+    const wrapper = await mountDetail(makeTask(), {
+      '/node-tasks/12/audit': {
+        data: [
+          {
+            id: 3,
+            username: null,
+            action: 'node_task_export',
+            detail: null,
+            ip_address: null,
+            created_at: '2026-11-01T11:00:00',
+          },
+        ],
+      },
+    })
+    const section = wrapper.find('.ntd-audit')
+    expect(section.text()).toContain('node_task_export')
+    expect(section.text()).toContain('—')
+    wrapper.unmount()
+  })
+
+  it('用例 B：audit 404 → 「暂无操作记录」，任务主体照常渲染', async () => {
+    routeState.params = { id: '12' }
+    getRegistry.clear()
+    vi.mocked(api.get).mockImplementation((u: string) => {
+      if (u === '/node-tasks/12') return Promise.resolve({ data: makeTask() } as never)
+      if (u === '/node-tasks/12/audit') {
+        return Promise.reject(
+          Object.assign(new Error('Request failed with status code 404'), {
+            response: { status: 404, data: { detail: '任务不存在' } },
+          }),
+        )
+      }
+      return Promise.reject(new Error('unexpected GET: ' + u))
+    })
+    const NodeTaskDetail = (await import('../NodeTaskDetail.vue')).default
+    const wrapper = mount(NodeTaskDetail, { global: { stubs: globalStubs } })
+    await flushPromises()
+
+    const section = wrapper.find('.ntd-audit')
+    expect(section.exists()).toBe(true)
+    expect(section.text()).toContain('暂无操作记录')
+    // 任务主体照常渲染（结论区 + 上下文行 + 节点表）
+    expect(wrapper.find('.ntd-verdict').exists()).toBe(true)
+    expect(wrapper.find('.ntd-context').text()).toContain('test')
+    expect(wrapper.find('.ntd-node-table').exists()).toBe(true)
+    // 审计失败绝不弹主体加载错误
+    expect(wrapper.text()).not.toContain('任务详情加载失败')
+    wrapper.unmount()
+  })
+
+  it('audit 返回空数组 → 「暂无操作记录」', async () => {
+    const wrapper = await mountDetail(makeTask(), { '/node-tasks/12/audit': { data: [] } })
+    expect(wrapper.find('.ntd-audit').text()).toContain('暂无操作记录')
+    expect(wrapper.find('.ntd-verdict').exists()).toBe(true)
+    wrapper.unmount()
+  })
+})

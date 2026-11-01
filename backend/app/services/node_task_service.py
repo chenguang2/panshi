@@ -841,15 +841,22 @@ class NodeTaskService:
         dest_per_node = ",".join([dest_full] * len(items))
         ev = {"ips": ips, "srcpath": src_per_node, "destpath": dest_per_node}
 
+        # 日志按节点路由（node-task-ux-review §11.5）：批量输出行的归属判定与
+        # _parse_distribute_results 的 [ip] 前缀语义完全同口径。
+        ip_to_node_id = {item.ip: item.node_id for item in items}
+        current_ip: str | None = None
+
         def _on_log(event: dict) -> None:
+            nonlocal current_ip
             line = event.get("stdout", "") if isinstance(event, dict) else str(event)
             if not line:
                 return
-            for item in items:
-                task_log_store.append_line(task.id, item.node_id, line)
+            targets, current_ip = route_distribute_line(line, current_ip, ip_to_node_id)
+            for node_id in targets:
+                task_log_store.append_line(task.id, node_id, line)
                 self._broadcast(task.id, {
                     "type": "log_line", "task_id": task.id,
-                    "node_id": item.node_id, "line": line,
+                    "node_id": node_id, "line": line,
                 })
 
         if self._ansible is None:
@@ -1324,6 +1331,41 @@ async def _install_openresty_ssh(
         cancel_event=cancel_event,
     )
     return {"rc": rc, "status": "success" if rc == 0 else "failed", "stdout": stdout, "stderr": stderr, "command": build_cmd}
+
+
+def route_distribute_line(
+    line: str, current_ip: str | None, ip_to_node_id: dict
+) -> tuple[list, str | None]:
+    """Route one batch-distribute ansible output line to per-node log targets.
+
+    Prefix semantics mirror ``_parse_distribute_results`` exactly (node-task-ux
+    review §11.5):
+
+    - ``[ip]`` prefix（括号内含数字且长度 < 20）总是推进 ``current_ip``——即使
+      该 ip 未命中任何 item；命中时只以该节点为目标。
+    - 无前缀行且 ``current_ip`` 已设置 → 只给 current_ip 对应节点（未命中 item
+      则不给任何节点）。
+    - 无前缀行且 ``current_ip`` 为 None → 广播给全体节点（playbook 头部行）。
+    - 括号内不含数字（如 ``[WARNING]``）→ 不算 ip 前缀，按无前缀行处理。
+
+    空白行在 parse 中被整体跳过，这里同样不产生任何目标。
+    Returns ``(target_node_ids, new_current_ip)``.
+    """
+    stripped = line.strip()
+    if not stripped:
+        return [], current_ip
+    if stripped.startswith("[") and "]" in stripped:
+        bracket_end = stripped.index("]")
+        candidate_ip = stripped[1:bracket_end]
+        # Validate it looks like an IP（与 _parse_distribute_results 同判定）
+        if any(c.isdigit() for c in candidate_ip) and len(candidate_ip) < 20:
+            current_ip = candidate_ip
+            node_id = ip_to_node_id.get(candidate_ip)
+            return ([node_id] if node_id is not None else []), current_ip
+    if current_ip is None:
+        return list(ip_to_node_id.values()), current_ip
+    node_id = ip_to_node_id.get(current_ip)
+    return ([node_id] if node_id is not None else []), current_ip
 
 
 def _parse_distribute_results(stdout: str, stderr: str, items: list, overall_rc: int) -> dict:

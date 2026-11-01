@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { Router, RouteRecordRaw } from 'vue-router'
+import { message } from 'ant-design-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useFeaturesStore } from '@/stores/features'
 
@@ -251,6 +252,10 @@ router.beforeEach((to, _from) => {
   const requiredPermission = to.meta?.permission as string | undefined
   if (requiredPermission) {
     if (!authStore.hasPermission(requiredPermission)) {
+      // task_center 直达被拦时给二阶提示（node-task-ux-review §11.5）；其它权限路由维持静默回落，与全站现状一致
+      if (requiredPermission === 'task_center') {
+        message.warning('暂无节点任务权限，无法访问该页面')
+      }
       return '/'
     }
   }
