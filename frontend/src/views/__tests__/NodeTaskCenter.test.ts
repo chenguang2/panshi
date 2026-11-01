@@ -1,9 +1,26 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 
 vi.mock('@/api', () => ({ default: { get: vi.fn(), post: vi.fn(), delete: vi.fn() } }))
 
+/** 列表页改用路由跳转详情（7.2）：mock vue-router，routeState 可变以覆盖「带 query 恢复筛选」 */
+const routerPush = vi.fn()
+const routeState: { params: Record<string, string>; query: Record<string, string>; name: string } = {
+  params: {},
+  query: {},
+  name: 'NodeTaskCenter',
+}
+vi.mock('vue-router', () => ({
+  useRoute: () => routeState,
+  useRouter: () => ({ push: routerPush, back: vi.fn(), replace: vi.fn() }),
+  RouterLink: { template: '<a><slot /></a>' },
+}))
+
 import api from '@/api'
+import TaskStatusTag from '@/components/TaskStatusTag.vue'
+import TaskProgressBar from '@/components/TaskProgressBar.vue'
 
 /** URL 感知 GET 注册表：注册过的 url 返回 data，未注册一律 reject（约定 #43） */
 const apiGetRegistry = new Map<string, unknown>()
@@ -59,34 +76,67 @@ const globalStubs = {
     template: `<button type="button" class="a-menu-item-stub" @click="$emit('click')"><slot /></button>`,
     emits: ['click'],
   },
+  /**
+   * a-table 桩（本文件的既有惯例：真实 Table 在 jsdom 无 matchMedia 会抛 Unhandled Rejection）。
+   *
+   * 复刻本组件消费的语义切片——表头（columns.title）、bodyCell 转发（含 index，
+   * 「#」序号列跨页公式要用）、行勾选框（含 getCheckboxProps 的 disabled）、
+   * 空数据时渲染 `#emptyText` 槽（真实 a-table 的空态槽名就是 emptyText，不是 empty）。
+   */
   'a-table': {
+    name: 'ATableStub',
     inheritAttrs: false,
-    props: ['dataSource', 'columns'],
+    props: {
+      dataSource: { type: Array, default: () => [] },
+      columns: { type: Array, default: () => [] },
+      rowSelection: { type: Object, default: null },
+    },
     template: `
       <div class="a-table-stub">
-        <template v-for="row in dataSource" :key="row.id">
-          <input
-            v-if="$attrs['row-selection'] || $attrs.rowSelection"
-            type="checkbox"
-            class="row-select"
-            :checked="($attrs['row-selection'] || $attrs.rowSelection).selectedRowKeys.includes(row.id)"
-            @change="onRowCheck(row.id, $event)"
-          />
-          <template v-for="col in columns" :key="col.key">
-            <span class="cell"><slot name="bodyCell" :column="col" :record="row" /></span>
-          </template>
-        </template>
+        <table>
+          <thead>
+            <tr>
+              <th v-for="col in columns" :key="col.key">{{ col.title }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template v-for="(row, i) in dataSource" :key="row.id">
+              <tr class="a-table-row">
+                <td v-if="rowSelection" class="select-cell">
+                  <input
+                    type="checkbox"
+                    class="row-select"
+                    :checked="rowSelection.selectedRowKeys.includes(row.id)"
+                    :disabled="checkboxDisabled(row)"
+                    @change="onRowCheck(row.id, $event)"
+                  />
+                </td>
+                <td v-for="col in columns" :key="col.key">
+                  <slot name="bodyCell" :column="col" :record="row" :index="i" />
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <div v-if="!dataSource || dataSource.length === 0" class="a-table-empty">
+          <slot name="emptyText" />
+        </div>
       </div>
     `,
     methods: {
+      checkboxDisabled(row: Record<string, unknown>): boolean {
+        const rs = this.rowSelection as { getCheckboxProps?: (r: unknown) => { disabled?: boolean } } | null
+        return rs?.getCheckboxProps?.(row)?.disabled === true
+      },
       onRowCheck(rowId: number, e: Event) {
-        const rs = this.$attrs['row-selection'] || this.$attrs.rowSelection
-        const keys = [...(rs?.selectedRowKeys || [])]
+        const rs = this.rowSelection as { selectedRowKeys: number[]; onChange: (keys: number[]) => void } | null
+        if (!rs) return
+        const keys = [...(rs.selectedRowKeys || [])]
         const checked = (e.target as HTMLInputElement).checked
         const idx = keys.indexOf(rowId)
         if (checked && idx === -1) keys.push(rowId)
         if (!checked && idx !== -1) keys.splice(idx, 1)
-        rs?.onChange(keys)
+        rs.onChange(keys)
       },
     },
   },
@@ -113,7 +163,8 @@ describe('NodeTaskCenter', () => {
     const text = wrapper.text()
     expect(text).toContain('安装 OpenResty')
     expect(text).toContain('执行中')
-    expect(text).toContain('1/2 成功')
+    // 6.1：状态/节点/进度三列合并为「结果」列，计数文案以「成功 x · 失败 y」呈现
+    expect(text).toContain('成功 1 · 失败 0')
     expect(text).toContain('详情')
     // 开始时间/结束时间/耗时列：stub 环境无表头，用行数据断言接线
     // fixture started/finished 为 naive UTC，东 8 区显示 +8h → 18:00:45
@@ -130,7 +181,7 @@ describe('NodeTaskCenter', () => {
     await flushPromises()
 
     // 状态筛选器必须存在：防止选择器被移除/改名时静默通过
-    const statusSelect = wrapper.find('.node-filter-bar select')
+    const statusSelect = wrapper.find('[data-test="filter-status"]')
     expect(statusSelect.exists()).toBe(true)
     // 筛选 select 只绑 v-model，需点击「刷新」按钮触发 loadTasks(1)
     await statusSelect.setValue('failed')
@@ -257,6 +308,36 @@ describe('NodeTaskCenter', () => {
     wrapper.unmount()
   })
 
+  it('列表行「取消」必须二次确认，且提示不回滚已发生的改动', async () => {
+    apiGetOk({ data: { total: 1, items: [makeTask({ id: 9, status: 'running' })] } })
+    vi.mocked(api.post).mockImplementation((url: string) => {
+      if (url === '/node-tasks/9/cancel') return Promise.resolve({ data: {} })
+      return Promise.reject(new Error('unexpected POST: ' + url))
+    })
+    const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
+    const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
+    await flushPromises()
+
+    const cancelItem = wrapper.findAll('.a-menu-item-stub').find((b) => b.text().trim() === '取消')
+    expect(cancelItem).toBeTruthy()
+    await cancelItem!.trigger('click')
+    await flushPromises()
+
+    // 点一下不得直接取消：必须先出现确认弹窗，且弹窗说明「不会回滚」
+    expect(api.post).not.toHaveBeenCalled()
+    const modal = Array.from(document.querySelectorAll('.modal-overlay')).find((m) =>
+      m.textContent?.includes('确认取消任务'),
+    )
+    expect(modal).toBeTruthy()
+    expect(modal!.textContent).toContain('不会回滚')
+
+    const okBtn = Array.from(modal!.querySelectorAll('button')).find((b) => b.textContent === '确认取消')
+    okBtn!.click()
+    await flushPromises()
+    expect(api.post).toHaveBeenCalledWith('/node-tasks/9/cancel')
+    wrapper.unmount()
+  })
+
   it('batch deletes selected tasks after confirmation', async () => {
     apiGetOk({
       data: {
@@ -301,6 +382,114 @@ describe('NodeTaskCenter', () => {
     expect(call).toBeTruthy()
     expect((call![1] as { task_ids: number[] }).task_ids).toEqual([1, 2])
     wrapper.unmount()
+  })
+})
+
+describe('NodeTaskCenter 状态与进度组件（node-task-ux-optimization 6.3/6.4）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    apiGetRegistry.clear()
+    document.body.innerHTML = ''
+  })
+
+  async function mountWith(items: Record<string, unknown>[]) {
+    apiGetOk({ data: { total: items.length, items } })
+    const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
+    const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
+    await flushPromises()
+    return wrapper
+  }
+
+  it('列表状态列渲染 TaskStatusTag，cancel_requested 的 running 显示「取消中」', async () => {
+    const wrapper = await mountWith([
+      makeTask({ id: 1, status: 'running', cancel_requested: true }),
+      makeTask({ id: 2, status: 'partial' }),
+    ])
+    expect(wrapper.findAllComponents(TaskStatusTag).length).toBe(2)
+    expect(wrapper.find('.status-tag.status-cancelling').exists()).toBe(true)
+    expect(wrapper.find('.status-tag.status-partial').exists()).toBe(true)
+    // 列表不再出现单独一套「状态色」纯文本
+    expect(wrapper.text()).toContain('取消中')
+    wrapper.unmount()
+  })
+
+  it('列表进度列渲染 TaskProgressBar：失败任务有红段而非空灰条', async () => {
+    const wrapper = await mountWith([
+      makeTask({ id: 1, status: 'failed', total_nodes: 1, success_nodes: 0, failed_nodes: 1, skipped_nodes: 0 }),
+    ])
+    expect(wrapper.findAllComponents(TaskProgressBar).length).toBe(1)
+    expect(wrapper.find('.tpb-seg-failed').exists()).toBe(true)
+    expect(wrapper.find('.tpb-seg-success').exists()).toBe(false)
+    expect(wrapper.text()).toContain('失败 1')
+    wrapper.unmount()
+  })
+
+  it('进度列用后端真实计数：跳过节点单独成段', async () => {
+    const wrapper = await mountWith([
+      makeTask({ id: 1, status: 'success', total_nodes: 4, success_nodes: 2, failed_nodes: 0, skipped_nodes: 2 }),
+    ])
+    expect(wrapper.find('.tpb-seg-skipped').exists()).toBe(true)
+    expect(wrapper.text()).toContain('跳过 2')
+    wrapper.unmount()
+  })
+
+  it('状态筛选下拉固定含「跳过」，顺序不变', async () => {
+    const wrapper = await mountWith([])
+    const options = wrapper.find('[data-test="filter-status"]').findAll('option')
+    expect(options.map((o) => o.attributes('value'))).toEqual([
+      '',
+      'pending',
+      'running',
+      'success',
+      'partial',
+      'failed',
+      'cancelled',
+      'skipped',
+    ])
+    expect(options.find((o) => o.attributes('value') === 'skipped')!.text()).toBe('跳过')
+    wrapper.unmount()
+  })
+
+  it('详情改为跳转到独立路由页，并带上当前筛选与分页', async () => {
+    apiGetOk({
+      data: {
+        total: 1,
+        items: [makeTask({ id: 7, status: 'partial', total_nodes: 2, success_nodes: 1, failed_nodes: 1 })],
+      },
+    })
+    const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
+    const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
+    await flushPromises()
+
+    // 先制造一个筛选 + 翻到第 2 页的上下文
+    await wrapper.find('[data-test="filter-status"]').setValue('failed')
+    await flushPromises()
+
+    const detailBtn = wrapper.findAll('button').find((b) => b.text().includes('详情'))
+    await detailBtn!.trigger('click')
+    await flushPromises()
+
+    expect(routerPush).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'NodeTaskDetail',
+        params: { id: 7 },
+        query: expect.objectContaining({ status: 'failed' }),
+      }),
+    )
+    // 旧详情弹窗彻底不再渲染（创建弹窗常驻 DOM，故按标题文案判定）
+    expect(document.body.textContent).not.toContain('任务详情 #')
+    expect(document.body.textContent).not.toContain('完整日志')
+    wrapper.unmount()
+  })
+
+  it('源码层：列表页不再持有详情弹窗状态（detailVisible / detailTask）', async () => {
+    const src = readFileSync(resolve(process.cwd(), 'src/views/NodeTaskCenter.vue'), 'utf-8')
+    expect(src).not.toContain('detailVisible')
+    expect(src).not.toContain('expandedIp')
+    expect(src).not.toContain('NodeTaskLogViewer')
+    expect(src).not.toContain('完整日志')
+    // 整行可点进详情（行内按钮/勾选框不劫持）
+    expect(src).toContain(':custom-row="rowProps"')
   })
 })
 
@@ -361,7 +550,7 @@ describe('NodeTaskCenter create-task flow', () => {
 
     // select cluster in the modal (Teleport -> body) to trigger node loading
     const bodySelects = Array.from(document.querySelectorAll('select'))
-    const clusterSel = bodySelects.find((s) => !s.hasAttribute('data-test'))
+    const clusterSel = bodySelects.find((s) => s.getAttribute('data-test') === 'create-cluster')
     clusterSel!.value = '1'
     clusterSel!.dispatchEvent(new Event('change', { bubbles: true }))
     await flushPromises()
@@ -402,7 +591,7 @@ describe('NodeTaskCenter create-task flow', () => {
 
     // select cluster (Teleport -> body)
     const bodySelects = Array.from(document.querySelectorAll('select'))
-    const clusterSel = bodySelects.find((s) => !s.hasAttribute('data-test'))
+    const clusterSel = bodySelects.find((s) => s.getAttribute('data-test') === 'create-cluster')
     clusterSel!.value = '1'
     clusterSel!.dispatchEvent(new Event('change', { bubbles: true }))
     await flushPromises()
@@ -430,6 +619,8 @@ describe('NodeTaskCenter create-task flow', () => {
     expect(body.node_ids).toEqual([10])
     // no manual params needed -- node record has everything
     expect(body.params).toEqual({})
+    // 7.2：创建成功后直接进入新任务详情页（替换「停在列表 + toast」）
+    expect(routerPush).toHaveBeenCalledWith(expect.objectContaining({ name: 'NodeTaskDetail', params: { id: 1 } }))
     wrapper.unmount()
   })
 
@@ -468,7 +659,7 @@ describe('NodeTaskCenter create-task flow', () => {
 
     // select cluster
     const bodySelects = Array.from(document.querySelectorAll('select'))
-    const clusterSel = bodySelects.find((s) => !s.hasAttribute('data-test'))
+    const clusterSel = bodySelects.find((s) => s.getAttribute('data-test') === 'create-cluster')
     clusterSel!.value = '1'
     clusterSel!.dispatchEvent(new Event('change', { bubbles: true }))
     clusterSel!.dispatchEvent(new Event('input', { bubbles: true }))
@@ -540,7 +731,7 @@ describe('NodeTaskCenter create-task flow', () => {
     await flushPromises()
 
     const bodySelects = Array.from(document.querySelectorAll('select'))
-    const clusterSel = bodySelects.find((s) => !s.hasAttribute('data-test'))
+    const clusterSel = bodySelects.find((s) => s.getAttribute('data-test') === 'create-cluster')
     clusterSel!.value = '1'
     clusterSel!.dispatchEvent(new Event('change', { bubbles: true }))
     await flushPromises()
@@ -607,7 +798,7 @@ describe('NodeTaskCenter create-task flow', () => {
     await flushPromises()
 
     const bodySelects = Array.from(document.querySelectorAll('select'))
-    const clusterSel = bodySelects.find((s) => !s.hasAttribute('data-test'))
+    const clusterSel = bodySelects.find((s) => s.getAttribute('data-test') === 'create-cluster')
     clusterSel!.value = '1'
     clusterSel!.dispatchEvent(new Event('change', { bubbles: true }))
     await flushPromises()
@@ -678,7 +869,7 @@ describe('NodeTaskCenter create-task flow', () => {
     await flushPromises()
 
     const bodySelects = Array.from(document.querySelectorAll('select'))
-    const clusterSel = bodySelects.find((s) => !s.hasAttribute('data-test'))
+    const clusterSel = bodySelects.find((s) => s.getAttribute('data-test') === 'create-cluster')
     clusterSel!.value = '1'
     clusterSel!.dispatchEvent(new Event('change', { bubbles: true }))
     await flushPromises()
@@ -744,7 +935,7 @@ describe('NodeTaskCenter create-task flow', () => {
     await flushPromises()
 
     const bodySelects = Array.from(document.querySelectorAll('select'))
-    const clusterSel = bodySelects.find((s) => !s.hasAttribute('data-test'))
+    const clusterSel = bodySelects.find((s) => s.getAttribute('data-test') === 'create-cluster')
     clusterSel!.value = '1'
     clusterSel!.dispatchEvent(new Event('change', { bubbles: true }))
     await flushPromises()
@@ -764,6 +955,181 @@ describe('NodeTaskCenter create-task flow', () => {
     expect(api.get).toHaveBeenCalledWith('/clusters/1/nodes/10/edge-pack-list')
     expect(api.get).not.toHaveBeenCalledWith('/clusters/1/nodes/11/edge-pack-list')
     expect(document.body.textContent || '').toContain('3.1.1.26071611')
+    wrapper.unmount()
+  })
+
+  /** 依赖选项按「集群 + 任务类型」加载：切换集群后必须重新请求，不得沿用旧集群的空列表 */
+
+  it.each([
+    ['install_openresty', 'openresty-files'],
+    ['edge_pack_add', 'edge-pack-files'],
+  ] as const)('切换集群后为 %s 重新加载依赖选项', async (taskType, endpoint) => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === '/clusters') {
+        return Promise.resolve({
+          data: {
+            items: [
+              { id: 1, name: 'prod' },
+              { id: 2, name: 'staging' },
+            ],
+          },
+        })
+      }
+      const nodesHit = url.match(/^\/clusters\/(\d+)\/nodes$/)
+      if (nodesHit) {
+        const cid = Number(nodesHit[1])
+        return Promise.resolve({ data: { total: 1, items: [{ id: cid * 10, ip: `10.0.0.${cid}` }] } })
+      }
+      const depHit = url.match(/^\/clusters\/(\d+)\/nodes\/(openresty-files|edge-pack-files)$/)
+      if (depHit) {
+        // 真实后端返回 { files: [{ name, size_display }] }
+        return Promise.resolve({
+          data: { files: [{ name: `${endpoint}-cluster-${depHit[1]}.tar.gz`, size_display: '1.2M' }] },
+        })
+      }
+      if (url === '/node-tasks') return Promise.resolve({ data: { total: 0, items: [] } })
+      return Promise.reject(new Error('unexpected GET: ' + url))
+    })
+    const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
+    const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
+    await flushPromises()
+
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text().includes('新建任务'))!
+      .trigger('click')
+    await flushPromises()
+
+    const selectCluster = async (value: string) => {
+      // 弹窗经 Teleport 挂到 body，集群下拉是弹窗内唯一无 data-test 的 select
+      const sel = Array.from(document.querySelectorAll('select')).find(
+        (s) => s.getAttribute('data-test') === 'create-cluster',
+      )
+      expect(sel).toBeTruthy()
+      sel!.value = value
+      sel!.dispatchEvent(new Event('change', { bubbles: true }))
+      await flushPromises()
+    }
+
+    await selectCluster('1')
+    const typeSel = Array.from(document.querySelectorAll('select')).find(
+      (s) => s.getAttribute('data-test') === 'task-type',
+    )
+    typeSel!.value = taskType
+    typeSel!.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushPromises()
+
+    expect(api.get).toHaveBeenCalledWith(`/clusters/1/nodes/${endpoint}`)
+    expect(document.body.textContent || '').toContain(`${endpoint}-cluster-1.tar.gz`)
+
+    // 切换到集群 2：应以集群 2 的 id 重新请求，并渲染集群 2 的列表
+    await selectCluster('2')
+    await flushPromises()
+
+    expect(api.get).toHaveBeenCalledWith(`/clusters/2/nodes/${endpoint}`)
+    expect(document.body.textContent || '').toContain(`${endpoint}-cluster-2.tar.gz`)
+    // 列表是替换而非追加：旧集群的选项不应残留
+    expect(document.body.textContent || '').not.toContain(`${endpoint}-cluster-1.tar.gz`)
+    wrapper.unmount()
+  })
+
+  it('当前任务类型不需要依赖选项时，切换集群不发起额外请求', async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === '/clusters') {
+        return Promise.resolve({
+          data: {
+            items: [
+              { id: 1, name: 'prod' },
+              { id: 2, name: 'staging' },
+            ],
+          },
+        })
+      }
+      const nodesHit = url.match(/^\/clusters\/(\d+)\/nodes$/)
+      if (nodesHit) return Promise.resolve({ data: { total: 0, items: [] } })
+      if (url === '/node-tasks') return Promise.resolve({ data: { total: 0, items: [] } })
+      return Promise.reject(new Error('unexpected GET: ' + url))
+    })
+    const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
+    const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
+    await flushPromises()
+
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text().includes('新建任务'))!
+      .trigger('click')
+    await flushPromises()
+
+    const clusterSel = Array.from(document.querySelectorAll('select')).find(
+      (s) => s.getAttribute('data-test') === 'create-cluster',
+    )
+    clusterSel!.value = '1'
+    clusterSel!.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushPromises()
+
+    const typeSel = Array.from(document.querySelectorAll('select')).find(
+      (s) => s.getAttribute('data-test') === 'task-type',
+    )
+    typeSel!.value = 'start'
+    typeSel!.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushPromises()
+
+    clusterSel!.value = '2'
+    clusterSel!.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushPromises()
+
+    const dependentCalls = vi
+      .mocked(api.get)
+      .mock.calls.filter(([url]) => /openresty-files|edge-pack-files|edge-pack-list/.test(String(url)))
+    expect(dependentCalls).toEqual([])
+    wrapper.unmount()
+  })
+
+  it('单独切换任务类型仍按类型加载依赖选项（回归）', async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, name: 'prod' }] } })
+      const nodesHit = url.match(/^\/clusters\/(\d+)\/nodes$/)
+      if (nodesHit) return Promise.resolve({ data: { total: 1, items: [{ id: 10, ip: '10.0.0.1' }] } })
+      if (url === '/clusters/1/nodes/openresty-files') {
+        return Promise.resolve({ data: { files: [{ name: 'openresty-filtered.tar.gz' }] } })
+      }
+      if (url === '/clusters/1/nodes/edge-pack-files') {
+        return Promise.resolve({ data: { files: [{ name: 'edge-pack-filtered.tar.gz' }] } })
+      }
+      if (url === '/node-tasks') return Promise.resolve({ data: { total: 0, items: [] } })
+      return Promise.reject(new Error('unexpected GET: ' + url))
+    })
+    const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
+    const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
+    await flushPromises()
+
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text().includes('新建任务'))!
+      .trigger('click')
+    await flushPromises()
+
+    const clusterSel = Array.from(document.querySelectorAll('select')).find(
+      (s) => s.getAttribute('data-test') === 'create-cluster',
+    )
+    clusterSel!.value = '1'
+    clusterSel!.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushPromises()
+
+    const typeSel = Array.from(document.querySelectorAll('select')).find(
+      (s) => s.getAttribute('data-test') === 'task-type',
+    )
+    typeSel!.value = 'install_openresty'
+    typeSel!.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushPromises()
+    expect(api.get).toHaveBeenCalledWith('/clusters/1/nodes/openresty-files')
+    expect(document.body.textContent || '').toContain('openresty-filtered.tar.gz')
+
+    typeSel!.value = 'edge_pack_add'
+    typeSel!.dispatchEvent(new Event('change', { bubbles: true }))
+    await flushPromises()
+    expect(api.get).toHaveBeenCalledWith('/clusters/1/nodes/edge-pack-files')
+    expect(document.body.textContent || '').toContain('edge-pack-filtered.tar.gz')
     wrapper.unmount()
   })
 })
@@ -802,7 +1168,7 @@ describe('NodeTaskCenter create-task node selection', () => {
     await flushPromises()
     // 选集群
     const bodySelects = Array.from(document.querySelectorAll('select'))
-    const clusterSel = bodySelects.find((s) => !s.hasAttribute('data-test'))
+    const clusterSel = bodySelects.find((s) => s.getAttribute('data-test') === 'create-cluster')
     clusterSel!.value = '1'
     clusterSel!.dispatchEvent(new Event('change', { bubbles: true }))
     await flushPromises()
@@ -819,7 +1185,7 @@ describe('NodeTaskCenter create-task node selection', () => {
     expect(vm.createNodeIds).toContain(12)
     await flushPromises()
     const text = document.body.textContent || ''
-    expect(text).toContain('已选择 3 / 3 个节点')
+    expect(text).toContain('已选 3 个（共 3）')
     wrapper.unmount()
   })
 
@@ -830,7 +1196,7 @@ describe('NodeTaskCenter create-task node selection', () => {
     vm.clearAllCreateNodes()
     expect(vm.createNodeIds.length).toBe(0)
     const text = document.body.textContent || ''
-    expect(text).toContain('已选择 0 / 3 个节点')
+    expect(text).toContain('已选 0 个（共 3）')
     wrapper.unmount()
   })
 })
@@ -866,7 +1232,7 @@ describe('NodeTaskCenter software_check flow', () => {
     await flushPromises()
 
     const bodySelects = Array.from(document.querySelectorAll('select'))
-    const clusterSel = bodySelects.find((s) => !s.hasAttribute('data-test'))
+    const clusterSel = bodySelects.find((s) => s.getAttribute('data-test') === 'create-cluster')
     clusterSel!.value = '1'
     clusterSel!.dispatchEvent(new Event('change', { bubbles: true }))
     await flushPromises()
@@ -897,239 +1263,6 @@ describe('NodeTaskCenter software_check flow', () => {
     expect(body.params.software_list as string[]).toContain('vim')
     wrapper.unmount()
   })
-
-  it('renders software x node matrix for a software_check task detail', async () => {
-    vi.mocked(api.get).mockImplementation((url: string) => {
-      if (url === '/node-tasks')
-        return Promise.resolve({
-          data: { total: 1, items: [makeTask({ id: 1, task_type: 'software_check', status: 'success' })] },
-        })
-      if (url === '/node-tasks/1') {
-        return Promise.resolve({
-          data: {
-            id: 1,
-            task_type: 'software_check',
-            status: 'success',
-            params: {},
-            success_nodes: 1,
-            failed_nodes: 0,
-            cancelled_nodes: 0,
-            total_nodes: 1,
-            items: [
-              {
-                id: 1,
-                node_id: 10,
-                ip: '10.0.0.10',
-                status: 'success',
-                rc: 0,
-                logs: [],
-                stdout: JSON.stringify({
-                  nc: { installed: true, pkg: 'nmap-7.80', ver: 'Ncat 7.80' },
-                  vim: { installed: true, pkg: 'vim-9.0', ver: 'VIM 9.0' },
-                  dos2unix: { installed: false, pkg: '未安装', ver: '' },
-                }),
-              },
-            ],
-          },
-        })
-      }
-      // 组件挂载即拉任务列表：注册真实列表形状，其余未注册 URL 一律 reject
-      if (url === '/node-tasks') return Promise.resolve({ data: { total: 0, items: [] } })
-      return Promise.reject(new Error('unexpected GET: ' + url))
-    })
-    const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
-    const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
-    await flushPromises()
-
-    const detailBtn = wrapper.findAll('button').find((b) => b.text().includes('详情'))
-    detailBtn!.trigger('click')
-    await flushPromises()
-
-    const text = document.body.textContent || ''
-    expect(text).toContain('软件查询结果')
-    expect(text).toContain('nmap-7.80')
-    expect(text).toContain('✗ 未安装')
-    wrapper.unmount()
-  })
-})
-
-describe('NodeTaskCenter live log streaming', () => {
-  // 组件改为 fetch 流式（带 Authorization 头），测试用可控 ReadableStream mock
-  function makeStreamHarness() {
-    let controller!: ReadableStreamDefaultController<Uint8Array>
-    const stream = new ReadableStream<Uint8Array>({
-      start(c) {
-        controller = c
-      },
-    })
-    const fetchMock = vi.fn(async () => ({ ok: true, status: 200, body: stream }))
-    vi.stubGlobal('fetch', fetchMock)
-    return {
-      push: (data: unknown) => controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(data)}\n\n`)),
-      close: () => controller.close(),
-      fail: () => controller.error(new Error('network down')),
-      fetchMock,
-    }
-  }
-
-  beforeEach(() => {
-    vi.clearAllMocks()
-    document.body.innerHTML = ''
-  })
-
-  afterEach(() => {
-    vi.unstubAllGlobals()
-  })
-
-  function makeDetailTask(overrides: Record<string, unknown> = {}) {
-    return {
-      id: 99,
-      cluster_id: 1,
-      task_type: 'install_openresty',
-      status: 'running',
-      params: {},
-      total_nodes: 1,
-      success_nodes: 0,
-      failed_nodes: 0,
-      cancelled_nodes: 0,
-      items: [
-        {
-          id: 100,
-          node_id: 7,
-          ip: '192.168.0.13',
-          status: 'running',
-          rc: null,
-          logs: [],
-          stdout: null,
-          stderr: null,
-          command: null,
-          started_at: '2026-08-02T10:00:00',
-          finished_at: null,
-        },
-      ],
-      ...overrides,
-    }
-  }
-
-  it('opens a fetch stream with Authorization header and appends log_line events', async () => {
-    localStorage.setItem('token', 'test-jwt')
-    vi.mocked(api.get).mockImplementation(async (url: string) => {
-      if (url === '/node-tasks') return { data: { total: 1, items: [makeDetailTask()] } }
-      if (url === '/node-tasks/99') return { data: makeDetailTask() }
-      return { data: { total: 0, items: [] } }
-    })
-    const harness = makeStreamHarness()
-    const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
-    const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
-    await flushPromises()
-
-    const detailBtn = wrapper.findAll('button').find((b) => b.text().includes('详情'))
-    await detailBtn!.trigger('click')
-    await flushPromises()
-
-    expect(harness.fetchMock).toHaveBeenCalledWith(
-      '/api/v1/node-tasks/99/stream',
-      expect.objectContaining({ headers: { Authorization: 'Bearer test-jwt' } }),
-    )
-
-    harness.push({ type: 'log_line', task_id: 99, node_id: 7, line: 'TASK [edge : Build edge server]' })
-    harness.push({ type: 'log_line', task_id: 99, node_id: 7, line: 'gcc -o nginx main.c' })
-    await flushPromises()
-
-    // expand the row's log panel to render the live lines
-    const expandBtn = Array.from(document.querySelectorAll('button')).find((b) => b.textContent === '展开')
-    expandBtn!.click()
-    await flushPromises()
-
-    expect(document.body.textContent || '').toContain('TASK [edge : Build edge server]')
-    expect(document.body.textContent || '').toContain('gcc -o nginx main.c')
-    harness.close()
-    await flushPromises()
-    wrapper.unmount()
-  })
-
-  it('polls detail as fallback when the stream errors', async () => {
-    vi.useFakeTimers()
-    vi.mocked(api.get).mockImplementation(async (url: string) => {
-      if (url === '/node-tasks') return { data: { total: 1, items: [makeDetailTask()] } }
-      if (url === '/node-tasks/99') return { data: makeDetailTask() }
-      return { data: { total: 0, items: [] } }
-    })
-    const harness = makeStreamHarness()
-    const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
-    const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
-    await flushPromises()
-
-    await wrapper
-      .findAll('button')
-      .find((b) => b.text().includes('详情'))!
-      .trigger('click')
-    await flushPromises()
-
-    harness.fail()
-    await vi.advanceTimersByTimeAsync(2100)
-    await flushPromises()
-
-    expect(api.get).toHaveBeenCalledWith('/node-tasks/99')
-    vi.useRealTimers()
-    wrapper.unmount()
-  })
-
-  it('stops stream and refreshes detail on done event', async () => {
-    let detailStatus = 'running'
-    vi.mocked(api.get).mockImplementation(async (url: string) => {
-      if (url === '/node-tasks') return { data: { total: 1, items: [makeDetailTask()] } }
-      if (url === '/node-tasks/99') return { data: makeDetailTask({ status: detailStatus }) }
-      return { data: { total: 0, items: [] } }
-    })
-    const harness = makeStreamHarness()
-    const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
-    const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
-    await flushPromises()
-
-    await wrapper
-      .findAll('button')
-      .find((b) => b.text().includes('详情'))!
-      .trigger('click')
-    await flushPromises()
-
-    const signal = harness.fetchMock.mock.calls[0][1].signal as AbortSignal
-    detailStatus = 'success'
-    harness.push({ type: 'done', task_id: 99 })
-    await flushPromises()
-    await vi.waitFor(() => {
-      expect(signal.aborted).toBe(true)
-    })
-    wrapper.unmount()
-  })
-
-  it('expands the row and shows file content when clicking 完整日志', async () => {
-    vi.mocked(api.get).mockImplementation(async (url: string) => {
-      if (url === '/node-tasks') return { data: { total: 1, items: [makeDetailTask()] } }
-      if (url === '/node-tasks/99') return { data: makeDetailTask({ status: 'success' }) }
-      if (url === '/node-tasks/99/items/7/log') return { data: 'line A from file\nline B from file' }
-      return { data: { total: 0, items: [] } }
-    })
-    const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
-    const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
-    await flushPromises()
-
-    await wrapper
-      .findAll('button')
-      .find((b) => b.text().includes('详情'))!
-      .trigger('click')
-    await flushPromises()
-
-    const fullLogBtn = Array.from(document.querySelectorAll('button')).find((b) => b.textContent === '完整日志')
-    expect(fullLogBtn).toBeTruthy()
-    fullLogBtn!.click()
-    await flushPromises()
-
-    expect(api.get).toHaveBeenCalledWith('/node-tasks/99/items/7/log', expect.anything())
-    expect(document.body.textContent || '').toContain('line A from file')
-    expect(document.body.textContent || '').toContain('line B from file')
-    wrapper.unmount()
-  })
 })
 
 describe('NodeTaskCenter cmd_exec flow', () => {
@@ -1146,7 +1279,7 @@ describe('NodeTaskCenter cmd_exec flow', () => {
 
   async function selectClusterAndType(wrapper: any, taskType: string) {
     const bodySelects = Array.from(document.querySelectorAll('select'))
-    const clusterSel = bodySelects.find((s) => !s.hasAttribute('data-test'))
+    const clusterSel = bodySelects.find((s) => s.getAttribute('data-test') === 'create-cluster')
     clusterSel!.value = '1'
     clusterSel!.dispatchEvent(new Event('change', { bubbles: true }))
     await flushPromises()
@@ -1454,6 +1587,613 @@ describe('NodeTaskCenter cmd_exec flow', () => {
     expect(timeoutSelect).toBeTruthy()
     expect(timeoutSelect.value).toBe('600')
     expect(timeoutSelect.options.length).toBe(5)
+    wrapper.unmount()
+  })
+})
+
+describe('NodeTaskCenter 列表信息架构（node-task-ux-optimization 6.1/6.2）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    apiGetRegistry.clear()
+    document.body.innerHTML = ''
+  })
+
+  /** 挂载并等待首次列表加载；payload 即 GET /node-tasks 的响应体 */
+  async function mountWith(payload: unknown) {
+    apiGetOk(payload)
+    const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
+    const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
+    await flushPromises()
+    return wrapper
+  }
+
+  function tableStub(wrapper: ReturnType<typeof mount>) {
+    return wrapper.findComponent({ name: 'ATableStub' })
+  }
+
+  /** 最近一次 GET /node-tasks 的 params */
+  function lastListParams(): Record<string, unknown> {
+    const calls = vi.mocked(api.get).mock.calls.filter(([u]) => u === '/node-tasks')
+    const last = calls[calls.length - 1]
+    return ((last?.[1] as { params?: Record<string, unknown> } | undefined)?.params || {}) as Record<string, unknown>
+  }
+
+  it('六列解剖：#/任务类型/集群/结果/时间/操作，节点与进度不再是独立列', async () => {
+    const wrapper = await mountWith({ data: { total: 0, items: [] } })
+    const headers = wrapper.findAll('th').map((th) => th.text())
+    expect(headers).toEqual(['#', '任务类型', '集群', '结果', '时间', '操作'])
+    // 撞词/重复表达的两列必须消失
+    expect(headers).not.toContain('节点')
+    expect(headers).not.toContain('进度')
+    expect(headers).not.toContain('ID')
+    wrapper.unmount()
+  })
+
+  it('# 序号列按后端分页跨页连续：第 2 页、每页 20 条时首个序号为 21', async () => {
+    const items = Array.from({ length: 20 }, (_, i) =>
+      makeTask({ id: i + 1, status: 'success', total_nodes: 1, success_nodes: 1 }),
+    )
+    const wrapper = await mountWith({ data: { total: 45, items } })
+    expect(wrapper.findAll('.nt-index').map((el) => el.text())[0]).toBe('1')
+
+    tableStub(wrapper).vm.$emit('change', { current: 2, pageSize: 20 })
+    await flushPromises()
+
+    const indexes = wrapper.findAll('.nt-index').map((el) => el.text())
+    expect(indexes[0]).toBe('21')
+    expect(indexes[19]).toBe('40')
+    wrapper.unmount()
+  })
+
+  it('集群列渲染 cluster_name，集群已删除（null）显示 —', async () => {
+    const wrapper = await mountWith({
+      data: {
+        total: 2,
+        items: [
+          makeTask({ id: 1, status: 'success', cluster_id: 3, cluster_name: '生产集群' }),
+          makeTask({ id: 2, status: 'success', cluster_id: 99, cluster_name: null }),
+        ],
+      },
+    })
+    expect(wrapper.findAll('.nt-cluster').map((el) => el.text())).toEqual(['生产集群', '—'])
+    wrapper.unmount()
+  })
+
+  it('结果列合并状态 chip + 计数 + 分段条；失败行给出归因，无归因不留空行', async () => {
+    const wrapper = await mountWith({
+      data: {
+        total: 2,
+        items: [
+          makeTask({
+            id: 1,
+            status: 'partial',
+            total_nodes: 4,
+            success_nodes: 3,
+            failed_nodes: 1,
+            skipped_nodes: 0,
+            failure_summary: '3 台节点不在 Ansible 主机清单中',
+          }),
+          makeTask({ id: 2, status: 'success', total_nodes: 2, success_nodes: 2, failed_nodes: 0 }),
+        ],
+      },
+    })
+    const cells = wrapper.findAll('.result-cell')
+    expect(cells.length).toBe(2)
+    // 同一格内三件套：状态 chip、计数、分段条
+    expect(cells[0].findComponent(TaskStatusTag).exists()).toBe(true)
+    expect(cells[0].text()).toContain('成功 3 · 失败 1')
+    expect(cells[0].find('.tpb').exists()).toBe(true)
+    // 第三行归因，12px 弱色
+    expect(cells[0].find('.result-cause').text()).toBe('3 台节点不在 Ansible 主机清单中')
+    // 成功行无归因：不渲染占位行（行高由 result-cell 的固定最小高度兜底）
+    expect(cells[1].find('.result-cause').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('计数在有跳过/取消时追加对应项', async () => {
+    const wrapper = await mountWith({
+      data: {
+        total: 1,
+        items: [
+          makeTask({
+            id: 1,
+            status: 'success',
+            total_nodes: 5,
+            success_nodes: 2,
+            failed_nodes: 0,
+            skipped_nodes: 2,
+            cancelled_nodes: 1,
+          }),
+        ],
+      },
+    })
+    expect(wrapper.find('.result-counts').text()).toBe('成功 2 · 失败 0 · 跳过 2 · 取消 1')
+    wrapper.unmount()
+  })
+
+  it('搜索框回车把关键字作为 q 参数发请求', async () => {
+    const wrapper = await mountWith({ data: { total: 0, items: [] } })
+    const input = wrapper.find('[data-test="task-search"]')
+    expect(input.exists()).toBe(true)
+    expect(input.attributes('placeholder')).toBe('搜索任务号 / 节点 IP / 命令')
+
+    await input.setValue('10.0.0.11')
+    // 输入过程中不请求（回车才触发）
+    expect(lastListParams().q).toBeUndefined()
+    await input.trigger('keyup.enter')
+    await flushPromises()
+
+    expect(lastListParams().q).toBe('10.0.0.11')
+    wrapper.unmount()
+  })
+
+  it('集群下拉与时间范围分别映射 cluster_id / created_from', async () => {
+    apiGetOk(
+      {
+        data: {
+          items: [
+            { id: 3, name: 'prod', display_name: '生产集群' },
+            { id: 4, name: 'staging', display_name: '预发集群' },
+          ],
+        },
+      },
+      '/clusters',
+    )
+    const wrapper = await mountWith({ data: { total: 0, items: [] } })
+
+    const clusterSel = wrapper.find('[data-test="filter-cluster"]')
+    expect(clusterSel.findAll('option').map((o) => o.text())).toEqual(['全部集群', '生产集群', '预发集群'])
+    await clusterSel.setValue('4')
+    await flushPromises()
+    expect(lastListParams().cluster_id).toBe(4)
+
+    const rangeSel = wrapper.find('[data-test="filter-range"]')
+    expect(rangeSel.findAll('option').map((o) => o.text())).toEqual(['全部时间', '近 24 小时', '近 7 天', '近 30 天'])
+    await rangeSel.setValue('7d')
+    await flushPromises()
+    // 后端按 naive UTC 与 created_at 比较：不带时区后缀的 ISO 时间串
+    expect(String(lastListParams().created_from)).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/)
+    wrapper.unmount()
+  })
+
+  it('勾选后出现批量工具条；running/pending 行勾选框禁用', async () => {
+    const wrapper = await mountWith({
+      data: {
+        total: 3,
+        items: [
+          makeTask({ id: 1, status: 'success' }),
+          makeTask({ id: 2, status: 'failed' }),
+          makeTask({ id: 3, status: 'running' }),
+        ],
+      },
+    })
+    expect(wrapper.find('.nt-batch-bar').exists()).toBe(false)
+
+    const boxes = wrapper.findAll('.row-select')
+    expect(boxes.length).toBe(3)
+    expect((boxes[2].element as HTMLInputElement).disabled).toBe(true)
+    expect((boxes[1].element as HTMLInputElement).disabled).toBe(false)
+
+    ;(boxes[1].element as HTMLInputElement).checked = true
+    await boxes[1].trigger('change')
+    const bar = wrapper.find('.nt-batch-bar')
+    expect(bar.exists()).toBe(true)
+    expect(bar.text()).toContain('已选 1 项')
+    expect(bar.text()).toContain('批量删除')
+
+    await bar
+      .findAll('button')
+      .find((b) => b.text().includes('取消选择'))!
+      .trigger('click')
+    expect(wrapper.find('.nt-batch-bar').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('没有任何任务时显示「还没有节点任务」空态与新建入口', async () => {
+    const wrapper = await mountWith({ data: { total: 0, items: [] } })
+    const empty = wrapper.find('.nt-empty')
+    expect(empty.exists()).toBe(true)
+    expect(empty.text()).toContain('还没有节点任务')
+    expect(empty.findAll('button').some((b) => b.text().includes('新建任务'))).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('从详情页返回时按 query 恢复筛选与页码', async () => {
+    routeState.query = { status: 'failed', page: '2', q: '10.0.0.1', range: '7d' }
+    apiGetOk({ data: { total: 0, items: [] } })
+    const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
+    const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
+    await flushPromises()
+
+    expect(lastListParams().status).toBe('failed')
+    expect(lastListParams().page).toBe(2)
+    expect(lastListParams().q).toBe('10.0.0.1')
+    expect(lastListParams().created_from).toBeTruthy()
+    // 筛选条控件也回填
+    expect((wrapper.find('[data-test="filter-status"]').element as HTMLSelectElement).value).toBe('failed')
+    expect((wrapper.find('[data-test="task-search"]').element as HTMLInputElement).value).toBe('10.0.0.1')
+    routeState.query = {}
+    wrapper.unmount()
+  })
+
+  it('有筛选但无结果时显示「没有符合条件的任务」，清空筛选后回到全量', async () => {
+    const wrapper = await mountWith({ data: { total: 0, items: [] } })
+    await wrapper.find('[data-test="filter-status"]').setValue('failed')
+    await flushPromises()
+
+    const empty = wrapper.find('.nt-empty')
+    expect(empty.exists()).toBe(true)
+    expect(empty.text()).toContain('没有符合条件的任务')
+    expect(empty.text()).not.toContain('还没有节点任务')
+
+    const clearBtn = empty.findAll('button').find((b) => b.text().includes('清空筛选'))
+    expect(clearBtn).toBeTruthy()
+    await clearBtn!.trigger('click')
+    await flushPromises()
+
+    // 清空后请求不带 status，空态回到「还没有节点任务」
+    expect(lastListParams().status).toBeUndefined()
+    expect(wrapper.find('.nt-empty').text()).toContain('还没有节点任务')
+    wrapper.unmount()
+  })
+})
+
+describe('NodeTaskCenter 页头入口与术语统一（node-task-ux-optimization 6.4 / D11）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    apiGetRegistry.clear()
+    document.body.innerHTML = ''
+  })
+
+  const STAGED = [
+    { upload_id: 'u1', filename: 'deploy.sh', size: 1024, kind: 'script', uploaded_at: '2026-10-01T02:00:00' },
+  ]
+  const TASK_FILES = [
+    {
+      task_id: 7,
+      name: 'a.sh',
+      filename: 'a.sh',
+      size: 2048,
+      task_type: 'cmd_exec',
+      created_at: '2026-10-02T02:00:00',
+    },
+    { task_id: 8, name: 'b.tar.gz', filename: 'b.tar.gz', size: 4096, task_type: 'distribute_file', created_at: null },
+  ]
+
+  /** 挂载并把两个文件列表注册成非空（验证徽章数量） */
+  async function mountWithFiles() {
+    apiGetOk({ data: { total: 0, items: [] } })
+    apiGetOk({ data: STAGED }, '/node-tasks/uploaded-scripts')
+    apiGetOk({ data: TASK_FILES }, '/node-tasks/task-files')
+    const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
+    const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
+    await flushPromises()
+    return wrapper
+  }
+
+  it('页头只剩一个主按钮；暂存文件/任务源文件降级为筛选条内的文字链', async () => {
+    const wrapper = await mountWithFiles()
+
+    const header = wrapper.find('.page-header')
+    const headerButtons = header.findAll('button')
+    expect(headerButtons.length).toBe(1)
+    expect(headerButtons[0].text()).toContain('新建任务')
+    expect(headerButtons[0].classes()).toContain('btn-primary')
+    // 页头不得再出现同尺寸白底描边按钮
+    expect(header.findAll('.btn-secondary').length).toBe(0)
+
+    const bar = wrapper.find('.node-filter-bar')
+    const staged = bar.find('[data-test="staged-files-entry"]')
+    const taskFiles = bar.find('[data-test="task-files-entry"]')
+    expect(staged.exists()).toBe(true)
+    expect(taskFiles.exists()).toBe(true)
+    // 与结果列「详情」同款文字链层级：link-action 且不带 btn 尺寸类
+    expect(staged.classes()).toContain('link-action')
+    expect(staged.classes()).not.toContain('btn')
+    expect(taskFiles.classes()).toContain('link-action')
+    expect(taskFiles.classes()).not.toContain('btn')
+    // 已不在页头
+    expect(header.find('[data-test="staged-files-entry"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('降级后数量徽章保留：暂存文件 1 / 任务源文件 2', async () => {
+    const wrapper = await mountWithFiles()
+    const bar = wrapper.find('.node-filter-bar')
+    expect(bar.find('[data-test="staged-files-entry"]').text()).toContain('暂存文件')
+    expect(bar.find('[data-test="staged-files-entry"] .nt-file-count').text()).toBe('1')
+    expect(bar.find('[data-test="task-files-entry"]').text()).toContain('任务源文件')
+    expect(bar.find('[data-test="task-files-entry"] .nt-file-count').text()).toBe('2')
+    wrapper.unmount()
+  })
+
+  it('数量为 0 时徽章仍渲染（避免入口宽度跳动）', async () => {
+    apiGetOk({ data: { total: 0, items: [] } })
+    apiGetOk({ data: [] }, '/node-tasks/uploaded-scripts')
+    apiGetOk({ data: [] }, '/node-tasks/task-files')
+    const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
+    const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="staged-files-entry"] .nt-file-count').text()).toBe('0')
+    expect(wrapper.find('[data-test="task-files-entry"] .nt-file-count').text()).toBe('0')
+    wrapper.unmount()
+  })
+
+  it('两个入口点击后仍打开原弹窗（标题/说明用新术语）', async () => {
+    const wrapper = await mountWithFiles()
+
+    await wrapper.find('[data-test="staged-files-entry"]').trigger('click')
+    await flushPromises()
+    const stagedModal = Array.from(document.querySelectorAll('.modal-overlay')).find(
+      (m) =>
+        (m as HTMLElement).style.display === 'flex' && m.querySelector('.modal-header h2')?.textContent === '暂存文件',
+    )
+    expect(stagedModal).toBeTruthy()
+    expect(stagedModal!.textContent).toContain(
+      '上传后尚未用于任务的临时文件。创建任务时会自动迁入该任务目录并从此处消失。',
+    )
+    expect(stagedModal!.textContent).not.toContain('待用上传')
+    // 列表项仍在（结构未动）
+    expect(stagedModal!.textContent).toContain('deploy.sh')
+
+    await wrapper.find('[data-test="task-files-entry"]').trigger('click')
+    await flushPromises()
+    const archiveModal = Array.from(document.querySelectorAll('.modal-overlay')).find(
+      (m) =>
+        (m as HTMLElement).style.display === 'flex' &&
+        m.querySelector('.modal-header h2')?.textContent === '任务源文件',
+    )
+    expect(archiveModal).toBeTruthy()
+    expect(archiveModal!.textContent).toContain(
+      '各任务创建时迁入任务目录的源文件副本。删除只移除控制端副本，不影响已分发到节点的文件，也不删除任务本身。',
+    )
+    expect(archiveModal!.textContent).not.toContain('任务留档')
+    expect(archiveModal!.textContent).toContain('b.tar.gz')
+    wrapper.unmount()
+  })
+
+  it('删除确认文案使用新术语（暂存文件 / 任务源文件）', async () => {
+    const wrapper = await mountWithFiles()
+
+    await wrapper.find('[data-test="staged-files-entry"]').trigger('click')
+    await flushPromises()
+    const delStaged = Array.from(document.querySelectorAll('.modal-overlay')).find(
+      (m) => (m as HTMLElement).style.display === 'flex' && m.textContent?.includes('deploy.sh'),
+    )!
+    const delLink = Array.from(delStaged.querySelectorAll('a')).find((a) => a.textContent?.trim() === '删除')!
+    delLink.click()
+    await flushPromises()
+    const confirm1 = Array.from(document.querySelectorAll('.modal-overlay')).find(
+      (m) => (m as HTMLElement).style.display === 'flex' && m.textContent?.includes('删除暂存文件'),
+    )
+    expect(confirm1).toBeTruthy()
+    expect(confirm1!.textContent).not.toContain('已上传')
+    ;(confirm1!.querySelector('.modal-close') as HTMLElement).click()
+    await flushPromises()
+    wrapper.unmount()
+  })
+
+  it('源码层：用户可见文案不再出现「待用上传」「任务留档」「留档」', async () => {
+    const src = readFileSync(resolve(process.cwd(), 'src/views/NodeTaskCenter.vue'), 'utf-8')
+    expect(src).not.toContain('待用上传')
+    expect(src).not.toContain('任务留档')
+    expect(src).not.toContain('留档')
+    // 两套新术语的落点：页头徽章、弹窗标题（含选择模式）、删除确认
+    expect(src).toContain('暂存文件')
+    expect(src).toContain('任务源文件')
+    expect(src).toContain('选择暂存文件')
+    expect(src).toContain('删除暂存文件')
+    expect(src).toContain('删除任务源文件')
+  })
+})
+
+describe('NodeTaskCenter 创建任务弹窗可用性（node-task-ux-optimization 8.1/8.3）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    apiGetRegistry.clear()
+    document.body.innerHTML = ''
+  })
+
+  const NODES = [
+    { id: 10, ip: '10.0.0.10', status: 1, edge_path: '/edge-a' },
+    { id: 11, ip: '10.0.0.11', status: 1, edge_path: '/edge-b' },
+    { id: 12, ip: '10.0.0.12', status: 0, edge_path: '/edge-off' },
+  ]
+
+  async function mountCenter(nodes: Record<string, unknown>[] = NODES) {
+    apiGetOk({ data: { total: 0, items: [] } })
+    apiGetOk({ data: { items: [{ id: 1, name: 'prod', display_name: '生产集群' }] } }, '/clusters')
+    apiGetOk({ data: { total: nodes.length, items: nodes } }, '/clusters/1/nodes')
+    apiGetOk({ data: { files: [{ name: 'openresty-26062608.tar.gz' }] } }, '/clusters/1/nodes/openresty-files')
+    const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
+    const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
+    await flushPromises()
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text().includes('新建任务'))!
+      .trigger('click')
+    await flushPromises()
+    return wrapper
+  }
+
+  function modalBody(): HTMLElement {
+    return document.querySelector('.modal-overlay[style*="flex"] .modal-body') as HTMLElement
+  }
+
+  function pickCluster(id = '1') {
+    const sel = document.querySelector('[data-test="create-cluster"]') as HTMLSelectElement
+    sel.value = id
+    sel.dispatchEvent(new Event('change', { bubbles: true }))
+  }
+
+  function pickType(value: string) {
+    const sel = document.querySelector('[data-test="task-type"]') as HTMLSelectElement
+    sel.value = value
+    sel.dispatchEvent(new Event('change', { bubbles: true }))
+  }
+
+  function submitBtn(): HTMLButtonElement {
+    return Array.from(document.querySelectorAll('button')).find(
+      (b) => b.textContent?.trim() === '创建',
+    ) as HTMLButtonElement
+  }
+
+  it('必填字段带红色星号（集群/节点/任务类型，切换到命令执行后命令也带）', async () => {
+    const wrapper = await mountCenter()
+    const body = modalBody()
+    const labels = Array.from(body.querySelectorAll('.ntc-label')).map((l) =>
+      l.textContent?.replace(/\s+/g, ' ').trim(),
+    )
+    expect(labels).toContain('集群 *')
+    expect(labels).toContain('节点 *')
+    expect(labels).toContain('任务类型 *')
+    expect(body.querySelector('.ntc-req')).toBeTruthy()
+
+    pickType('cmd_exec')
+    await flushPromises()
+    const cmdLabels = Array.from(modalBody().querySelectorAll('.ntc-label')).map((l) =>
+      l.textContent?.replace(/\s+/g, ' ').trim(),
+    )
+    expect(cmdLabels).toContain('命令 *')
+    wrapper.unmount()
+  })
+
+  it('失焦后空字段就地报中文错误，填好后错误消失', async () => {
+    const wrapper = await mountCenter()
+
+    const clusterSel = document.querySelector('[data-test="create-cluster"]') as HTMLSelectElement
+    clusterSel.dispatchEvent(new Event('blur'))
+    await flushPromises()
+    expect(document.querySelector('.ntc-error')?.textContent).toContain('请选择集群')
+
+    pickCluster()
+    await flushPromises()
+    const clearedErrors = Array.from(document.querySelectorAll('.ntc-error')).map((e) => e.textContent?.trim())
+    expect(clearedErrors).not.toContain('请选择集群')
+
+    pickType('cmd_exec')
+    await flushPromises()
+    const cmdInput = document.querySelector('[data-test="cmd-command"]') as HTMLInputElement
+    cmdInput.dispatchEvent(new Event('blur'))
+    await flushPromises()
+    const cmdError = Array.from(document.querySelectorAll('.ntc-error')).map((e) => e.textContent?.trim())
+    expect(cmdError).toContain('请输入命令')
+
+    cmdInput.value = 'ls -la'
+    cmdInput.dispatchEvent(new Event('input', { bubbles: true }))
+    await flushPromises()
+    const afterErrors = Array.from(document.querySelectorAll('.ntc-error')).map((e) => e.textContent?.trim())
+    expect(afterErrors).not.toContain('请输入命令')
+    wrapper.unmount()
+  })
+
+  it('创建按钮：禁用时给出「还差什么」，填全后启用且提示清空', async () => {
+    const wrapper = await mountCenter()
+
+    const btn = submitBtn()
+    expect(btn.disabled).toBe(true)
+    expect(btn.getAttribute('title') || '').toContain('还需')
+    expect(btn.getAttribute('title') || '').toContain('选择集群')
+
+    pickCluster()
+    await flushPromises()
+    const nodeBox = document.querySelector('input[type="checkbox"]') as HTMLInputElement
+    nodeBox.checked = true
+    nodeBox.dispatchEvent(new Event('change', { bubbles: true }))
+    pickType('start')
+    await flushPromises()
+
+    const enabled = submitBtn()
+    expect(enabled.disabled).toBe(false)
+    expect(enabled.getAttribute('title') || '').toBe('')
+    wrapper.unmount()
+  })
+
+  it('执行策略有组标签与一行说明', async () => {
+    const wrapper = await mountCenter()
+    pickType('cmd_exec')
+    await flushPromises()
+
+    const label = document.querySelector('.ntc-group-label')
+    const desc = document.querySelector('.ntc-group-desc')
+    expect(label?.textContent?.trim()).toBe('执行策略')
+    expect(desc?.textContent).toContain('黑名单')
+    expect(desc?.textContent).toContain('白名单')
+    expect(desc?.textContent).toContain('不限制')
+    wrapper.unmount()
+  })
+
+  it('节点区：未选集群为虚线空态；选集群后可搜索，离线节点禁用并标注', async () => {
+    const wrapper = await mountCenter()
+
+    const empty = document.querySelector('.ntc-node-empty') as HTMLElement
+    expect(empty).toBeTruthy()
+    expect(empty.textContent).toContain('选择集群后加载节点列表')
+    expect(empty.className).toContain('ntc-node-empty')
+
+    pickCluster()
+    await flushPromises()
+
+    // 3 个节点全部列出，其中 status=0 的禁用并标「离线」
+    const rows = Array.from(document.querySelectorAll('.ntc-node'))
+    expect(rows.length).toBe(3)
+    const offlineRow = rows[2]
+    expect(offlineRow.className).toContain('is-offline')
+    expect((offlineRow.querySelector('input') as HTMLInputElement).disabled).toBe(true)
+    expect(offlineRow.textContent).toContain('离线')
+    expect((rows[0].querySelector('input') as HTMLInputElement).disabled).toBe(false)
+
+    // 搜索按 IP 过滤
+    const search = document.querySelector('[data-test="node-search"]') as HTMLInputElement
+    search.value = '10.0.0.11'
+    search.dispatchEvent(new Event('input', { bubbles: true }))
+    await flushPromises()
+    const filtered = Array.from(document.querySelectorAll('.ntc-node'))
+    expect(filtered.length).toBe(1)
+    expect(filtered[0].textContent).toContain('10.0.0.11')
+
+    // 计数文案
+    expect(document.body.textContent).toContain('已选 0 个（共 3）')
+    wrapper.unmount()
+  })
+
+  it('帮助文案随任务类型切换，底部旧长文案已移除', async () => {
+    const wrapper = await mountCenter()
+
+    pickType('cmd_exec')
+    await flushPromises()
+    expect(document.querySelector('.ntc-help')?.textContent).toContain(
+      '命令将以清单中的用户身份在各节点执行；执行明细见任务详情。',
+    )
+
+    pickType('install_openresty')
+    await flushPromises()
+    expect(document.querySelector('.ntc-help')?.textContent).toContain(
+      '任务参数（安装路径、管理端口等）从节点记录自动读取，无需手动填写。',
+    )
+
+    expect(document.body.textContent).not.toContain('任务参数将从节点记录自动读取')
+    wrapper.unmount()
+  })
+
+  it('命令模式「复制命令」写入剪贴板', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    const wrapper = await mountCenter()
+    pickType('cmd_exec')
+    await flushPromises()
+
+    const cmdInput = document.querySelector('[data-test="cmd-command"]') as HTMLInputElement
+    cmdInput.value = 'df -h'
+    cmdInput.dispatchEvent(new Event('input', { bubbles: true }))
+    await flushPromises()
+
+    const copyBtn = document.querySelector('[data-test="cmd-copy"]') as HTMLElement
+    expect(copyBtn).toBeTruthy()
+    copyBtn.click()
+    await flushPromises()
+    expect(writeText).toHaveBeenCalledWith('df -h')
     wrapper.unmount()
   })
 })

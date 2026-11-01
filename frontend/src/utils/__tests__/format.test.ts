@@ -7,6 +7,8 @@ import {
   formatPublishDateTime,
   formatFileSize,
   formatRelativeTime,
+  formatDurationCompact,
+  durationSeconds,
 } from '../format'
 
 describe('utils/format', () => {
@@ -137,6 +139,43 @@ describe('utils/format', () => {
       vi.setSystemTime(new Date('2026-10-12T08:00:00Z'))
       // 2026-10-12T07:55:00 UTC == 5 分钟前
       expect(formatRelativeTime('2026-10-12T07:55:00')).toBe('5 分钟前')
+    })
+  })
+
+  describe('formatDurationCompact（紧凑耗时：45s / 3m20s / 1h05m）', () => {
+    it('不足 1 分钟按秒', () => {
+      expect(formatDurationCompact(0)).toBe('0s')
+      expect(formatDurationCompact(45)).toBe('45s')
+      expect(formatDurationCompact(59)).toBe('59s')
+    })
+    it('不足 1 小时按分秒', () => {
+      expect(formatDurationCompact(60)).toBe('1m')
+      expect(formatDurationCompact(200)).toBe('3m20s')
+      expect(formatDurationCompact(605)).toBe('10m05s')
+    })
+    it('1 小时以上按时分', () => {
+      expect(formatDurationCompact(3600)).toBe('1h')
+      expect(formatDurationCompact(3900)).toBe('1h05m')
+    })
+    it('负值与非法值钳为 0 / 占位', () => {
+      expect(formatDurationCompact(-3)).toBe('0s')
+      expect(formatDurationCompact(null)).toBe('—')
+      expect(formatDurationCompact(undefined)).toBe('—')
+      expect(formatDurationCompact(Number.NaN)).toBe('—')
+    })
+  })
+
+  describe('durationSeconds（两个后端时间戳的秒差）', () => {
+    it('naive UTC 串相减得秒数（时区偏移在差值中抵消）', () => {
+      expect(durationSeconds('2026-08-02T10:00:00', '2026-08-02T10:00:45')).toBe(45)
+    })
+    it('任意一端缺失返回 null（调用方渲染占位）', () => {
+      expect(durationSeconds(null, '2026-08-02T10:00:45')).toBeNull()
+      expect(durationSeconds('2026-08-02T10:00:00', null)).toBeNull()
+      expect(durationSeconds(undefined, undefined)).toBeNull()
+    })
+    it('结束早于开始钳为 0（客户端/服务端时钟漂移）', () => {
+      expect(durationSeconds('2026-08-02T10:00:45', '2026-08-02T10:00:00')).toBe(0)
     })
   })
 })

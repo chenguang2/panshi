@@ -557,7 +557,8 @@ function isActive(item: NavItem): boolean {
   if (item.route === '/ssl/server') return name === 'ServerCertList'
   if (item.route === '/metrics') return name === 'Metrics'
   if (item.route === '/metrics/dashboard') return name === 'MetricsDashboard'
-  if (item.route === '/node-tasks') return name === 'NodeTaskCenter'
+  // 详情页（node-tasks/:id）保持列表项高亮
+  if (item.route === '/node-tasks') return name === 'NodeTaskCenter' || name === 'NodeTaskDetail'
   return false
 }
 </script>

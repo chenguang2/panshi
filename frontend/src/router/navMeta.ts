@@ -33,6 +33,7 @@ export const sectionMap: Record<string, string> = {
   EdgeAutostart: '运维管理',
   AnsibleInventory: '运维管理',
   NodeTaskCenter: '运维管理',
+  NodeTaskDetail: '运维管理',
   RelayGateways: '运维管理',
   Users: '系统管理',
   DatabaseManagement: '系统管理',
@@ -72,6 +73,7 @@ export const pageNameMap: Record<string, string> = {
   EdgeAutostart: '自启动管理',
   AnsibleInventory: 'Ansible 主机清单',
   NodeTaskCenter: '节点任务',
+  NodeTaskDetail: '节点任务',
   AuditLog: '审计日志',
   RelayGateways: '中继区域管理',
 }
@@ -106,6 +108,8 @@ export function collectNavEntries(router: Router): NavEntry[] {
   for (const route of router.getRoutes()) {
     const name = typeof route.name === 'string' ? route.name : ''
     if (!name || !pageNameMap[name] || byName.has(name)) continue
+    // 参数化详情路由（如 node-tasks/:id）不是可跳转目的地，不进搜索索引
+    if (route.path.includes(':')) continue
     byName.set(name, {
       name,
       title: pageNameMap[name],

@@ -46,7 +46,10 @@ describe('L6 高频操作提频露出', () => {
   })
   it('节点任务：详情直接露出，⋯ 保留其余', () => {
     const s = src('views', 'NodeTaskCenter.vue')
-    expect(s).toMatch(/<a-button[^>]*@click="openDetail\(record\)"[^>]*>详情<\/a-button>/)
+    // 6.1/6.2 列表重排：详情改为文字链 button（全局 .ant-btn 主题会把任何非 primary 的
+    // a-button 画成白底描边，「两个等价白底按钮」正是本轮要消灭的形态）。
+    // 守卫意图不变：详情直出、不藏进 ⋯ 菜单。
+    expect(s).toMatch(/<button[^>]*class="link-action"[^>]*@click="openDetail\(record\)"[^>]*>详情<\/button>/)
     expect(s).not.toMatch(/<a-menu-item[^>]*@click="openDetail\(record\)"/)
   })
 })

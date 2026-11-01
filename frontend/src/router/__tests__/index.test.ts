@@ -115,3 +115,26 @@ describe('navMeta 与批 9 菜单信息架构同源（plugin-switches-ux-review-
     expect(values.sort()).toEqual(['核心功能', '证书管理', '边缘网络', '监控', '运维管理', '系统管理'].sort())
   })
 })
+
+describe('task_center 详情页路由（node-task-ux-optimization 7.4）', () => {
+  it('node-tasks/:id 登记在 task_center 特性路由表内（关闸即整组不注册）', async () => {
+    const mod = await import('../index')
+    const entries = mod.featureRouteMap.task_center
+    expect(Array.isArray(entries)).toBe(true)
+    const routes = entries as Array<{ name?: string; path?: string; meta?: { permission?: string } }>
+    expect(routes.some((r) => r.name === 'NodeTaskCenter' && r.path === 'node-tasks')).toBe(true)
+    expect(
+      routes.some(
+        (r) => r.name === 'NodeTaskDetail' && r.path === 'node-tasks/:id' && r.meta?.permission === 'task_center',
+      ),
+    ).toBe(true)
+    // 详情页不得静态注册（静态注册不受 features.yaml 门控）
+    expect(mod.default.getRoutes().some((r) => r.name === 'NodeTaskDetail')).toBe(false)
+  })
+
+  it('详情页登记 navMeta 面包屑（运维管理 / 节点任务），参数化路由不进全局搜索索引', async () => {
+    const { sectionMap, pageNameMap } = await import('../navMeta')
+    expect(sectionMap.NodeTaskDetail).toBe('运维管理')
+    expect(pageNameMap.NodeTaskDetail).toBe('节点任务')
+  })
+})

@@ -9,7 +9,11 @@
           <div class="header-breadcrumb">
             <span class="crumb-item">{{ currentSection }}</span>
             <span class="crumb-sep">/</span>
-            <span class="crumb-item crumb-current">{{ currentRouteName }}</span>
+            <span class="crumb-item" :class="{ 'crumb-current': !currentDetailCrumb }">{{ currentRouteName }}</span>
+            <template v-if="currentDetailCrumb">
+              <span class="crumb-sep">/</span>
+              <span class="crumb-item crumb-current">{{ currentDetailCrumb }}</span>
+            </template>
           </div>
         </div>
         <div class="header-right">
@@ -65,6 +69,17 @@ const currentSection = computed(() => {
 
 const currentRouteName = computed(() => {
   return pageNameMap[route.name as string] || (route.name as string) || ''
+})
+
+/**
+ * 详情页的第三层面包屑（如 `运维管理 / 节点任务 / #12`）：
+ * 路由 meta.detailCrumb = true 时用路由参数拼尾层，普通页面保持两层不变。
+ */
+const currentDetailCrumb = computed(() => {
+  if (route.meta?.detailCrumb !== true) return ''
+  const id = route.params.id
+  const raw = Array.isArray(id) ? id[0] : id
+  return raw ? `#${raw}` : ''
 })
 
 const handleLogout = async () => {

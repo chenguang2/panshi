@@ -413,6 +413,13 @@ describe('StreamProxyFormWizard.vue', () => {
   })
 })
 
+// jsdom 未实现 scrollIntoView：组件在 setTimeout 里调用它，缺失会抛
+// Unhandled Rejection（4 条），使全量 vitest 即使 2387 个用例全过也以 exit 1 收场。
+// 在文件级补齐该 DOM 桩，恢复「全绿 = exit 0」的信号价值。
+if (typeof Element.prototype.scrollIntoView !== 'function') {
+  Element.prototype.scrollIntoView = vi.fn()
+}
+
 // ── checks 保真（stream-proxy-ux-review-fixes 批 1 / P0-1）────────────────
 describe('StreamProxyFormWizard checks 提交保真', () => {
   beforeEach(() => {

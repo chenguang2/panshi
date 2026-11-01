@@ -1,275 +1,227 @@
 <template>
   <div class="node-task-list">
-    <PageHeader title="节点任务" description="查看和管理节点运维操作任务（安装/升级/启动/停止等），支持取消与重试">
+    <PageHeader title="节点任务" description="跨集群查看和管理节点运维任务（安装/升级/启动/停止等），支持取消与重试">
       <template #actions>
-        <button class="btn btn-secondary" data-test="uploaded-files-entry" @click="openPendingFilesModal">
-          待用上传（{{ uploadedFiles.length }}）
-        </button>
-        <button class="btn btn-secondary" data-test="task-files-entry" @click="openTaskFilesModal">
-          任务留档（{{ taskFiles.length }}）
-        </button>
-        <button class="btn btn-primary" @click="openCreateModal">＋ 新建任务</button>
+        <!-- 页头只保留唯一主 CTA；低频文件维护入口降级到筛选条行尾（D11） -->
+        <button class="btn btn-primary" data-test="create-task-entry" @click="openCreateModal">＋ 新建任务</button>
       </template>
     </PageHeader>
 
-    <div class="node-filter-bar">
-      <select v-model="filterStatus" class="form-input" style="width: 140px">
-        <option value="">全部状态</option>
-        <option value="pending">待执行</option>
-        <option value="running">执行中</option>
-        <option value="success">成功</option>
-        <option value="partial">部分成功</option>
-        <option value="failed">失败</option>
-        <option value="cancelled">已取消</option>
-      </select>
-      <select v-model="filterType" class="form-input" style="width: 180px">
-        <option value="">全部类型</option>
-        <option v-for="t in taskTypes" :key="t.value" :value="t.value">{{ t.label }}</option>
-      </select>
-      <button class="btn btn-secondary" @click="loadTasks(1)">刷新</button>
-      <button v-if="selectedRowKeys.length > 0" class="btn btn-danger" @click="handleBatchDelete">
-        批量删除（{{ selectedRowKeys.length }}）
-      </button>
-    </div>
+    <!-- 筛选条与表格同属一张卡片：筛选在上、表格在下，控件不再浮在页面空白里 -->
+    <div class="table-container node-task-panel">
+      <div class="node-filter-bar">
+        <input
+          v-model="filterKeyword"
+          type="text"
+          class="form-input nt-search"
+          data-test="task-search"
+          placeholder="搜索任务号 / 节点 IP / 命令"
+          @keyup.enter="applyFilters"
+        />
+        <select
+          v-model="filterClusterId"
+          class="form-input"
+          data-test="filter-cluster"
+          style="width: 150px"
+          @change="onFilterChange"
+        >
+          <option value="">全部集群</option>
+          <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
+        </select>
+        <select
+          v-model="filterStatus"
+          class="form-input"
+          data-test="filter-status"
+          style="width: 130px"
+          @change="onFilterChange"
+        >
+          <option value="">全部状态</option>
+          <option value="pending">待执行</option>
+          <option value="running">执行中</option>
+          <option value="success">成功</option>
+          <option value="partial">部分成功</option>
+          <option value="failed">失败</option>
+          <option value="cancelled">已取消</option>
+          <option value="skipped">跳过</option>
+        </select>
+        <select
+          v-model="filterType"
+          class="form-input"
+          data-test="filter-type"
+          style="width: 170px"
+          @change="onFilterChange"
+        >
+          <option value="">全部类型</option>
+          <option v-for="t in taskTypes" :key="t.value" :value="t.value">{{ t.label }}</option>
+        </select>
+        <select
+          v-model="filterRange"
+          class="form-input"
+          data-test="filter-range"
+          style="width: 130px"
+          @change="onFilterChange"
+        >
+          <option value="">全部时间</option>
+          <option value="24h">近 24 小时</option>
+          <option value="7d">近 7 天</option>
+          <option value="30d">近 30 天</option>
+        </select>
+        <div class="nt-bar-tail">
+          <button
+            type="button"
+            class="link-action nt-file-entry"
+            data-test="staged-files-entry"
+            @click="openPendingFilesModal"
+          >
+            暂存文件
+            <span class="nt-file-count">{{ uploadedFiles.length }}</span>
+          </button>
+          <button
+            type="button"
+            class="link-action nt-file-entry"
+            data-test="task-files-entry"
+            @click="openTaskFilesModal"
+          >
+            任务源文件
+            <span class="nt-file-count">{{ taskFiles.length }}</span>
+          </button>
+          <span class="nt-bar-sep" aria-hidden="true"></span>
+          <button class="btn btn-secondary nt-refresh" @click="loadTasks(1)">刷新</button>
+        </div>
+      </div>
 
-    <div class="table-container">
+      <!-- 批量工具条：只在有勾选时出现，与表格同卡片 -->
+      <div v-if="selectedRowKeys.length > 0" class="nt-batch-bar">
+        <span class="nt-batch-count">
+          已选 <strong>{{ selectedRowKeys.length }}</strong> 项
+        </span>
+        <div class="nt-batch-actions">
+          <button class="btn btn-danger" @click="handleBatchDelete">批量删除</button>
+          <button class="btn btn-secondary" @click="clearSelection">取消选择</button>
+        </div>
+      </div>
+
       <a-table
         :data-source="tasks"
         :columns="columns"
         :loading="loading"
         row-key="id"
-        :row-selection="{ selectedRowKeys, onChange: onSelectionChange }"
+        :row-selection="rowSelection"
         :pagination="paginationProps({ page, pageSize, total }, '条')"
         size="middle"
         class="node-task-table"
+        :custom-row="rowProps"
         @change="onTableChange"
       >
-        <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'task_type'">
-            {{ typeLabel(record.task_type) }}
+        <template #bodyCell="{ column, record, index }">
+          <template v-if="column.key === 'index'">
+            <span class="nt-index">{{ (page - 1) * pageSize + index + 1 }}</span>
           </template>
-          <template v-else-if="column.key === 'status'">
-            <span :class="'status-tag status-' + record.status">{{ statusLabel(record.status) }}</span>
+          <template v-else-if="column.key === 'task_type'">
+            <span class="nt-task-type" :title="taskTooltip(record)">{{ typeLabel(record.task_type) }}</span>
           </template>
-          <template v-else-if="column.key === 'nodes'">
-            {{ record.success_nodes }}/{{ record.total_nodes }} 成功
+          <template v-else-if="column.key === 'cluster'">
+            <span class="nt-cluster" :title="clusterTooltip(record)">{{ record.cluster_name || '—' }}</span>
           </template>
-          <template v-else-if="column.key === 'progress'">
-            <div class="progress-bar-wrap" style="min-width: 120px">
-              <div
-                class="progress-bar"
-                :class="'progress-' + progressStatus(record)"
-                :style="{ width: progressPercent(record) + '%' }"
-              ></div>
+          <template v-else-if="column.key === 'result'">
+            <div class="result-cell">
+              <div class="result-head">
+                <TaskStatusTag :status="record.status" :cancel-requested="record.cancel_requested === true" />
+                <span class="result-counts">{{ resultCountText(record) }}</span>
+              </div>
+              <TaskProgressBar
+                class="result-bar"
+                :success="record.success_nodes"
+                :failed="record.failed_nodes"
+                :skipped="record.skipped_nodes"
+                :cancelled="record.cancelled_nodes"
+                :total="record.total_nodes"
+                :running="record.status === 'running'"
+                :show-text="false"
+              />
+              <div v-if="record.failure_summary" class="result-cause" :title="record.failure_summary">
+                {{ record.failure_summary }}
+              </div>
             </div>
           </template>
-          <template v-else-if="column.key === 'created_at'">
-            {{ formatTime(record.created_at) }}
-          </template>
-          <template v-else-if="column.key === 'finished_at'">
-            {{ formatTime(record.finished_at) }}
-          </template>
-          <template v-else-if="column.key === 'duration'">
-            {{ durationText(record) }}
+          <template v-else-if="column.key === 'time'">
+            <div class="time-cell" :title="timeTooltip(record)">
+              <span v-if="isLiveTaskRow(record)" class="time-live">进行中 · 已用时 {{ elapsedText(record) }}</span>
+              <template v-else>
+                <span class="time-main">{{ formatTime(record.finished_at) }}</span>
+                <span class="time-duration">{{ durationText(record) }}</span>
+              </template>
+            </div>
           </template>
           <template v-else-if="column.key === 'actions'">
-            <a-button type="link" size="small" @click="openDetail(record)">详情</a-button>
-            <a-dropdown :trigger="['click']">
-              <a-button type="text" size="small" class="action-trigger-btn">⋯</a-button>
-              <template #overlay>
-                <a-menu>
-                  <a-menu-item
-                    v-if="record.status === 'running' || record.status === 'pending'"
-                    @click="handleCancel(record)"
-                    >取消</a-menu-item
-                  >
-                  <a-menu-item
-                    v-if="['failed', 'partial', 'cancelled'].includes(record.status)"
-                    @click="handleRetry(record)"
-                    >重试</a-menu-item
-                  >
-                  <a-menu-item
-                    v-if="['success', 'failed', 'partial', 'cancelled'].includes(record.status)"
-                    danger
-                    @click="handleDelete(record)"
-                    >删除</a-menu-item
-                  >
-                </a-menu>
-              </template>
-            </a-dropdown>
+            <div class="action-cell">
+              <!-- 文字链而非 a-button：全局 .ant-btn 主题会把任何非 primary 按钮画成白底描边，
+                   两个等价白底按钮并排正是本轮要消灭的形态 -->
+              <button type="button" class="link-action" @click="openDetail(record)">详情</button>
+              <a-dropdown :trigger="['click']">
+                <button type="button" class="action-trigger-btn" aria-label="更多操作">⋯</button>
+                <template #overlay>
+                  <a-menu>
+                    <a-menu-item
+                      v-if="record.status === 'running' || record.status === 'pending'"
+                      @click="handleCancel(record)"
+                      >取消</a-menu-item
+                    >
+                    <a-menu-item
+                      v-if="['failed', 'partial', 'cancelled'].includes(record.status)"
+                      @click="handleRetry(record)"
+                      >重试</a-menu-item
+                    >
+                    <a-menu-item
+                      v-if="['success', 'failed', 'partial', 'cancelled'].includes(record.status)"
+                      danger
+                      @click="handleDelete(record)"
+                      >删除</a-menu-item
+                    >
+                  </a-menu>
+                </template>
+              </a-dropdown>
+            </div>
           </template>
+        </template>
+
+        <!-- 空态槽名是 #emptyText（不是 #empty）：写错时单测桩会绿、生产却永不渲染 -->
+        <template #emptyText>
+          <div class="nt-empty">
+            <div class="nt-empty-icon" aria-hidden="true">
+              <svg
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <rect x="3" y="4" width="18" height="16" rx="2" />
+                <path d="M7 9l3 3-3 3" />
+                <path d="M13 15h4" />
+              </svg>
+            </div>
+            <template v-if="hasActiveFilters">
+              <div class="nt-empty-title">没有符合条件的任务</div>
+              <div class="nt-empty-desc">当前筛选条件下没有任务。放宽条件，或清空筛选查看全部任务。</div>
+              <button class="btn btn-secondary" @click="clearFilters">清空筛选</button>
+            </template>
+            <template v-else>
+              <div class="nt-empty-title">还没有节点任务</div>
+              <div class="nt-empty-desc">在集群节点上执行安装、启动、命令等运维操作后，任务会记录在这里。</div>
+              <button class="btn btn-primary" @click="openCreateModal">新建任务</button>
+            </template>
+          </div>
         </template>
       </a-table>
     </div>
 
-    <!-- Detail drawer -->
-    <Teleport to="body">
-      <div class="modal-overlay" :style="{ display: detailVisible ? 'flex' : 'none' }">
-        <div class="modal modal-wide" style="max-width: 900px">
-          <div class="modal-header">
-            <h2>任务详情 #{{ detail?.id }}</h2>
-            <button class="modal-close" @click="closeDetail">&times;</button>
-          </div>
-          <div class="modal-body" style="max-height: 80vh; overflow-y: auto">
-            <div
-              v-if="detail"
-              style="
-                margin-bottom: 16px;
-                display: grid;
-                grid-template-columns: repeat(2, 1fr);
-                gap: 8px;
-                font-size: 13px;
-              "
-            >
-              <div><strong>类型:</strong> {{ typeLabel(detail.task_type) }}</div>
-              <div><strong>状态:</strong> {{ statusLabel(detail.status) }}</div>
-              <div><strong>节点:</strong> {{ detail.success_nodes }}/{{ detail.total_nodes }} 成功</div>
-              <div>
-                <strong>失败:</strong> {{ detail.failed_nodes }}，<strong>取消:</strong> {{ detail.cancelled_nodes }}
-              </div>
-              <div
-                v-if="detail.task_type === 'distribute_file' && detail.params?.srcfilename"
-                style="grid-column: 1/-1"
-              >
-                <strong>分发文件:</strong>
-                {{ detail.params.srcfilename }}
-                <span style="color: var(--muted, #999)">→ 目标目录 {{ detail.params.destpath }}</span>
-                <span v-if="detail.status === 'success'" style="color: var(--muted, #999)">
-                  （节点落地：{{ detail.params.destpath }}{{ detail.params.srcfilename }}）
-                </span>
-              </div>
-              <div
-                v-if="detail.task_type === 'cmd_exec' && detail.params?.script_content && detail.params?.script_file"
-                style="grid-column: 1/-1"
-              >
-                <strong>执行脚本:</strong>
-                {{ detail.params.script_filename || '（上传脚本）' }}
-              </div>
-              <div v-if="detail.params && Object.keys(detail.params).length > 0" style="grid-column: 1/-1">
-                <strong>参数:</strong>
-                <code style="white-space: pre-wrap">{{ JSON.stringify(detail.params, null, 2) }}</code>
-              </div>
-            </div>
-
-            <table class="ner-table" style="width: 100%; border-collapse: collapse; font-size: 13px">
-              <thead>
-                <tr style="text-align: left; color: var(--muted, #888)">
-                  <th style="padding: 6px 8px; border-bottom: 1px solid #eee">节点</th>
-                  <th style="padding: 6px 8px; border-bottom: 1px solid #eee">状态</th>
-                  <th style="padding: 6px 8px; border-bottom: 1px solid #eee">rc</th>
-                  <th style="padding: 6px 8px; border-bottom: 1px solid #eee">耗时</th>
-                  <th style="padding: 6px 8px; border-bottom: 1px solid #eee">日志</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="item in detail?.items || []" :key="item.id">
-                  <td style="padding: 6px 8px; border-bottom: 1px solid #f5f5f5">
-                    {{ item.ip
-                    }}<span v-if="item.node_name" style="color: var(--muted, #999); margin-left: 6px">{{
-                      item.node_name
-                    }}</span>
-                  </td>
-                  <td style="padding: 6px 8px; border-bottom: 1px solid #f5f5f5">
-                    <span :class="'status-tag status-' + streamItem(item).status">{{
-                      statusLabel(streamItem(item).status)
-                    }}</span>
-                  </td>
-                  <td style="padding: 6px 8px; border-bottom: 1px solid #f5f5f5">{{ streamItem(item).rc ?? '-' }}</td>
-                  <td style="padding: 6px 8px; border-bottom: 1px solid #f5f5f5">{{ durationText(item) }}</td>
-                  <td style="padding: 6px 8px; border-bottom: 1px solid #f5f5f5">
-                    <button
-                      class="btn btn-secondary btn-sm"
-                      @click="expandedIp = expandedIp === item.ip ? null : item.ip"
-                    >
-                      {{ expandedIp === item.ip ? '收起' : '展开' }}
-                    </button>
-                    <button class="btn btn-secondary btn-sm" @click="loadFullLog(item)">完整日志</button>
-                  </td>
-                </tr>
-                <tr v-if="expandedItem">
-                  <td colspan="5" style="padding: 8px">
-                    <NodeTaskLogViewer
-                      :logs="streamLogLines(expandedItem)"
-                      :stdout="expandedItem.stdout || ''"
-                      :stderr="expandedItem.stderr || ''"
-                      :command="expandedItem.command || ''"
-                    />
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            <div v-if="detail?.task_type === 'software_check'" style="margin-top: 16px">
-              <div style="font-size: 14px; font-weight: 600; margin-bottom: 8px">软件查询结果</div>
-              <table style="width: 100%; border-collapse: collapse; font-size: 12px">
-                <thead>
-                  <tr>
-                    <th style="padding: 6px 8px; border-bottom: 1px solid #eee; text-align: left">软件</th>
-                    <th
-                      v-for="item in detail?.items || []"
-                      :key="'h' + item.id"
-                      style="padding: 6px 8px; border-bottom: 1px solid #eee; text-align: center"
-                    >
-                      {{ item.ip }}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="soft in softwareMatrixRows()" :key="soft">
-                    <td style="padding: 6px 8px; border-bottom: 1px solid #f5f5f5">{{ soft }}</td>
-                    <td
-                      v-for="item in detail?.items || []"
-                      :key="'c' + item.id + soft"
-                      style="padding: 6px 8px; border-bottom: 1px solid #f5f5f5; text-align: center"
-                    >
-                      <template v-if="softwareCell(item, soft)">
-                        <span
-                          v-if="softwareCell(item, soft)!.status === 'installed'"
-                          style="color: var(--success, #16a34a)"
-                          :title="
-                            '包: ' +
-                            softwareCell(item, soft)!.pkg +
-                            (softwareCell(item, soft)!.ver ? '\n版本: ' + softwareCell(item, soft)!.ver : '')
-                          "
-                          >✓ {{ softwareCell(item, soft)!.pkg }}</span
-                        >
-                        <span
-                          v-else-if="softwareCell(item, soft)!.status === 'missing'"
-                          style="color: var(--danger, #e5484d)"
-                          >✗ 未安装</span
-                        >
-                        <span v-else style="color: var(--muted, #999)">检测失败</span>
-                      </template>
-                      <span v-else style="color: var(--muted, #999)">-</span>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button
-              v-if="detail && (detail.status === 'running' || detail.status === 'pending')"
-              class="btn btn-danger"
-              @click="handleCancel(detail)"
-            >
-              取消任务
-            </button>
-            <button
-              v-if="detail && ['failed', 'partial', 'cancelled'].includes(detail.status)"
-              class="btn btn-secondary"
-              @click="handleRetry(detail)"
-            >
-              重试失败节点
-            </button>
-            <button class="btn btn-secondary" @click="closeDetail">关闭</button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
-
     <!-- Create task modal -->
     <Teleport to="body">
-      <!-- 待用上传（全局入口）：仅管理 temp/ 待用上传 -->
+      <!-- 暂存文件（全局入口）：仅管理 temp/ 暂存文件 -->
       <div
         class="modal-overlay"
         :style="{
@@ -279,24 +231,24 @@
       >
         <div class="modal modal-wide" style="max-width: 680px">
           <div class="modal-header">
-            <h2>{{ pendingFilesSelectMode ? '选择已上传文件' : '待用上传' }}</h2>
+            <h2>{{ pendingFilesSelectMode ? '选择暂存文件' : '暂存文件' }}</h2>
             <button class="modal-close" @click="pendingFilesModalVisible = false">&times;</button>
           </div>
           <div class="modal-body" style="max-height: 70vh; overflow-y: auto">
             <div style="color: var(--muted, #999); font-size: 12px; margin-bottom: 10px">
-              上传后尚未用于创建任务的临时文件；创建任务时会自动迁入对应任务目录并从此处消失。
+              上传后尚未用于任务的临时文件。创建任务时会自动迁入该任务目录并从此处消失。
             </div>
             <div
               v-if="pendingFilesFiltered.length === 0"
               style="font-size: 13px; color: var(--muted, #999); padding: 4px 0"
             >
               <template v-if="pendingFilesSelectMode && createTaskType === 'cmd_exec'">
-                暂无脚本类上传文件，请先通过「选择脚本文件」上传 .sh 文件
+                暂无脚本类暂存文件，请先通过「选择脚本文件」上传 .sh 文件
               </template>
               <template v-else-if="pendingFilesSelectMode && createTaskType === 'distribute_file'">
-                暂无分发类上传文件，请先通过「选择文件」上传需要分发的文件
+                暂无分发类暂存文件，请先通过「选择文件」上传需要分发的文件
               </template>
-              <template v-else>暂无待用上传文件</template>
+              <template v-else>暂无暂存文件</template>
             </div>
             <div
               v-for="item in pendingFilesPageItems"
@@ -397,19 +349,19 @@
         </div>
       </div>
 
-      <!-- 任务留档（全局入口）：各任务迁入任务目录的控制端源文件副本 -->
+      <!-- 任务源文件（全局入口）：各任务迁入任务目录的控制端源文件副本 -->
       <div class="modal-overlay" :style="{ display: taskFilesModalVisible ? 'flex' : 'none' }">
         <div class="modal modal-wide" style="max-width: 680px">
           <div class="modal-header">
-            <h2>任务留档</h2>
+            <h2>任务源文件</h2>
             <button class="modal-close" @click="taskFilesModalVisible = false">&times;</button>
           </div>
           <div class="modal-body" style="max-height: 70vh; overflow-y: auto">
             <div style="color: var(--muted, #999); font-size: 12px; margin-bottom: 10px">
-              各任务创建时迁入任务目录的源文件副本。删除仅移除控制端留档，不影响已分发到节点上的文件，也不删除任务本身。
+              各任务创建时迁入任务目录的源文件副本。删除只移除控制端副本，不影响已分发到节点的文件，也不删除任务本身。
             </div>
             <div v-if="taskFiles.length === 0" style="font-size: 13px; color: var(--muted, #999); padding: 4px 0">
-              暂无任务留档文件
+              暂无任务源文件
             </div>
             <div
               v-for="item in taskFilesPageItems"
@@ -493,80 +445,89 @@
             <button class="modal-close" @click="createVisible = false">&times;</button>
           </div>
           <div class="modal-body" style="max-height: 80vh; overflow-y: auto">
-            <div style="margin-bottom: 12px">
-              <label style="font-size: 13px; color: var(--muted, #888); display: block; margin-bottom: 4px">集群</label>
+            <div class="ntc-field">
+              <label class="ntc-label" for="ntc-cluster">集群 <span class="ntc-req">*</span></label>
               <select
+                id="ntc-cluster"
                 v-model="createClusterId"
-                class="filter-select"
-                style="width: 100%; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border, #e5e5e5)"
-                @change="loadCreateNodes"
+                class="form-input"
+                :class="{ 'is-error': showCreateError('cluster') }"
+                data-test="create-cluster"
+                @change="onCreateClusterChange"
+                @blur="touchCreateField('cluster')"
               >
                 <option :value="0" disabled>请选择集群</option>
                 <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
               </select>
+              <p v-if="showCreateError('cluster')" class="ntc-error">{{ showCreateError('cluster') }}</p>
             </div>
-            <div style="margin-bottom: 12px">
-              <label style="font-size: 13px; color: var(--muted, #888); display: block; margin-bottom: 4px">节点</label>
-              <div
-                style="
-                  display: flex;
-                  align-items: center;
-                  justify-content: space-between;
-                  margin-bottom: 4px;
-                  font-size: 12px;
-                  color: var(--muted, #888);
-                "
-              >
-                <div>
-                  <a
-                    style="cursor: pointer; margin-right: 12px; color: var(--accent, #4096ff)"
-                    @click="selectAllCreateNodes"
-                    >全选</a
-                  >
-                  <a style="cursor: pointer; color: var(--accent, #4096ff)" @click="clearAllCreateNodes">取消全选</a>
-                </div>
-                <span>已选择 {{ createNodeIds.length }} / {{ createNodes.length }} 个节点</span>
-              </div>
-              <div
-                style="
-                  border: 1px solid var(--border, #e5e5e5);
-                  border-radius: 6px;
-                  padding: 8px;
-                  max-height: 180px;
-                  overflow-y: auto;
-                "
-              >
-                <label
-                  v-for="n in createNodes"
-                  :key="n.id"
-                  style="display: block; padding: 4px 6px; font-size: 13px; cursor: pointer"
+            <div class="ntc-field">
+              <div class="ntc-label-row">
+                <label class="ntc-label">节点 <span class="ntc-req">*</span></label>
+                <span v-if="createClusterId" class="ntc-count"
+                  >已选 {{ createNodeIds.length }} 个（共 {{ createNodes.length }}）</span
                 >
-                  <input type="checkbox" :value="n.id" v-model="createNodeIds" style="margin-right: 6px" />
-                  {{ n.ip }}
-                  <span v-if="n.edge_path" style="color: var(--muted, #999); font-size: 12px">({{ n.edge_path }})</span>
-                </label>
-                <div v-if="createNodes.length === 0" style="color: var(--muted, #999); font-size: 12px; padding: 4px">
-                  请先选择集群
-                </div>
               </div>
+              <!-- 未选集群：虚线空态区，不要伪装成禁用输入框 -->
+              <div v-if="!createClusterId" class="ntc-node-empty" data-test="node-empty">选择集群后加载节点列表</div>
+              <template v-else>
+                <input
+                  v-model="nodeSearch"
+                  class="form-input ntc-node-search"
+                  data-test="node-search"
+                  type="text"
+                  placeholder="搜索节点 IP / 名称"
+                />
+                <div class="ntc-node-list">
+                  <label
+                    v-for="n in filteredCreateNodes"
+                    :key="n.id"
+                    class="ntc-node"
+                    :class="{ 'is-offline': isNodeOffline(n) }"
+                  >
+                    <input
+                      type="checkbox"
+                      :value="n.id"
+                      v-model="createNodeIds"
+                      :disabled="isNodeOffline(n)"
+                      :data-test="`node-check-${n.id}`"
+                    />
+                    <span class="ntc-node-ip">{{ n.ip }}</span>
+                    <span v-if="n.edge_path" class="ntc-node-path">({{ n.edge_path }})</span>
+                    <span v-if="isNodeOffline(n)" class="ntc-offline-tag">离线</span>
+                  </label>
+                  <div v-if="filteredCreateNodes.length === 0" class="ntc-node-none">
+                    {{ createNodes.length === 0 ? '该集群暂无节点' : '没有匹配的节点' }}
+                  </div>
+                </div>
+                <div class="ntc-node-actions">
+                  <a @click="selectAllCreateNodes">全选</a>
+                  <a @click="clearAllCreateNodes">取消全选</a>
+                  <span class="ntc-node-hint">离线节点不可选</span>
+                </div>
+              </template>
+              <p v-if="showCreateError('nodes')" class="ntc-error">{{ showCreateError('nodes') }}</p>
             </div>
-            <div style="margin-bottom: 12px">
-              <label style="font-size: 13px; color: var(--muted, #888); display: block; margin-bottom: 4px"
-                >任务类型</label
-              >
+            <div class="ntc-field">
+              <label class="ntc-label" for="ntc-task-type">任务类型 <span class="ntc-req">*</span></label>
               <select
+                id="ntc-task-type"
                 v-model="createTaskType"
+                class="form-input"
+                :class="{ 'is-error': showCreateError('taskType') }"
                 data-test="task-type"
-                style="width: 100%; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border, #e5e5e5)"
+                @change="onCreateTaskTypeChange"
+                @blur="touchCreateField('taskType')"
               >
                 <option value="" disabled>请选择操作类型</option>
                 <option v-for="t in taskTypes" :key="t.value" :value="t.value">{{ t.label }}</option>
               </select>
+              <p v-if="showCreateError('taskType')" class="ntc-error">{{ showCreateError('taskType') }}</p>
+              <!-- 无专属字段的类型：帮助文案紧跟任务类型 -->
+              <p v-if="isSimpleTaskType && helpText" class="ntc-help">{{ helpText }}</p>
             </div>
             <div v-if="createTaskType === 'install_openresty'" style="margin-bottom: 12px">
-              <label style="font-size: 13px; color: var(--muted, #888); display: block; margin-bottom: 4px"
-                >安装包</label
-              >
+              <label class="ntc-label">安装包 <span class="ntc-req">*</span></label>
               <select
                 v-model="createOpenrestyFile"
                 data-test="openresty-file"
@@ -577,11 +538,11 @@
                   {{ f.name }} <template v-if="f.size_display">({{ f.size_display }})</template>
                 </option>
               </select>
+              <p v-if="showCreateError('file')" class="ntc-error">{{ showCreateError('file') }}</p>
+              <p class="ntc-help">{{ helpText }}</p>
             </div>
             <div v-if="createTaskType === 'edge_pack_add'" style="margin-bottom: 12px">
-              <label style="font-size: 13px; color: var(--muted, #888); display: block; margin-bottom: 4px"
-                >Edge 版本包</label
-              >
+              <label class="ntc-label">Edge 版本包 <span class="ntc-req">*</span></label>
               <select
                 v-model="selectedPackFile"
                 data-test="edge-pack-file"
@@ -592,11 +553,11 @@
                   {{ f.name }} <template v-if="f.size_display">({{ f.size_display }})</template>
                 </option>
               </select>
+              <p v-if="showCreateError('file')" class="ntc-error">{{ showCreateError('file') }}</p>
+              <p class="ntc-help">{{ helpText }}</p>
             </div>
             <div v-if="createTaskType === 'edge_pack_rebase'" style="margin-bottom: 12px">
-              <label style="font-size: 13px; color: var(--muted, #888); display: block; margin-bottom: 4px"
-                >目标版本{{ edgePackRouteText }}</label
-              >
+              <label class="ntc-label">目标版本{{ edgePackRouteText }} <span class="ntc-req">*</span></label>
               <select
                 v-model="selectedPackVersion"
                 data-test="edge-pack-version"
@@ -607,11 +568,11 @@
                   {{ v.name }} <template v-if="v.current">(当前)</template>
                 </option>
               </select>
+              <p v-if="showCreateError('file')" class="ntc-error">{{ showCreateError('file') }}</p>
+              <p class="ntc-help">{{ helpText }}</p>
             </div>
             <div v-if="createTaskType === 'software_check'" style="margin-bottom: 12px">
-              <label style="font-size: 13px; color: var(--muted, #888); display: block; margin-bottom: 6px"
-                >软件列表</label
-              >
+              <label class="ntc-label">软件列表 <span class="ntc-req">*</span></label>
               <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px">
                 <label
                   v-for="s in softwareOptions"
@@ -667,73 +628,60 @@
                   <a style="color: var(--danger, #e5484d); cursor: pointer" @click="removeCustomSoftware(s)">×</a>
                 </span>
               </div>
+              <p v-if="showCreateError('file')" class="ntc-error">{{ showCreateError('file') }}</p>
+              <p class="ntc-help">{{ helpText }}</p>
             </div>
             <div v-if="createTaskType === 'cmd_exec'" style="margin-bottom: 12px">
-              <div
-                style="
-                  display: flex;
-                  gap: 0;
-                  margin-bottom: 12px;
-                  border: 1px solid var(--border, #e5e5e5);
-                  border-radius: 6px;
-                  overflow: hidden;
-                "
-              >
+              <!-- 分段选择：选中态用浅底 + 主色文字 + 细边，不抢主按钮的实心主色 -->
+              <div class="ntc-seg">
                 <button
-                  :style="{
-                    flex: 1,
-                    padding: '6px 0',
-                    border: 'none',
-                    cursor: 'pointer',
-                    fontSize: '13px',
-                    background: cmdExecMode === 'command' ? 'var(--accent,#4096ff)' : 'var(--bg-secondary,#f5f5f5)',
-                    color: cmdExecMode === 'command' ? '#fff' : 'var(--fg,#333)',
-                  }"
+                  type="button"
+                  class="ntc-seg-btn"
+                  :class="{ 'is-active': cmdExecMode === 'command' }"
+                  data-test="cmd-mode-command"
                   @click="cmdExecMode = 'command'"
                 >
                   命令
                 </button>
                 <button
-                  :style="{
-                    flex: 1,
-                    padding: '6px 0',
-                    border: 'none',
-                    borderLeft: '1px solid var(--border,#e5e5e5)',
-                    cursor: 'pointer',
-                    fontSize: '13px',
-                    background: cmdExecMode === 'script' ? 'var(--accent,#4096ff)' : 'var(--bg-secondary,#f5f5f5)',
-                    color: cmdExecMode === 'script' ? '#fff' : 'var(--fg,#333)',
-                  }"
+                  type="button"
+                  class="ntc-seg-btn"
+                  :class="{ 'is-active': cmdExecMode === 'script' }"
+                  data-test="cmd-mode-script"
                   @click="cmdExecMode = 'script'"
                 >
                   脚本
                 </button>
               </div>
               <template v-if="cmdExecMode === 'command'">
-                <label style="font-size: 13px; color: var(--muted, #888); display: block; margin-bottom: 6px"
-                  >命令</label
-                >
-                <input
-                  v-model="cmdCommand"
-                  data-test="cmd-command"
-                  type="text"
-                  placeholder="如: ls -la /etc"
-                  style="width: 100%; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border, #e5e5e5)"
-                />
-                <div style="display: flex; gap: 12px; margin-top: 10px">
-                  <label
-                    v-for="s in cmdSecurityOptions"
-                    :key="s.value"
-                    style="display: inline-flex; align-items: center; gap: 4px; font-size: 13px; cursor: pointer"
-                  >
-                    <input
-                      type="radio"
-                      :value="s.value"
-                      v-model="cmdSecurity"
-                      style="accent-color: var(--accent, #4096ff)"
-                    />
-                    <span>{{ s.label }}</span>
-                  </label>
+                <label class="ntc-label">命令 <span class="ntc-req">*</span></label>
+                <div class="ntc-input-with-action">
+                  <input
+                    v-model="cmdCommand"
+                    class="form-input"
+                    :class="{ 'is-error': showCreateError('content') }"
+                    data-test="cmd-command"
+                    type="text"
+                    placeholder="如: ls -la /etc"
+                    @blur="touchCreateField('content')"
+                  />
+                  <button type="button" class="btn btn-secondary btn-sm" data-test="cmd-copy" @click="copyCommand">
+                    复制命令
+                  </button>
+                </div>
+                <p v-if="showCreateError('content')" class="ntc-error">{{ showCreateError('content') }}</p>
+                <p class="ntc-help">{{ helpText }}</p>
+                <div class="ntc-group">
+                  <div class="ntc-group-label">执行策略</div>
+                  <div class="ntc-group-desc">
+                    黑名单：拦截危险命令；白名单：只允许预置与本任务添加的命令；不限制：不做校验
+                  </div>
+                  <div class="ntc-radios">
+                    <label v-for="s in cmdSecurityOptions" :key="s.value" class="ntc-radio">
+                      <input type="radio" :value="s.value" v-model="cmdSecurity" />
+                      <span>{{ s.label }}</span>
+                    </label>
+                  </div>
                 </div>
                 <div v-if="cmdSecurity === 'whitelist'" style="margin-top: 10px">
                   <div style="font-size: 13px; color: var(--muted, #888); margin-bottom: 6px">
@@ -783,24 +731,18 @@
                     <button class="btn btn-secondary btn-sm" @click="addCmdWhitelist">添加</button>
                   </div>
                 </div>
-                <label
-                  style="
-                    font-size: 13px;
-                    color: var(--muted, #888);
-                    display: block;
-                    margin-top: 10px;
-                    margin-bottom: 6px;
-                  "
-                  >超时（秒）</label
-                >
-                <input
-                  v-model.number="cmdTimeout"
-                  data-test="cmd-timeout"
-                  type="number"
-                  min="1"
-                  max="600"
-                  style="width: 120px; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border, #e5e5e5)"
-                />
+                <label class="ntc-label ntc-label-inline">超时</label>
+                <div class="ntc-inline-field">
+                  <input
+                    v-model.number="cmdTimeout"
+                    class="form-input ntc-number"
+                    data-test="cmd-timeout"
+                    type="number"
+                    min="1"
+                    max="600"
+                  />
+                  <span class="ntc-unit">秒</span>
+                </div>
               </template>
               <template v-else>
                 <div style="margin-bottom: 8px">
@@ -809,7 +751,7 @@
                     <a
                       style="font-size: 12px; color: var(--primary, #0099ff); cursor: pointer"
                       @click="openPendingFilesSelect"
-                      >从已上传中选择</a
+                      >从暂存文件中选择</a
                     >
                     <span v-if="scriptFile" style="font-size: 12px; color: var(--muted, #888); line-height: 28px">
                       {{ scriptFile.name }} ({{ formatFileSize(scriptFile.size) }})
@@ -891,20 +833,17 @@
                     "
                   ></textarea>
                 </div>
-                <div style="display: flex; gap: 12px; margin-top: 10px">
-                  <label
-                    v-for="s in cmdSecurityOptions"
-                    :key="s.value"
-                    style="display: inline-flex; align-items: center; gap: 4px; font-size: 13px; cursor: pointer"
-                  >
-                    <input
-                      type="radio"
-                      :value="s.value"
-                      v-model="cmdSecurity"
-                      style="accent-color: var(--accent, #4096ff)"
-                    />
-                    <span>{{ s.label }}</span>
-                  </label>
+                <div class="ntc-group">
+                  <div class="ntc-group-label">执行策略</div>
+                  <div class="ntc-group-desc">
+                    黑名单：拦截危险命令；白名单：只允许预置与本任务添加的命令；不限制：不做校验
+                  </div>
+                  <div class="ntc-radios">
+                    <label v-for="s in cmdSecurityOptions" :key="s.value" class="ntc-radio">
+                      <input type="radio" :value="s.value" v-model="cmdSecurity" />
+                      <span>{{ s.label }}</span>
+                    </label>
+                  </div>
                 </div>
                 <div v-if="cmdSecurity === 'whitelist'" style="margin-top: 10px">
                   <div style="font-size: 13px; color: var(--muted, #888); margin-bottom: 6px">
@@ -954,40 +893,32 @@
                     <button class="btn btn-secondary btn-sm" @click="addCmdWhitelist">添加</button>
                   </div>
                 </div>
-                <label
-                  style="
-                    font-size: 13px;
-                    color: var(--muted, #888);
-                    display: block;
-                    margin-top: 10px;
-                    margin-bottom: 6px;
-                  "
-                  >超时（秒）</label
-                >
-                <input
-                  v-model.number="cmdTimeout"
-                  data-test="cmd-timeout"
-                  type="number"
-                  min="1"
-                  max="600"
-                  style="width: 120px; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border, #e5e5e5)"
-                />
-                <div v-if="scriptUploadError" style="margin-top: 8px; color: var(--danger, #e5484d); font-size: 12px">
-                  {{ scriptUploadError }}
+                <label class="ntc-label ntc-label-inline">超时</label>
+                <div class="ntc-inline-field">
+                  <input
+                    v-model.number="cmdTimeout"
+                    class="form-input ntc-number"
+                    data-test="cmd-timeout"
+                    type="number"
+                    min="1"
+                    max="600"
+                  />
+                  <span class="ntc-unit">秒</span>
                 </div>
+                <p v-if="scriptUploadError" class="ntc-error">{{ scriptUploadError }}</p>
+                <p v-if="showCreateError('content')" class="ntc-error">{{ showCreateError('content') }}</p>
+                <p class="ntc-help">{{ helpText }}</p>
               </template>
             </div>
             <!-- 分发文件表单 -->
             <div v-if="createTaskType === 'distribute_file'" style="margin-bottom: 12px">
-              <label style="font-size: 13px; color: var(--muted, #888); display: block; margin-bottom: 4px"
-                >选择文件</label
-              >
+              <label class="ntc-label">选择文件 <span class="ntc-req">*</span></label>
               <div style="display: flex; gap: 8px; margin-bottom: 8px; align-items: center">
                 <button class="btn btn-secondary btn-sm" @click="triggerDistributeUpload">选择文件</button>
                 <a
                   style="font-size: 12px; color: var(--primary, #0099ff); cursor: pointer"
                   @click="openPendingFilesSelect"
-                  >从已上传中选择</a
+                  >从暂存文件中选择</a
                 >
                 <span v-if="distributeFile" style="font-size: 12px; color: var(--muted, #888); line-height: 28px">
                   {{ distributeFile.name }} ({{ formatFileSize(distributeFile.size) }})
@@ -1024,45 +955,22 @@
                 <div style="margin-bottom: 4px">点击或拖拽文件到此处</div>
                 <div style="font-size: 11px">支持任意文件类型，最大 10MB</div>
               </div>
-              <div v-if="distributeUploadError" style="margin-top: 8px; color: var(--danger, #e5484d); font-size: 12px">
-                {{ distributeUploadError }}
-              </div>
-              <label
-                style="font-size: 13px; color: var(--muted, #888); display: block; margin-top: 12px; margin-bottom: 4px"
-                >目标目录路径</label
-              >
+              <p v-if="distributeUploadError" class="ntc-error">{{ distributeUploadError }}</p>
+              <p v-if="showCreateError('file')" class="ntc-error">{{ showCreateError('file') }}</p>
+              <label class="ntc-label ntc-label-inline">目标目录路径 <span class="ntc-req">*</span></label>
               <input
                 v-model="distributeDestpath"
+                class="form-input"
+                :class="{ 'is-error': showCreateError('destpath') }"
                 type="text"
                 data-test="distribute-destpath"
                 placeholder="例如: /etc/nginx/conf.d/"
-                style="
-                  width: 100%;
-                  padding: 6px 10px;
-                  border-radius: 6px;
-                  border: 1px solid var(--border, #e5e5e5);
-                  font-size: 13px;
-                "
+                @blur="touchCreateField('destpath')"
               />
-              <div style="color: var(--muted, #999); font-size: 11px; margin-top: 4px">
-                文件将以原始文件名存入此目录
-              </div>
-              <label
-                style="font-size: 13px; color: var(--muted, #888); display: block; margin-top: 12px; margin-bottom: 4px"
-                >超时时间</label
-              >
-              <select
-                v-model.number="distributeTimeout"
-                data-test="distribute-timeout"
-                style="
-                  width: 100%;
-                  padding: 6px 10px;
-                  border-radius: 6px;
-                  border: 1px solid var(--border, #e5e5e5);
-                  font-size: 13px;
-                  background: var(--bg, #fff);
-                "
-              >
+              <p v-if="showCreateError('destpath')" class="ntc-error">{{ showCreateError('destpath') }}</p>
+              <p class="ntc-help">{{ helpText }}</p>
+              <label class="ntc-label ntc-label-inline">超时时间</label>
+              <select v-model.number="distributeTimeout" class="form-input ntc-number" data-test="distribute-timeout">
                 <option :value="60">60 秒</option>
                 <option :value="300">5 分钟</option>
                 <option :value="600">10 分钟（默认）</option>
@@ -1070,31 +978,16 @@
                 <option :value="3600">1 小时</option>
               </select>
             </div>
-            <div style="color: var(--muted, #999); font-size: 12px; line-height: 1.6">
-              任务参数将从节点记录自动读取（安装路径/管理端口等），无需手动填写。
-            </div>
           </div>
-          <div class="modal-footer">
+          <div class="modal-footer ntc-footer">
+            <!-- 禁用时说明「还差什么」，而不是只有一个灰按钮 -->
+            <span v-if="!canCreate" class="ntc-footer-hint">{{ createMissingHint }}</span>
             <button class="btn btn-secondary" @click="createVisible = false">取消</button>
             <button
-              class="btn btn-primary"
-              :disabled="
-                !createClusterId ||
-                createNodeIds.length === 0 ||
-                !createTaskType ||
-                (createTaskType === 'install_openresty' && !createOpenrestyFile) ||
-                (createTaskType === 'edge_pack_add' && !selectedPackFile) ||
-                (createTaskType === 'edge_pack_rebase' && !selectedPackVersion) ||
-                (createTaskType === 'software_check' &&
-                  softwareSelected.length === 0 &&
-                  customSoftwareList.length === 0) ||
-                (createTaskType === 'cmd_exec' && cmdExecMode === 'command' && !cmdCommand.trim()) ||
-                (createTaskType === 'cmd_exec' &&
-                  cmdExecMode === 'script' &&
-                  (!scriptFile || !scriptPreviewContent || !scriptPreviewContent.trim())) ||
-                (createTaskType === 'distribute_file' &&
-                  (!distributeFile || !distributeUploadId || !distributeDestpath.trim()))
-              "
+              class="btn btn-primary ntc-submit"
+              :disabled="!canCreate"
+              :title="canCreate ? '' : createMissingHint"
+              data-test="create-submit"
               @click="submitCreateTask"
             >
               创建
@@ -1107,27 +1000,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount, h, render } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount, h, render } from 'vue'
 import { message } from 'ant-design-vue'
+import { useRoute, useRouter } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
-import NodeTaskLogViewer from '@/components/NodeTaskLogViewer.vue'
+import TaskStatusTag from '@/components/TaskStatusTag.vue'
+import TaskProgressBar from '@/components/TaskProgressBar.vue'
 import {
   listNodeTasks,
-  getNodeTask,
   cancelNodeTask,
   retryNodeTask,
   createNodeTask,
-  fetchTaskItemLog,
   deleteNodeTask,
   batchDeleteNodeTasks,
-  parseTaskEvent,
   type NodeTaskData,
-  type NodeTaskItemData,
-  type TaskStreamEvent,
 } from '@/composables/useNodeTasks'
 import { paginationProps } from '@/composables/usePagination'
-import { consumeSSEDataLines } from '@/utils/sse'
-import { formatFileSize, formatDateTime } from '@/utils/format'
+import { formatFileSize, formatDateTime, formatDurationCompact, durationSeconds } from '@/utils/format'
 import {
   listUploadedScripts,
   deleteUploadedScript,
@@ -1143,31 +1032,36 @@ import { showOverlayModal } from '@/composables/useOverlayModal'
 import { routeLabel } from '@/composables/useClusterUtils'
 import api from '@/api'
 
+const route = useRoute()
+const router = useRouter()
+
 const tasks = ref<NodeTaskData[]>([])
 const total = ref(0)
 const page = ref(1)
 const pageSize = ref(20)
 const loading = ref(false)
+/** 筛选条草稿与已生效值分开：搜索框回车才生效（避免每个字符触发一次请求） */
+const filterKeyword = ref('')
+const appliedKeyword = ref('')
+const filterClusterId = ref<number | ''>('')
 const filterStatus = ref('')
 const filterType = ref('')
+/** 时间范围快捷项：'' 全部 / 24h / 7d / 30d（映射为 created_from） */
+const filterRange = ref('')
 const selectedRowKeys = ref<number[]>([])
-const detailVisible = ref(false)
-const detail = ref<NodeTaskData | null>(null)
-const expandedIp = ref<string | null>(null)
-const liveLogs = ref<Record<number, string[]>>({})
-const liveDetail = ref<Record<number, NodeTaskItemData>>({})
-let streamAbort: AbortController | null = null
-let pollTimer: ReturnType<typeof setInterval> | null = null
-let streamTaskId = 0
 
 const createVisible = ref(false)
 const clusters = ref<Array<{ id: number; name: string; display_name?: string }>>([])
 const createClusterId = ref(0)
-const createNodes = ref<Array<{ id: number; ip: string; edge_path?: string }>>([])
+const createNodes = ref<Array<{ id: number; ip: string; status?: number; edge_path?: string; name?: string | null }>>(
+  [],
+)
+/** 节点搜索关键字（8.1：节点多时不再只能翻滚动条） */
+const nodeSearch = ref('')
 const createNodeIds = ref<number[]>([])
 
 function selectAllCreateNodes() {
-  createNodeIds.value = createNodes.value.map((n: any) => n.id)
+  createNodeIds.value = createNodes.value.filter((n) => !isNodeOffline(n)).map((n) => n.id)
 }
 
 function clearAllCreateNodes() {
@@ -1334,7 +1228,7 @@ async function handleScriptFile(file: File) {
 }
 
 function clearScriptFile() {
-  // 仅删除新上传的临时文件；从待用列表选用的文件不应删除（属于已有文件，非本次上传）
+  // 仅删除本次新上传的暂存文件；从暂存列表选用的文件不应删除（属于已有文件，非本次上传）
   if (scriptUploadId.value && !scriptFromPending.value) {
     deleteUploadedScript(scriptUploadId.value).catch(() => {})
   }
@@ -1430,7 +1324,7 @@ async function handleDistributeFile(file: File) {
 }
 
 function clearDistributeFile() {
-  // 仅删除新上传的临时文件；从待用列表选用的文件不应删除
+  // 仅删除本次新上传的暂存文件；从暂存列表选用的文件不应删除
   if (distributeUploadId.value && !distributeFromPending.value) {
     deleteUploadedScript(distributeUploadId.value).catch(() => {})
   }
@@ -1439,7 +1333,7 @@ function clearDistributeFile() {
   distributeFromPending.value = false
 }
 
-// ── 已上传文件管理（全局入口；脚本/分发共用，openspec node-task-distribute-file 5.7） ──
+// ── 暂存文件 / 任务源文件管理（全局入口；脚本/分发共用，openspec node-task-distribute-file 5.7） ──
 
 const uploadedFiles = ref<UploadedScript[]>([])
 const taskFiles = ref<TaskFile[]>([])
@@ -1482,7 +1376,7 @@ function setTaskFilesPage(p: number) {
 }
 
 async function loadUploadedFiles() {
-  // 两个列表独立加载：listTaskFiles 需要数据库，失败不影响待用上传展示
+  // 两个列表独立加载：listTaskFiles 需要数据库，失败不影响暂存文件展示
   const pendingResult = listUploadedScripts().catch(() => [])
   const archivedResult = listTaskFiles().catch(() => [])
   const [pending, archived] = await Promise.all([pendingResult, archivedResult])
@@ -1504,13 +1398,13 @@ function openPendingFilesSelect() {
   void loadUploadedFiles()
 }
 
-/** 判断待用上传列表中的文件是否正被表单选中 */
+/** 判断暂存文件列表中的文件是否正被表单选中 */
 function isFileSelected(item: UploadedScript): boolean {
   if (item.kind === 'script') return scriptUploadId.value === item.upload_id
   return distributeUploadId.value === item.upload_id
 }
 
-/** 从待用上传弹窗选用一个文件，填入创建表单对应字段 */
+/** 从暂存文件弹窗选用一个文件，填入创建表单对应字段 */
 async function selectPendingFile(item: UploadedScript) {
   if (item.kind === 'script') {
     // 填入脚本字段 + 自动加载内容到编辑区
@@ -1540,8 +1434,8 @@ function openTaskFilesModal() {
 
 function removeUploadedFile(item: UploadedScript) {
   showOverlayModal({
-    title: '删除已上传文件',
-    content: `确定删除「${item.filename}」？删除后无法再用于创建任务。`,
+    title: '删除暂存文件',
+    content: `确定删除暂存文件「${item.filename}」？删除后无法再用于创建任务。`,
     okText: '删除',
     okDanger: true,
     onOk: async () => {
@@ -1568,8 +1462,8 @@ function removeUploadedFile(item: UploadedScript) {
 
 function removeTaskFile(item: TaskFile) {
   showOverlayModal({
-    title: '删除任务留档文件',
-    content: `确定删除任务 #${item.task_id} 的留档文件「${item.filename}」？仅删除控制端留档副本，不影响已分发到节点上的文件，也不删除任务本身。`,
+    title: '删除任务源文件',
+    content: `确定删除任务 #${item.task_id} 的源文件「${item.filename}」？仅删除控制端副本，不影响已分发到节点上的文件，也不删除任务本身。`,
     okText: '删除',
     okDanger: true,
     onOk: async () => {
@@ -1582,6 +1476,144 @@ function removeTaskFile(item: TaskFile) {
       }
     },
   })
+}
+
+/** 节点是否离线（后端 status：1=运行中；缺字段的裁剪载荷按「未知但可选」处理，避免整批锁死） */
+function isNodeOffline(n: { status?: number }): boolean {
+  return n.status != null && n.status !== 1
+}
+
+/** 节点列表按 IP / 名称 / 路径搜索（8.1） */
+const filteredCreateNodes = computed(() => {
+  const q = nodeSearch.value.trim().toLowerCase()
+  if (!q) return createNodes.value
+  return createNodes.value.filter((n) => `${n.ip} ${n.name || ''} ${n.edge_path || ''}`.toLowerCase().includes(q))
+})
+
+// ── 创建表单校验（8.1）：问题清单实时算，展示由「失焦过 / 提交过」决定 ──
+const createTouched = ref<Record<string, boolean>>({})
+const createSubmitAttempted = ref(false)
+
+const createProblems = computed<Record<string, string>>(() => {
+  const problems: Record<string, string> = {}
+  if (!createClusterId.value) problems.cluster = '请选择集群'
+  else if (createNodeIds.value.length === 0) problems.nodes = '请至少选择一个节点'
+  if (!createTaskType.value) {
+    problems.taskType = '请选择任务类型'
+    return problems
+  }
+  switch (createTaskType.value) {
+    case 'install_openresty':
+      if (!createOpenrestyFile.value) problems.file = '请选择 OpenResty 安装包'
+      break
+    case 'edge_pack_add':
+      if (!selectedPackFile.value) problems.file = '请选择版本包'
+      break
+    case 'edge_pack_rebase':
+      if (!selectedPackVersion.value) problems.file = '请选择目标版本'
+      break
+    case 'software_check':
+      if (softwareSelected.value.length === 0 && customSoftwareList.value.length === 0)
+        problems.file = '请至少选择一项软件'
+      break
+    case 'cmd_exec':
+      if (cmdExecMode.value === 'command') {
+        if (!cmdCommand.value.trim()) problems.content = '请输入命令'
+      } else if (!scriptPreviewContent.value || !scriptPreviewContent.value.trim()) {
+        problems.content = '脚本内容不能为空'
+      }
+      break
+    case 'distribute_file':
+      if (!distributeFile.value || !distributeUploadId.value) problems.file = '请选择要分发的文件'
+      else if (!distributeDestpath.value.trim()) problems.destpath = '请输入目标目录路径'
+      break
+    default:
+      break
+  }
+  return problems
+})
+
+/** 字段错误：未触碰且未提交时保持安静，避免空白表单满屏红字 */
+function showCreateError(field: string): string {
+  if (!createTouched.value[field] && !createSubmitAttempted.value) return ''
+  return createProblems.value[field] || ''
+}
+
+function touchCreateField(field: string) {
+  createTouched.value = { ...createTouched.value, [field]: true }
+}
+
+const canCreate = computed(() => Object.keys(createProblems.value).length === 0)
+
+/** 缺什么（按钮禁用态的 title / 底部提示）：说人话，不要「表单不完整」 */
+function missingLabel(field: string): string {
+  switch (field) {
+    case 'cluster':
+      return '选择集群'
+    case 'nodes':
+      return '选择节点'
+    case 'taskType':
+      return '选择任务类型'
+    case 'content':
+      return cmdExecMode.value === 'script' ? '填写脚本内容' : '输入命令'
+    case 'destpath':
+      return '填写目标目录'
+    case 'file':
+      switch (createTaskType.value) {
+        case 'install_openresty':
+          return '选择安装包'
+        case 'edge_pack_add':
+          return '选择版本包'
+        case 'edge_pack_rebase':
+          return '选择目标版本'
+        case 'software_check':
+          return '选择软件'
+        case 'distribute_file':
+          return '选择要分发的文件'
+        default:
+          return '选择文件'
+      }
+    default:
+      return field
+  }
+}
+
+const createMissingHint = computed(() => {
+  const keys = Object.keys(createProblems.value)
+  if (keys.length === 0) return ''
+  return `还需${keys.map((k) => missingLabel(k)).join('、')}`
+})
+
+/** 帮助文案按任务类型切换（8.3）：放在相关字段旁，不再统一沉在弹窗底部 */
+const CREATE_HELP: Record<string, string> = {
+  install_openresty: '任务参数（安装路径、管理端口等）从节点记录自动读取，无需手动填写。',
+  install_edge: '任务参数（安装路径、管理端口等）从节点记录自动读取，无需手动填写。',
+  associate_new_openresty: '任务参数（安装路径、管理端口等）从节点记录自动读取，无需手动填写。',
+  edge_pack_add: '任务参数（安装路径、管理端口等）从节点记录自动读取，无需手动填写。',
+  edge_pack_rebase: '任务参数（安装路径、管理端口等）从节点记录自动读取，无需手动填写。',
+  start: '任务参数（安装路径、管理端口等）从节点记录自动读取，无需手动填写。',
+  stop: '任务参数（安装路径、管理端口等）从节点记录自动读取，无需手动填写。',
+  reload: '任务参数（安装路径、管理端口等）从节点记录自动读取，无需手动填写。',
+  statistic: '任务参数（安装路径、管理端口等）从节点记录自动读取，无需手动填写。',
+  cmd_exec: '命令将以清单中的用户身份在各节点执行；执行明细见任务详情。',
+  software_check: '将查询各节点已安装的软件包版本，结果在任务详情中按节点展示。',
+  distribute_file: '文件将以原始文件名存入目标目录；分发进度与结果见任务详情。',
+}
+const helpText = computed(() => (createTaskType.value ? CREATE_HELP[createTaskType.value] || '' : ''))
+
+/** 命令模式「复制命令」（8.1；脚本模式已有「转换为命令」） */
+async function copyCommand() {
+  const cmd = cmdCommand.value.trim()
+  if (!cmd) {
+    message.warning('请先输入命令')
+    return
+  }
+  try {
+    await navigator.clipboard.writeText(cmd)
+    message.success('已复制命令')
+  } catch {
+    message.warning('复制失败：浏览器未授权剪贴板，请手动选择文本复制')
+  }
 }
 
 const taskTypes = [
@@ -1600,16 +1632,53 @@ const taskTypes = [
 ]
 
 const columns = [
-  { title: 'ID', dataIndex: 'id', key: 'id', width: 60 },
-  { title: '任务类型', key: 'task_type' },
-  { title: '状态', key: 'status' },
-  { title: '节点', key: 'nodes' },
-  { title: '进度', key: 'progress' },
-  { title: '创建时间', key: 'created_at' },
-  { title: '结束时间', key: 'finished_at' },
-  { title: '耗时', key: 'duration' },
-  { title: '操作', key: 'actions', width: 180 },
+  // 序号列全站统一解剖（AGENTS #59）：宽度 45、后端分页用跨页连续公式
+  { title: '#', key: 'index', width: 45 },
+  { title: '任务类型', key: 'task_type', width: 170 },
+  { title: '集群', key: 'cluster', width: 150, ellipsis: true },
+  // 状态 + 节点计数 + 进度条合并为一列（原三列表达同一件事，吃掉表中部 ~300px）
+  { title: '结果', key: 'result' },
+  { title: '时间', key: 'time', width: 210 },
+  { title: '操作', key: 'actions', width: 110, align: 'right' as const },
 ]
+
+/** 状态 + 计数（与分段条同源，统一取后端真实计数） */
+function resultCountText(t: NodeTaskData): string {
+  const parts = [`成功 ${t.success_nodes ?? 0}`, `失败 ${t.failed_nodes ?? 0}`]
+  if ((t.skipped_nodes ?? 0) > 0) parts.push(`跳过 ${t.skipped_nodes}`)
+  if ((t.cancelled_nodes ?? 0) > 0) parts.push(`取消 ${t.cancelled_nodes}`)
+  return parts.join(' · ')
+}
+
+/** 行是否仍在进行（有 finished_at 视为已结束，即使状态还是 running——中止的旧任务） */
+function isLiveTaskRow(t: NodeTaskData): boolean {
+  return ['pending', 'running'].includes(t.status) && !t.finished_at
+}
+
+/** 进行中任务的已用时（从开始时间起算，未开始则从创建时间起算） */
+function elapsedText(t: NodeTaskData): string {
+  const seconds = durationSeconds(t.started_at || t.created_at, new Date().toISOString())
+  return seconds == null ? '—' : formatDurationCompact(seconds)
+}
+
+/** 任务类型格 tooltip：任务号 + 发起人（ID/操作人不占列宽，D7） */
+function taskTooltip(t: NodeTaskData): string {
+  const parts = [`任务 #${t.id}`]
+  if (t.created_by_name) parts.push(`${t.created_by_name} 创建`)
+  return parts.join(' · ')
+}
+
+/** 集群格 tooltip：集群被删后仍保留任务历史，给出可读说明 */
+function clusterTooltip(t: NodeTaskData): string {
+  return t.cluster_name || `集群已删除（ID ${t.cluster_id}）`
+}
+
+/** 时间格 tooltip：创建时间降级为提示，避免两列 19 字符时间戳并排 */
+function timeTooltip(t: NodeTaskData): string {
+  const created = t.created_at ? `创建于 ${formatTime(t.created_at)}` : '创建时间未知'
+  const by = t.created_by_name ? ` · ${t.created_by_name}` : ''
+  return created + by
+}
 
 function typeLabel(t: string): string {
   return taskTypes.find((x) => x.value === t)?.label || t
@@ -1619,95 +1688,83 @@ function taskTypeLabel(t: string): string {
   return typeLabel(t)
 }
 
-// ── software_check matrix ──
-
-interface SoftwareCell {
-  status: 'installed' | 'missing' | 'failed'
-  pkg: string
-  ver: string
-}
-
-function softwareMatrixRows(): string[] {
-  const items = detail.value?.items || []
-  const rows = new Set<string>()
-  for (const item of items) {
-    try {
-      const data = typeof item.stdout === 'string' ? JSON.parse(item.stdout) : item.stdout || {}
-      Object.keys(data).forEach((k) => rows.add(k))
-    } catch {
-      /* ignore */
-    }
-  }
-  return Array.from(rows)
-}
-
-function softwareCell(item: NodeTaskItemData, soft: string): SoftwareCell | null {
-  try {
-    const data = typeof item.stdout === 'string' ? JSON.parse(item.stdout) : item.stdout || {}
-    const entry = data[soft]
-    if (!entry) return null
-    if (item.status !== 'success' && entry.installed === undefined) {
-      return { status: 'failed', pkg: '', ver: '' }
-    }
-    return {
-      status: entry.installed ? 'installed' : 'missing',
-      pkg: entry.pkg || '',
-      ver: entry.ver || '',
-    }
-  } catch {
-    return null
-  }
-}
-
-function statusLabel(s: string): string {
-  const map: Record<string, string> = {
-    pending: '待执行',
-    running: '执行中',
-    success: '成功',
-    partial: '部分成功',
-    failed: '失败',
-    cancelled: '已取消',
-    skipped: '跳过',
-  }
-  return map[s] || s
-}
-
-function progressStatus(record: NodeTaskData): 'active' | 'success' | 'exception' {
-  if (record.status === 'success') return 'success'
-  if (record.status === 'running' || record.status === 'pending') return 'active'
-  return 'exception'
-}
-
-function progressPercent(record: NodeTaskData): number {
-  if (record.total_nodes === 0) return 0
-  return Math.round((record.success_nodes / record.total_nodes) * 100)
-}
-
 function formatTime(t?: string | null): string {
   return formatDateTime(t)
 }
 
 function durationText(item: { started_at?: string | null; finished_at?: string | null }): string {
-  if (!item.started_at || !item.finished_at) return '-'
-  const ms = new Date(item.finished_at).getTime() - new Date(item.started_at).getTime()
-  return `${Math.max(0, Math.round(ms / 1000))}s`
+  const seconds = durationSeconds(item.started_at, item.finished_at)
+  return seconds == null ? '—' : formatDurationCompact(seconds)
 }
 
-const expandedItem = computed(() => {
-  if (!detail.value || !expandedIp.value) return null
-  return detail.value.items?.find((i) => i.ip === expandedIp.value) || null
-})
+/** 时间范围快捷项 → 小时数（映射为 created_from 下界） */
+const RANGE_HOURS: Record<string, number> = { '24h': 24, '7d': 24 * 7, '30d': 24 * 30 }
+
+/**
+ * 时间范围下界（后端 created_at 为 naive UTC，见 AGENTS #26）：
+ * 用 UTC 墙钟的 ISO 串（不带时区后缀）与库内口径对齐。
+ */
+function rangeStartIso(range: string): string | undefined {
+  const hours = RANGE_HOURS[range]
+  if (!hours) return undefined
+  return new Date(Date.now() - hours * 3600_000).toISOString().slice(0, 19)
+}
+
+/** 列表请求参数（列表与轮询共用，保证轮询不会把筛选条件丢掉） */
+function listParams(): Parameters<typeof listNodeTasks>[0] {
+  return {
+    status: filterStatus.value || undefined,
+    task_type: filterType.value || undefined,
+    cluster_id: filterClusterId.value === '' ? undefined : Number(filterClusterId.value),
+    q: appliedKeyword.value.trim() || undefined,
+    created_from: rangeStartIso(filterRange.value),
+    page: page.value,
+    page_size: pageSize.value,
+  }
+}
+
+/** 是否有任何生效中的筛选（决定空态文案：没有任务 vs 没有符合条件） */
+const hasActiveFilters = computed(
+  () =>
+    !!appliedKeyword.value.trim() ||
+    filterClusterId.value !== '' ||
+    !!filterStatus.value ||
+    !!filterType.value ||
+    !!filterRange.value,
+)
+
+/** 搜索框回车生效 */
+function applyFilters() {
+  appliedKeyword.value = filterKeyword.value
+  void loadTasks(1)
+}
+
+/** 下拉变更立即生效（v-model 先写入，再下一拍取数） */
+function onFilterChange() {
+  void nextTick(() => loadTasks(1))
+}
+
+/** 空态「清空筛选」 */
+function clearFilters() {
+  filterKeyword.value = ''
+  appliedKeyword.value = ''
+  filterClusterId.value = ''
+  filterStatus.value = ''
+  filterType.value = ''
+  filterRange.value = ''
+  void loadTasks(1)
+}
+
+/** 批量工具条「取消选择」 */
+function clearSelection() {
+  selectedRowKeys.value = []
+}
 
 async function loadTasks(targetPage = 1) {
   loading.value = true
   page.value = targetPage
   try {
-    const res = await listNodeTasks({
-      status: filterStatus.value || undefined,
-      task_type: filterType.value || undefined,
-      page: page.value,
-      page_size: pageSize.value,
-    })
+    const res = await listNodeTasks(listParams())
     tasks.value = res.items
     total.value = res.total
     const currentIds = new Set(tasks.value.map((t) => t.id))
@@ -1725,6 +1782,17 @@ function onSelectionChange(keys: number[]) {
   selectedRowKeys.value = keys.map(Number)
 }
 
+/**
+ * 行勾选框：执行中/待执行的任务不允许勾选（后端也会 skip，界面先拦一层）。
+ */
+const rowSelection = computed(() => ({
+  selectedRowKeys: selectedRowKeys.value,
+  onChange: onSelectionChange,
+  getCheckboxProps: (record: NodeTaskData) => ({
+    disabled: ['running', 'pending'].includes(record.status),
+  }),
+}))
+
 function syncListPolling() {
   const hasActive = tasks.value.some((t) => t.status === 'pending' || t.status === 'running')
   if (hasActive && !listPollTimer) {
@@ -1738,14 +1806,9 @@ function syncListPolling() {
 }
 
 async function listPollRefresh() {
-  if (loading.value || detailVisible.value) return
+  if (loading.value) return
   try {
-    const res = await listNodeTasks({
-      status: filterStatus.value || undefined,
-      task_type: filterType.value || undefined,
-      page: page.value,
-      page_size: pageSize.value,
-    })
+    const res = await listNodeTasks(listParams())
     tasks.value = res.items
     total.value = res.total
     const stillActive = tasks.value.some((t) => t.status === 'pending' || t.status === 'running')
@@ -1765,150 +1828,93 @@ function onTableChange(pagination: { current?: number; pageSize?: number }) {
   if (pagination.current) loadTasks(pagination.current)
 }
 
-async function openDetail(record: NodeTaskData) {
-  detailVisible.value = true
-  expandedIp.value = null
-  stopStream()
-  liveLogs.value = {}
-  liveDetail.value = {}
-  detail.value = await getNodeTask(record.id)
-  if (detail.value && (detail.value.status === 'pending' || detail.value.status === 'running')) {
-    startStream(detail.value.id)
+/**
+ * 详情改为独立路由页（D8）：带上当前筛选与分页，详情页「返回列表」据此恢复现场。
+ */
+function openDetail(record: NodeTaskData) {
+  void router.push({ name: 'NodeTaskDetail', params: { id: record.id }, query: currentListQuery() })
+}
+
+/**
+ * 整行可点进详情（7.2）：行内按钮/勾选框/下拉的点击不劫持，
+ * 否则「批量删除」「⋯ 菜单」会连带跳页。
+ */
+function rowProps(record: NodeTaskData) {
+  return {
+    style: { cursor: 'pointer' },
+    onClick: (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null
+      if (target?.closest('button, a, input, .ant-dropdown, .ant-checkbox-wrapper')) return
+      openDetail(record)
+    },
   }
 }
 
-function stopStream() {
-  if (streamAbort) {
-    streamAbort.abort()
-    streamAbort = null
-  }
-  if (pollTimer) {
-    clearInterval(pollTimer)
-    pollTimer = null
-  }
-  streamTaskId = 0
+/** 列表现场 → query（只写非默认值，URL 保持干净） */
+function currentListQuery(): Record<string, string> {
+  const query: Record<string, string> = {}
+  if (page.value > 1) query.page = String(page.value)
+  if (pageSize.value !== 20) query.size = String(pageSize.value)
+  if (appliedKeyword.value.trim()) query.q = appliedKeyword.value.trim()
+  if (filterClusterId.value !== '') query.cluster = String(filterClusterId.value)
+  if (filterStatus.value) query.status = filterStatus.value
+  if (filterType.value) query.type = filterType.value
+  if (filterRange.value) query.range = filterRange.value
+  return query
 }
 
-function applyStreamEvent(ev: TaskStreamEvent) {
-  if (!detail.value || ev.task_id !== detail.value.id) return
-  if (ev.type === 'log_line' && ev.node_id && ev.line) {
-    if (!liveLogs.value[ev.node_id]) liveLogs.value[ev.node_id] = []
-    liveLogs.value[ev.node_id] = [...liveLogs.value[ev.node_id], ev.line].slice(-2000)
-  } else if (ev.type === 'node_update' && ev.node_id) {
-    const item = detail.value.items?.find((i) => i.node_id === ev.node_id)
-    if (item) {
-      liveDetail.value = {
-        ...liveDetail.value,
-        [ev.node_id]: { ...item, status: ev.status || item.status, rc: ev.rc ?? item.rc },
-      }
-    }
-  } else if (ev.type === 'task_update') {
-    detail.value = {
-      ...detail.value,
-      status: ev.status || detail.value.status,
-      success_nodes: ev.success_nodes ?? detail.value.success_nodes,
-      failed_nodes: ev.failed_nodes ?? detail.value.failed_nodes,
-      cancelled_nodes: ev.cancelled_nodes ?? detail.value.cancelled_nodes,
-    }
-  }
-}
-
-function startStream(taskId: number) {
-  streamTaskId = taskId
-  streamAbort = new AbortController()
-  const token = localStorage.getItem('token')
-
-  // 原生 EventSource 无法携带 Authorization 头（任务流接口现已要求认证），
-  // 改用 fetch 流式读取（v3 8B-3：行解析收敛到 utils/sse.ts，onData 返回 false 提前终止）。
-  fetch(`/api/v1/node-tasks/${taskId}/stream`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    signal: streamAbort.signal,
-  })
-    .then(async (res) => {
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      let finishedByEvent = false
-      await consumeSSEDataLines(res, (raw) => {
-        const ev = parseTaskEvent(raw)
-        if (!ev) return
-        applyStreamEvent(ev)
-        if (ev.type === 'done') {
-          finishedByEvent = true
-          stopStream()
-          getNodeTask(taskId).then((fresh) => {
-            detail.value = fresh
-          })
-          return false
-        }
-      })
-      if (!finishedByEvent) stopStream() // 流自然读完（对应原 pump 的 reader done 分支）
-    })
-    .catch((err: unknown) => {
-      // 主动 abort（stopStream/卸载）不触发轮询回退
-      if (err instanceof DOMException && err.name === 'AbortError') return
-      // 流断开/出错时回退轮询（原 EventSource onerror 行为）
-      if (pollTimer) clearInterval(pollTimer)
-      pollTimer = setInterval(async () => {
-        if (!streamTaskId) return
-        const fresh = await getNodeTask(streamTaskId)
-        detail.value = fresh
-        if (!['pending', 'running'].includes(fresh.status)) {
-          stopStream()
-        }
-      }, 2000)
-    })
-}
-
-function streamItem(record: NodeTaskItemData): NodeTaskItemData {
-  if (streamTaskId && liveDetail.value[record.node_id]) {
-    return { ...record, ...liveDetail.value[record.node_id] }
-  }
-  return record
-}
-
-function streamLogLines(record: NodeTaskItemData): string[] {
-  if (liveLogs.value[record.node_id] && liveLogs.value[record.node_id].length > 0) {
-    return liveLogs.value[record.node_id]
-  }
-  return record.logs.map((l) => l.line)
-}
-
-async function loadFullLog(record: NodeTaskItemData) {
-  if (!detail.value) return
-  expandedIp.value = record.ip
-  try {
-    const content = await fetchTaskItemLog(detail.value.id, record.node_id)
-    if (content) {
-      const lines = content.split('\n')
-      liveLogs.value = { ...liveLogs.value, [record.node_id]: lines }
-    }
-  } catch {
-    message.warning('完整日志加载失败')
-  }
-}
-
-function isLiveTask(): boolean {
-  return !!detail.value && ['pending', 'running'].includes(detail.value.status)
+/** 从详情页返回时按 query 回填筛选条（保持与跳转前一致） */
+function restoreFiltersFromQuery() {
+  const q = route.query
+  const str = (v: unknown) => (typeof v === 'string' ? v : '')
+  const pageParam = Number(str(q.page))
+  page.value = pageParam > 0 ? pageParam : 1
+  const sizeParam = Number(str(q.size))
+  if (sizeParam > 0) pageSize.value = sizeParam
+  appliedKeyword.value = str(q.q)
+  filterKeyword.value = appliedKeyword.value
+  filterClusterId.value = str(q.cluster) ? Number(str(q.cluster)) : ''
+  filterStatus.value = str(q.status)
+  filterType.value = str(q.type)
+  filterRange.value = str(q.range)
 }
 
 onMounted(() => {
-  loadTasks(1)
+  restoreFiltersFromQuery()
+  loadTasks(page.value)
   void loadUploadedFiles()
+  void loadClusters()
 })
 onBeforeUnmount(() => {
-  stopStream()
   if (listPollTimer) {
     clearInterval(listPollTimer)
     listPollTimer = null
   }
 })
 
-async function handleCancel(record: NodeTaskData) {
-  await cancelNodeTask(record.id)
-  message.success('任务取消已发起')
-  if (detailVisible.value && detail.value?.id === record.id) {
-    detail.value = await getNodeTask(record.id)
-  }
-  loadTasks(page.value)
+/**
+ * 列表行「取消」先二次确认（与详情页 confirmCancel 同口径）。
+ * 原实现点一下就直接取消：对改动型任务（安装/升级/启停）风险高，
+ * 且取消**不可回滚已发生的改动**，必须让用户在选择前就看到这句。
+ */
+function handleCancel(record: NodeTaskData) {
+  showOverlayModal({
+    title: '确认取消任务',
+    content:
+      '取消会立即中断正在执行的节点进程，已成功的节点不受影响。\n' +
+      '已产生的改动不会回滚——安装/升级/启停等改动型任务，请确认后续是否需要手工处理。',
+    okText: '确认取消',
+    okDanger: true,
+    onOk: async () => {
+      try {
+        await cancelNodeTask(record.id)
+        message.success('任务取消已发起')
+        loadTasks(page.value)
+      } catch {
+        message.error('取消失败')
+      }
+    },
+  })
 }
 
 function showRetryConfirm(record: NodeTaskData, onOk: () => void) {
@@ -1969,12 +1975,6 @@ function handleRetry(record: NodeTaskData) {
   showRetryConfirm(record, async () => {
     await retryNodeTask(record.id)
     message.success('任务重试已发起')
-    if (detailVisible.value && detail.value?.id === record.id) {
-      detail.value = await getNodeTask(record.id)
-      if (['pending', 'running'].includes(detail.value.status)) {
-        startStream(detail.value.id)
-      }
-    }
     loadTasks(page.value)
   })
 }
@@ -2029,9 +2029,6 @@ async function handleDelete(record: NodeTaskData) {
       try {
         await deleteNodeTask(record.id)
         message.success('任务已删除')
-        if (detailVisible.value && detail.value?.id === record.id) {
-          closeDetail()
-        }
         loadTasks(page.value)
       } catch (e: any) {
         message.error(e?.response?.data?.detail || '删除任务失败')
@@ -2055,9 +2052,6 @@ async function handleBatchDelete() {
           message.success(`已删除 ${deleted} 个任务${skipped > 0 ? `，${skipped} 个跳过（执行中/不存在）` : ''}`)
         else if (skipped > 0) message.warning('所选任务均执行中或不存在，未删除')
         selectedRowKeys.value = []
-        if (detailVisible.value && detail.value && ids.includes(detail.value.id)) {
-          closeDetail()
-        }
         loadTasks(page.value)
       } catch (e: any) {
         message.error(e?.response?.data?.detail || '批量删除失败')
@@ -2066,26 +2060,15 @@ async function handleBatchDelete() {
   )
 }
 
-function closeDetail() {
-  stopStream()
-  detailVisible.value = false
-  detail.value = null
-  liveLogs.value = {}
-  liveDetail.value = {}
-}
-
 async function openCreateModal() {
   createVisible.value = true
+  createTouched.value = {}
+  createSubmitAttempted.value = false
+  nodeSearch.value = ''
   createClusterId.value = 0
   createNodeIds.value = []
   createTaskType.value = ''
-  createOpenrestyFile.value = ''
-  openrestyFiles.value = []
-  edgePackFiles.value = []
-  selectedPackFile.value = ''
-  edgePackVersions.value = []
-  edgePackRoute.value = {}
-  selectedPackVersion.value = ''
+  resetTypeDependentOptions()
   createNodes.value = []
   resetCmdExecForm()
   distributeFile.value = null
@@ -2094,55 +2077,93 @@ async function openCreateModal() {
   distributeUploadError.value = null
   distributeDestpath.value = ''
   distributeTimeout.value = 600
-  if (clusters.value.length === 0) {
+  if (clusters.value.length === 0) await loadClusters()
+}
+
+/** 集群下拉（筛选条与创建表单共用）：失败不影响列表，仅少一个筛选维度 */
+async function loadClusters(): Promise<void> {
+  try {
     const res = await api.get('/clusters', { params: { page_size: 100 } })
     clusters.value = res.data.items || res.data || []
+  } catch {
+    clusters.value = []
   }
 }
 
-async function loadEdgePackFiles() {
-  if (!createClusterId.value) return
-  const res = await api.get(`/clusters/${createClusterId.value}/nodes/edge-pack-files`)
+async function loadEdgePackFiles(clusterId: number) {
+  if (!clusterId) return
+  const res = await api.get(`/clusters/${clusterId}/nodes/edge-pack-files`)
   edgePackFiles.value = res.data?.files || []
 }
 
-async function loadEdgePackVersions() {
+async function loadEdgePackVersions(clusterId: number) {
   // 取第一个"被勾选"的节点。此前误用 createNodes.value[0]（集群节点表首节点，
   // 恰好是网关机），导致无论用户勾选哪个节点，版本列表永远查的是网关机——
   // 它没传过升级包，下拉里自然只有它自己的当前版本。
   const firstNode = createNodes.value.find((n) => createNodeIds.value.includes(n.id))
-  if (!createClusterId.value || !firstNode) return
-  const res = await api.get(`/clusters/${createClusterId.value}/nodes/${firstNode.id}/edge-pack-list`)
+  if (!clusterId || !firstNode) return
+  const res = await api.get(`/clusters/${clusterId}/nodes/${firstNode.id}/edge-pack-list`)
   edgePackVersions.value = res.data?.versions || []
   edgePackRoute.value = { route: res.data.route, relay_via: res.data.relay_via }
 }
 
-async function onTaskTypeChange() {
+/** 清空全部「随任务类型变化」的依赖选项及其选中值 */
+function resetTypeDependentOptions() {
   createOpenrestyFile.value = ''
   openrestyFiles.value = []
   selectedPackFile.value = ''
+  edgePackFiles.value = []
+  edgePackVersions.value = []
+  edgePackRoute.value = {}
   selectedPackVersion.value = ''
-  if (createTaskType.value === 'install_openresty' && createClusterId.value) {
-    const res = await api.get(`/clusters/${createClusterId.value}/nodes/openresty-files`)
+}
+
+/**
+ * 按「集群 + 任务类型」加载该类型所需的依赖选项（安装包 / Edge 版本包 / 目标版本）。
+ * 切换任务类型与切换集群共用本实现，禁止两处各写一套请求。
+ * 不需要依赖选项的类型（启动/停止/命令执行等）只清空，不发起任何请求。
+ */
+async function loadTypeDependentOptions(clusterId: number, taskType: string) {
+  resetTypeDependentOptions()
+  if (!clusterId) return
+  if (taskType === 'install_openresty') {
+    const res = await api.get(`/clusters/${clusterId}/nodes/openresty-files`)
     openrestyFiles.value = res.data?.files || res.data || []
+    return
   }
-  if (createTaskType.value === 'edge_pack_add' && createClusterId.value) {
-    loadEdgePackFiles()
+  if (taskType === 'edge_pack_add') {
+    await loadEdgePackFiles(clusterId)
+    return
   }
-  if (createTaskType.value === 'edge_pack_rebase' && createNodeIds.value.length > 0) {
-    loadEdgePackVersions()
+  if (taskType === 'edge_pack_rebase') {
+    await loadEdgePackVersions(clusterId)
   }
+}
+
+function onTaskTypeChange() {
+  loadTypeDependentOptions(createClusterId.value, createTaskType.value)
 }
 
 watch(createTaskType, () => onTaskTypeChange())
 watch(createClusterId, () => {
-  createOpenrestyFile.value = ''
-  openrestyFiles.value = []
-  selectedPackFile.value = ''
-  edgePackVersions.value = []
-  edgePackRoute.value = {}
-  selectedPackVersion.value = ''
+  // 切换集群后按当前任务类型重新加载：此前只清空不重载，下拉会恒为空
+  loadTypeDependentOptions(createClusterId.value, createTaskType.value)
 })
+
+/** 无专属字段的任务类型：帮助文案挂在「任务类型」下方 */
+const isSimpleTaskType = computed(() =>
+  ['install_edge', 'associate_new_openresty', 'start', 'stop', 'reload', 'statistic'].includes(createTaskType.value),
+)
+
+function onCreateClusterChange() {
+  touchCreateField('cluster')
+  nodeSearch.value = ''
+  void loadCreateNodes()
+}
+
+function onCreateTaskTypeChange() {
+  touchCreateField('taskType')
+}
 
 async function loadCreateNodes() {
   createNodeIds.value = []
@@ -2154,11 +2175,24 @@ async function loadCreateNodes() {
 
 watch(createNodeIds, () => {
   if (createTaskType.value === 'edge_pack_rebase' && createNodeIds.value.length > 0) {
-    loadEdgePackVersions()
+    loadEdgePackVersions(createClusterId.value)
   }
 })
 
+/** 提交时把第一个错误字段滚到可见处（8.1：错误不藏在视口外） */
+function scrollToFirstCreateError() {
+  void nextTick(() => {
+    const el = document.querySelector('.modal-overlay[style*="flex"] .is-error') as HTMLElement | null
+    el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  })
+}
+
 async function submitCreateTask() {
+  createSubmitAttempted.value = true
+  if (!canCreate.value) {
+    scrollToFirstCreateError()
+    return
+  }
   if (!createClusterId.value || createNodeIds.value.length === 0 || !createTaskType.value) {
     message.warning('请选择集群、节点和操作类型')
     return
@@ -2228,11 +2262,18 @@ async function submitCreateTask() {
       ? scriptUploadId.value
       : undefined
   try {
-    await createNodeTask(createClusterId.value, createTaskType.value, createNodeIds.value, params, archiveId)
+    const created = await createNodeTask(
+      createClusterId.value,
+      createTaskType.value,
+      createNodeIds.value,
+      params,
+      archiveId,
+    )
     message.success('任务已创建')
     createVisible.value = false
-    loadTasks(1)
     void loadUploadedFiles()
+    // 7.2：创建成功直接进入新任务详情页（替换「停在列表 + toast」）
+    void router.push({ name: 'NodeTaskDetail', params: { id: created.id } })
   } catch (e: any) {
     message.error(e?.response?.data?.detail || '创建任务失败')
   }
@@ -2240,70 +2281,521 @@ async function submitCreateTask() {
 </script>
 
 <style scoped>
+/* ── 筛选条：与表格同卡片，作为表格上方的工具栏条 ── */
 .node-filter-bar {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 20px;
+  padding: 12px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
   flex-wrap: nowrap;
 }
 
-.action-trigger-btn {
-  border: none !important;
-  background: transparent !important;
-  font-size: 16px !important;
-  color: var(--muted) !important;
+.nt-search {
+  width: 240px;
+  flex: 0 0 auto;
 }
 
-.status-tag {
+/* 筛选条行尾：低频文件维护入口（文字链层级，与行内「详情」同款）+ 分隔线 + 刷新 */
+.nt-bar-tail {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+.nt-file-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+/* 数量徽章恒定渲染（含 0），避免入口宽度随数量跳变 */
+.nt-file-count {
+  min-width: 18px;
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.nt-bar-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+}
+
+.nt-refresh {
+  flex: 0 0 auto;
+}
+
+/* ── 批量工具条：有勾选才出现，主色淡底与筛选条分层 ── */
+.nt-batch-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 16px;
+  background: var(--accent-bg);
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--fg);
+}
+
+.nt-batch-count strong {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.nt-batch-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── 序号列：等宽、弱色，翻页不跳字宽 ── */
+.nt-index {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.nt-task-type,
+.nt-cluster {
   display: inline-block;
-  padding: 2px 10px;
-  border-radius: 10px;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.nt-cluster {
+  color: var(--muted);
+}
+
+/*
+ * 结果列：状态 chip / 计数（第一行）+ 分段条（第二行）+ 失败归因（第三行）。
+ * 归因缺失时不渲染占位行，靠固定最小高度保证同页行高一致（避免翻页时表格总高漂移）。
+ */
+.result-cell {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  min-height: 58px;
+  /* 分段条铺满单元格时不要贴到「时间」列文字上 */
+  padding-right: 16px;
+}
+
+.result-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.result-counts {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.result-bar :deep(.tpb) {
+  min-width: 0;
+  width: 100%;
+}
+
+.result-cause {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── 时间列：结束时间 + 耗时并列，进行中换「已用时」 ── */
+.time-cell {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.time-main {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+}
+
+.time-duration {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.time-live {
+  font-size: 12px;
+  color: var(--accent);
+}
+
+/* ── 操作列：文字链 + ⋯，整列右对齐 ── */
+.action-cell {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+.link-action {
+  padding: 2px 6px;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--accent);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: color 0.15s;
+}
+
+.link-action:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+
+/* ── 空态（两态共用外壳，文案/主行动按有无筛选切换） ── */
+.nt-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 40px 16px 44px;
+}
+
+.nt-empty-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 4px;
+  border-radius: 50%;
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+.nt-empty-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.nt-empty-desc {
+  max-width: 420px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted);
+  text-align: center;
+}
+
+.nt-empty .btn {
+  margin-top: 10px;
+}
+
+.action-trigger-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    color 0.15s,
+    background-color 0.15s;
+}
+
+.action-trigger-btn:hover {
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+/* ── 创建任务表单（8.1 / 8.3）：字段节奏、必填星号、行内错误、帮助文案 ── */
+.ntc-field {
+  margin-bottom: 14px;
+}
+
+.ntc-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: var(--fg);
+}
+
+.ntc-label-inline {
+  margin-top: 12px;
+}
+
+.ntc-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.ntc-label-row .ntc-label {
+  margin-bottom: 0;
+}
+
+.ntc-req {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.ntc-count {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.ntc-error {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--danger);
+}
+
+.ntc-help {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.form-input.is-error {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px oklch(55% 0.18 28 / 12%);
+}
+
+/* 节点区：未选集群是虚线空态，不是伪输入框 */
+.ntc-node-empty {
+  padding: 20px 16px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.ntc-node-search {
+  margin-bottom: 8px;
+}
+
+.ntc-node-list {
+  max-height: 180px;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.ntc-node {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.ntc-node:hover {
+  background: var(--bg);
+}
+
+.ntc-node.is-offline {
+  cursor: not-allowed;
+  color: var(--muted);
+}
+
+.ntc-node-ip {
+  font-family: var(--font-mono);
   font-size: 12px;
 }
-.status-success {
-  background: oklch(70% 0.14 145 / 15%);
-  color: var(--success, #16a34a);
+
+.ntc-node-path {
+  font-size: 12px;
+  color: var(--muted);
 }
-.status-failed {
-  background: oklch(55% 0.18 28 / 12%);
-  color: var(--danger, #dc2626);
+
+.ntc-offline-tag {
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--muted);
 }
-.status-running {
-  background: oklch(56% 0.16 210 / 12%);
-  color: var(--accent, #2563eb);
+
+.ntc-node-none {
+  padding: 8px 6px;
+  font-size: 12px;
+  color: var(--muted);
 }
-.status-pending {
-  background: oklch(55% 0.05 260 / 10%);
-  color: var(--muted, #888);
+
+.ntc-node-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 8px;
+  font-size: 12px;
 }
-.status-partial {
-  background: oklch(75% 0.14 85 / 15%);
-  color: #b45309;
+
+.ntc-node-actions a {
+  color: var(--accent);
+  cursor: pointer;
 }
-.status-cancelled,
-.status-skipped {
-  background: oklch(55% 0.05 260 / 10%);
-  color: var(--muted, #888);
+
+.ntc-node-hint {
+  margin-left: auto;
+  color: var(--muted);
 }
-.progress-bar-wrap {
-  background: #f0f0f0;
-  border-radius: 4px;
-  height: 8px;
-  overflow: hidden;
+
+/* 分段选择：浅底 + 主色文字 + 细边（不抢主按钮） */
+.ntc-seg {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 12px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
 }
-.progress-bar {
-  height: 100%;
-  border-radius: 4px;
-  transition: width 0.3s;
+
+.ntc-seg-btn {
+  flex: 1;
+  padding: 5px 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    color 0.15s,
+    background-color 0.15s;
 }
-.progress-active {
-  background: var(--accent, #2563eb);
+
+.ntc-seg-btn.is-active {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 500;
 }
-.progress-success {
-  background: var(--success, #16a34a);
+
+.ntc-input-with-action {
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
-.progress-exception {
-  background: var(--danger, #dc2626);
+
+.ntc-input-with-action .form-input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 执行策略：组标签 + 说明 + 单选项一行 */
+.ntc-group {
+  margin-top: 12px;
+}
+
+.ntc-group-label {
+  font-size: 13px;
+  color: var(--fg);
+  margin-bottom: 4px;
+}
+
+.ntc-group-desc {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.ntc-radios {
+  display: flex;
+  gap: 16px;
+}
+
+.ntc-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.ntc-radio input {
+  accent-color: var(--accent);
+}
+
+/* 数值输入统一宽度 + 单位后缀 */
+.ntc-inline-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ntc-number {
+  width: 160px;
+}
+
+.ntc-unit {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* 底部：提示 + 按钮 */
+.ntc-footer {
+  align-items: center;
+  gap: 8px;
+}
+
+.ntc-footer-hint {
+  margin-right: auto;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.ntc-submit:disabled {
+  background: var(--bg);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  cursor: not-allowed;
+  opacity: 1;
 }
 </style>

@@ -108,12 +108,22 @@ export const featureRouteMap: Record<string, RouteRecordRaw | RouteRecordRaw[]> 
       meta: { permission: 'metrics' },
     },
   ],
-  task_center: {
-    path: 'node-tasks',
-    name: 'NodeTaskCenter',
-    component: () => import('@/views/NodeTaskCenter.vue'),
-    meta: { permission: 'task_center' },
-  },
+  // 列表 + 详情同属一个特性开关（AGENTS #61：详情页必须与列表同组，关闸后连直接链接也不可达）
+  task_center: [
+    {
+      path: 'node-tasks',
+      name: 'NodeTaskCenter',
+      component: () => import('@/views/NodeTaskCenter.vue'),
+      meta: { permission: 'task_center' },
+    },
+    {
+      path: 'node-tasks/:id',
+      name: 'NodeTaskDetail',
+      component: () => import('@/views/NodeTaskDetail.vue'),
+      // detailCrumb：面包屑追加「#id」层级（DefaultLayout 读取）
+      meta: { permission: 'task_center', detailCrumb: true },
+    },
+  ],
   database_management: {
     path: 'database-management',
     name: 'DatabaseManagement',

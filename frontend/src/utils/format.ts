@@ -129,6 +129,35 @@ export function formatPublishDateTime(isoStr: string | null): string {
   }
 }
 
+/**
+ * 紧凑耗时（表格/列表列用）：`45s` / `3m20s` / `1h05m`。
+ * 负值钳为 0；null/NaN 返回「—」（渲染侧据此显示占位，不留空）。
+ */
+export function formatDurationCompact(seconds: number | null | undefined): string {
+  if (seconds == null || !Number.isFinite(seconds)) return '—'
+  const total = Math.max(0, Math.round(seconds))
+  if (total < 60) return `${total}s`
+  const minutes = Math.floor(total / 60)
+  const restSec = total % 60
+  if (minutes < 60) return restSec === 0 ? `${minutes}m` : `${minutes}m${String(restSec).padStart(2, '0')}s`
+  const hours = Math.floor(minutes / 60)
+  const restMin = minutes % 60
+  return restMin === 0 ? `${hours}h` : `${hours}h${String(restMin).padStart(2, '0')}m`
+}
+
+/**
+ * 两个后端时间戳之间的秒数（任一端缺失返回 null）。
+ * 两端都走 parseBackendDate（naive UTC 按 UTC 解析，见 AGENTS #26），
+ * 禁止视图里直接 `new Date(a) - new Date(b)` 读后端时间。
+ */
+export function durationSeconds(from: string | null | undefined, to: string | null | undefined): number | null {
+  if (!from || !to) return null
+  const start = parseBackendDate(from).getTime()
+  const end = parseBackendDate(to).getTime()
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return null
+  return Math.max(0, Math.round((end - start) / 1000))
+}
+
 /** 人类可读文件大小（B / KB / MB / GB）。历史 useClusterStaticResources.formatFileSize 同语义。 */
 export function formatFileSize(bytes: number): string {
   if (bytes < 1024) return bytes + ' B'
