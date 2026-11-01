@@ -806,6 +806,11 @@ class NodeTaskService:
                 item.stderr = "缺少 srcpath 或 destpath 参数"
                 item.finished_at = datetime.utcnow()
             await db.commit()
+            for item in items:
+                self._broadcast(task.id, {
+                    "type": "node_update", "task_id": task.id,
+                    "node_id": item.node_id, "status": item.status, "rc": item.rc,
+                })
             return
 
         # Resolve the actual file path from srcpath (format: "temp/{upload_id}" → "task-scripts/{task_id}/{upload_id}")
@@ -819,6 +824,11 @@ class NodeTaskService:
                 item.stderr = f"文件不存在: {file_name}"
                 item.finished_at = datetime.utcnow()
             await db.commit()
+            for item in items:
+                self._broadcast(task.id, {
+                    "type": "node_update", "task_id": task.id,
+                    "node_id": item.node_id, "status": item.status, "rc": item.rc,
+                })
             return
 
         # Build comma-separated IPs. srcpath/destpath repeat per node: the edge
@@ -867,6 +877,19 @@ class NodeTaskService:
         except (TypeError, ValueError):
             timeout = 600
 
+        # 启动语义对齐单节点腿 _run_item：全部 items 置 running + started_at
+        # （每节点耗时锚点）落库后，再逐项广播 node_update，详情页行内状态
+        # 才会从快照播种的 pending 翻转为「执行中」。先 commit 再广播，顺序一致。
+        for item in items:
+            item.status = "running"
+            item.started_at = datetime.utcnow()
+        await db.commit()
+        for item in items:
+            self._broadcast(task.id, {
+                "type": "node_update", "task_id": task.id,
+                "node_id": item.node_id, "status": "running",
+            })
+
         result = await self._ansible.run_playbook(
             "", "edge_master_copy_to_slaves", ev,
             cancel_event=cancel_flag, on_progress=_on_log,
@@ -913,6 +936,13 @@ class NodeTaskService:
                     item.stderr = item.failure_reason
             item.finished_at = datetime.utcnow()
         await db.commit()
+        # 收尾语义对齐单节点腿：落库后逐项广播终态 node_update（含 rc），
+        # 详情页「执行中」行在完成瞬间翻转；cancelled 子项自然带上 cancelled。
+        for item in items:
+            self._broadcast(task.id, {
+                "type": "node_update", "task_id": task.id,
+                "node_id": item.node_id, "status": item.status, "rc": item.rc,
+            })
 
     async def _software_check_node(
         self, node, cmd_str: str, on_log, cancel_event: asyncio.Event | None = None

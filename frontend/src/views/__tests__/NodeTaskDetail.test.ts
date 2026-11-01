@@ -7,6 +7,22 @@ import { aTableStub } from '@/components/__tests__/helpers/aTableStub'
 vi.mock('@/api', () => ({ default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }))
 vi.mock('@/utils/download', () => ({ downloadBlob: vi.fn(), sanitizeFilename: (s: string) => s }))
 
+/**
+ * 捕获详情页创建的 stream 实例并把 resetItems 包成 spy（委托真实实现，行为不变），
+ * 供「done 后先清状态增量再重拉」接线用例断言（分发文件「待执行」钉死缺陷）。
+ */
+const streamResetItemsSpies: Array<ReturnType<typeof vi.fn>> = []
+vi.mock('@/composables/useNodeTaskStream', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('@/composables/useNodeTaskStream')>()
+  return {
+    useNodeTaskStream: (...args: Parameters<typeof mod.useNodeTaskStream>) => {
+      const api = mod.useNodeTaskStream(...args)
+      streamResetItemsSpies.push(vi.spyOn(api, 'resetItems'))
+      return api
+    },
+  }
+})
+
 const routerPush = vi.fn()
 const routeState: { params: Record<string, string>; query: Record<string, string>; name: string } = {
   params: { id: '12' },
@@ -408,6 +424,72 @@ describe('NodeTaskDetail 日志抽屉（7.3）', () => {
     const tabs = document.querySelector('.ner-tabs')
     expect(tabs).toBeTruthy()
     expect(document.body.textContent).toContain('stdout')
+    wrapper.unmount()
+  })
+})
+
+describe('NodeTaskDetail 流终态恢复（分发文件「待执行」钉死缺陷）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getRegistry.clear()
+    document.body.innerHTML = ''
+    streamResetItemsSpies.length = 0
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('done 后：先清空状态增量再重拉，行状态显示终态而非过期「待执行」', async () => {
+    // 受控 SSE 流：fetch 返回 ReadableStream，测试按需推帧
+    let sse: ReadableStreamDefaultController<Uint8Array> | null = null
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => {
+        const body = new ReadableStream<Uint8Array>({
+          start(c) {
+            sse = c
+          },
+        })
+        return Promise.resolve({ ok: true, body })
+      }),
+    )
+    const push = (payload: Record<string, unknown>) => {
+      sse!.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(payload)}\n\n`))
+    }
+
+    const running = makeTask({
+      status: 'running',
+      finished_at: null,
+      failure_summary: null,
+      items: [
+        makeItem({ status: 'running', rc: null }),
+        makeItem({ id: 2, node_id: 11, ip: '10.0.0.11', status: 'running', rc: null, finished_at: null }),
+      ],
+    })
+    routeState.params = { id: '12' }
+    getOk('/node-tasks/12', { data: running })
+    const NodeTaskDetail = (await import('../NodeTaskDetail.vue')).default
+    const wrapper = mount(NodeTaskDetail, { global: { stubs: globalStubs } })
+    await flushPromises()
+
+    // SSE 连接建立：后端回放过期快照 node_update{pending, rc:null}，之后不再发增量
+    expect(vi.mocked(fetch).mock.calls.some(([u]) => String(u).includes('/node-tasks/12/stream'))).toBe(true)
+    push({ type: 'node_update', task_id: 12, node_id: 11, status: 'pending', rc: null })
+    await flushPromises()
+
+    // 任务完成：把重拉将取到的终态数据就位，随后流发 done
+    getRegistry.set('/node-tasks/12', { data: makeTask() })
+    push({ type: 'done', task_id: 12 })
+    await flushPromises()
+
+    // onFinished 先 resetItems（清空过期增量）再重拉
+    expect(streamResetItemsSpies[0]).toBeTruthy()
+    expect(streamResetItemsSpies[0]).toHaveBeenCalled()
+
+    // 行 11（失败节点）显示终态，而非被过期 pending 钉死成「待执行」
+    const rows = wrapper.findAll('.ntd-node-table .ant-table-row')
+    expect(rows[1].find('.status-tag.status-failed').exists()).toBe(true)
+    expect(rows[1].text()).not.toContain('待执行')
     wrapper.unmount()
   })
 })

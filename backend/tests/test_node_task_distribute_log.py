@@ -179,6 +179,119 @@ class TestBatchLogRouting:
         assert by_line["TASK [copy file] ***"] == {10, 20}
 
 
+class TestBatchNodeUpdateBroadcast:
+    """批量执行腿的 node_update 广播（对齐单节点腿 _run_item 语义）。
+
+    此前批量腿整个执行期只广播 log_line：不置 started_at、不发 node_update，
+    详情页「执行中节点行不更新、完成瞬间不翻转、每节点耗时恒 —」。
+    """
+
+    @staticmethod
+    def _node_updates(events):
+        return [ev for ev in events if ev.get("type") == "node_update"]
+
+    @pytest.mark.asyncio
+    async def test_running_then_terminal_node_update_per_node(self, test_db, batch_env, tmp_path):
+        """每个 item 先收 running、后收终态（status+rc）两类 node_update 广播。"""
+        lines = [
+            "PLAY [edge] ***",
+            "[10.0.0.10] 文件已复制",
+            "[10.0.0.20] 文件已复制",
+        ]
+        items_spec = [(10, "10.0.0.10"), (20, "10.0.0.20")]
+        task, items = await _seed_task(test_db, items_spec, _params())
+        _seed_src_file(tmp_path, task)
+        svc, _ = batch_env(items_spec, lines)
+        events = []
+        svc._broadcast = lambda tid, ev: events.append(ev)
+
+        await svc._execute_distribute_batch(test_db, task, items, _params(), None)
+
+        updates = self._node_updates(events)
+        by_node = {}
+        for ev in updates:
+            by_node.setdefault(ev["node_id"], []).append(ev)
+        for node_id in (10, 20):
+            seq = by_node.get(node_id, [])
+            assert seq, f"节点 {node_id} 必须收到 node_update 广播"
+            assert seq[0].get("status") == "running", "首个 node_update 必须是 running（行内状态进入执行中）"
+            final = seq[-1]
+            assert final.get("status") == "success", "末个 node_update 必须是终态"
+            assert "rc" in final, "终态 node_update 必须带 rc"
+
+        # running 广播必须发生在任何日志行之前（即 run_playbook 调用之前）
+        first_running = next(i for i, ev in enumerate(events) if ev.get("type") == "node_update")
+        first_log = next((i for i, ev in enumerate(events) if ev.get("type") == "log_line"), len(events))
+        assert first_running < first_log, "running 广播必须先于 run_playbook 的日志输出"
+
+    @pytest.mark.asyncio
+    async def test_started_at_anchored_before_finish(self, test_db, batch_env, tmp_path):
+        """执行后 item.started_at 非空且早于 finished_at（每节点耗时锚点）。"""
+        from sqlalchemy import select
+
+        items_spec = [(10, "10.0.0.10"), (20, "10.0.0.20")]
+        task, items = await _seed_task(test_db, items_spec, _params())
+        _seed_src_file(tmp_path, task)
+        svc, _ = batch_env(items_spec, ["[10.0.0.10] ok", "[10.0.0.20] ok"])
+        svc._broadcast = lambda tid, ev: None
+
+        await svc._execute_distribute_batch(test_db, task, items, _params(), None)
+
+        rows = (
+            await test_db.execute(
+                select(NodeTaskItem)
+                .where(NodeTaskItem.task_id == task.id)
+                .order_by(NodeTaskItem.node_id)
+            )
+        ).scalars().all()
+        assert len(rows) == 2
+        for it in rows:
+            assert it.started_at is not None, "started_at 必须在执行前写入（此前恒 NULL，耗时恒 —）"
+            assert it.finished_at is not None
+            assert it.started_at < it.finished_at, "started_at 必须早于 finished_at"
+
+    @pytest.mark.asyncio
+    async def test_early_return_missing_params_broadcasts_terminal_node_update(self, test_db, batch_env):
+        """early-return（缺 srcpath）也必须补发终态 node_update（先落库再广播）。"""
+        from unittest.mock import AsyncMock
+
+        items_spec = [(10, "10.0.0.10"), (20, "10.0.0.20")]
+        bad_params = {"srcpath": "", "destpath": "/tmp/"}
+        task, items = await _seed_task(test_db, items_spec, bad_params)
+        svc, mock_ansible = batch_env(items_spec, [])
+        events = []
+        svc._broadcast = lambda tid, ev: events.append(ev)
+
+        await svc._execute_distribute_batch(test_db, task, items, bad_params, None)
+
+        mock_ansible.run_playbook.assert_not_called()
+        updates = self._node_updates(events)
+        assert {ev["node_id"] for ev in updates} == {10, 20}, "每个 item 都要收到终态 node_update"
+        for ev in updates:
+            assert ev["status"] == "failed"
+            assert ev["rc"] == -1
+
+    @pytest.mark.asyncio
+    async def test_early_return_missing_file_broadcasts_terminal_node_update(self, test_db, batch_env):
+        """early-return（源文件不存在）同样补发终态 node_update。"""
+        from unittest.mock import AsyncMock
+
+        items_spec = [(10, "10.0.0.10")]
+        task, items = await _seed_task(test_db, items_spec, _params())
+        # 不 seed 源文件 → actual_src.exists() 为 False
+        svc, mock_ansible = batch_env(items_spec, [])
+        events = []
+        svc._broadcast = lambda tid, ev: events.append(ev)
+
+        await svc._execute_distribute_batch(test_db, task, items, _params(), None)
+
+        mock_ansible.run_playbook.assert_not_called()
+        updates = self._node_updates(events)
+        assert [ev["node_id"] for ev in updates] == [10]
+        assert updates[0]["status"] == "failed"
+        assert updates[0]["rc"] == -1
+
+
 class TestRouteDistributeLine:
     """纯函数级边界：前缀判定与 _parse_distribute_results 完全同口径。"""
 

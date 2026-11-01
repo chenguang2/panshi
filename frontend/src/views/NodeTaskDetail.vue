@@ -277,6 +277,10 @@ const stream = useNodeTaskStream({
     }
   },
   onFinished: () => {
+    // done = 流结束，增量已无意义：先清掉过期 overlay（如连接建立时回放的
+    // node_update{pending, rc:null}，分发批量腿之后不再有增量覆盖它）再重拉，
+    // 否则旧增量会盖住重拉回的终态记录——行状态钉死「待执行」、rc 钉死空。
+    stream.resetItems()
     void loadTask()
   },
   onPoll: (fresh) => {

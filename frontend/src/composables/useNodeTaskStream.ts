@@ -46,6 +46,11 @@ export function useNodeTaskStream(options: NodeTaskStreamOptions = {}) {
     liveItems.value = {}
   }
 
+  /** 只清空节点状态增量（不动 liveLogs：清日志会让日志区闪烁回退到快照） */
+  function resetItems() {
+    liveItems.value = {}
+  }
+
   function stop() {
     if (abort) {
       abort.abort()
@@ -128,10 +133,22 @@ export function useNodeTaskStream(options: NodeTaskStreamOptions = {}) {
       })
   }
 
+  /** 子项终态集合：到达后不再变化（pending/running 为进行态，空串视为未知非终态） */
+  const TERMINAL_ITEM_STATUSES = new Set(['success', 'failed', 'skipped', 'cancelled', 'partial'])
+
   /** 子项实时状态覆盖（无增量时原样返回） */
   function itemOf(record: NodeTaskItemData): NodeTaskItemData {
     const live = liveItems.value[record.node_id]
-    return live ? { ...record, ...live } : record
+    if (!live) return record
+    // 终态守卫：record 已是终态而 overlay 仍是非终态（pending/running/空）时，
+    // 这份 overlay 必是过期快照（典型：SSE 连接建立时回放的 node_update{pending, rc:null}，
+    // 之后批量腿不再发增量）——整条忽略，以重拉的终态记录为准，否则 status/rc 被
+    // 旧增量永久盖住（分发文件任务「待执行」钉死缺陷，实机复现）。
+    // 反向不拦：overlay 终态 + record 旧 pending 时仍以 overlay 为准（新增量盖旧记录）。
+    if (TERMINAL_ITEM_STATUSES.has(record.status) && !TERMINAL_ITEM_STATUSES.has(live.status || '')) {
+      return record
+    }
+    return { ...record, ...live }
   }
 
   /** 子项实时日志（无实时行时回退到任务下发时的 logs 快照） */
@@ -143,5 +160,5 @@ export function useNodeTaskStream(options: NodeTaskStreamOptions = {}) {
 
   onBeforeUnmount(stop)
 
-  return { liveLogs, liveItems, streaming, start: startStream, stop, reset, itemOf, linesOf }
+  return { liveLogs, liveItems, streaming, start: startStream, stop, reset, resetItems, itemOf, linesOf }
 }

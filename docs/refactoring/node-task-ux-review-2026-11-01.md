@@ -389,3 +389,15 @@ spec「进程重启后任务状态处理」要求标记为 failed **且带「进
 | 详情页展示审计历史 | 后端：`create_node_task` 经 `enrich_audit` 补 create 审计 `resource_id`（此前经词汇推断走 "(batch)" 恒 NULL）+ 新端点 `GET /node-tasks/{task_id}/audit`（升序、naive UTC isoformat、安全守卫补采样）；前端：详情页「操作记录」区块（操作中文标签、东八区时间、空态兜底）。实机取证：任务 #19 create 行 `resource_id=19`、详情页区块渲染正确 |
 
 验证基线：后端全量 pytest 2771 passed / 0 failed；前端全量 vitest 2394 passed（--maxWorkers=4）；`vue-tsc -b` 零错误。
+
+### 11.7 追加修复：分发文件任务完成时节点结果不更新（2026-11-01，用户实测反馈）
+
+症状：分发任务执行中节点行钉死「待执行」；完成瞬间头部/上下文行更新了、行状态仍「待执行」、每节点耗时恒「—」。
+
+根因（双层叠加，实机任务 #25 时序采样取证）：
+1. 后端 `_execute_distribute_batch` 整个执行期只广播 `log_line`，不发 `node_update`、不写 `started_at`（单节点腿 `_run_item` 两样都有）。
+2. 前端 `useNodeTaskStream.itemOf` 的 overlay 毒化：SSE 连接快照回放 `node_update{pending, rc:null}` 播种 `liveItems`，分发腿之后无增量覆盖 → `{...record, ...live}` 把过期 pending 永久盖在重拉数据上（完成时 `done→loadTask` 实际生效——行内失败原因就是新拉的，恰证状态/rc 被 overlay 键盖住）。
+
+修复（两层）：后端批量腿对齐单节点腿语义（启动置 running+started_at 并广播；两条 early-return 与收尾 commit 后逐项广播终态 node_update）；前端 `resetItems()`（done 后先清 liveItems 再重拉）+ `itemOf` 终态守卫（record 终态而 overlay 非终态 → 忽略 overlay，反向不拦）。
+
+实机对照（任务 #26）：执行中行显示「执行中」；完成瞬间行即时翻转终态+耗时 19s（修前「待执行」/「—」）。测试：`test_node_task_distribute_log.py` +4（13 passed）、`useNodeTaskStream.test.ts` 新建 5 用例、NodeTaskDetail 接线用例；全量后端 2775 / 前端 2400 全绿。
