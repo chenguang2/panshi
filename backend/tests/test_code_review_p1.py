@@ -175,7 +175,7 @@ class TestM21SshpassScoping:
 
         calls: list = []
 
-        async def fake_run(cmd, env_extra=None):
+        async def fake_run(cmd, env_extra=None, cancel_event=None):
             calls.append(env_extra)
             if len(calls) == 1:
                 return 255, "", "Permission denied (publickey)."
@@ -196,7 +196,7 @@ class TestM21SshpassScoping:
 
         calls: list = []
 
-        async def fake_stream(cmd, on_line=None, env_extra=None):
+        async def fake_stream(cmd, on_line=None, env_extra=None, cancel_event=None):
             calls.append(env_extra)
             if len(calls) == 1:
                 return 255, "", "Permission denied (publickey)."

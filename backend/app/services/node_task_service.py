@@ -23,15 +23,23 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.node_task import NodeTask, NodeTaskItem
 from app.services import task_log_store
-from app.services.ansible_service import _ansible_false_success_error  # noqa: F401 — P2① 守卫已下沉至 run_playbook 出口，此名保留供本模块与既有测试引用
+from app.services.ansible_service import (  # noqa: F401 — P2① 守卫已下沉至 run_playbook 出口，旧名保留供本模块与既有测试引用
+    _ansible_false_success_error,
+    classify_ansible_failure,
+)
 from app.config.script_upload import TASK_SCRIPTS_DIR
 
 logger = logging.getLogger(__name__)
+
+# 终态判定（D6）：只有终态任务可重试。与删除端点共用同一集合语义。
+TERMINAL_STATUSES = {"success", "failed", "partial", "cancelled"}
+RETRY_NOT_TERMINAL_MESSAGE = "任务仍在执行中，请先取消或等待结束"
+RETRY_INVALID_NODES_MESSAGE = "指定的节点不属于该任务"
 
 NodeExecutor = Callable[[int, NodeTaskItem, dict, asyncio.Event | None, Callable[[dict], None]], Awaitable[dict]]
 
@@ -122,6 +130,7 @@ class NodeTaskService:
         db.add(task)
         await db.flush()
 
+        created_items: list[NodeTaskItem] = []
         for node_id in node_ids:
             ip, node_name = (node_snapshots or {}).get(node_id, (str(node_id), None))
             item = NodeTaskItem(
@@ -133,6 +142,10 @@ class NodeTaskService:
             )
             item.set_logs([])
             db.add(item)
+            created_items.append(item)
+        await db.flush()
+        # 创建即一致（D2）：total_nodes 取子项数，禁止与子项漂移
+        self._recompute_stats(task, created_items)
         await db.commit()
 
         self._cancel_flags[task.id] = asyncio.Event()
@@ -146,11 +159,61 @@ class NodeTaskService:
             return
         await asyncio.wait_for(asyncio.shield(task), timeout=timeout)
 
-    async def cancel_task(self, task_id: int) -> None:
-        """Set the cancel flag; idempotent. Running items observe the event."""
+    async def cancel_task(self, task_id: int, db: Any = None) -> None:
+        """置取消标志并持久化「取消已请求」（幂等：重复取消不覆盖首次时间）。
+
+        持久化的意义：内存 Event 在刷新页面/重启后端后消失，「取消中」状态
+        必须能从库里读回（D3）。
+
+        终态任务（success/failed/partial/cancelled）取消是**幂等无副作用**的：
+        不写 ``cancel_requested_at``（否则列表会给已结束任务挂「取消中」），
+        也不置取消标志、不广播。
+
+        ``db``: 请求作用域会话（端点注入）。审计骨架已在该会话 flush 并持
+        SQLite 写锁，自建第二会话会自锁超时（"database is locked"，AGENTS #29）。
+        """
+        if not await self._is_active_task(task_id, db):
+            return
         flag = self._cancel_flags.get(task_id)
         if flag is not None:
             flag.set()
+        requested_at = await self._mark_cancel_requested(task_id, db)
+        self._broadcast(task_id, {
+            "type": "task_update", "task_id": task_id,
+            "cancel_requested": True,
+            "cancel_requested_at": requested_at.isoformat() if requested_at else None,
+        })
+
+    async def _is_active_task(self, task_id: int, db: Any = None) -> bool:
+        """任务存在且未终态 → 才需要取消（终态/不存在一律幂等放过）。"""
+        session_factory = self._db_factory or self._default_session_factory
+        if db is not None:
+            return await self._is_active_task_on(task_id, db)
+        async with session_factory() as owned_db:
+            return await self._is_active_task_on(task_id, owned_db)
+
+    @staticmethod
+    async def _is_active_task_on(task_id: int, db: Any) -> bool:
+        task = await db.get(NodeTask, task_id)
+        return task is not None and task.status not in TERMINAL_STATUSES
+
+    async def _mark_cancel_requested(self, task_id: int, db: Any = None) -> datetime | None:
+        """写 ``cancel_requested_at``（已有值不改），返回库中当前值。"""
+        session_factory = self._db_factory or self._default_session_factory
+        if db is not None:
+            return await self._mark_cancel_requested_on(task_id, db)
+        async with session_factory() as owned_db:
+            return await self._mark_cancel_requested_on(task_id, owned_db)
+
+    @staticmethod
+    async def _mark_cancel_requested_on(task_id: int, db: Any) -> datetime | None:
+        task = await db.get(NodeTask, task_id)
+        if task is None:
+            return None
+        if task.cancel_requested_at is None:
+            task.cancel_requested_at = datetime.utcnow()
+            await db.commit()
+        return task.cancel_requested_at
 
     async def retry_task(self, task_id: int, node_ids: list[int] | None = None, db: Any = None) -> None:
         """Reset failed/cancelled items to pending and re-execute them.
@@ -158,15 +221,53 @@ class NodeTaskService:
         ``db``: 请求作用域会话（端点注入）。必须贯穿使用——audit 骨架已在该
         会话上 flush 并持有 SQLite 写锁，reset 若走第二个会话会被阻塞至
         busy_timeout 超时（"database is locked" → 500）。
+
+        前置校验（D6，与端点层有意冗余）：任务必须处于终态，``node_ids``
+        必须全部是该任务的实际子项——否则运行中任务会被再起一个执行体覆盖
+        ``self._running``，而无效 node_ids 会静默无操作。
         """
-        if node_ids is None:
-            await self._reset_failed_items(task_id, None, db=db)
-        else:
-            await self._reset_failed_items(task_id, node_ids, db=db)
-        flag = self._cancel_flags.get(task_id)
-        if flag is not None:
-            flag.clear()
+        await self._assert_retryable(task_id, node_ids, db)
+        await self._reset_failed_items(task_id, node_ids, db=db)
+        # 取消态必须整体换新：只 clear() 旧 Event 不够——若 _cancel_flags 里
+        # 是上次取消留下的**已置位**对象（或该键根本不存在），新一次执行会在
+        # 起跑瞬间被判「已取消」。故替换为新 Event（_execute 在其开头读取）。
+        self._cancel_flags[task_id] = asyncio.Event()
+        # 前端据 cancel_requested 显示「取消中」；重试后必须广播清除，
+        # 否则界面一直挂着上一次的取消标记（库侧已在 reset 里清空）。
+        self._broadcast(task_id, {
+            "type": "task_update", "task_id": task_id, "cancel_requested": False,
+        })
         self._running[task_id] = asyncio.create_task(self._execute(task_id))
+
+    async def _assert_retryable(self, task_id: int, node_ids: list[int] | None, db: Any = None) -> None:
+        """重试前置校验（service 层）：非终态 → ValueError，无效节点 → ValueError。"""
+        session_factory = self._db_factory or self._default_session_factory
+        if db is None:
+            async with session_factory() as owned_db:
+                await self._assert_retryable_on(task_id, node_ids, owned_db)
+            return
+        await self._assert_retryable_on(task_id, node_ids, db)
+
+    @staticmethod
+    async def _assert_retryable_on(task_id: int, node_ids: list[int] | None, db: Any) -> None:
+        task = await db.get(NodeTask, task_id)
+        if task is None:
+            raise ValueError("任务不存在")
+        if task.status not in TERMINAL_STATUSES:
+            raise ValueError(RETRY_NOT_TERMINAL_MESSAGE)
+        if node_ids is None:
+            return
+        existing = set(
+            (
+                await db.execute(
+                    select(NodeTaskItem.node_id).where(NodeTaskItem.task_id == task_id)
+                )
+            ).scalars().all()
+        )
+        invalid = [nid for nid in node_ids if nid not in existing]
+        if invalid:
+            ids = "、".join(str(i) for i in invalid)
+            raise ValueError(f"{RETRY_INVALID_NODES_MESSAGE}：{ids}")
 
     def shutdown_sync(self) -> None:
         """Cancel running tasks (called by tests / lifespan shutdown)."""
@@ -226,7 +327,7 @@ class NodeTaskService:
                 pending_items = [i for i in items if i.status == "pending"]
 
                 if not pending_items:
-                    await self._finalize_task(db, task, [i.status for i in items])
+                    await self._finalize_task(db, task, items)
                     return
 
                 # Batch execution for distribute_file: run_playbook once with all IPs
@@ -241,7 +342,7 @@ class NodeTaskService:
                             .execution_options(populate_existing=True)
                         )
                     ).scalars().all()
-                    await self._finalize_task(db, task, [i.status for i in items])
+                    await self._finalize_task(db, task, items)
                     return
 
                 async def run_one(item: NodeTaskItem) -> str:
@@ -256,6 +357,10 @@ class NodeTaskService:
                         except Exception as e:  # noqa: BLE001 - engine must not die on node failure
                             logger.exception("task %s node %s failed: %s", task_id, item.node_id, e)
                             fresh.status = "failed"
+                            # 异常兜底（openspec node-task-ux-optimization 1.3）：
+                            # executor 抛异常时没有 stderr 可落，前端将只看到「失败」无原因；
+                            # 这里补中文原因，保证「stderr 与 failure_reason 同时为空」的失败子项不存在。
+                            fresh.failure_reason = f"节点 {fresh.ip} 执行异常：{e}"[:500]
                             await item_db.commit()
                             return "failed"
 
@@ -273,7 +378,7 @@ class NodeTaskService:
                         .execution_options(populate_existing=True)
                     )
                 ).scalars().all()
-                await self._finalize_task(db, task, [i.status for i in items])
+                await self._finalize_task(db, task, items)
         except asyncio.CancelledError:
             async with session_factory() as db:
                 task = await db.get(NodeTask, task_id)
@@ -322,10 +427,11 @@ class NodeTaskService:
                     line = event.get("stdout", "") if isinstance(event, dict) else str(event)
                     if not line:
                         return
-                    task_log_store.append_line(item.task_id, item.node_id, line)
+                    # 只累计实际落盘的行数（超过 MAX_LOG_LINES 的丢弃，D10）
+                    saved = task_log_store.append_line(item.task_id, item.node_id, line)
                     with tail_lock:
                         tail_chunks.append(line)
-                        line_count += len(line.splitlines())
+                        line_count += saved
                     self._broadcast(item.task_id, {
                         "type": "log_line", "task_id": item.task_id,
                         "node_id": item.node_id, "line": line,
@@ -342,6 +448,10 @@ class NodeTaskService:
                     if false_success_err:
                         rc = -1
                         result = dict(result, rc=-1, status="failed", stderr=false_success_err)
+                # 中文失败归因（openspec node-task-ux-optimization D1）：**不区分 rc**。
+                # 旧守卫只在 rc==0 时判，导致 rc≠0 的真实失败（任务 #11：rc=4、stderr 空，
+                # 真因 ssh connect timed out 只在 stdout 文本里）没有任何原因可展示。
+                reason = None if rc == 0 else classify_ansible_failure(result, item.ip, rc=rc)
                 with tail_lock:
                     tail_text = "".join(tail_chunks)
                 item.rc = rc
@@ -351,8 +461,22 @@ class NodeTaskService:
                 item.stdout_tail = task_log_store.tail_bytes(tail_text)
                 item.stdout = result.get("stdout")
                 item.stderr = result.get("stderr")
+                # stderr 为空时回填归因文案：既有前端「原因/stderr」页签无需改动即可读到中文原因
+                if reason and not str(item.stderr or "").strip():
+                    item.stderr = reason
+                item.failure_reason = reason
                 item.command = result.get("command")
-                item.status = "success" if rc == 0 else "failed"
+                # 取消语义（D3）：用户取消且本节点未成功 → cancelled（而非 failed）。
+                # 这是「取消」与「失败」的语义分界，也让 _finalize_task 的
+                # cancelled_nodes 计数不再恒为 0。已成功的节点不受取消影响。
+                cancelled = cancel_flag is not None and cancel_flag.is_set()
+                if cancelled and rc != 0:
+                    item.status = "cancelled"
+                    item.failure_reason = "任务已被取消，执行已中断"
+                    if not str(item.stderr or "").strip():
+                        item.stderr = item.failure_reason
+                else:
+                    item.status = "success" if rc == 0 else "failed"
                 item.finished_at = datetime.utcnow()
                 await db.commit()
                 self._broadcast(item.task_id, {
@@ -361,16 +485,22 @@ class NodeTaskService:
                 })
                 return item.status
 
-    async def _finalize_task(self, db: AsyncSession, task: NodeTask, results: list[str]) -> None:
-        task.success_nodes = results.count("success")
-        task.failed_nodes = results.count("failed")
-        task.cancelled_nodes = results.count("cancelled")
+    async def _finalize_task(
+        self, db: AsyncSession, task: NodeTask, items: list[NodeTaskItem]
+    ) -> None:
+        """收尾：先按子项重算全部统计，再按既有规则判定任务状态（D2）。
+
+        cancelled 子项自本组起才真实存在（此前恒 0），必须纳入状态判定：
+        否则「1 台完成 + 2 台被取消」会因 failed/skipped 均为 0 被判成 success，
+        与规格「取消后主任务 cancelled（全部未完成）或 partial（部分已完成）」矛盾。
+        """
+        self._recompute_stats(task, items)
         task.finished_at = datetime.utcnow()
 
-        skipped = results.count("skipped")
-        if task.failed_nodes == 0 and skipped == 0:
+        unfinished_but_not_failed = task.skipped_nodes + task.cancelled_nodes
+        if task.failed_nodes == 0 and unfinished_but_not_failed == 0:
             task.status = "success"
-        elif task.success_nodes == 0 and task.failed_nodes == 0 and skipped > 0:
+        elif task.success_nodes == 0 and task.failed_nodes == 0 and unfinished_but_not_failed > 0:
             task.status = "cancelled"
         elif task.failed_nodes > 0 and task.success_nodes == 0:
             task.status = "failed"
@@ -380,11 +510,26 @@ class NodeTaskService:
         self._broadcast(task.id, {
             "type": "task_update", "task_id": task.id,
             "status": task.status,
+            "total_nodes": task.total_nodes,
             "success_nodes": task.success_nodes,
             "failed_nodes": task.failed_nodes,
+            "skipped_nodes": task.skipped_nodes,
             "cancelled_nodes": task.cancelled_nodes,
         })
         self._broadcast(task.id, {"type": "done", "task_id": task.id})
+
+    @staticmethod
+    def _recompute_stats(task: NodeTask, items: list[NodeTaskItem]) -> None:
+        """统计算法唯一实现（D2）：只改内存对象，不 commit。
+
+        ``total_nodes`` 取子项数（创建时的入参长度会与子项漂移，实机出现过
+        「2/1 成功」这类物理不可能的口径）；其余四列按子项 status 计数。
+        """
+        task.total_nodes = len(items)
+        task.success_nodes = sum(1 for i in items if i.status == "success")
+        task.failed_nodes = sum(1 for i in items if i.status == "failed")
+        task.skipped_nodes = sum(1 for i in items if i.status == "skipped")
+        task.cancelled_nodes = sum(1 for i in items if i.status == "cancelled")
 
     async def _reset_failed_items(self, task_id: int, node_ids: list[int] | None, db: Any = None) -> None:
         session_factory = self._db_factory or self._default_session_factory
@@ -401,6 +546,16 @@ class NodeTaskService:
         for item in items:
             if node_ids is None or item.node_id in node_ids:
                 if item.status in ("failed", "cancelled", "skipped"):
+                    prev_attempt = item.attempt or 0
+                    # 证据保留（D6）：旧日志改名留档（旧失败原因追加到留档末尾），
+                    # 活动日志重新从空开始——不再 reset_log 直接删掉上次的证据。
+                    note = (
+                        f"失败原因：{item.failure_reason}"
+                        if item.failure_reason and str(item.failure_reason).strip()
+                        else None
+                    )
+                    task_log_store.rotate_log(task_id, item.node_id, prev_attempt, trailing_note=note)
+                    item.attempt = prev_attempt + 1
                     item.status = "pending"
                     item.rc = None
                     item.stdout = None
@@ -409,10 +564,18 @@ class NodeTaskService:
                     item.started_at = None
                     item.finished_at = None
                     item.set_logs([])
-                    task_log_store.reset_log(task_id, item.node_id)
                     item.log_file = None
                     item.log_line_count = 0
                     item.stdout_tail = None
+                    # failure_reason 属「当前尝试」字段，随本次重试清空（旧值已在留档日志里）
+                    item.failure_reason = None
+        # 重置后任务统计必须同步（D2）：否则重试前主表仍显示上一次的
+        # failed/success 计数（累加口径残留）。
+        task = await db.get(NodeTask, task_id)
+        if task is not None:
+            # 取消态随本次重试清除：否则列表仍给新一次执行挂「取消中」
+            task.cancel_requested_at = None
+            self._recompute_stats(task, items)
         await db.commit()
 
     @staticmethod
@@ -452,11 +615,17 @@ class NodeTaskService:
         if task_type in ("start", "stop", "reload", "check"):
             if self._ansible is None:
                 raise ValueError("NodeTaskService has no ansible instance")
-            return await self._ansible.nginx_cmd(node.ip, task_type, prefix, ports)
+            return await self._ansible.nginx_cmd(
+                node.ip, task_type, prefix, ports,
+                cancel_event=cancel_event, on_progress=on_log,
+            )
         if task_type == "statistic":
             if self._ansible is None:
                 raise ValueError("NodeTaskService has no ansible instance")
-            return await self._ansible.statistic(node.ip, prefix, ports)
+            return await self._ansible.statistic(
+                node.ip, prefix, ports,
+                cancel_event=cancel_event, on_progress=on_log,
+            )
 
         if task_type == "software_check":
             # C2 修复：software_list 会拼进目标机 shell 命令行（playbook 与
@@ -465,7 +634,7 @@ class NodeTaskService:
                 cmd_str = _validate_software_list(params.get("software_list"))
             except ValueError as e:
                 return {"rc": -1, "status": "failed", "stderr": str(e)}
-            return await self._software_check_node(node, cmd_str, on_log)
+            return await self._software_check_node(node, cmd_str, on_log, cancel_event=cancel_event)
 
         if task_type == "cmd_exec":
             script_file = params.get("script_file")
@@ -515,6 +684,7 @@ class NodeTaskService:
                         _run_ssh_with_fallback(
                             node.ip, ssh_user, ssh_cmd,
                             on_line=on_log, port=ssh_port,
+                            cancel_event=cancel_event,
                         ),
                         timeout=timeout,
                     )
@@ -566,7 +736,7 @@ class NodeTaskService:
             )
             if copy_result.get("rc") != 0:
                 return copy_result
-            return await _install_openresty_ssh(node, prefix, on_log)
+            return await _install_openresty_ssh(node, prefix, on_log, cancel_event=cancel_event)
 
         edge_target = node.edge_path
         if task_type == "install_edge":
@@ -721,17 +891,46 @@ class NodeTaskService:
             # `# [中继] 经跳板 …` 标记）供前端命令 tab 显示。
             item.command = result.get("command")
             item.stderr = nr.get("stderr", stderr if not nr.get("success", False) else "")
+            # 归因与单节点腿同口径（openspec node-task-ux-optimization D1）：批量分发
+            # 失败时 stderr 常为空，同样需要中文原因，否则前端只见「失败」。
+            reason = None if item.status == "success" else classify_ansible_failure(result, item.ip, rc=item.rc)
+            if reason and not str(item.stderr or "").strip():
+                item.stderr = reason
+            item.failure_reason = reason
+            # 取消语义与单节点腿一致（D3）：用户取消导致未成功的子项落 cancelled，
+            # 否则批量分发任务的「取消」与「失败」在列表里分不开（此前恒 failed）。
+            if cancel_flag is not None and cancel_flag.is_set() and item.status == "failed":
+                item.status = "cancelled"
+                item.failure_reason = "任务已被取消，执行已中断"
+                if not str(item.stderr or "").strip():
+                    item.stderr = item.failure_reason
             item.finished_at = datetime.utcnow()
         await db.commit()
 
-    async def _software_check_node(self, node, cmd_str: str, on_log) -> dict:
-        """Run software_check via ansible, falling back to direct SSH on failure."""
-        from app.services.ansible_service import get_ssh_user, _run_ssh_with_fallback, resolve_ssh_port, PRIVATE_DATA_DIR, ssh_relay_note
+    async def _software_check_node(
+        self, node, cmd_str: str, on_log, cancel_event: asyncio.Event | None = None
+    ) -> dict:
+        """Run software_check via ansible, falling back to direct SSH on failure.
+
+        cancel_event 同时透传给 ansible 腿与 SSH 降级腿；**已取消时不再降级**
+        ——否则取消后 task 会换条链路继续跑，等于没取消。
+        """
+        from app.services.ansible_service import (
+            CANCELLED_NOTE, get_ssh_user, _run_ssh_with_fallback, resolve_ssh_port,
+            PRIVATE_DATA_DIR, ssh_relay_note,
+        )
+
+        def _cancelled() -> bool:
+            return cancel_event is not None and cancel_event.is_set()
+
+        if _cancelled():
+            return {"rc": -1, "status": "failed", "stdout": "", "stderr": CANCELLED_NOTE}
 
         if self._ansible is not None:
             result = await self._ansible.run_playbook(
                 node.ip, "software_check_run",
                 {"software_list": cmd_str}, on_progress=on_log,
+                cancel_event=cancel_event,
             )
             raw = result.get("shell_stdout") or ""
             if result.get("rc") == 0 and raw:
@@ -741,6 +940,17 @@ class NodeTaskService:
                     "stderr": result.get("stderr", ""),
                     # 透传展示用 command（含 run_playbook 的 `# [中继] 经跳板 …` 标记），
                     # 供前端命令 tab 显示；此前被丢弃导致成功路径看不到中继信息。
+                    "command": result.get("command") or "",
+                }
+            if _cancelled():
+                stderr = str(result.get("stderr") or "")
+                if CANCELLED_NOTE not in stderr:
+                    stderr = f"{stderr}\n{CANCELLED_NOTE}".strip()
+                return {
+                    "rc": result.get("rc") or -1,
+                    "status": "failed",
+                    "stdout": result.get("stdout") or "",
+                    "stderr": stderr,
                     "command": result.get("command") or "",
                 }
             # 降级路径实际路由由 -J 注入决定（可能经中继），不得硬编码「直连」。
@@ -755,7 +965,7 @@ class NodeTaskService:
         script_content = script_path.read_text(encoding="utf-8")
         rc, stdout, stderr = await _run_ssh_with_fallback(
             node.ip, ssh_user, _software_check_ssh_command(cmd_str, script_content),
-            on_line=on_log, port=ssh_port,
+            on_line=on_log, port=ssh_port, cancel_event=cancel_event,
         )
         return {
             "rc": rc, "status": "successful" if rc == 0 else "failed",
@@ -950,9 +1160,15 @@ node_task_service = get_node_task_service()
 
 
 async def recover_interrupted_tasks() -> None:
-    """Mark pending/running tasks as failed on startup (process restart)."""
+    """Mark pending/running tasks as failed on startup (process restart).
+
+    同时给未完成子项写中文原因（openspec node-task-ux-optimization D5）：
+    进程重启后这些子项既无 stderr 也无 failure_reason，前端只显示「执行中」
+    却永远不再推进——必须改判 failed 并写明「进程重启中断」。
+    """
     from app.core.database import AsyncSessionLocal
 
+    interrupted_reason = "进程重启中断，任务未完成"
     async with AsyncSessionLocal() as db:
         result = await db.execute(
             update(NodeTask)
@@ -960,6 +1176,107 @@ async def recover_interrupted_tasks() -> None:
             .values(status="failed", finished_at=datetime.utcnow())
         )
         await db.commit()
+        # 未完成子项：改判 failed + 写原因（stderr 为空时一并回填，与 D1 同口径）
+        items = (
+            await db.execute(
+                select(NodeTaskItem).where(NodeTaskItem.status.in_(["pending", "running"]))
+            )
+        ).scalars().all()
+        for item in items:
+            item.status = "failed"
+            item.failure_reason = interrupted_reason
+            if not str(item.stderr or "").strip():
+                item.stderr = interrupted_reason
+            item.finished_at = item.finished_at or datetime.utcnow()
+        if items:
+            await db.commit()
+        # 统计同步（D2）：改判 failed 的子项所属任务逐个重算（按 task_id 分组），
+        # 否则重启恢复后的任务仍显示恢复前的陈旧计数。
+        affected_task_ids = {item.task_id for item in items}
+        for task_id in affected_task_ids:
+            task = await db.get(NodeTask, task_id)
+            if task is None:
+                continue
+            task_items = (
+                await db.execute(
+                    select(NodeTaskItem).where(NodeTaskItem.task_id == task_id)
+                )
+            ).scalars().all()
+            NodeTaskService._recompute_stats(task, task_items)
+        if affected_task_ids:
+            await db.commit()
+        logger.info(
+            "recover_interrupted_tasks: %s 个任务改判失败，%s 个未完成子项写入中断原因",
+            result.rowcount or 0,
+            len(items),
+        )
+
+
+async def backfill_task_stats() -> int:
+    """回填历史任务的统计口径（幂等），返回被修正的任务数（D2）。
+
+    ``total_nodes`` 此前写的是创建入参的长度、收尾计数又来自子项状态，两者会
+    漂移（实机任务 #1/#2/#3：主表 total_nodes=1 而子项 3 条，列表显示
+    「2/1 成功」）。这里对每个任务按子项重算五列，无脏数据时零修正，故可
+    在每次启动时无条件调用。
+
+    **不得加载整行对象**：``install_task_node.stdout`` 存的是完整 ansible 输出
+    （单节点可达数 MB）、``install_task.params`` 存脚本全文——启动期把所有行读进
+    内存会随历史积累线性膨胀。故用两条**聚合/窄列**查询：子项按
+    ``(task_id, status)`` 分组计数，任务只取五个计数列。
+    """
+    from app.core.database import AsyncSessionLocal
+
+    fixed = 0
+    async with AsyncSessionLocal() as db:
+        counts: dict[int, dict[str, int]] = {}
+        grouped = await db.execute(
+            select(NodeTaskItem.task_id, NodeTaskItem.status, func.count())
+            .group_by(NodeTaskItem.task_id, NodeTaskItem.status)
+        )
+        for task_id, status, cnt in grouped.all():
+            counts.setdefault(task_id, {})[status] = int(cnt)
+
+        rows = (
+            await db.execute(
+                select(
+                    NodeTask.id,
+                    NodeTask.total_nodes,
+                    NodeTask.success_nodes,
+                    NodeTask.failed_nodes,
+                    NodeTask.skipped_nodes,
+                    NodeTask.cancelled_nodes,
+                )
+            )
+        ).all()
+        for task_id, total, success, failed, skipped, cancelled in rows:
+            by_status = counts.get(task_id, {})
+            want = (
+                sum(by_status.values()),
+                by_status.get("success", 0),
+                by_status.get("failed", 0),
+                by_status.get("skipped", 0),
+                by_status.get("cancelled", 0),
+            )
+            if (total, success, failed, skipped, cancelled) == want:
+                continue
+            await db.execute(
+                update(NodeTask)
+                .where(NodeTask.id == task_id)
+                .values(
+                    total_nodes=want[0],
+                    success_nodes=want[1],
+                    failed_nodes=want[2],
+                    skipped_nodes=want[3],
+                    cancelled_nodes=want[4],
+                )
+            )
+            fixed += 1
+        if fixed:
+            await db.commit()
+    if fixed:
+        logger.info("backfill_task_stats: 修正了 %s 个任务的统计口径", fixed)
+    return fixed
 
 
 # ── production executor helpers ────────────────────────────────────────
@@ -988,7 +1305,9 @@ async def _resolve_node(task_id: int, node_id: int):
         return await db.get(Node, node_id)
 
 
-async def _install_openresty_ssh(node, prefix: str, on_log: Callable[[dict], None]) -> dict:
+async def _install_openresty_ssh(
+    node, prefix: str, on_log: Callable[[dict], None], cancel_event: asyncio.Event | None = None
+) -> dict:
     """Phase 2 of install_openresty: SSH build of install-edge.sh on the node."""
     from app.services.ansible_service import get_ssh_user, _run_ssh_with_fallback, resolve_ssh_port, ssh_relay_note
 
@@ -1002,6 +1321,7 @@ async def _install_openresty_ssh(node, prefix: str, on_log: Callable[[dict], Non
         on_log({"stdout": _note})
     rc, stdout, stderr = await _run_ssh_with_fallback(
         node.ip, ssh_user, build_cmd, on_line=on_log, port=ssh_port,
+        cancel_event=cancel_event,
     )
     return {"rc": rc, "status": "success" if rc == 0 else "failed", "stdout": stdout, "stderr": stderr, "command": build_cmd}
 

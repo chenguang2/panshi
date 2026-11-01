@@ -245,8 +245,12 @@ def _script_env(
     env["FRONTEND_PORT"] = str(frontend_port)
     env["PANSHI_BACKEND_PID_FILE"] = str(tmp_path / "backend.pid")
     env["PANSHI_FRONTEND_PID_FILE"] = str(tmp_path / "frontend.pid")
-    if project_root is not None:
-        env["PANSHI_PROJECT_ROOT"] = str(project_root)
+    # 身份锚点默认隔离到 tmp_path：stop.sh 的「孤儿清扫」（pgrep uvicorn/vite +
+    # 锚点复核）**不看端口**，若锚点仍是真实仓库根，跑 stop.sh 的用例会把开发机上
+    # 常驻的后端/前端一并 SIGKILL（2026-11-01 实测：全量 pytest 跑完 12344/12345
+    # 双双掉线；单跑本文件同样复现，before=200 after=000）。显式传 project_root 的
+    # 用例（验证锚点语义）不受影响。
+    env["PANSHI_PROJECT_ROOT"] = str(project_root if project_root is not None else tmp_path)
     return env
 
 

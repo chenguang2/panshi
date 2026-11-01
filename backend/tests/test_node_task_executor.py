@@ -38,9 +38,12 @@ class TestExecuteNodeDispatch:
             })()
             result = await svc._execute_node(5, item, params, None, lambda e: None)
 
-        ansible.nginx_cmd.assert_awaited_once_with(
-            "10.0.0.5", "start", params["prefix"], "9180",
-        )
+        # 取消通道（D3）：cancel_event 必须透传到 ansible 调用，且顺带产出实时日志
+        ansible.nginx_cmd.assert_awaited_once()
+        call = ansible.nginx_cmd.await_args
+        assert call.args == ("10.0.0.5", "start", params["prefix"], "9180")
+        assert call.kwargs.get("cancel_event") is None
+        assert call.kwargs.get("on_progress") is not None
         assert result["rc"] == 0
 
     @pytest.mark.asyncio
@@ -82,9 +85,11 @@ class TestExecuteNodeDispatch:
             })()
             await svc._execute_node(5, item, {}, None, lambda e: None)
 
-        ansible.statistic.assert_awaited_once_with(
-            "10.0.0.5", "/work/edge", "9180",
-        )
+        ansible.statistic.assert_awaited_once()
+        call = ansible.statistic.await_args
+        assert call.args == ("10.0.0.5", "/work/edge", "9180")
+        assert call.kwargs.get("cancel_event") is None
+        assert call.kwargs.get("on_progress") is not None
 
     @pytest.mark.asyncio
     async def test_edge_pack_add_uses_install_path_parent_for_destpath(self, mock_task_type):

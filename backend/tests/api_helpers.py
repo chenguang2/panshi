@@ -91,6 +91,7 @@ def isolated_app_lifespan():
         patch("app.main.AsyncSessionLocal", lambda: contextlib.nullcontext(object())),
         # lifespan 函数体内延迟 import，patch 源模块属性
         patch("app.services.node_task_service.recover_interrupted_tasks", _noop_async),
+        patch("app.services.node_task_service.backfill_task_stats", _noop_async),
         patch("app.services.node_task_service.get_node_task_service", lambda: _NoopTaskService()),
     ]
     for p in patches:

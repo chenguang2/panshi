@@ -156,6 +156,11 @@ COLUMN_MIGRATIONS = [
     ("install_task_node", "log_file", "VARCHAR(255)"),
     ("install_task_node", "log_line_count", "INTEGER DEFAULT 0"),
     ("install_task_node", "stdout_tail", "TEXT"),
+    ("install_task_node", "failure_reason", "TEXT"),
+    # node-task-ux-optimization 组 4（D6）：重试计数，旧日志按 attempt 留档
+    ("install_task_node", "attempt", "INTEGER DEFAULT 0"),
+    ("install_task", "skipped_nodes", "INTEGER DEFAULT 0"),
+    ("install_task", "cancel_requested_at", "DATETIME"),
     ("ps_db_migration_log", "duration_seconds", "FLOAT"),
     ("ps_db_migration_log", "started_at", "DATETIME"),
     ("relay_gateways", "openresty_prefix", "VARCHAR(255)"),

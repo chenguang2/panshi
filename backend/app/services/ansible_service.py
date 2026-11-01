@@ -7,8 +7,11 @@ import logging
 import os
 import re
 import shutil
+import signal
 import sys
 import threading
+import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, AsyncGenerator, Callable
@@ -40,6 +43,7 @@ _SSH_CONTROL_PATH_DIR = "/tmp/panshi-cp"
 SSH_CONTROL_PATH = "/tmp/panshi-cp/%%h-%%p-%%r"
 
 from app.services import relay_registry  # noqa: E402  （仅 stdlib/sqlalchemy 顶层依赖，无循环）
+from app.services import task_log_store  # noqa: E402  （叶子模块，无循环依赖）
 
 
 def _relay_key_path() -> str:
@@ -262,6 +266,63 @@ def _prune_artifacts_safe() -> None:
         logger.debug("ansible artifacts 清理失败", exc_info=True)
 
 
+def classify_ansible_failure(result: dict, ip: str, rc: int | None = None) -> str | None:
+    """把一次 ansible 执行结果归因为中文失败原因（rc 任意都判）。
+
+    背景（openspec: node-task-ux-optimization 1.1）：`_ansible_false_success_error`
+    只在 rc==0 时被调用，故真实失败（rc≠0）且 stderr 为空时，前端只看到「失败」
+    两字而无任何原因——实机案例：rc=4、stderr 空、真实原因（ssh connect timed out）
+    只藏在 stdout 的 ANSI 文本里。
+
+    按**优先级**做子串匹配（顺序即语义，勿随意调整）：
+    清单缺失 → 认证失败 → 无法连接（含连接超时）→ 执行超时 → 磁盘不足 → 权限不足
+    → rc 非 0 兜底 → 无归因（None）。
+
+    注意：「connection timed out」属于**连接**类，必须先于通用的「timeout」判定命中，
+    否则会把「连不上」误报成「命令跑太久」，把用户引向错误的排查方向。
+    """
+    raw = "\n".join(
+        str(result.get(k) or "") for k in ("stdout", "shell_stdout", "stderr")
+    ).lower()
+    if rc is None:
+        rc = result.get("rc")
+
+    # 1) 节点不在主机清单（ansible 对空匹配 rc 常为 0，故不看 rc）
+    if "no hosts matched" in raw or "could not match supplied host pattern" in raw:
+        return f"节点 {ip} 不在 Ansible 主机清单中，请在 inventory/host 文件中添加该节点的 SSH 连接信息"
+    # 2) 认证失败（**必须先于「无法连接」判定**：ansible 把 SSH 认证失败包在
+    #    `UNREACHABLE! => {... Permission denied (publickey,password)}` 里，若先命中
+    #    unreachable，用户会被引去查网络/端口，而真正要改的是清单里的密码或密钥）
+    if "permission denied" in raw or "authentication failed" in raw:
+        return f"节点 {ip} SSH 认证失败，请检查免密登录或清单中的密码"
+    # 3) 无法连接（先于「执行超时」判定：连接超时不是命令超时）
+    if (
+        "unreachable!" in raw
+        or '"unreachable": true' in raw
+        or "failed to connect" in raw
+        or "connection timed out" in raw
+        or "connection refused" in raw
+    ):
+        return f"节点 {ip} 无法连接，请检查网络与 SSH 服务（22 端口）"
+    # 4) 执行超时（命令层面）
+    if "timed out" in raw or "timeout" in raw or "exit code 124" in raw:
+        return f"节点 {ip} 执行超时，请检查命令或调大超时时间"
+    # 5) 磁盘空间不足
+    if "no space left" in raw:
+        return f"节点 {ip} 磁盘空间不足，请清理后重试"
+    # 6) 权限不足（sudo 缺失/需要密码/非 root）
+    if (
+        "sudo: command not found" in raw
+        or "must be run as root" in raw
+        or "a password is required" in raw
+    ):
+        return f"节点 {ip} 缺少必要权限，请以 root 或配置 sudo 免密执行"
+    # 7) 兜底：仅当确实是非 0 返回码（rc 未知/成功时不编造原因）
+    if rc is not None and rc != 0:
+        return f"节点 {ip} 执行失败（返回码 {rc}），请查看日志详情"
+    return None
+
+
 def _ansible_false_success_error(result: dict, ip: str) -> str | None:
     """ansible rc==0 但 playbook 实际未执行目标主机时，返回友好错误信息。
 
@@ -271,39 +332,216 @@ def _ansible_false_success_error(result: dict, ip: str) -> str | None:
     输出标记，命中即返回对应错误文案。
     P2①：自 node_task_service 下沉至此——由 run_playbook 唯一出口统一调用，
     新调用方自动免疫（调用侧逐点补守卫会漏，S4/M24 两次实证）。
+
+    现为 `classify_ansible_failure(rc=0)` 的薄封装：**rc=0 语义不变**（无命中
+    返回 None，不会因 rc 兜底编造原因），既有调用方与测试契约保持有效。
     """
-    raw = "\n".join(
-        str(result.get(k) or "") for k in ("stdout", "shell_stdout", "stderr")
-    ).lower()
-    if "no hosts matched" in raw or "could not match supplied host pattern" in raw:
-        return f"节点 {ip} 不在 Ansible 主机清单中，请在 inventory/host 文件中添加该节点的 SSH 连接信息"
-    if "unreachable!" in raw or '"unreachable": true' in raw:
-        return f"节点 {ip} 无法连接，请检查网络和 SSH 配置"
-    if "permission denied" in raw:
-        return f"节点 {ip} SSH 认证失败，请检查免密登录或 inventory/host 中的密码"
-    return None
+    return classify_ansible_failure(result, ip, rc=0)
 
 
-async def _run_subprocess(cmd: list[str], env_extra: dict[str, str] | None = None) -> tuple[int, str, str]:
+# ── 取消通道（openspec node-task-center D3）─────────────────────────────
+# 取消必须真的杀掉正在跑的子进程（SSH 腿：软件查询降级 / 脚本执行 /
+# install_openresty 第二阶段），否则点了「取消」任务仍会跑到自然结束。
+# 实现要点：
+#   1. 子进程以 start_new_session=True 启动 → 独立进程组，才能 killpg 整组
+#      （ssh 会再 fork，只杀 ssh 会留下远端连接/本地残留进程）；
+#   2. watcher 先 SIGTERM（给 ssh 收尾机会），宽限 3 秒仍未退出再 SIGKILL；
+#   3. watcher 必须在 finally 里取消，否则子进程正常退出后 watcher 仍挂着。
+CANCELLED_NOTE = "已按用户请求取消执行"
+CANCEL_KILL_GRACE_SECONDS = 3.0
+
+
+def _signal_process_group(proc: asyncio.subprocess.Process, sig: int) -> None:
+    """向子进程所在进程组发信号；进程已消失时静默忽略。"""
+    try:
+        os.killpg(os.getpgid(proc.pid), sig)
+    except (ProcessLookupError, PermissionError):
+        # 进程组已不存在（或无权）→ 退化为单进程信号
+        try:
+            proc.send_signal(sig)
+        except (ProcessLookupError, RuntimeError):
+            pass
+
+
+def _start_cancel_watcher(
+    proc: asyncio.subprocess.Process, cancel_event: asyncio.Event | None
+) -> asyncio.Task | None:
+    """启动「等取消 → 杀进程组」watcher；未传 cancel_event 时不启动。"""
+    if cancel_event is None:
+        return None
+
+    async def watch() -> None:
+        await cancel_event.wait()
+        _signal_process_group(proc, signal.SIGTERM)
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=CANCEL_KILL_GRACE_SECONDS)
+        except asyncio.TimeoutError:
+            _signal_process_group(proc, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+    return asyncio.ensure_future(watch())
+
+
+async def _stop_cancel_watcher(watcher: asyncio.Task | None) -> None:
+    """取消并回收 watcher（避免子进程正常退出后 watcher 泄漏）。"""
+    if watcher is None:
+        return
+    if not watcher.done():
+        watcher.cancel()
+    # return_exceptions=True：子任务被取消（CancelledError 是 BaseException）
+    # 不应向外抛；父协程自身的取消仍然会传播
+    await asyncio.gather(watcher, return_exceptions=True)
+
+
+def _append_cancel_note(stderr: str) -> str:
+    """在 stderr 末尾追加中文取消说明（幂等）。"""
+    if CANCELLED_NOTE in stderr:
+        return stderr
+    return f"{stderr}\n{CANCELLED_NOTE}".strip()
+
+
+# ── ansible 腿的硬杀（2026-11-01 实机取证）───────────────────────────────
+# 上面那套 killpg 只覆盖 SSH 子进程腿。ansible 腿走 ansible-runner，其
+# ``cancel_callback`` 只在**任务边界**被轮询：单个长命令（``sleep 45``）内部
+# 无法中断 → 界面显示「已取消」，节点上的命令仍跑到自然结束（实测 45s 才消失）。
+# 对重启/安装类改动型命令这是危险的不准确，故按唯一标记硬杀进程。
+RUN_TOKEN_KEY = "panshi_run_token"
+
+
+def _proc_cmdline_tokens(pid: int) -> tuple[str, ...]:
+    """读 /proc/<pid>/cmdline（\\0 分隔）并按 UTF-8 解码；不可读时抛 OSError 由调用方兜住。"""
+    with open(f"/proc/{pid}/cmdline", "rb") as fh:
+        return tuple(
+            part.decode("utf-8", errors="replace") for part in fh.read().split(b"\0") if part
+        )
+
+
+def hard_kill_ansible_playbook(token: str, grace_seconds: float = CANCEL_KILL_GRACE_SECONDS) -> list[int]:
+    """按唯一标记精确杀掉本次运行的 ansible-playbook 进程组。
+
+    仅匹配「cmdline 同时含 ``ansible-playbook`` 与 token」的进程，避免误杀
+    并发任务；``/proc`` 不可用（非 Linux / 权限受限）时返回空列表，调用方
+    照旧走 cancel_callback 的软中断。
+
+    实现要点：
+    1. token 每次运行唯一（run_playbook 注入 extravars），故不会串杀；
+    2. 进程组信号前有自保检查：pgid 等于本进程进程组时退化为单进程信号——
+       ansible-runner 经 pexpect 启动 playbook（pty.fork → setsid，自成会话），
+       正常情况不会命中，但若将来某路径不带 setsid，killpg 会连后端一起打死；
+    3. SIGTERM 后最多等 ``grace_seconds``（0.1s 间隔）仍未退出则 SIGKILL；
+    4. 全程 try/except：取消路径绝不能因为杀进程失败而崩。
+
+    Returns:
+        命中并已发信号的 pid 列表（按扫描顺序）。
+    """
+    marker = str(token or "")
+    if not marker:
+        return []
+    try:
+        my_pgid = os.getpgrp()
+        my_pid = os.getpid()
+        pids: list[int] = []
+        for entry in os.listdir("/proc"):
+            if not entry.isdigit():
+                continue
+            pid = int(entry)
+            # 不杀自己（后端进程自身 cmdline 不含标记，此处再加一道保险）
+            if pid == my_pid:
+                continue
+            try:
+                parts = _proc_cmdline_tokens(pid)
+            except OSError:
+                continue  # 进程已退出 / 无权读取
+            joined = "\0".join(parts)
+            if "ansible-playbook" not in joined or marker not in joined:
+                continue
+            pids.append(pid)
+        if not pids:
+            return []
+
+        for pid in pids:
+            try:
+                pgid = os.getpgid(pid)
+                if pgid == my_pgid:
+                    # 自保：与本进程同组时绝不 killpg（会连带后端/测试进程）
+                    os.kill(pid, signal.SIGTERM)
+                else:
+                    os.killpg(pgid, signal.SIGTERM)
+            except (ProcessLookupError, PermissionError):
+                pass
+
+        # 宽限期轮询；仍存活的补 SIGKILL
+        deadline = time.monotonic() + max(0.0, grace_seconds)
+        alive = list(pids)
+        while alive and time.monotonic() < deadline:
+            alive = [p for p in alive if _pid_alive(p)]
+            if alive:
+                time.sleep(0.1)
+        for pid in alive:
+            try:
+                pgid = os.getpgid(pid)
+                if pgid == my_pgid:
+                    os.kill(pid, signal.SIGKILL)
+                else:
+                    os.killpg(pgid, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                pass
+        logger.info("cancel: 已硬杀 ansible-playbook（token=%s, pids=%s）", marker, pids)
+        return pids
+    except Exception as exc:  # noqa: BLE001 —— 兜底：取消路径不得因此失败
+        logger.debug("硬杀 ansible-playbook 失败（token=%s）：%s", marker, exc)
+        return []
+
+
+def _pid_alive(pid: int) -> bool:
+    """pid 是否仍存在且未成僵尸（读 /proc/<pid>/stat 的 state 字段）。"""
+    try:
+        with open(f"/proc/{pid}/stat", "rb") as fh:
+            fields = fh.read().rsplit(b") ", 1)[-1].split()
+        return bool(fields) and fields[0] != b"Z"
+    except OSError:
+        return False
+
+
+async def _run_subprocess(
+    cmd: list[str],
+    env_extra: dict[str, str] | None = None,
+    cancel_event: asyncio.Event | None = None,
+) -> tuple[int, str, str]:
     """Run a subprocess, return (rc, stdout, stderr).
 
     env_extra 叠加注入子进程环境（如 SSHPASS），不污染父进程全局环境（M21）。
+    cancel_event 置位时中断子进程（SIGTERM 后宽限 3 秒再 SIGKILL 进程组），
+    此时 rc 为负（信号号）且 stderr 末尾带中文取消说明。
     """
+    if cancel_event is not None and cancel_event.is_set():
+        return -1, "", CANCELLED_NOTE
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         env={**os.environ, **env_extra} if env_extra else None,
+        # 独立进程组：取消时才能 killpg 整组，而不只是杀掉首进程
+        start_new_session=True,
     )
-    stdout, stderr = await proc.communicate()
+    watcher = _start_cancel_watcher(proc, cancel_event)
+    try:
+        stdout, stderr = await proc.communicate()
+    finally:
+        await _stop_cancel_watcher(watcher)
     rc = proc.returncode or 0
-    return rc, stdout.decode("utf-8", errors="replace").strip(), stderr.decode("utf-8", errors="replace").strip()
+    stderr_text = stderr.decode("utf-8", errors="replace").strip()
+    if cancel_event is not None and cancel_event.is_set():
+        stderr_text = _append_cancel_note(stderr_text)
+    return rc, stdout.decode("utf-8", errors="replace").strip(), stderr_text
 
 
 async def _run_subprocess_stream(
     cmd: list[str],
     on_line: Callable[[dict], None] | None = None,
     env_extra: dict[str, str] | None = None,
+    cancel_event: asyncio.Event | None = None,
 ) -> tuple[int, str, str]:
     """Run a subprocess, streaming stdout/stderr lines to ``on_line`` as they arrive.
 
@@ -311,12 +549,16 @@ async def _run_subprocess_stream(
     ``communicate()``), this reads stdout line-by-line and invokes ``on_line``
     for each line in real time. Returns (rc, full_stdout, full_stderr).
     env_extra 叠加注入子进程环境（如 SSHPASS），不污染父进程全局环境（M21）。
+    cancel_event 同 ``_run_subprocess``：置位即杀进程组，rc 为负。
     """
+    if cancel_event is not None and cancel_event.is_set():
+        return -1, "", CANCELLED_NOTE
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         env={**os.environ, **env_extra} if env_extra else None,
+        start_new_session=True,
     )
     stdout_lines: list[str] = []
     stderr_lines: list[str] = []
@@ -331,12 +573,19 @@ async def _run_subprocess_stream(
             if on_line is not None and line.strip():
                 on_line({"stderr": line} if is_stderr else {"stdout": line})
 
-    await asyncio.gather(
-        pump(proc.stdout, stdout_lines, False),
-        pump(proc.stderr, stderr_lines, True),
-    )
-    rc = await proc.wait()
-    return rc, "\n".join(stdout_lines), "\n".join(stderr_lines)
+    watcher = _start_cancel_watcher(proc, cancel_event)
+    try:
+        await asyncio.gather(
+            pump(proc.stdout, stdout_lines, False),
+            pump(proc.stderr, stderr_lines, True),
+        )
+        rc = await proc.wait()
+    finally:
+        await _stop_cancel_watcher(watcher)
+    stderr_text = "\n".join(stderr_lines)
+    if cancel_event is not None and cancel_event.is_set():
+        stderr_text = _append_cancel_note(stderr_text)
+    return rc, "\n".join(stdout_lines), stderr_text
 
 
 async def _run_ssh_with_fallback(
@@ -347,21 +596,31 @@ async def _run_ssh_with_fallback(
     port: int | None = None,
     status_callback=None,
     on_line: Callable[[dict], None] | None = None,
+    cancel_event: asyncio.Event | None = None,
 ) -> tuple[int, str, str]:
     """Run SSH command, retrying with password fallback on auth failure.
 
     When ``on_line`` is provided, stdout/stderr lines are streamed to it in
     real time (compile output etc.). Returns (rc, stdout, stderr). On fallback
     failure, merges both error outputs.
+
+    ``cancel_event`` 透传到两个子进程执行器：用户取消后**不得**再发起第二轮
+    （中继重试 / 密码降级）尝试——否则取消等于没取消。
     """
+
+    def _cancelled() -> bool:
+        return cancel_event is not None and cancel_event.is_set()
+
     # Round 1: key-based
     key_cmd = _build_ssh_cmd(ip, ssh_user, cmd, port=port)
     if on_line is not None:
-        rc, stdout, stderr = await _run_subprocess_stream(key_cmd, on_line)
+        rc, stdout, stderr = await _run_subprocess_stream(key_cmd, on_line, cancel_event=cancel_event)
     else:
-        rc, stdout, stderr = await _run_subprocess(key_cmd)
+        rc, stdout, stderr = await _run_subprocess(key_cmd, cancel_event=cancel_event)
     if rc == 0:
         return rc, stdout, stderr
+    if _cancelled():
+        return rc, stdout, _append_cancel_note(stderr)
 
     # 档 1 HA 配套（openspec relay-channel-routing）：中继启用时，连接类失败
     # （VIP 漂移窗口 3~5s）立即原样重试一次；重试成功按成功处理。
@@ -370,11 +629,13 @@ async def _run_ssh_with_fallback(
         and ("Connection refused" in stderr or "timed out" in stderr)
     ):
         if on_line is not None:
-            rc1, stdout, stderr = await _run_subprocess_stream(key_cmd, on_line)
+            rc1, stdout, stderr = await _run_subprocess_stream(key_cmd, on_line, cancel_event=cancel_event)
         else:
-            rc1, stdout, stderr = await _run_subprocess(key_cmd)
+            rc1, stdout, stderr = await _run_subprocess(key_cmd, cancel_event=cancel_event)
         if rc1 == 0:
             return rc1, stdout, stderr
+        if _cancelled():
+            return rc1, stdout, _append_cancel_note(stderr)
         rc, stderr = rc1, stderr
 
     # Check whether to attempt password fallback
@@ -398,11 +659,15 @@ async def _run_ssh_with_fallback(
     # SSHPASS 只进密码腿子进程环境，不写全局 os.environ（M21）
     pass_env: dict[str, str] = {"SSHPASS": password}
     if on_line is not None:
-        rc2, stdout2, stderr2 = await _run_subprocess_stream(pass_cmd, on_line, env_extra=pass_env)
+        rc2, stdout2, stderr2 = await _run_subprocess_stream(
+            pass_cmd, on_line, env_extra=pass_env, cancel_event=cancel_event
+        )
     else:
-        rc2, stdout2, stderr2 = await _run_subprocess(pass_cmd, env_extra=pass_env)
+        rc2, stdout2, stderr2 = await _run_subprocess(pass_cmd, env_extra=pass_env, cancel_event=cancel_event)
     if rc2 == 0:
         return rc2, stdout2, stderr2
+    if _cancelled():
+        return rc2, stdout2, _append_cancel_note(stderr2)
 
     # Both failed — merge errors
     merged_stderr = f"免密登录失败: {stderr}\n--- 密码认证也失败 ---\n{stderr2}"
@@ -876,7 +1141,9 @@ NGINX_CMD_LABEL = {v: k for k, v in NGINX_CMD_MAP.items()}
 
 
 _SENTINEL = object()
-MAX_LOG_LINES = 500
+# 日志行数上限的单一事实源在 task_log_store（D10），此处按原名复用，
+# 避免两处常量各自漂移。
+MAX_LOG_LINES = task_log_store.MAX_LOG_LINES
 
 
 async def _stream_ansible_events(
@@ -1084,6 +1351,12 @@ class AnsibleRunnerService:
         if ip:
             ev["ips"] = ip
 
+        # 本次运行的唯一标记（仅用于本机进程匹配，playbook 不使用）：取消时
+        # ansible 腿无法在长命令内部被 cancel_callback 打断，需按此标记硬杀
+        # 对应进程组，同时避免误杀并发任务。
+        run_token = uuid.uuid4().hex
+        ev[RUN_TOKEN_KEY] = run_token
+
         # 中继跳板（openspec relay-channel-routing）：目标 ip 运行期注入
         # ansible_ssh_common_args，finally 恢复（用户清单零落盘修改）。
         relay_injected_ips: list[str] = []
@@ -1147,9 +1420,45 @@ class AnsibleRunnerService:
         if event_handler is not None or on_progress is not None:
             runner_kwargs["event_handler"] = _wrapped_handler
         if cancel_event is not None:
-            runner_kwargs["cancel_callback"] = lambda: cancel_event.is_set()
+            # ansible 腿的取消有两条腿（硬杀同一份进程，_kill_once 保证只杀一次）：
+            #   ① cancel_callback —— ansible-runner 的输出轮询边界才会被调用，
+            #      静默期受 pexpect_timeout（默认 5s）限制 → 最长约 5 秒才轮到；
+            #   ② watcher —— cancel_event 置位瞬间硬杀（见下方 _watch_cancel），
+            #      把「点了取消但节点上还在跑」的窗口压到亚秒级。
+            _cancel_state = {"killed": False}
+
+            def _kill_once() -> bool:
+                """按本次 token 硬杀一次；已杀过或本次未命中（进程未起/已退出）返回 False。"""
+                if _cancel_state["killed"]:
+                    return True
+                if hard_kill_ansible_playbook(run_token):
+                    _cancel_state["killed"] = True
+                    return True
+                return False
+
+            def _cancel_cb() -> bool:
+                if cancel_event.is_set():
+                    _kill_once()
+                    return True
+                return False
+
+            runner_kwargs["cancel_callback"] = _cancel_cb
+
+            _run_done = {"done": False}
+
+            async def _watch_cancel() -> None:
+                await cancel_event.wait()
+                while not _run_done["done"]:
+                    # to_thread：/proc 扫描 + 宽限轮询最长 3 秒，绝不能阻塞事件循环
+                    if await asyncio.to_thread(_kill_once):
+                        return
+                    # 取消可能发生在 playbook 进程起来之前 → 退避重试
+                    await asyncio.sleep(0.2)
 
         async with self._semaphore:
+            watcher: asyncio.Task | None = None
+            if cancel_event is not None:
+                watcher = asyncio.ensure_future(_watch_cancel())
             try:
                 result = await asyncio.wait_for(
                     asyncio.to_thread(
@@ -1164,6 +1473,15 @@ class AnsibleRunnerService:
                     rc=-1, detail="timeout",
                 )
             finally:
+                if cancel_event is not None:
+                    _run_done["done"] = True
+                    if watcher is not None and not watcher.done():
+                        watcher.cancel()
+                        # 回收：CancelledError 是 BaseException，不能靠 except Exception
+                        try:
+                            await watcher
+                        except BaseException:  # noqa: BLE001 —— 取消收尾不得干扰主流程
+                            pass
                 if inject_port:
                     _inventory_restore_port(ip, inject_port)
                 for _rip in relay_injected_ips:
@@ -1256,8 +1574,15 @@ class AnsibleRunnerService:
         action: str,
         prefix: str,
         ports: str = "",
+        cancel_event: asyncio.Event | None = None,
+        on_progress: Any = None,
     ) -> dict[str, Any]:
-        """Execute nginx_cmd_run tag (start/stop/reload/check)."""
+        """Execute nginx_cmd_run tag (start/stop/reload/check).
+
+        cancel_event/on_progress 透传给 run_playbook：前者让「取消」能真正终止
+        正在跑的 playbook，后者让这类任务产出实时日志（此前零日志，前端日志
+        面板恒空）。
+        """
         nginx_cmd = NGINX_CMD_MAP.get(action)
         if nginx_cmd is None:
             raise ValueError(f"Unknown nginx_cmd action: {action}")
@@ -1266,17 +1591,23 @@ class AnsibleRunnerService:
             "prefix": prefix,
             "ports": ports,
         }
-        return await self.run_playbook(ip, "nginx_cmd_run", ev)
+        return await self.run_playbook(
+            ip, "nginx_cmd_run", ev, cancel_event=cancel_event, on_progress=on_progress,
+        )
 
     async def statistic(
         self,
         ip: str,
         prefix: str,
         ports: str,
+        cancel_event: asyncio.Event | None = None,
+        on_progress: Any = None,
     ) -> dict[str, Any]:
         """Execute edge_statistic tag to collect CPU/memory/disk/version."""
         ev = {"prefix": prefix, "ports": ports}
-        return await self.run_playbook(ip, "edge_statistic", ev)
+        return await self.run_playbook(
+            ip, "edge_statistic", ev, cancel_event=cancel_event, on_progress=on_progress,
+        )
 
     async def install_openresty(
         self,

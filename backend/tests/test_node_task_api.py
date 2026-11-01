@@ -27,6 +27,30 @@ async def _seed_nodes(session: AsyncSession):
     await session.commit()
 
 
+async def _seed_terminal_task(session: AsyncSession, status: str = "failed") -> int:
+    """造一条终态任务 + 子项（node 1/2）。
+
+    重试端点自 node-task-ux-optimization 组 4 起要求任务存在且处于终态
+    （D6），因此 retry 用例不能再直接打一条库里不存在的 task_id=1。
+    """
+    from app.models.node_task import NodeTask, NodeTaskItem
+
+    task = NodeTask(cluster_id=1, task_type="start", status=status, total_nodes=2)
+    task.set_params({"prefix": "/data/openresty"})
+    session.add(task)
+    await session.flush()
+    for node_id in (1, 2):
+        session.add(NodeTaskItem(
+            task_id=task.id,
+            node_id=node_id,
+            ip=f"127.0.0.{node_id}",
+            status="failed" if status == "failed" else "running",
+            rc=1 if status == "failed" else None,
+        ))
+    await session.commit()
+    return task.id
+
+
 class TestNodeTaskApi:
     @pytest.fixture
     def client(self, test_db, test_db_factory):
@@ -73,7 +97,7 @@ class TestNodeTaskApi:
         fake_task = SimpleNamespace(
             id=42, cluster_id=1, task_type="start", status="pending",
             params={}, total_nodes=2, success_nodes=0, failed_nodes=0,
-            cancelled_nodes=0, created_by=None,
+            skipped_nodes=0, cancelled_nodes=0, created_by=None,
             created_at=datetime.utcnow(), started_at=None, finished_at=None,
         )
         fake_task.get_params = lambda: {}
@@ -109,7 +133,7 @@ class TestNodeTaskApi:
         fake_task = SimpleNamespace(
             id=43, cluster_id=1, task_type="cmd_exec", status="pending",
             params={"cmd": "ls -la /tmp"}, total_nodes=1, success_nodes=0,
-            failed_nodes=0, cancelled_nodes=0, created_by=None,
+            failed_nodes=0, skipped_nodes=0, cancelled_nodes=0, created_by=None,
             created_at=datetime.utcnow(), started_at=None, finished_at=None,
         )
         fake_task.get_params = lambda: fake_task.params
@@ -169,11 +193,19 @@ class TestNodeTaskApi:
         assert mock_service.cancel_task.await_count == 1
         assert mock_service.cancel_task.await_args.args[0] == 1
 
-    def test_retry_task_endpoint(self, client, mock_service):
-        """POST /node-tasks/1/retry should call engine retry_task."""
-        resp = client.post("/api/v1/node-tasks/1/retry", json={"node_ids": [2]})
-        assert resp.status_code in (200, 202)
+    def test_retry_task_endpoint(self, client, mock_service, test_db):
+        """POST /node-tasks/{id}/retry（终态任务）应调用引擎 retry_task。
+
+        守卫前该用例打的是库里不存在的 task_id=1（旧行为：无存在性校验）；
+        组 4 起 404「任务不存在」，故改为真实种子一条终态任务。
+        """
+        import asyncio
+
+        task_id = asyncio.run(_seed_terminal_task(test_db))
+        resp = client.post(f"/api/v1/node-tasks/{task_id}/retry", json={"node_ids": [2]})
+        assert resp.status_code in (200, 202), resp.text
         assert mock_service.retry_task.await_count == 1
+        assert mock_service.retry_task.await_args.args[0] == task_id
 
 
 class TestRetrySessionThreading:

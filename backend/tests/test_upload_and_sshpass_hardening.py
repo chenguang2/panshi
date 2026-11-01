@@ -177,7 +177,7 @@ class TestSshpassEnvOnly:
         """密码回退腿：spawn 时 argv 无明文、SSHPASS 经子进程级 env_extra（全局不落地）。"""
         calls: list[tuple[list[str], dict | None]] = []
 
-        async def fake_run_subprocess(cmd, env_extra=None):
+        async def fake_run_subprocess(cmd, env_extra=None, cancel_event=None):
             calls.append((list(cmd), env_extra))
             if cmd[0] == "sshpass":
                 return 0, "ok", ""

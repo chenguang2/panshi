@@ -67,6 +67,14 @@ async def lifespan(app: FastAPI):
         pass
     from app.services.node_task_service import recover_interrupted_tasks
     await recover_interrupted_tasks()
+    # 统计口径回填（openspec node-task-ux-optimization D2）：历史任务 total_nodes
+    # 可能与子项漂移（列表出现「2/1 成功」）。幂等，无脏数据时零修正。
+    try:
+        from app.services.node_task_service import backfill_task_stats
+
+        await backfill_task_stats()
+    except Exception:
+        pass
     # P2⑥：清扫崩溃残留的网关 root 凭据（relay_sshd 注入打标行）
     try:
         from app.services import relay_sshd
