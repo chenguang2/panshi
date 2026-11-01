@@ -36,7 +36,9 @@
 | `GET /api/v1/node-tasks` | 全局任务列表（跨集群） |
 | `GET /api/v1/node-tasks/{task_id}` | 任务详情（含逐节点子任务与日志） |
 | `POST /api/v1/node-tasks/{task_id}/cancel` | 取消任务（幂等） |
-| `POST /api/v1/node-tasks/{task_id}/retry` | 重试失败/取消节点（body 可选 `node_ids` 限定） |
+| `POST /api/v1/node-tasks/{task_id}/retry` | 重试失败/取消/跳过节点（body 可选 `node_ids` 限定）；非终态 → 409，`node_ids` 不属于该任务 → 400 |
+| `GET /api/v1/node-tasks/{task_id}/items/{node_id}/log` | 单节点日志（`tail=N` 截尾；`download=true` 以附件返回；`attempt=N` 读历史尝试留档） |
+| `GET /api/v1/node-tasks/{task_id}/logs/archive` | 整任务日志打包为 zip（各节点活动日志 + 历史尝试留档 + `_missing.txt`） |
 | `GET /api/v1/node-tasks/{task_id}/stream` | 任务实时事件流（SSE；前端可轮询详情兜底） |
 
 ## 并发与互斥
@@ -61,7 +63,13 @@
 设计决策：
 - `node_id`、`cluster_id` **不是外键**——节点/集群被删除后任务历史仍可读（ip 快照）
 - `task_id → install_task` 外键 `ondelete=CASCADE`——删除任务连带清理子项
-- 日志每节点最多保留 500 行（滚动截断）
+- 日志每节点最多保留 **5000 行**（`task_log_store.MAX_LOG_LINES`，唯一事实源）；写满后文件末尾
+  追加一行 `…（已截断，后续输出未保存）` 并停止追加——磁盘占用有界，`log_line_count` 只记
+  实际保存行数，前端读到该提示行即可判定「日志被截断」；`tail` 读取不受影响
+- 重试不删旧日志：旧日志改名为 `{node_id}.attempt{N}.log` 留档（旧失败原因追加到留档末尾），
+  `attempt` +1，活动日志重新从空开始；单节点 `?download=true` 以附件返回，
+  `GET /node-tasks/{task_id}/logs/archive` 把全任务日志打成 zip（条目 `{ip}/{filename}`，
+  无日志节点写入 `_missing.txt`）
 
 ## 进程重启
 

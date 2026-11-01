@@ -30,6 +30,8 @@ const VIEWPORT = { width: 1600, height: 900 } // 统一视口
 /** 截图清单：name = 输出文件名（不含扩展名），path = 登录后访问的路由。
  *  可选字段：
  *   - actions: [{ click: '选择器' }] 登录进入页面后依次点击（切 Tab、开抽屉/弹窗等）
+ *     支持 click / select({selector,value|index}) / type({selector,text}) / wait({text,timeout})
+ *     / waitMs / blur(选择器) / checkFirstEnabled(选择器，点第一个未 disabled 的元素)
  *   - viewportShot: true 只截视口（弹窗/抽屉为 fixed 覆盖层，fullPage 会错位）
  */
 const SHOTS = [
@@ -129,6 +131,70 @@ const SHOTS = [
     ],
     viewportShot: true,
   },
+// ── 第 30 章 节点任务（2026-11 信息架构改版：6 列表格/详情独立页/表单必填） ──
+  { name: '30-01-task-list', path: '/node-tasks' },
+  {
+    name: '30-02-create-empty',
+    path: '/node-tasks',
+    viewportShot: true,
+    actions: [
+      { click: '[data-test="create-task-entry"]' },
+      { click: '[data-test="create-cluster"]' }, // 打开下拉
+      { blur: '[data-test="create-cluster"]' }, // 失焦触发「请选择集群」
+      { waitMs: 300 },
+    ],
+  },
+  {
+    name: '30-03-create-cmd',
+    path: '/node-tasks',
+    viewportShot: true,
+    actions: [
+      { click: '[data-test="create-task-entry"]' },
+      { select: { selector: '[data-test="create-cluster"]', index: 1 } },
+      { waitMs: 500 },
+      { select: { selector: '[data-test="task-type"]', value: 'cmd_exec' } },
+      { waitMs: 400 },
+      { checkFirstEnabled: '[data-test^="node-check-"]' },
+      { type: { selector: '[data-test="cmd-command"]', text: 'uptime' } },
+      { waitMs: 300 },
+    ],
+  },
+  {
+    // 手册示例取「失败任务」：先按状态过滤，教学价值高于随手取第一行
+    name: '30-04-detail',
+    path: '/node-tasks',
+    actions: [
+      { select: { selector: '[data-test="filter-status"]', value: 'failed' } },
+      { waitMs: 600 },
+      { click: 'tbody tr >> nth=0' },
+      { waitMs: 800 },
+    ],
+  },
+  {
+    name: '30-05-detail-log',
+    path: '/node-tasks',
+    viewportShot: true,
+    actions: [
+      { select: { selector: '[data-test="filter-status"]', value: 'failed' } },
+      { waitMs: 600 },
+      { click: 'tbody tr >> nth=0' },
+      { waitMs: 800 },
+      { click: '.link-action' },
+      { waitMs: 800 },
+    ],
+  },
+  {
+    name: '30-06-staged-files',
+    path: '/node-tasks',
+    viewportShot: true,
+    actions: [{ click: '[data-test="staged-files-entry"]' }, { waitMs: 500 }],
+  },
+  {
+    name: '30-07-task-files',
+    path: '/node-tasks',
+    viewportShot: true,
+    actions: [{ click: '[data-test="task-files-entry"]' }, { waitMs: 500 }],
+  },
 ]
 
 mkdirSync(OUT_DIR, { recursive: true })
@@ -174,9 +240,26 @@ for (const shot of SHOTS) {
       await page.locator(act.click).first().click()
       await page.waitForTimeout(500) // 等待 Tab/抽屉/弹窗切换完成
     } else if (act.select) {
-      // 原生 <select>：按 value 选中（如 edge-env 节点下拉）
-      await page.locator(act.select.selector).first().selectOption(act.select.value)
+      // 原生 <select>：按 value 或 index 选中（index 便于「跳过首项占位」）
+      const arg = act.select.value !== undefined ? act.select.value : { index: act.select.index }
+      await page.locator(act.select.selector).first().selectOption(arg)
       await page.waitForTimeout(500)
+    } else if (act.blur) {
+      // 触发失焦校验（表单行内错误提示）
+      await page.locator(act.blur).first().blur()
+      await page.waitForTimeout(300)
+    } else if (act.checkFirstEnabled) {
+      // 勾选第一个未 disabled 的复选框（跳过离线节点）
+      const boxes = page.locator(act.checkFirstEnabled)
+      const total = await boxes.count()
+      for (let i = 0; i < total; i++) {
+        const box = boxes.nth(i)
+        if (await box.isEnabled()) {
+          await box.click()
+          break
+        }
+      }
+      await page.waitForTimeout(300)
     } else if (act.type) {
       // 点击目标后键入（如 Monaco 编辑器制造 dirty）
       await page.locator(act.type.selector).first().click()
