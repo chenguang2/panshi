@@ -35,6 +35,41 @@ def _parse_interval_seconds(interval: str) -> int:
     return {"s": val, "m": val * 60}.get(unit, 300)
 
 
+_IP_PATTERN = re.compile(r"^(\d{1,3}\.){3}\d{1,3}$")
+
+FILTER_USAGE_HINT = "筛选参数无效，应为 cluster:{id}、node:{ip} 或 unmanaged"
+
+
+def parse_filter(filter_str: str | None) -> tuple[str, str] | None:
+    """解析集群/节点筛选参数（metrics-cluster-node-filter D1）。
+
+    返回 (kind, value)：('cluster', id串) / ('node', ip) / ('unmanaged', '')；
+    空值 → None（不过滤）。非法形态抛 ValueError（端点层转 400 中文报错）。
+    """
+    if not filter_str:
+        return None
+    if filter_str == "unmanaged":
+        return ("unmanaged", "")
+    m = re.fullmatch(r"cluster:(\d+)", filter_str)
+    if m:
+        return ("cluster", m.group(1))
+    m = re.fullmatch(r"node:(.+)", filter_str)
+    if m:
+        if not _IP_PATTERN.match(m.group(1)):
+            raise ValueError(FILTER_USAGE_HINT)
+        return ("node", m.group(1))
+    raise ValueError(FILTER_USAGE_HINT)
+
+
+def _ip_where(ips: list[str] | None) -> str:
+    """ip 集合过滤片段（与 params['ips'] 配对使用）。
+
+    None = 不过滤（无 filter 参数的既有行为）；[] = 过滤到空（unmanaged 差集为空
+    的诚实语义——绝不能把空集当「不过滤」静默放大成全站视角）。
+    """
+    return " AND Attributes['ip'] IN %(ips)s" if ips is not None else ""
+
+
 def _is_counter(metric_name: str) -> tuple[bool, str]:
     """Check if a metric is a cumulative counter and return its source table.
 
@@ -79,6 +114,7 @@ def query_time_series(
     since: str = "1h",
     interval: str = "5m",
     label: str | None = None,
+    ips: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     since_sec = _parse_since_seconds(since)
     interval_sec = _parse_interval_seconds(interval)
@@ -94,6 +130,9 @@ def query_time_series(
         if _LABEL_KEY_PATTERN.match(key):
             label_where = f"AND Attributes['{key}'] = %(label_val)s"
             params["label_val"] = val
+    ip_where = _ip_where(ips)
+    if ips is not None:
+        params["ips"] = ips
 
     if is_counter_val:
         # Counter path — calculate rate（相邻桶差分，Prometheus rate 的标准做法）
@@ -133,6 +172,7 @@ def query_time_series(
                         WHERE MetricName = %(name)s
                           AND TimeUnix > now() - INTERVAL %(since)s SECOND
                           {label_where}
+                          {ip_where}
                         GROUP BY bucket, Attributes
                     )
                     GROUP BY bucket
@@ -172,6 +212,7 @@ def query_time_series(
         WHERE MetricName = %(name)s
           AND TimeUnix > now() - INTERVAL %(since)s SECOND
           {label_where}
+          {ip_where}
         GROUP BY bucket
         ORDER BY bucket
     """
@@ -260,7 +301,7 @@ def query_summary(window_sec: int = 300) -> tuple[dict[str, float], bool]:
     return result, source_ok
 
 
-def query_connection_states(window_sec: int = 300) -> dict[str, float]:
+def query_connection_states(window_sec: int = 300, ips: list[str] | None = None) -> dict[str, float]:
     """Nginx 连接状态细分。
 
     - active/reading/writing/waiting 为瞬时状态：逐序列取最新值后按状态求和
@@ -271,29 +312,35 @@ def query_connection_states(window_sec: int = 300) -> dict[str, float]:
     - 无数据时返回空 dict
     """
     result: dict[str, float] = {}
+    ip_where = _ip_where(ips)
+    params: dict[str, Any] = {"window": window_sec}
+    if ips is not None:
+        params["ips"] = ips
 
     rows = execute_query(f"""
         SELECT Attributes['state'] AS state, sum(latest) AS latest_value
         FROM (
             SELECT Attributes, argMax(Value, TimeUnix) AS latest
             FROM otel_metrics_gauge
-            WHERE TimeUnix > now() - INTERVAL {window_sec} SECOND
+            WHERE TimeUnix > now() - INTERVAL %(window)s SECOND
               AND MetricName = 'edge_nginx_http_current_connections'
               AND Attributes['state'] NOT IN ('accepted', 'handled')
+              {ip_where}
             GROUP BY Attributes
         )
         GROUP BY state
-    """)
+    """, params)
     if rows:
         result.update({r[0]: float(r[1]) for r in rows if r[0]})
 
     delta_rows = execute_query(f"""
         SELECT greatest(max(Value) - min(Value), 0) AS window_inc
         FROM otel_metrics_gauge
-        WHERE TimeUnix > now() - INTERVAL {window_sec} SECOND
+        WHERE TimeUnix > now() - INTERVAL %(window)s SECOND
           AND MetricName = 'edge_nginx_http_current_connections'
           AND Attributes['state'] = 'accepted'
-    """)
+          {ip_where}
+    """, params)
     if delta_rows:
         first = delta_rows[0]
         if first and first[0] is not None:
@@ -307,26 +354,27 @@ def query_route_stats(
     since: str = "24h",
     limit: int = 10,
     latency_type: str = "request",
+    ips: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     since_sec = _parse_since_seconds(since)
 
     if stats_type == "qps":
-        return _query_route_qps(since_sec, limit)
+        return _query_route_qps(since_sec, limit, ips)
     elif stats_type == "bandwidth":
-        return _query_route_bandwidth(since_sec, limit)
+        return _query_route_bandwidth(since_sec, limit, ips)
     elif stats_type == "error_rate":
-        return _query_route_error_rate(since_sec, limit)
+        return _query_route_error_rate(since_sec, limit, ips)
     elif stats_type == "latency":
-        return _query_route_latency(since_sec, limit, latency_type)
+        return _query_route_latency(since_sec, limit, latency_type, ips)
     return []
 
 
-def _query_route_qps(since_sec: int, limit: int) -> list[dict[str, Any]]:
+def _query_route_qps(since_sec: int, limit: int, ips: list[str] | None = None) -> list[dict[str, Any]]:
     # 累计计数器：窗口内增量 = 每条序列的 max - min，再按路由汇总。
     # 注意：子查询按 code 拆分，外层必须 sum(total_inc)——直接引用别名会触发
     # CH Code 215（total_inc not under aggregate function），曾被吞成空结果
     # 导致路由统计页全空。
-    rows = execute_query("""
+    rows = execute_query(f"""
         SELECT
             route_id,
             uri,
@@ -343,12 +391,13 @@ def _query_route_qps(since_sec: int, limit: int) -> list[dict[str, Any]]:
             FROM otel_metrics_sum
             WHERE MetricName = 'edge_http_status'
               AND TimeUnix > now() - INTERVAL %(since)s SECOND
+              {_ip_where(ips)}
             GROUP BY route_id, uri, code
         )
         GROUP BY route_id, uri
         ORDER BY requests_per_sec DESC
         LIMIT %(limit)s
-    """, {"since": since_sec, "limit": limit})
+    """, {**{"since": since_sec, "limit": limit}, **({"ips": ips} if ips is not None else {})})
 
     if rows is None:
         return []
@@ -364,10 +413,10 @@ def _query_route_qps(since_sec: int, limit: int) -> list[dict[str, Any]]:
     ]
 
 
-def _query_route_bandwidth(since_sec: int, limit: int) -> list[dict[str, Any]]:
+def _query_route_bandwidth(since_sec: int, limit: int, ips: list[str] | None = None) -> list[dict[str, Any]]:
     # 累计计数器：窗口内增量 = 每条序列的 max - min，再按路由/方向汇总
     # 外层 sum(total_inc)：同 _query_route_qps 的 Code 215 教训
-    rows = execute_query("""
+    rows = execute_query(f"""
         SELECT
             route_id,
             uri,
@@ -383,12 +432,13 @@ def _query_route_bandwidth(since_sec: int, limit: int) -> list[dict[str, Any]]:
             FROM otel_metrics_sum
             WHERE MetricName = 'edge_bandwidth'
               AND TimeUnix > now() - INTERVAL %(since)s SECOND
+              {_ip_where(ips)}
             GROUP BY route_id, uri, direction
         )
         GROUP BY route_id, uri, direction
         ORDER BY total_bytes DESC
         LIMIT %(limit)s
-    """, {"since": since_sec, "limit": limit})
+    """, {**{"since": since_sec, "limit": limit}, **({"ips": ips} if ips is not None else {})})
 
     if rows is None:
         return []
@@ -403,9 +453,9 @@ def _query_route_bandwidth(since_sec: int, limit: int) -> list[dict[str, Any]]:
         for r in rows]
 
 
-def _query_route_error_rate(since_sec: int, limit: int) -> list[dict[str, Any]]:
+def _query_route_error_rate(since_sec: int, limit: int, ips: list[str] | None = None) -> list[dict[str, Any]]:
     # 累计计数器：窗口内增量 = 每条 (路由, code) 序列的 max - min
-    rows = execute_query("""
+    rows = execute_query(f"""
         SELECT
             route_id,
             uri,
@@ -423,13 +473,14 @@ def _query_route_error_rate(since_sec: int, limit: int) -> list[dict[str, Any]]:
             FROM otel_metrics_sum
             WHERE MetricName = 'edge_http_status'
               AND TimeUnix > now() - INTERVAL %(since)s SECOND
+              {_ip_where(ips)}
             GROUP BY route_id, uri, code
         )
         GROUP BY route_id, uri
         HAVING total_requests > 0
         ORDER BY client_errors + server_errors DESC
         LIMIT %(limit)s
-    """, {"since": since_sec, "limit": limit})
+    """, {**{"since": since_sec, "limit": limit}, **({"ips": ips} if ips is not None else {})})
 
     if rows is None:
         return []
@@ -447,8 +498,8 @@ def _query_route_error_rate(since_sec: int, limit: int) -> list[dict[str, Any]]:
     ]
 
 
-def _query_route_latency(since_sec: int, limit: int, latency_type: str) -> list[dict[str, Any]]:
-    rows = execute_query("""
+def _query_route_latency(since_sec: int, limit: int, latency_type: str, ips: list[str] | None = None) -> list[dict[str, Any]]:
+    rows = execute_query(f"""
         SELECT
             Attributes['route'] AS route_id,
             Attributes['matched_uri'] AS uri,
@@ -460,10 +511,11 @@ def _query_route_latency(since_sec: int, limit: int, latency_type: str) -> list[
         WHERE MetricName = 'edge_http_latency'
           AND TimeUnix > now() - INTERVAL %(since)s SECOND
           AND Attributes['type'] = %(latency_type)s
+          {_ip_where(ips)}
         GROUP BY route_id, uri, latency_type
         ORDER BY avg_latency_ms DESC
         LIMIT %(limit)s
-    """, {"since": since_sec, "latency_type": latency_type, "limit": limit})
+    """, {**{"since": since_sec, "latency_type": latency_type, "limit": limit}, **({"ips": ips} if ips is not None else {})})
 
     if rows is None:
         return []
@@ -480,10 +532,10 @@ def _query_route_latency(since_sec: int, limit: int, latency_type: str) -> list[
     ]
 
 
-def query_status_analysis(since: str = "24h") -> list[dict[str, Any]]:
+def query_status_analysis(since: str = "24h", ips: list[str] | None = None) -> list[dict[str, Any]]:
     since_sec = _parse_since_seconds(since)
     # 累计计数器：窗口内增量 = 每条 code 序列的 max - min，再按状态类汇总
-    rows = execute_query("""
+    rows = execute_query(f"""
         SELECT
             status_class,
             sum(inc) AS request_count
@@ -501,12 +553,13 @@ def query_status_analysis(since: str = "24h") -> list[dict[str, Any]]:
             FROM otel_metrics_sum
             WHERE MetricName = 'edge_http_status'
               AND TimeUnix > now() - INTERVAL %(since)s SECOND
+              {_ip_where(ips)}
             GROUP BY status_class, code
         )
         GROUP BY status_class
         HAVING request_count > 0
         ORDER BY request_count DESC
-    """, {"since": since_sec})
+    """, {**{"since": since_sec}, **({"ips": ips} if ips is not None else {})})
 
     if rows is None:
         return []
@@ -525,19 +578,20 @@ def query_status_analysis(since: str = "24h") -> list[dict[str, Any]]:
 def query_time_comparison(
     comparison_type: str = "day_over_day",
     days: int = 7,
+    ips: list[str] | None = None,
 ) -> dict[str, Any] | list[dict[str, Any]]:
     if comparison_type == "day_over_day":
-        return _query_day_over_day()
+        return _query_day_over_day(ips)
     elif comparison_type == "hourly_distribution":
-        return _query_hourly_distribution(days)
+        return _query_hourly_distribution(days, ips)
     elif comparison_type == "week_over_week":
-        return _query_week_over_week()
+        return _query_week_over_week(ips)
     return {}
 
 
-def _query_day_over_day() -> dict[str, Any]:
+def _query_day_over_day(ips: list[str] | None = None) -> dict[str, Any]:
     # 累计计数器：窗口内增量 = 每条序列的 max - min
-    today_rows = execute_query("""
+    today_rows = execute_query(f"""
         SELECT sum(inc) AS request_count, sum(sample_count) AS sample_count
         FROM (
             SELECT
@@ -548,10 +602,11 @@ def _query_day_over_day() -> dict[str, Any]:
             FROM otel_metrics_sum
             WHERE MetricName = 'edge_http_status'
               AND TimeUnix > toStartOfDay(now())
+              {_ip_where(ips)}
             GROUP BY route_id, code
         )
-    """)
-    yesterday_rows = execute_query("""
+    """, {"ips": ips} if ips is not None else {})
+    yesterday_rows = execute_query(f"""
         SELECT sum(inc) AS request_count, sum(sample_count) AS sample_count
         FROM (
             SELECT
@@ -563,9 +618,10 @@ def _query_day_over_day() -> dict[str, Any]:
             WHERE MetricName = 'edge_http_status'
               AND TimeUnix > toStartOfDay(now()) - INTERVAL 1 DAY
               AND TimeUnix <= toStartOfDay(now())
+              {_ip_where(ips)}
             GROUP BY route_id, code
         )
-    """)
+    """, {"ips": ips} if ips is not None else {})
 
     today_count = int(today_rows[0][0]) if today_rows and today_rows[0][0] else 0
     today_samples = int(today_rows[0][1]) if today_rows else 0
@@ -589,8 +645,8 @@ def _query_day_over_day() -> dict[str, Any]:
     }
 
 
-def _query_hourly_distribution(days: int) -> list[dict[str, Any]]:
-    rows = execute_query("""
+def _query_hourly_distribution(days: int, ips: list[str] | None = None) -> list[dict[str, Any]]:
+    rows = execute_query(f"""
         SELECT
             toHour(TimeUnix) AS hour_of_day,
             toDayOfWeek(TimeUnix) AS day_of_week,
@@ -598,9 +654,10 @@ def _query_hourly_distribution(days: int) -> list[dict[str, Any]]:
         FROM otel_metrics_sum
         WHERE MetricName = 'edge_http_status'
           AND TimeUnix > now() - INTERVAL %(days)s DAY
+          {_ip_where(ips)}
         GROUP BY hour_of_day, day_of_week
         ORDER BY day_of_week, hour_of_day
-    """, {"days": days})
+    """, {**{"days": days}, **({"ips": ips} if ips is not None else {})})
 
     if rows is None:
         return []
@@ -614,9 +671,9 @@ def _query_hourly_distribution(days: int) -> list[dict[str, Any]]:
     ]
 
 
-def _query_week_over_week() -> dict[str, Any]:
+def _query_week_over_week(ips: list[str] | None = None) -> dict[str, Any]:
     # 累计计数器：窗口内增量 = 每条序列的 max - min
-    this_week_rows = execute_query("""
+    this_week_rows = execute_query(f"""
         SELECT sum(inc) AS request_count, sum(sample_count) AS sample_count
         FROM (
             SELECT
@@ -627,10 +684,11 @@ def _query_week_over_week() -> dict[str, Any]:
             FROM otel_metrics_sum
             WHERE MetricName = 'edge_http_status'
               AND TimeUnix > toStartOfWeek(now())
+              {_ip_where(ips)}
             GROUP BY route_id, code
         )
-    """)
-    last_week_rows = execute_query("""
+    """, {"ips": ips} if ips is not None else {})
+    last_week_rows = execute_query(f"""
         SELECT sum(inc) AS request_count, sum(sample_count) AS sample_count
         FROM (
             SELECT
@@ -642,9 +700,10 @@ def _query_week_over_week() -> dict[str, Any]:
             WHERE MetricName = 'edge_http_status'
               AND TimeUnix > toStartOfWeek(now()) - INTERVAL 7 DAY
               AND TimeUnix <= toStartOfWeek(now())
+              {_ip_where(ips)}
             GROUP BY route_id, code
         )
-    """)
+    """, {"ips": ips} if ips is not None else {})
 
     this_week_count = int(this_week_rows[0][0]) if this_week_rows and this_week_rows[0][0] else 0
     this_week_samples = int(this_week_rows[0][1]) if this_week_rows else 0
@@ -671,16 +730,17 @@ def _query_week_over_week() -> dict[str, Any]:
 def query_node_health(
     health_type: str = "status",
     status_filter: str | None = None,
+    ips: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     if health_type == "status":
-        return _query_node_status(status_filter)
+        return _query_node_status(status_filter, ips)
     elif health_type == "resource":
-        return _query_resource_usage()
+        return _query_resource_usage(ips)
     return []
 
 
-def _query_node_status(status_filter: str | None = None) -> list[dict[str, Any]]:
-    rows = execute_query("""
+def _query_node_status(status_filter: str | None = None, ips: list[str] | None = None) -> list[dict[str, Any]]:
+    rows = execute_query(f"""
         SELECT
             Attributes['ip'] AS node_ip,
             argMax(Value, TimeUnix) AS status,
@@ -688,9 +748,10 @@ def _query_node_status(status_filter: str | None = None) -> list[dict[str, Any]]
             toUnixTimestamp(max(TimeUnix)) AS last_seen_ts
         FROM otel_metrics_gauge
         WHERE MetricName = 'up'
+          {_ip_where(ips)}
         GROUP BY node_ip
         ORDER BY status ASC, last_seen DESC
-    """)
+    """, {"ips": ips} if ips is not None else {})
 
     if rows is None:
         return []
@@ -714,8 +775,8 @@ def _query_node_status(status_filter: str | None = None) -> list[dict[str, Any]]
     return result
 
 
-def _query_resource_usage() -> list[dict[str, Any]]:
-    rows = execute_query("""
+def _query_resource_usage(ips: list[str] | None = None) -> list[dict[str, Any]]:
+    rows = execute_query(f"""
         SELECT
             Attributes['name'] AS dict_name,
             Attributes['ip'] AS node_ip,
@@ -729,8 +790,9 @@ def _query_resource_usage() -> list[dict[str, Any]]:
             ) AS free_bytes
         FROM otel_metrics_gauge
         WHERE MetricName IN ('edge_shared_dict_capacity_bytes', 'edge_shared_dict_free_space_bytes')
+          {_ip_where(ips)}
         GROUP BY dict_name, node_ip
-    """)
+    """, {"ips": ips} if ips is not None else {})
 
     if rows is None:
         return []

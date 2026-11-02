@@ -132,4 +132,46 @@ describe('metricsDashboard store', () => {
     await store.retryChart('connections')
     expect(getMetricTimeSeries).toHaveBeenCalledTimes(4)
   })
+
+  it('filterParam 组装：默认不过滤 / 集群 / 未纳管 / 节点优先（metrics-cluster-node-filter D4）', () => {
+    const store = useMetricsDashboardStore()
+    expect(store.filterParam).toBeUndefined()
+    store.setClusterFilter(3)
+    expect(store.filterParam).toBe('cluster:3')
+    store.setClusterFilter(-1)
+    expect(store.filterParam).toBe('unmanaged')
+    store.setClusterFilter(null)
+    expect(store.filterParam).toBeUndefined()
+    store.setClusterFilter(3)
+    store.setNodeFilter('10.0.0.1')
+    expect(store.filterParam).toBe('node:10.0.0.1')
+    store.setNodeFilter(null)
+    expect(store.filterParam).toBe('cluster:3')
+  })
+
+  it('setClusterFilter 重置节点选择（两级联动状态机）', () => {
+    const store = useMetricsDashboardStore()
+    store.setClusterFilter(3)
+    store.setNodeFilter('10.0.0.1')
+    store.setClusterFilter(5)
+    expect(store.nodeIp).toBeNull()
+    expect(store.clusterId).toBe(5)
+  })
+
+  it('加载函数透传 filter（time-series 全部目标 + summary）', async () => {
+    vi.mocked(getMetricTimeSeries).mockResolvedValue([mockDataPoint(1000, 50)])
+    vi.mocked(getMetricSummary).mockResolvedValue({
+      summary: {},
+      connectionStates: {},
+      sourceOk: true,
+      sourceTarget: 'ch:9000',
+    })
+    const store = useMetricsDashboardStore()
+    store.setClusterFilter(7)
+    await store.loadAllCharts()
+    // qps + errors + 连接状态 4 序列 = 6 个 time-series 调用全部带 filter
+    expect(getMetricTimeSeries).toHaveBeenCalledTimes(6)
+    expect(vi.mocked(getMetricTimeSeries).mock.calls.every((c) => c[4] === 'cluster:7')).toBe(true)
+    expect(getMetricSummary).toHaveBeenLastCalledWith('cluster:7')
+  })
 })

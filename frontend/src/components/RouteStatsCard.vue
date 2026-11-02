@@ -75,12 +75,15 @@ const props = withDefaults(
     sourceOk?: boolean | null
     /** 全页刷新信号：每次整页刷新周期完成后由父组件 +1（design D6） */
     refreshTick?: number
+    /** 集群/节点筛选（metrics-cluster-node-filter） */
+    filter?: string
   }>(),
   {
     since: '24h',
     limit: 10,
     sourceOk: null,
     refreshTick: 0,
+    filter: undefined,
   },
 )
 
@@ -187,7 +190,7 @@ async function loadData() {
   loading.value = true
   failed.value = false
   try {
-    const rawData = await getRouteStats(currentType.value, props.since, props.limit)
+    const rawData = await getRouteStats(currentType.value, props.since, props.limit, undefined, props.filter)
     const edgeUuids = [...new Set(rawData.map((r) => r.route_id))]
     const routeMapData = await getRouteNameMap(edgeUuids)
     routeMap.value = routeMapData
@@ -207,6 +210,12 @@ onMounted(() => {
 })
 watch(() => props.since, loadData)
 watch(() => props.limit, loadData)
+watch(
+  () => props.filter,
+  (n, o) => {
+    if (n !== o) loadData()
+  },
+)
 watch(
   () => props.sourceOk,
   (v, old) => {

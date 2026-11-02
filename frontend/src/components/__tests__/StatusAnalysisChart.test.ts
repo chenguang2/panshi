@@ -79,6 +79,14 @@ describe('StatusAnalysisChart.vue', () => {
     expect(wrapper.text()).toContain('数据源不可用，无法读取指标')
   })
 
+  it('filter 参数透传给 API（metrics-cluster-node-filter）', async () => {
+    mockGetStatusAnalysis.mockResolvedValue([])
+    mount(StatusAnalysisChart, { global: { stubs }, props: { filter: 'node:10.0.0.1' } })
+    await nextTick()
+    await nextTick()
+    expect(mockGetStatusAnalysis).toHaveBeenLastCalledWith('24h', 'node:10.0.0.1')
+  })
+
   it('refreshTick 变化时重新加载', async () => {
     mockGetStatusAnalysis.mockResolvedValue([])
     const wrapper = mount(StatusAnalysisChart, { global: { stubs }, props: { refreshTick: 0 } })

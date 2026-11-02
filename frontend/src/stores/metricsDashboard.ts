@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { getMetricSummary, getMetricTimeSeries } from '@/api/metrics'
 import type { MetricDataPoint } from '@/types/metrics'
 
@@ -73,13 +73,33 @@ export const useMetricsDashboardStore = defineStore('metricsDashboard', () => {
   const lastUpdated = ref<number | null>(null)
   const refreshTick = ref(0)
 
+  // ── 集群/节点筛选（metrics-cluster-node-filter D4）──
+  // clusterId：null=全部集群；-1=未纳管节点；>0=具体集群。nodeIp 仅在具体集群下有意义。
+  const clusterId = ref<number | -1 | null>(null)
+  const nodeIp = ref<string | null>(null)
+  // 后端单参数 filter 三形态（design D1）；nodeIp 优先于集群
+  const filterParam = computed(() => {
+    if (nodeIp.value) return `node:${nodeIp.value}`
+    if (clusterId.value === -1) return 'unmanaged'
+    if (clusterId.value != null) return `cluster:${clusterId.value}`
+    return undefined
+  })
+  function setClusterFilter(id: number | -1 | null): void {
+    // 切集群重置节点（两级联动状态机）
+    clusterId.value = id
+    nodeIp.value = null
+  }
+  function setNodeFilter(ip: string | null): void {
+    nodeIp.value = ip
+  }
+
   let sourceInFlight = false
 
   async function loadSourceStatus(): Promise<void> {
     if (sourceInFlight) return
     sourceInFlight = true
     try {
-      const { sourceOk: ok, sourceTarget: target } = await getMetricSummary()
+      const { sourceOk: ok, sourceTarget: target } = await getMetricSummary(filterParam.value)
       sourceOk.value = ok
       sourceTarget.value = target
     } catch {
@@ -97,7 +117,13 @@ export const useMetricsDashboardStore = defineStore('metricsDashboard', () => {
 
   async function loadSingleChart(cd: ChartDefinition): Promise<void> {
     try {
-      const data = await getMetricTimeSeries(cd.metricName, timeRange.value, intervalForRange(), cd.labelFilter)
+      const data = await getMetricTimeSeries(
+        cd.metricName,
+        timeRange.value,
+        intervalForRange(),
+        cd.labelFilter,
+        filterParam.value,
+      )
       chartDataMap.value[cd.key] = data
       errorMap.value[cd.key] = null
     } catch {
@@ -225,6 +251,9 @@ export const useMetricsDashboardStore = defineStore('metricsDashboard', () => {
     sourceTarget,
     lastUpdated,
     refreshTick,
+    clusterId,
+    nodeIp,
+    filterParam,
     loadAllCharts,
     loadInfraCharts,
     loadSourceStatus,
@@ -234,5 +263,7 @@ export const useMetricsDashboardStore = defineStore('metricsDashboard', () => {
     toggleAutoRefresh,
     startAutoRefresh,
     stopAutoRefresh,
+    setClusterFilter,
+    setNodeFilter,
   }
 })

@@ -94,7 +94,7 @@ describe('NodeHealthCard.vue（metrics-dashboard-ux-optimization D4）', () => {
     await wrapper.find('.a-select').trigger('click')
     await nextTick()
     await nextTick()
-    expect(mockGetNodeHealth).toHaveBeenLastCalledWith('resource')
+    expect(mockGetNodeHealth).toHaveBeenLastCalledWith('resource', undefined, undefined)
     expect(wrapper.find('.cell-capacity_fmt').text()).toBe('50.0 MB')
     expect(wrapper.find('.cell-usage_percent').text()).toContain('0.6%')
     expect(wrapper.find('.usage-bar').exists()).toBe(true)
@@ -127,6 +127,14 @@ describe('NodeHealthCard.vue（metrics-dashboard-ux-optimization D4）', () => {
     await nextTick()
     expect(mockGetNodeHealth).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('数据源不可用，无法读取指标')
+  })
+
+  it('filter 参数透传给 API（metrics-cluster-node-filter）', async () => {
+    mockGetNodeHealth.mockResolvedValue([])
+    mount(NodeHealthCard, { global: { stubs }, props: { filter: 'cluster:4' } })
+    await nextTick()
+    await nextTick()
+    expect(mockGetNodeHealth).toHaveBeenLastCalledWith('status', undefined, 'cluster:4')
   })
 
   it('refreshTick 变化时重新加载', async () => {

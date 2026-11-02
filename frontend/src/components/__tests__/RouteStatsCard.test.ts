@@ -150,6 +150,14 @@ describe('RouteStatsCard.vue（metrics-dashboard-ux-optimization D8）', () => {
     expect(wrapper.text()).toContain('数据源不可用，无法读取指标')
   })
 
+  it('filter 参数透传给 API（metrics-cluster-node-filter）', async () => {
+    mockGetRouteStats.mockResolvedValue([])
+    mount(RouteStatsCard, { global: { stubs }, props: { filter: 'cluster:9' } })
+    await nextTick()
+    await flushPromises()
+    expect(mockGetRouteStats).toHaveBeenLastCalledWith('qps', '24h', 10, undefined, 'cluster:9')
+  })
+
   it('refreshTick 变化时重新加载', async () => {
     mockGetRouteStats.mockResolvedValue([])
     const wrapper = mount(RouteStatsCard, { global: { stubs }, props: { refreshTick: 0 } })

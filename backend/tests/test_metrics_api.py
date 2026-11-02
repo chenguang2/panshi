@@ -39,7 +39,7 @@ class TestMetricsAPI:
         mock_query.return_value = []
         resp = isolated_app.get("/api/v1/metrics/cpu?since=6h&interval=15m&label=state:active")
         assert resp.status_code == 200
-        mock_query.assert_called_once_with(metric_name="cpu", since="6h", interval="15m", label="state:active")
+        mock_query.assert_called_once_with(metric_name="cpu", since="6h", interval="15m", label="state:active", ips=None)
 
     @patch("app.api.v1.metrics.query_time_series")
     def test_get_metric_time_series_empty(self, mock_query, isolated_app):

@@ -40,6 +40,22 @@ const SHOTS = [
   { name: '00-03-db-management', path: '/database-management' },
   // ── 第 24 章 指标总览（metrics-dashboard-ux-optimization 四分区版式，等数据上屏再截） ──
   { name: '16-01-dashboard', path: '/metrics/dashboard', steps: [{ waitMs: 9000 }] },
+  // 集群/节点筛选态（metrics-cluster-node-filter：选 app 集群 + 唯一上报节点，等 reload 再截）
+  {
+    name: '16-02-dashboard-filter',
+    path: '/metrics/dashboard',
+    steps: [
+      { waitMs: 9000 },
+      { click: '.cluster-filter' },
+      { waitMs: 500 },
+      { click: '.ant-select-item-option[title="app"]' },
+      { waitMs: 7000 },
+      { click: '.node-filter' },
+      { waitMs: 500 },
+      { click: '.ant-select-item-option[title="192.168.100.42"]' },
+      { waitMs: 7000 },
+    ],
+  },
   // ── 第 10 章 证书管理（ssl-cert-management：证书管理分组两页） ──
   { name: '09-01-ssl-ca-tab-empty', path: '/ssl/ca' },
   { name: '09-10-server-page-warn', path: '/ssl/server' },

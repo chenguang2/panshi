@@ -11,9 +11,11 @@ export async function getMetricTimeSeries(
   since = '1h',
   interval = '5m',
   label?: string,
+  filter?: string,
 ): Promise<MetricDataPoint[]> {
   const params: Record<string, string> = { since, interval }
   if (label) params.label = label
+  if (filter) params.filter = filter
   const res = await api.get(`/metrics/${metricName}`, { params })
   return res.data.data as MetricDataPoint[]
 }
@@ -25,8 +27,10 @@ interface MetricSummaryResult {
   sourceTarget: string
 }
 
-export async function getMetricSummary(): Promise<MetricSummaryResult> {
-  const res = await api.get('/metrics/summary')
+export async function getMetricSummary(filter?: string): Promise<MetricSummaryResult> {
+  const params: Record<string, string> = {}
+  if (filter) params.filter = filter
+  const res = await api.get('/metrics/summary', { params })
   return {
     summary: res.data.data as MetricSummary,
     connectionStates: (res.data.connection_states ?? {}) as ConnectionStates,
@@ -64,9 +68,11 @@ export async function getRouteStats(
   since: string,
   limit: number,
   latencyType?: string,
+  filter?: string,
 ): Promise<RouteStatsItem[]> {
   const params: Record<string, string | number> = { stats_type: statsType, since, limit }
   if (latencyType) params.latency_type = latencyType
+  if (filter) params.filter = filter
   const res = await api.get('/metrics/route-stats', { params })
   return res.data.data as RouteStatsItem[]
 }
@@ -78,8 +84,10 @@ interface StatusAnalysisItem {
   percentage: number
 }
 
-export async function getStatusAnalysis(since: string): Promise<StatusAnalysisItem[]> {
-  const res = await api.get('/metrics/status-analysis', { params: { since } })
+export async function getStatusAnalysis(since: string, filter?: string): Promise<StatusAnalysisItem[]> {
+  const params: Record<string, string> = { since }
+  if (filter) params.filter = filter
+  const res = await api.get('/metrics/status-analysis', { params })
   return res.data.data as StatusAnalysisItem[]
 }
 
@@ -100,9 +108,11 @@ interface HourlyDistributionItem {
 export async function getTimeComparison(
   comparisonType: string,
   days?: number,
+  filter?: string,
 ): Promise<DayOverDayData | HourlyDistributionItem[]> {
   const params: Record<string, string | number> = { comparison_type: comparisonType }
   if (days) params.days = days
+  if (filter) params.filter = filter
   const res = await api.get('/metrics/time-comparison', { params })
   return res.data.data as DayOverDayData | HourlyDistributionItem[]
 }
@@ -118,9 +128,14 @@ interface NodeHealthItem {
   usage_percent?: number
 }
 
-export async function getNodeHealth(healthType: string, statusFilter?: string): Promise<NodeHealthItem[]> {
+export async function getNodeHealth(
+  healthType: string,
+  statusFilter?: string,
+  filter?: string,
+): Promise<NodeHealthItem[]> {
   const params: Record<string, string> = { health_type: healthType }
   if (statusFilter) params.status = statusFilter
+  if (filter) params.filter = filter
   const res = await api.get('/metrics/node-health', { params })
   return res.data.data as NodeHealthItem[]
 }

@@ -71,8 +71,10 @@ const props = withDefaults(
     sourceOk?: boolean | null
     /** 全页刷新信号：每次整页刷新周期完成后由父组件 +1（design D6） */
     refreshTick?: number
+    /** 集群/节点筛选（metrics-cluster-node-filter） */
+    filter?: string
   }>(),
-  { sourceOk: null, refreshTick: 0 },
+  { sourceOk: null, refreshTick: 0, filter: undefined },
 )
 
 const currentType = ref('status')
@@ -144,7 +146,7 @@ async function loadData() {
   loading.value = true
   failed.value = false
   try {
-    raw.value = await getNodeHealth(currentType.value)
+    raw.value = await getNodeHealth(currentType.value, undefined, props.filter)
   } catch {
     failed.value = true
     raw.value = []
@@ -155,6 +157,12 @@ async function loadData() {
 
 onMounted(loadData)
 watch(currentType, loadData)
+watch(
+  () => props.filter,
+  (n, o) => {
+    if (n !== o) loadData()
+  },
+)
 watch(
   () => props.sourceOk,
   (v, old) => {

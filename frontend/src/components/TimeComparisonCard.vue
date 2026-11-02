@@ -120,12 +120,15 @@ const props = withDefaults(
     sourceOk?: boolean | null
     /** 全页刷新信号：每次整页刷新周期完成后由父组件 +1（design D6） */
     refreshTick?: number
+    /** 集群/节点筛选（metrics-cluster-node-filter）：cluster:{id} / node:{ip} / unmanaged */
+    filter?: string
   }>(),
   {
     comparisonType: 'day_over_day',
     days: 7,
     sourceOk: null,
     refreshTick: 0,
+    filter: undefined,
   },
 )
 
@@ -179,7 +182,7 @@ async function loadData() {
   failed.value = false
   view.value = null
   try {
-    const result = await getTimeComparison(currentType.value, props.days)
+    const result = await getTimeComparison(currentType.value, props.days, props.filter)
     const meta = TYPE_MAP[currentType.value]
     const d = (result && typeof result === 'object' && !Array.isArray(result) ? result : {}) as Record<string, unknown>
     const current = d[meta.currentField]
@@ -220,6 +223,12 @@ watch(
 )
 watch(() => props.comparisonType, loadData)
 watch(() => props.days, loadData)
+watch(
+  () => props.filter,
+  (n, o) => {
+    if (n !== o) loadData()
+  },
+)
 </script>
 
 <style scoped>

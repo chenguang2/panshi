@@ -89,7 +89,7 @@ describe('TimeComparisonCard.vue', () => {
     await wrapper.find('.a-select').trigger('click')
     await nextTick()
     await nextTick()
-    expect(mockGetTimeComparison).toHaveBeenLastCalledWith('week_over_week', 7)
+    expect(mockGetTimeComparison).toHaveBeenLastCalledWith('week_over_week', 7, undefined)
     expect(wrapper.text()).toContain('本周请求')
     expect(wrapper.text()).toContain('上周请求')
     expect(wrapper.text()).toContain('较上周')
@@ -121,6 +121,19 @@ describe('TimeComparisonCard.vue', () => {
     mockGetTimeComparison.mockResolvedValue({})
     const wrapper = mount(TimeComparisonCard, { global: { stubs } })
     expect(wrapper.find('.chart-scope').text()).toBe('今日 vs 昨日')
+  })
+
+  it('filter 参数透传给 API（metrics-cluster-node-filter）', async () => {
+    mockGetTimeComparison.mockResolvedValue({
+      today_requests: 1,
+      yesterday_requests: 1,
+      change_rate: 0,
+      data_quality: 'complete',
+    })
+    mount(TimeComparisonCard, { global: { stubs }, props: { filter: 'cluster:5' } })
+    await nextTick()
+    await nextTick()
+    expect(mockGetTimeComparison).toHaveBeenLastCalledWith('day_over_day', 7, 'cluster:5')
   })
 
   it('shows attributed error on failure', async () => {
