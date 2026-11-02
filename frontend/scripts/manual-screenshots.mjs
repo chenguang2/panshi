@@ -38,6 +38,8 @@ const SHOTS = [
   { name: '00-01-login', path: '/login', preLogin: true },
   { name: '00-02-dashboard-empty', path: '/' },
   { name: '00-03-db-management', path: '/database-management' },
+  // ── 第 24 章 指标总览（metrics-dashboard-ux-optimization 四分区版式，等数据上屏再截） ──
+  { name: '16-01-dashboard', path: '/metrics/dashboard', steps: [{ waitMs: 9000 }] },
   // ── 第 10 章 证书管理（ssl-cert-management：证书管理分组两页） ──
   { name: '09-01-ssl-ca-tab-empty', path: '/ssl/ca' },
   { name: '09-10-server-page-warn', path: '/ssl/server' },

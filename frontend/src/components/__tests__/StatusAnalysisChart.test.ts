@@ -28,10 +28,11 @@ describe('StatusAnalysisChart.vue', () => {
     vi.clearAllMocks()
   })
 
-  it('renders title', () => {
+  it('renders title with scope annotation', () => {
     mockGetStatusAnalysis.mockResolvedValue([])
     const wrapper = mount(StatusAnalysisChart, { global: { stubs } })
     expect(wrapper.find('.chart-title').text()).toBe('HTTP 状态码分析')
+    expect(wrapper.find('.chart-scope').text()).toBe('近 24小时')
   })
 
   it('shows loading state', async () => {
@@ -41,12 +42,13 @@ describe('StatusAnalysisChart.vue', () => {
     expect(wrapper.find('.a-spin').exists()).toBe(true)
   })
 
-  it('shows empty state when no data', async () => {
+  it('shows empty state 统计窗口内暂无请求', async () => {
     mockGetStatusAnalysis.mockResolvedValue([])
     const wrapper = mount(StatusAnalysisChart, { global: { stubs } })
     await nextTick()
     await nextTick()
     expect(wrapper.find('.chart-empty').exists()).toBe(true)
+    expect(wrapper.find('.chart-empty').text()).toBe('统计窗口内暂无请求')
   })
 
   it('shows total requests count', async () => {
@@ -60,11 +62,32 @@ describe('StatusAnalysisChart.vue', () => {
     expect(wrapper.find('.summary-total').text()).toContain('1,150')
   })
 
-  it('shows error state on API failure', async () => {
+  it('shows attributed error on failure', async () => {
     mockGetStatusAnalysis.mockRejectedValue(new Error('fail'))
     const wrapper = mount(StatusAnalysisChart, { global: { stubs } })
     await nextTick()
     await nextTick()
-    expect(wrapper.find('.chart-error').text()).toBe('数据加载失败')
+    expect(wrapper.find('.chart-error').text()).toContain('加载失败')
+  })
+
+  it('sourceOk=false 时不发请求并显示数据源不可用', async () => {
+    mockGetStatusAnalysis.mockResolvedValue([])
+    const wrapper = mount(StatusAnalysisChart, { global: { stubs }, props: { sourceOk: false } })
+    await nextTick()
+    await nextTick()
+    expect(mockGetStatusAnalysis).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('数据源不可用，无法读取指标')
+  })
+
+  it('refreshTick 变化时重新加载', async () => {
+    mockGetStatusAnalysis.mockResolvedValue([])
+    const wrapper = mount(StatusAnalysisChart, { global: { stubs }, props: { refreshTick: 0 } })
+    await nextTick()
+    await nextTick()
+    expect(mockGetStatusAnalysis).toHaveBeenCalledTimes(1)
+    await wrapper.setProps({ refreshTick: 1 })
+    await nextTick()
+    await nextTick()
+    expect(mockGetStatusAnalysis).toHaveBeenCalledTimes(2)
   })
 })

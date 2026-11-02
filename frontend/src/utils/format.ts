@@ -167,6 +167,27 @@ export function formatFileSize(bytes: number): string {
 }
 
 /**
+ * epoch 秒 → `YYYY-MM-DD HH:mm:ss`（Asia/Shanghai，与 formatDateTime 同展示时区）。
+ * 用于来自 ClickHouse 的 epoch 时间戳（如 node-health last_seen_ts）——其字符串
+ * 形态是采集端服务器时区，不可套 parseBackendDate 的 naive-UTC 解析（#26）。
+ */
+export function formatEpochDateTime(epochSeconds: number | null | undefined): string {
+  if (epochSeconds === null || epochSeconds === undefined || Number.isNaN(epochSeconds)) return '-'
+  const parts = new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date(epochSeconds * 1000))
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? ''
+  return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}:${get('second')}`
+}
+
+/**
  * 相对时间（node-management-ux-batch2 2.1 / design D3）：
  * <1min「刚刚」/ N 分钟前 / N 小时前 / N 天前（<7 天）/ 更早回落 formatDateOnly。
  * 差值为负（客户端时钟回拨 / 后端时钟漂移）钳为 0 →「刚刚」。

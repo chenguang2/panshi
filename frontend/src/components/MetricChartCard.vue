@@ -3,12 +3,17 @@
     <div class="chart-header">
       <span class="chart-title">{{ title }}</span>
       <span v-if="latestValue !== null" class="chart-value">{{ formattedValue }}</span>
-      <span v-if="unit" class="chart-unit">{{ unit }}</span>
+      <span v-if="unitLabel && latestValue !== null" class="chart-unit-label">{{ unitLabel }}</span>
+      <span v-if="unit && unit !== 'bytes' && unit !== 'bytes/s'" class="chart-unit">{{ unit }}</span>
     </div>
     <div class="chart-body">
-      <v-chart v-if="hasData" :option="chartOption" autoresize />
-      <div v-else-if="error" class="chart-error">{{ error }}</div>
-      <div v-else class="chart-empty">当前无数据</div>
+      <div v-if="loading" class="chart-skeleton" aria-hidden="true"></div>
+      <v-chart v-else-if="hasData" :option="chartOption" autoresize />
+      <div v-else-if="errorText" class="chart-error">
+        <span>{{ errorText }}</span>
+        <button v-if="retryable" type="button" class="chart-retry" @click="emit('retry')">重试</button>
+      </div>
+      <div v-else class="chart-empty">{{ emptyText }}</div>
     </div>
   </div>
 </template>
@@ -20,6 +25,7 @@ import { CanvasRenderer } from 'echarts/renderers'
 import { LineChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
 import VChart from 'vue-echarts'
+import { formatFileSize } from '@/utils/format'
 import type { MetricDataPoint } from '@/types/metrics'
 
 use([CanvasRenderer, LineChart, GridComponent, TooltipComponent, LegendComponent])
@@ -30,14 +36,38 @@ interface ChartSeriesInput {
   data: MetricDataPoint[]
 }
 
-const props = defineProps<{
-  title: string
-  data: MetricDataPoint[]
-  error?: string | null
-  unit?: string
-  /** 多序列模式：提供时按 series 渲染多条线 + 图例，data 仅用于头部最新值 */
-  series?: ChartSeriesInput[]
-}>()
+const props = withDefaults(
+  defineProps<{
+    title: string
+    data: MetricDataPoint[]
+    error?: string | null
+    unit?: string
+    /** 多序列模式：提供时按 series 渲染多条线 + 图例，data 仅用于头部最新值 */
+    series?: ChartSeriesInput[]
+    /** 加载中骨架（metrics-dashboard-ux-optimization D2 三态机：loading > error > empty > data） */
+    loading?: boolean
+    /** 空态文案：流量类「统计窗口内暂无请求」，上报类默认「暂无上报数据」 */
+    emptyText?: string
+    /** 错误可重试（数据源不可用态传 false，与全页横幅同语义） */
+    retryable?: boolean
+    /** 头部值后缀标注（连接状态卡「活跃」） */
+    unitLabel?: string
+  }>(),
+  {
+    error: null,
+    unit: undefined,
+    series: undefined,
+    loading: false,
+    emptyText: '暂无上报数据',
+    retryable: false,
+    unitLabel: undefined,
+  },
+)
+
+const emit = defineEmits<{ retry: [] }>()
+
+// 错误文案由页面按数据源状态归因后传入（数据源不可用 / 加载失败），卡片只负责渲染
+const errorText = computed(() => props.error || null)
 
 const hasData = computed(() => (props.series ? props.series.length > 0 : props.data.length > 0))
 
@@ -57,13 +87,18 @@ const latestValue = computed<number | null>(() => {
   return last?.avg ?? null
 })
 
-const formattedValue = computed(() => {
-  if (latestValue.value === null) return '--'
-  const v = latestValue.value
-  // 去尾零：整数不带小数点（586 而非 586.0），小数保留原有精度
+/** 数值格式化：字节类经 formatFileSize 人性化（design D3），其余按量级裁尾零 */
+function formatMetricValue(v: number): string {
+  if (props.unit === 'bytes') return formatFileSize(v)
+  if (props.unit === 'bytes/s') return `${formatFileSize(v)}/s`
   if (v >= 100) return Number(v.toFixed(1)).toString()
   if (v >= 10) return Number(v.toFixed(2)).toString()
   return Number(v.toFixed(3)).toString()
+}
+
+const formattedValue = computed(() => {
+  if (latestValue.value === null) return '--'
+  return formatMetricValue(latestValue.value)
 })
 
 const chartOption = computed(() => {
@@ -98,7 +133,8 @@ const chartOption = computed(() => {
   return {
     tooltip: {
       trigger: 'axis' as const,
-      valueFormatter: (v: number) => `${v.toFixed(3)}${props.unit || ''}`,
+      valueFormatter: (v: number) =>
+        `${formatMetricValue(v)}${props.unit === 'bytes' || props.unit === 'bytes/s' ? '' : props.unit || ''}`,
     },
     grid: { left: 4, right: 4, top: 4, bottom: 4 },
     xAxis: { show: false, type: 'time' as const },
@@ -145,6 +181,11 @@ const chartOption = computed(() => {
   font-family: var(--font-mono);
 }
 
+.chart-unit-label {
+  font-size: 11px;
+  color: var(--muted);
+}
+
 .chart-unit {
   font-size: 11px;
   color: var(--muted);
@@ -160,17 +201,50 @@ const chartOption = computed(() => {
   width: 100%;
 }
 
+/* 加载骨架：shimmer 占位（design D2，替代「闪现当前无数据」） */
+.chart-skeleton {
+  height: 160px;
+  border-radius: var(--radius-sm, 6px);
+  background: linear-gradient(100deg, var(--bg) 40%, var(--surface) 50%, var(--bg) 60%);
+  background-size: 200% 100%;
+  animation: chart-shimmer 1.4s ease infinite;
+}
+
+@keyframes chart-shimmer {
+  0% {
+    background-position: 120% 0;
+  }
+  100% {
+    background-position: -80% 0;
+  }
+}
+
 .chart-empty,
 .chart-error {
   height: 160px;
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   color: var(--muted);
   font-size: 12px;
 }
 
 .chart-error {
   color: var(--danger);
+}
+
+.chart-retry {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--accent);
+  font-size: 12px;
+  padding: 2px 10px;
+  border-radius: var(--radius-sm, 6px);
+  cursor: pointer;
+}
+
+.chart-retry:hover {
+  text-decoration: underline;
 }
 </style>

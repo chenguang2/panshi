@@ -48,8 +48,8 @@ export const BUSINESS_CHARTS: ChartDefinition[] = [
 ]
 
 export const INFRA_CHARTS: ChartDefinition[] = [
-  { key: 'shared_capacity', label: '共享字典容量', metricName: 'edge_shared_dict_capacity_bytes' },
-  { key: 'shared_free', label: '共享字典剩余', metricName: 'edge_shared_dict_free_space_bytes' },
+  { key: 'shared_capacity', label: '共享字典容量', metricName: 'edge_shared_dict_capacity_bytes', unit: 'bytes' },
+  { key: 'shared_free', label: '共享字典剩余', metricName: 'edge_shared_dict_free_space_bytes', unit: 'bytes' },
   { key: 'scrape_duration', label: '采集耗时', metricName: 'scrape_duration_seconds' },
   { key: 'scrape_samples', label: '采集样本数', metricName: 'scrape_samples_scraped' },
   { key: 'scrape_series', label: '新增序列', metricName: 'scrape_series_added' },
@@ -68,6 +68,10 @@ export const useMetricsDashboardStore = defineStore('metricsDashboard', () => {
   // 数据源连接级可用性（summary 响应 source_ok）：false 显示横幅；null 不显示
   const sourceOk = ref<boolean | null>(null)
   const sourceTarget = ref('')
+  // 新鲜度与全区块刷新信号（metrics-dashboard-ux-optimization D6）：
+  // lastUpdated 供「更新于 HH:mm:ss」；refreshTick 供扩展四卡/基础设施区跟随刷新周期 reload
+  const lastUpdated = ref<number | null>(null)
+  const refreshTick = ref(0)
 
   let sourceInFlight = false
 
@@ -109,6 +113,11 @@ export const useMetricsDashboardStore = defineStore('metricsDashboard', () => {
 
   let chartsInFlight = false
 
+  // 全量加载目标（含基础设施区）：retryChart 按卡 key 查找用
+  function allLoadTargets(): ChartDefinition[] {
+    return [...businessLoadTargets(), ...INFRA_CHARTS]
+  }
+
   async function loadAllCharts(): Promise<void> {
     // 单飞守卫：加载中不重复发起，避免快速切换页面时慢查询无限堆叠
     if (chartsInFlight) return
@@ -126,7 +135,19 @@ export const useMetricsDashboardStore = defineStore('metricsDashboard', () => {
     } finally {
       chartsInFlight = false
       loading.value = false
+      lastUpdated.value = Date.now()
+      refreshTick.value++
     }
+  }
+
+  // 单卡重试：仅重发该卡的请求（错误态「重试」按钮，design D2）
+  async function retryChart(key: string): Promise<void> {
+    if (key === 'connections') {
+      await Promise.allSettled(CONNECTION_CHART_DEFS.map((cd) => loadSingleChart(cd)))
+      return
+    }
+    const cd = allLoadTargets().find((d) => d.key === key)
+    if (cd) await loadSingleChart(cd)
   }
 
   let infraInFlight = false
@@ -202,9 +223,12 @@ export const useMetricsDashboardStore = defineStore('metricsDashboard', () => {
     errorMap,
     sourceOk,
     sourceTarget,
+    lastUpdated,
+    refreshTick,
     loadAllCharts,
     loadInfraCharts,
     loadSourceStatus,
+    retryChart,
     setTimeRange,
     setRefreshInterval,
     toggleAutoRefresh,

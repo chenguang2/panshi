@@ -32,7 +32,7 @@ class TestNodeHealthData:
     def test_health_status_returns_correct_structure(self, isolated_app):
         with patch("app.services.metrics_service.execute_query") as mock_exec:
             mock_exec.return_value = [
-                ("192.168.100.42", 1.0, "2026-08-21 10:47:42"),
+                ("192.168.100.42", 1.0, "2026-08-21 10:47:42", 1755749262),
             ]
             response = isolated_app.get("/api/v1/metrics/node-health?health_type=status")
             assert response.status_code == 200
@@ -41,6 +41,19 @@ class TestNodeHealthData:
             assert data[0]["node_ip"] == "192.168.100.42"
             assert data[0]["status"] == 1
             assert "last_seen" in data[0]
+
+    def test_health_status_includes_epoch_timestamp(self, isolated_app):
+        """last_seen_ts：Unix epoch 秒（前端格式化的事实源，规避 ClickHouse 服务器时区歧义）。"""
+        with patch("app.services.metrics_service.execute_query") as mock_exec:
+            mock_exec.return_value = [
+                ("192.168.100.42", 1.0, "2026-08-21 10:47:42", 1755749262),
+            ]
+            response = isolated_app.get("/api/v1/metrics/node-health?health_type=status")
+            data = response.json()["data"]
+            assert data[0]["last_seen_ts"] == 1755749262
+            assert isinstance(data[0]["last_seen_ts"], int)
+            # 兼容字段保留
+            assert data[0]["last_seen"] == "2026-08-21 10:47:42"
 
     def test_resource_usage_returns_correct_structure(self, isolated_app):
         with patch("app.services.metrics_service.execute_query") as mock_exec:

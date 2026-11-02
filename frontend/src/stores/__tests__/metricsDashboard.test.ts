@@ -3,9 +3,10 @@ import { setActivePinia, createPinia } from 'pinia'
 
 vi.mock('@/api/metrics', () => ({
   getMetricTimeSeries: vi.fn(),
+  getMetricSummary: vi.fn(),
 }))
 
-import { getMetricTimeSeries } from '@/api/metrics'
+import { getMetricTimeSeries, getMetricSummary } from '@/api/metrics'
 import { useMetricsDashboardStore } from '../metricsDashboard'
 import type { MetricDataPoint } from '@/types/metrics'
 
@@ -92,5 +93,43 @@ describe('metricsDashboard store', () => {
     expect(store.chartDataMap['connections_writing']).toHaveLength(1)
     expect(store.chartDataMap['connections_waiting']).toHaveLength(1)
     expect(store.loading).toBe(false)
+  })
+
+  it('loadAllCharts 完成后更新 lastUpdated 与 refreshTick（页面新鲜度与全区块刷新信号）', async () => {
+    vi.mocked(getMetricTimeSeries).mockResolvedValue([mockDataPoint(1000, 50)])
+    vi.mocked(getMetricSummary).mockResolvedValue({
+      summary: {},
+      connectionStates: {},
+      sourceOk: true,
+      sourceTarget: 'ch:9000',
+    })
+    const store = useMetricsDashboardStore()
+    expect(store.refreshTick).toBe(0)
+    expect(store.lastUpdated).toBeNull()
+    await store.loadAllCharts()
+    expect(store.refreshTick).toBe(1)
+    expect(store.lastUpdated).not.toBeNull()
+    await store.loadAllCharts()
+    expect(store.refreshTick).toBe(2)
+  })
+
+  it('retryChart 只重发指定卡片的请求', async () => {
+    vi.mocked(getMetricTimeSeries).mockResolvedValue([mockDataPoint(1000, 50)])
+    const store = useMetricsDashboardStore()
+    await store.loadAllCharts()
+    vi.mocked(getMetricTimeSeries).mockClear()
+    await store.retryChart('qps')
+    expect(getMetricTimeSeries).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(getMetricTimeSeries).mock.calls[0][0]).toBe('edge_http_requests_total')
+    expect(store.chartDataMap['qps']).toHaveLength(1)
+  })
+
+  it('retryChart(connections) 重发连接状态 4 序列', async () => {
+    vi.mocked(getMetricTimeSeries).mockResolvedValue([mockDataPoint(1000, 50)])
+    const store = useMetricsDashboardStore()
+    await store.loadAllCharts()
+    vi.mocked(getMetricTimeSeries).mockClear()
+    await store.retryChart('connections')
+    expect(getMetricTimeSeries).toHaveBeenCalledTimes(4)
   })
 })

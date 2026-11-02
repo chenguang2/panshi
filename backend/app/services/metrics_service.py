@@ -684,7 +684,8 @@ def _query_node_status(status_filter: str | None = None) -> list[dict[str, Any]]
         SELECT
             Attributes['ip'] AS node_ip,
             argMax(Value, TimeUnix) AS status,
-            max(TimeUnix) AS last_seen
+            max(TimeUnix) AS last_seen,
+            toUnixTimestamp(max(TimeUnix)) AS last_seen_ts
         FROM otel_metrics_gauge
         WHERE MetricName = 'up'
         GROUP BY node_ip
@@ -699,6 +700,8 @@ def _query_node_status(status_filter: str | None = None) -> list[dict[str, Any]]
             "node_ip": r[0],
             "status": int(r[1]),
             "last_seen": str(r[2]),
+            # epoch 秒：前端格式化的事实源（ClickHouse 服务器时区的字符串有歧义，不作展示依据）
+            "last_seen_ts": int(r[3]),
         }
         for r in rows
     ]

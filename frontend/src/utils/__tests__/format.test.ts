@@ -7,6 +7,7 @@ import {
   formatPublishDateTime,
   formatFileSize,
   formatRelativeTime,
+  formatEpochDateTime,
   formatDurationCompact,
   durationSeconds,
 } from '../format'
@@ -176,6 +177,17 @@ describe('utils/format', () => {
     })
     it('结束早于开始钳为 0（客户端/服务端时钟漂移）', () => {
       expect(durationSeconds('2026-08-02T10:00:45', '2026-08-02T10:00:00')).toBe(0)
+    })
+  })
+
+  describe('formatEpochDateTime（epoch 秒 → Asia/Shanghai，metrics node-health last_seen_ts）', () => {
+    it('epoch 1787309262（UTC 10:47:42）按 Asia/Shanghai 展示为 18:47:42', () => {
+      expect(formatEpochDateTime(1787309262)).toBe('2026-08-21 18:47:42')
+    })
+    it('空值 / 非法值返回占位', () => {
+      expect(formatEpochDateTime(null)).toBe('-')
+      expect(formatEpochDateTime(undefined)).toBe('-')
+      expect(formatEpochDateTime(Number.NaN)).toBe('-')
     })
   })
 })

@@ -30,59 +30,86 @@
           un-checked-children="手动"
         />
       </div>
-      <a-button size="small" @click="refreshAll">
+      <a-button size="small" class="refresh-btn" @click="refreshAll">
         <template #icon><ReloadOutlined /></template>
         刷新
       </a-button>
+      <span v-if="lastUpdatedText" class="last-updated">更新于 {{ lastUpdatedText }}</span>
       <a-tag v-if="store.loading" color="processing">加载中...</a-tag>
     </div>
 
-    <!-- ── Business Metrics Grid ── -->
-    <div class="chart-grid">
-      <template v-for="chart in businessCharts" :key="chart.key">
-        <MetricChartCard
-          v-if="chart.key === 'connections'"
-          :title="chart.label"
-          :data="store.chartDataMap['connections_active'] || []"
-          :error="connectionSeriesError"
-          :series="connectionSeries"
-        />
-        <MetricChartCard
-          v-else
-          :title="chart.label"
-          :data="store.chartDataMap[chart.key] || []"
-          :error="store.errorMap[chart.key]"
-          :unit="chart.unit"
-        />
-      </template>
-    </div>
+    <!-- ── 核心流量 ── -->
+    <div class="section-header">核心流量</div>
+    <section class="chart-grid" data-section="core">
+      <MetricChartCard
+        title="QPS"
+        :data="store.chartDataMap['qps'] || []"
+        :error="metricCardError('qps')"
+        :retryable="store.sourceOk !== false"
+        :loading="store.loading"
+        unit="/s"
+        empty-text="暂无上报数据"
+        @retry="store.retryChart('qps')"
+      />
+      <MetricChartCard
+        title="Nginx 连接状态"
+        :data="store.chartDataMap['connections_active'] || []"
+        :error="metricCardError('connections')"
+        :retryable="store.sourceOk !== false"
+        :loading="store.loading"
+        :series="connectionSeries"
+        unit-label="活跃"
+        @retry="store.retryChart('connections')"
+      />
+    </section>
 
-    <!-- ── Extended Analytics Grid ── -->
-    <div class="chart-grid" style="grid-template-columns: 1fr">
-      <RouteStatsCard :since="store.timeRange" />
-    </div>
-    <div class="chart-grid">
-      <StatusAnalysisChart :since="store.timeRange" />
-      <TimeComparisonCard :comparison-type="'day_over_day'" />
-    </div>
-    <div class="chart-grid">
-      <NodeHealthCard />
-    </div>
+    <!-- ── 流量分析 ── -->
+    <div class="section-header">流量分析</div>
+    <section class="chart-grid analysis-grid" data-section="analysis">
+      <RouteStatsCard :since="store.timeRange" :source-ok="store.sourceOk" :refresh-tick="store.refreshTick" />
+      <div class="chart-grid analysis-row">
+        <StatusAnalysisChart :since="store.timeRange" :source-ok="store.sourceOk" :refresh-tick="store.refreshTick" />
+        <TimeComparisonCard
+          comparison-type="day_over_day"
+          :source-ok="store.sourceOk"
+          :refresh-tick="store.refreshTick"
+        />
+      </div>
+    </section>
+
+    <!-- ── 运行健康 ── -->
+    <div class="section-header">运行健康</div>
+    <section class="chart-grid" data-section="health">
+      <NodeHealthCard :source-ok="store.sourceOk" :refresh-tick="store.refreshTick" />
+      <MetricChartCard
+        title="采集错误率"
+        :data="store.chartDataMap['errors'] || []"
+        :error="metricCardError('errors')"
+        :retryable="store.sourceOk !== false"
+        :loading="store.loading"
+        unit="/s"
+        @retry="store.retryChart('errors')"
+      />
+    </section>
 
     <!-- ── Infra Collapsible ── -->
     <div class="infra-section">
-      <div class="infra-toggle" @click="toggleInfra">
+      <button type="button" class="infra-toggle" :aria-expanded="infraOpen" @click="toggleInfra">
         <span>{{ infraOpen ? '收起' : '更多指标' }}</span>
         <span class="infra-count" v-if="!infraOpen">({{ INFRA_CHARTS.length }} 项)</span>
         <CaretDownOutlined :class="{ rotated: infraOpen }" />
-      </div>
+      </button>
       <div v-if="infraOpen" class="chart-grid">
         <MetricChartCard
           v-for="chart in INFRA_CHARTS"
           :key="chart.key"
           :title="chart.label"
           :data="store.chartDataMap[chart.key] || []"
-          :error="store.errorMap[chart.key]"
+          :error="metricCardError(chart.key)"
+          :retryable="store.sourceOk !== false"
+          :loading="store.loading"
+          :unit="chart.unit"
+          @retry="store.retryChart(chart.key)"
         />
       </div>
     </div>
@@ -90,10 +117,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted, watch } from 'vue'
 import { ref } from 'vue'
 import { ReloadOutlined, CaretDownOutlined } from '@ant-design/icons-vue'
-import { useMetricsDashboardStore, BUSINESS_CHARTS, INFRA_CHARTS, CONNECTION_SERIES } from '@/stores/metricsDashboard'
+import { useMetricsDashboardStore, INFRA_CHARTS, CONNECTION_SERIES } from '@/stores/metricsDashboard'
 import MetricChartCard from '@/components/MetricChartCard.vue'
 import MetricsSourceBanner from '@/components/MetricsSourceBanner.vue'
 import RouteStatsCard from '@/components/RouteStatsCard.vue'
@@ -105,8 +132,6 @@ import PageHeader from '@/components/PageHeader.vue'
 const store = useMetricsDashboardStore()
 const infraOpen = ref(false)
 
-const businessCharts = BUSINESS_CHARTS
-
 // 连接状态多序列：过滤无数据序列，避免渲染空线
 const connectionSeries = computed(() =>
   CONNECTION_SERIES.map((s) => ({
@@ -116,13 +141,26 @@ const connectionSeries = computed(() =>
   })).filter((s) => s.data.length > 0),
 )
 
-// 任一状态序列加载失败即提示
-const connectionSeriesError = computed(() => {
-  const failed = CONNECTION_SERIES.some((s) => store.errorMap[s.key])
-  return failed ? '数据加载失败' : null
+// 卡片错误归因（design D2）：数据源不可用统一文案（与横幅同语义），其余「加载失败」＋重试
+function metricCardError(key: string): string | null {
+  if (store.sourceOk === false) return '数据源不可用，无法读取指标'
+  return store.errorMap[key] ? '加载失败' : null
+}
+
+// 新鲜度（design D6）：更新于 HH:mm:ss（Asia/Shanghai）
+const lastUpdatedText = computed(() => {
+  if (!store.lastUpdated) return ''
+  const parts = new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(new Date(store.lastUpdated))
+  return parts
 })
 
-function onTimeRangeChange(e: any): void {
+function onTimeRangeChange(e: { target: { value: string } }): void {
   store.setTimeRange(e.target.value)
 }
 
@@ -137,12 +175,21 @@ function toggleInfra(): void {
   }
 }
 
+// 手动刷新（design D6）：业务图 + refreshTick bump（扩展卡与展开的基础设施区跟随 reload）
 function refreshAll(): void {
   store.loadAllCharts()
-  if (infraOpen.value) {
-    store.loadInfraCharts()
-  }
+  // loadAllCharts 完成即 bump refreshTick；基础设施区在 tick watcher 中按展开态 reload
 }
+
+// 全页刷新周期 → 展开中的基础设施区跟随刷新（收起时按需豁免）
+watch(
+  () => store.refreshTick,
+  (n, o) => {
+    if (n !== o && n > 0 && infraOpen.value) {
+      store.loadInfraCharts()
+    }
+  },
+)
 
 // 卸载竞态防护：初始加载耗时数秒，若等待期间用户离开页面，
 // 卸载时 stopAutoRefresh 尚无定时器可停；加载完成后不得再启动（否则成为无人停止的孤儿定时器）
@@ -184,11 +231,33 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
+.last-updated {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.section-header {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+  margin-bottom: 10px;
+}
+
 .chart-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
   margin-bottom: 16px;
+}
+
+.analysis-grid {
+  grid-template-columns: 1fr;
+  gap: 16px 16px;
+  margin-bottom: 16px;
+}
+
+.analysis-row {
+  margin-bottom: 0;
 }
 
 .infra-section {
@@ -199,8 +268,10 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 6px;
+  width: 100%;
   padding: 10px 16px;
   background: var(--surface);
+  border: none;
   border-radius: var(--radius-md);
   cursor: pointer;
   font-size: 13px;
