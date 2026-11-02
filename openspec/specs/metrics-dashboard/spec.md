@@ -8,28 +8,26 @@
 
 ### Requirement: Menu integration
 
-The metrics monitoring feature SHALL use a parent-child menu structure in the sidebar.
+The metrics feature SHALL be presented in the sidebar「监控」nav group（AppSidebar navSections 批 9 结构，组内另有独立 feature 的 ClickHouse 配置项）。
 
-The parent menu "指标监控" SHALL NOT be a clickable route itself — it SHALL serve as an expandable container for two sub-menus.
+Both metrics items SHALL be gated by the `metrics` feature switch and the `metrics` permission — hidden when either fails.
 
-#### Scenario: Parent menu visible (feature enabled)
+#### Scenario: Metrics items visible (feature enabled)
 - **WHEN** the `metrics` feature switch is enabled in `features.yaml`
-- **THEN** "指标监控" SHALL appear as an expandable parent item in the sidebar navigation menu
-- **AND** clicking the parent SHALL toggle its sub-menu expansion (not navigate)
+- **THEN** the「监控」group SHALL show「指标总览」and「指标查询」items
+- **AND** the group SHALL be positioned per navSections group order (after 边缘网络, before 运维管理)
 
-#### Scenario: Sub-menu "查询分析"
-- **WHEN** the `metrics` feature is enabled
-- **THEN** "查询分析" SHALL appear as a child item under "指标监控"
-- **AND** clicking it SHALL navigate to `/metrics`
+#### Scenario: Item「指标总览」
+- **WHEN** the user clicks「指标总览」
+- **THEN** it SHALL navigate to `/metrics/dashboard`
 
-#### Scenario: Sub-menu "仪表盘"
-- **WHEN** the `metrics` feature is enabled
-- **THEN** "仪表盘" SHALL appear as a child item under "指标监控"
-- **AND** clicking it SHALL navigate to `/metrics/dashboard`
+#### Scenario: Item「指标查询」
+- **WHEN** the user clicks「指标查询」
+- **THEN** it SHALL navigate to `/metrics`
 
 #### Scenario: Feature disabled
 - **WHEN** the `metrics` feature switch is disabled
-- **THEN** both the parent menu and its sub-menus SHALL be hidden
+- **THEN** both metrics items SHALL be hidden
 
 ### Requirement: Dashboard page layout
 

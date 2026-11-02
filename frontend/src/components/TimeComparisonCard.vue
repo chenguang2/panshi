@@ -26,7 +26,7 @@
           </div>
           <div class="compare-item">
             <div class="compare-label">变化率（{{ view.suffix }}）</div>
-            <div :class="['compare-value', changeClass]">
+            <div :class="['compare-value', changeClass]" :title="changeTitle">
               {{ view.changeRate > 0 ? '+' : '' }}{{ view.changeRate.toFixed(1) }}%
             </div>
           </div>
@@ -145,6 +145,15 @@ const changeClass = computed(() => {
   if (view.value.changeRate > 0) return 'change-up'
   if (view.value.changeRate < 0) return 'change-down'
   return ''
+})
+
+/** 变化率 tooltip（P2 #2）：流量涨跌无善恶，用中性语句说明方向与幅度 */
+const changeTitle = computed(() => {
+  const v = view.value
+  if (!v) return ''
+  if (v.changeRate > 0) return `请求量${v.suffix}上升 ${v.changeRate.toFixed(1)}%`
+  if (v.changeRate < 0) return `请求量${v.suffix}下降 ${Math.abs(v.changeRate).toFixed(1)}%`
+  return `请求量${v.suffix}持平`
 })
 
 const samplesText = computed(() => {

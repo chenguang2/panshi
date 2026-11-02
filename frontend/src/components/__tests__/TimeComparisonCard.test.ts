@@ -68,6 +68,9 @@ describe('TimeComparisonCard.vue', () => {
     expect(wrapper.text()).toContain('今日请求')
     expect(wrapper.text()).toContain('昨日请求')
     expect(wrapper.text()).toContain('较昨日')
+    const change = wrapper.find('.change-up')
+    expect(change.exists()).toBe(true)
+    expect(change.attributes('title')).toBe('请求量较昨日上升 5.9%')
   })
 
   it('renders week-over-week with 本周/上周 labels（修复：周对比恒空态）', async () => {
@@ -90,6 +93,9 @@ describe('TimeComparisonCard.vue', () => {
     expect(wrapper.text()).toContain('本周请求')
     expect(wrapper.text()).toContain('上周请求')
     expect(wrapper.text()).toContain('较上周')
+    const change = wrapper.find('.change-down')
+    expect(change.exists()).toBe(true)
+    expect(change.attributes('title')).toBe('请求量较上周下降 3.3%')
   })
 
   it('shows sampling coverage with weak text and tooltip title', async () => {
