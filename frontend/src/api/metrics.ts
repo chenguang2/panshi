@@ -140,6 +140,18 @@ export async function getNodeHealth(
   return res.data.data as NodeHealthItem[]
 }
 
+/** 平均请求处理耗时（metrics-avg-latency-card）：histogram 窗口增量 ΔSum/ΔCount，单位 ms */
+export async function getAvgLatencySeries(
+  since: string,
+  interval: string,
+  filter?: string,
+): Promise<MetricDataPoint[]> {
+  const params: Record<string, string> = { since, interval }
+  if (filter) params.filter = filter
+  const res = await api.get('/metrics/avg-latency', { params })
+  return res.data.data as MetricDataPoint[]
+}
+
 export async function getRouteNameMap(edgeUuids: string[]): Promise<Record<string, { name: string; uri: string }>> {
   if (edgeUuids.length === 0) return {}
   const res = await api.post('/routes/by-edge-uuids', edgeUuids)

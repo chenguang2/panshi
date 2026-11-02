@@ -73,7 +73,19 @@
         @retry="store.retryChart('qps')"
       />
       <MetricChartCard
+        title="平均耗时"
+        :scope-label="`近 ${timeRangeLabel}`"
+        :data="store.chartDataMap['avg_latency'] || []"
+        :error="metricCardError('avg_latency')"
+        :retryable="store.sourceOk !== false"
+        :loading="store.loading"
+        unit="ms"
+        empty-text="暂无上报数据"
+        @retry="store.retryChart('avg_latency')"
+      />
+      <MetricChartCard
         title="Nginx 连接状态"
+        class="span-full"
         :data="store.chartDataMap['connections_active'] || []"
         :error="metricCardError('connections')"
         :retryable="store.sourceOk !== false"
@@ -166,6 +178,10 @@ import PageHeader from '@/components/PageHeader.vue'
 
 const store = useMetricsDashboardStore()
 const infraOpen = ref(false)
+
+// 平均耗时卡口径标注（metrics-avg-latency-card 文案 #2）
+const TIME_RANGE_LABELS: Record<string, string> = { '1h': '1小时', '6h': '6小时', '24h': '24小时', '7d': '7天' }
+const timeRangeLabel = computed(() => TIME_RANGE_LABELS[store.timeRange] || store.timeRange)
 
 // ── 集群/节点筛选（metrics-cluster-node-filter D4）──
 const route = useRoute()
@@ -369,6 +385,11 @@ onUnmounted(() => {
   grid-template-columns: 1fr 1fr;
   gap: 16px;
   margin-bottom: 16px;
+}
+
+/* 连接状态 4 状态序列全宽横排（metrics-avg-latency-card 布局 A） */
+.span-full {
+  grid-column: 1 / -1;
 }
 
 .analysis-grid {

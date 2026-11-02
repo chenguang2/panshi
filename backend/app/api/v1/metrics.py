@@ -15,6 +15,7 @@ from app.core.database import get_db
 from app.models.cluster import Node
 from app.services.metrics_service import (
     parse_filter,
+    query_avg_latency_series,
     query_metric_names,
     query_time_series,
     query_summary,
@@ -173,6 +174,27 @@ async def get_time_comparison(
 VALID_HEALTH_TYPES = {"status", "resource"}
 
 
+@router.get("/metrics/avg-latency")
+async def get_avg_latency(
+    since: str = Query("1h", pattern=r"^\d+[smhd]$"),
+    interval: str = Query("5m", pattern=r"^\d+[smh]$"),
+    filter_str: str | None = Query(None, alias="filter"),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        ips, warning = await _resolve_filter(filter_str, db)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    data = await asyncio.to_thread(
+        query_avg_latency_series,
+        "edge_http_latency",
+        since=since,
+        interval=interval,
+        ips=ips,
+    )
+    return _filter_response(data, warning)
+
+
 @router.get("/metrics/node-health")
 async def get_node_health(
     health_type: str = Query("status"),
@@ -202,7 +224,7 @@ async def get_node_health(
 async def get_metric_time_series(
     metric_name: str,
     since: str = Query("1h", pattern=r"^\d+[smhd]$"),
-    interval: str = Query("5m", pattern=r"^\d+[sm]$"),
+    interval: str = Query("5m", pattern=r"^\d+[smh]$"),
     label: str | None = Query(None),
     filter_str: str | None = Query(None, alias="filter"),
     db: AsyncSession = Depends(get_db),

@@ -41,8 +41,8 @@ const stubs = {
   MetricsSourceBanner: { template: '<div class="source-banner-stub" />', props: ['sourceOk', 'target'] },
   MetricChartCard: {
     template:
-      '<div class="mc-card-stub">{{ title }}<span v-if="error" class="stub-error">{{ error }}</span><button class="stub-retry" @click="$emit(\'retry\')">r</button></div>',
-    props: ['title', 'data', 'error', 'unit', 'series', 'loading', 'emptyText', 'retryable', 'unitLabel'],
+      '<div class="mc-card-stub">{{ title }}<span v-if="scopeLabel" class="chart-scope">{{ scopeLabel }}</span><span v-if="error" class="stub-error">{{ error }}</span><button class="stub-retry" @click="$emit(\'retry\')">r</button></div>',
+    props: ['title', 'data', 'error', 'unit', 'series', 'loading', 'emptyText', 'retryable', 'unitLabel', 'scopeLabel'],
     emits: ['retry'],
   },
   RouteStatsCard: {
@@ -110,6 +110,22 @@ describe('MetricsDashboard.vue 四分区与刷新一致性（metrics-dashboard-u
     const core = wrapper.find('[data-section="core"]').text()
     expect(core).toContain('QPS')
     expect(core).toContain('Nginx 连接状态')
+  })
+
+  it('核心流量区含平均耗时卡（ms），连接状态全宽（布局 A，metrics-avg-latency-card）', () => {
+    const { wrapper } = mountPage()
+    const core = wrapper.find('[data-section="core"]')
+    expect(core.text()).toContain('平均耗时')
+    const cards = core.findAll('.mc-card-stub')
+    const connCard = cards.find((c) => c.text().includes('Nginx 连接状态'))
+    expect(connCard).toBeTruthy()
+    expect((connCard as { classes: () => string[] }).classes()).toContain('span-full')
+  })
+
+  it('平均耗时卡带口径标注「近 …」（MetricChartCard scopeLabel）', () => {
+    const { wrapper } = mountPage()
+    const core = wrapper.find('[data-section="core"]')
+    expect(core.find('.chart-scope').text()).toMatch(/^近 /)
   })
 
   it('运行健康区含 节点健康 与 采集错误率（采集错误率移出业务组）', () => {

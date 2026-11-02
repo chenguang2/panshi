@@ -2,6 +2,7 @@
   <div class="metric-chart-card">
     <div class="chart-header">
       <span class="chart-title">{{ title }}</span>
+      <span v-if="scopeLabel" class="chart-scope">{{ scopeLabel }}</span>
       <span v-if="latestValue !== null" class="chart-value">{{ formattedValue }}</span>
       <span v-if="unitLabel && latestValue !== null" class="chart-unit-label">{{ unitLabel }}</span>
       <span v-if="unit && unit !== 'bytes' && unit !== 'bytes/s'" class="chart-unit">{{ unit }}</span>
@@ -52,6 +53,8 @@ const props = withDefaults(
     retryable?: boolean
     /** 头部值后缀标注（连接状态卡「活跃」） */
     unitLabel?: string
+    /** 标题旁口径标注（平均耗时卡「近 {time range}」，metrics-avg-latency-card 文案 #2） */
+    scopeLabel?: string
   }>(),
   {
     error: null,
@@ -61,6 +64,7 @@ const props = withDefaults(
     emptyText: '暂无上报数据',
     retryable: false,
     unitLabel: undefined,
+    scopeLabel: undefined,
   },
 )
 
@@ -172,6 +176,12 @@ const chartOption = computed(() => {
 .chart-title {
   font-size: 12px;
   color: var(--muted);
+}
+
+.chart-scope {
+  font-size: 11px;
+  color: var(--muted);
+  opacity: 0.75;
 }
 
 .chart-value {

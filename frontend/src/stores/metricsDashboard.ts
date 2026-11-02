@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { getMetricSummary, getMetricTimeSeries } from '@/api/metrics'
+import { getMetricSummary, getMetricTimeSeries, getAvgLatencySeries } from '@/api/metrics'
 import type { MetricDataPoint } from '@/types/metrics'
 
 const intervalMap: Record<string, string> = {
@@ -16,6 +16,8 @@ interface ChartDefinition {
   metricName: string
   labelFilter?: string
   unit?: string
+  /** 加载通道（metrics-avg-latency-card D3）：缺省走 query_time_series；histogram_avg 走专用 avg-latency 端点 */
+  kind?: 'histogram_avg'
 }
 
 // 「Nginx 连接状态」图的 4 条序列（active/reading/writing/waiting）
@@ -42,6 +44,7 @@ const CONNECTION_CHART_DEFS: ChartDefinition[] = CONNECTION_SERIES.map((s) => ({
 
 export const BUSINESS_CHARTS: ChartDefinition[] = [
   { key: 'qps', label: 'QPS', metricName: 'edge_http_requests_total', unit: '/s' },
+  { key: 'avg_latency', label: '平均耗时', metricName: 'edge_http_latency', unit: 'ms', kind: 'histogram_avg' },
   // connections 卡片由 CONNECTION_CHART_DEFS 加载（4 状态序列），此处仅保留占位定义供视图渲染
   { key: 'connections', label: 'Nginx 连接状态', metricName: 'edge_nginx_http_current_connections' },
   { key: 'errors', label: '采集错误率', metricName: 'edge_metric_errors_total', unit: '/s' },
@@ -117,13 +120,17 @@ export const useMetricsDashboardStore = defineStore('metricsDashboard', () => {
 
   async function loadSingleChart(cd: ChartDefinition): Promise<void> {
     try {
-      const data = await getMetricTimeSeries(
-        cd.metricName,
-        timeRange.value,
-        intervalForRange(),
-        cd.labelFilter,
-        filterParam.value,
-      )
+      // histogram_avg 通道：平均耗时卡走专用端点（metrics-avg-latency-card D3），其余走通用 time-series
+      const data =
+        cd.kind === 'histogram_avg'
+          ? await getAvgLatencySeries(timeRange.value, intervalForRange(), filterParam.value)
+          : await getMetricTimeSeries(
+              cd.metricName,
+              timeRange.value,
+              intervalForRange(),
+              cd.labelFilter,
+              filterParam.value,
+            )
       chartDataMap.value[cd.key] = data
       errorMap.value[cd.key] = null
     } catch {

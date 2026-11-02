@@ -4,9 +4,10 @@ import { setActivePinia, createPinia } from 'pinia'
 vi.mock('@/api/metrics', () => ({
   getMetricTimeSeries: vi.fn(),
   getMetricSummary: vi.fn(),
+  getAvgLatencySeries: vi.fn(),
 }))
 
-import { getMetricTimeSeries, getMetricSummary } from '@/api/metrics'
+import { getMetricTimeSeries, getMetricSummary, getAvgLatencySeries } from '@/api/metrics'
 import { useMetricsDashboardStore } from '../metricsDashboard'
 import type { MetricDataPoint } from '@/types/metrics'
 
@@ -173,5 +174,40 @@ describe('metricsDashboard store', () => {
     expect(getMetricTimeSeries).toHaveBeenCalledTimes(6)
     expect(vi.mocked(getMetricTimeSeries).mock.calls.every((c) => c[4] === 'cluster:7')).toBe(true)
     expect(getMetricSummary).toHaveBeenLastCalledWith('cluster:7')
+  })
+
+  it('avg_latency 卡走 histogram 专用加载（metrics-avg-latency-card D3）', async () => {
+    vi.mocked(getMetricTimeSeries).mockResolvedValue([mockDataPoint(1000, 50)])
+    vi.mocked(getAvgLatencySeries).mockResolvedValue([mockDataPoint(1000, 0.8)])
+    const store = useMetricsDashboardStore()
+    store.setClusterFilter(7)
+    await store.loadAllCharts()
+    // qps + errors + 4 连接序列走 time-series；avg_latency 走 histogram 专用 API
+    expect(getAvgLatencySeries).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(getAvgLatencySeries).mock.calls[0]).toEqual(['1h', '1m', 'cluster:7'])
+    expect(store.chartDataMap['avg_latency']).toEqual([mockDataPoint(1000, 0.8)])
+  })
+
+  it('retryChart(avg_latency) 只重发 histogram 专用请求', async () => {
+    vi.mocked(getMetricTimeSeries).mockResolvedValue([mockDataPoint(1000, 50)])
+    vi.mocked(getAvgLatencySeries).mockResolvedValue([mockDataPoint(1000, 0.8)])
+    const store = useMetricsDashboardStore()
+    await store.loadAllCharts()
+    vi.mocked(getAvgLatencySeries).mockClear()
+    vi.mocked(getMetricTimeSeries).mockClear()
+    await store.retryChart('avg_latency')
+    expect(getAvgLatencySeries).toHaveBeenCalledTimes(1)
+    expect(getMetricTimeSeries).not.toHaveBeenCalled()
+  })
+
+  it('时间范围变化时 avg_latency 用新聚合间隔重发', async () => {
+    vi.mocked(getMetricTimeSeries).mockResolvedValue([mockDataPoint(1000, 50)])
+    vi.mocked(getAvgLatencySeries).mockResolvedValue([mockDataPoint(1000, 0.8)])
+    const store = useMetricsDashboardStore()
+    await store.loadAllCharts()
+    vi.mocked(getAvgLatencySeries).mockClear()
+    store.setTimeRange('24h')
+    await vi.waitFor(() => expect(getAvgLatencySeries).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(getAvgLatencySeries).mock.calls[0][1]).toBe('15m')
   })
 })

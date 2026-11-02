@@ -12,7 +12,7 @@ from app.services.clickhouse_client import execute_query
 # ── Helpers ────────────────────────────────────────────────────────────
 
 _SINCE_PATTERN = re.compile(r"^(\d+)([smhd])$")
-_INTERVAL_PATTERN = re.compile(r"^(\d+)([sm])$")
+_INTERVAL_PATTERN = re.compile(r"^(\d+)([smh])$")
 # label 键来自查询参数且直接拼接进 SQL（值已参数绑定、键无法绑定），
 # 仅放行安全字符集：字母/数字/下划线/点/连字符。排除单引号、反斜杠、
 # 空格、分号、注释符等一切可用于注入的字符。
@@ -32,7 +32,8 @@ def _parse_interval_seconds(interval: str) -> int:
     if not m:
         return 300  # default 5m
     val, unit = int(m.group(1)), m.group(2)
-    return {"s": val, "m": val * 60}.get(unit, 300)
+    # h：7d 档前端聚合间隔为 1h（metrics-avg-latency-card 顺手修的既有 422 缺陷）
+    return {"s": val, "m": val * 60, "h": val * 3600}.get(unit, 300)
 
 
 _IP_PATTERN = re.compile(r"^(\d{1,3}\.){3}\d{1,3}$")
@@ -107,6 +108,73 @@ def query_metric_names() -> list[str]:
     if rows is None:
         return []
     return [r[0] for r in rows]
+
+
+def query_avg_latency_series(
+    metric_name: str,
+    since: str = "1h",
+    interval: str = "5m",
+    latency_type: str = "request",
+    ips: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    """平均请求处理耗时时间序列（metrics-avg-latency-card，design D1/D2）。
+
+    histogram 专用：每桶窗口增量比值 ΣΔSum / ΣΔCount（ms）。
+    - lagInFrame 默认取自身 → 首桶增量为 0（与 QPS 卡 counter 差分一致）
+    - 负增量（计数器重启）钳 0；c_inc=0 的桶 avg=0.0（无请求被处理的事实语义）
+    - ips：集群筛选 ip 集合（None=不过滤）
+    """
+    since_sec = _parse_since_seconds(since)
+    interval_sec = _parse_interval_seconds(interval)
+    ip_where = _ip_where(ips)
+    params: dict[str, Any] = {"name": metric_name, "since": since_sec}
+    if ips is not None:
+        params["ips"] = ips
+
+    rows = execute_query(f"""
+        SELECT
+            bucket,
+            greatest(sum(s_inc), 0) AS s_total,
+            greatest(sum(c_inc), 0) AS c_total
+        FROM (
+            SELECT
+                bucket,
+                Attributes,
+                s_last,
+                c_last,
+                greatest(s_last - lagInFrame(s_last, 1, s_last) OVER (ORDER BY bucket ASC), 0) AS s_inc,
+                greatest(c_last - lagInFrame(c_last, 1, c_last) OVER (ORDER BY bucket ASC), 0) AS c_inc
+            FROM (
+                SELECT
+                    toUnixTimestamp(toStartOfInterval(TimeUnix,
+                                  INTERVAL {interval_sec} SECOND)) AS bucket,
+                    Attributes,
+                    argMax(Sum, TimeUnix) AS s_last,
+                    argMax(Count, TimeUnix) AS c_last,
+                    count(*) AS sample_count
+                FROM otel_metrics_histogram
+                WHERE MetricName = %(name)s
+                  AND Attributes['type'] = %(latency_type)s
+                  AND TimeUnix > now() - INTERVAL %(since)s SECOND
+                  {ip_where}
+                GROUP BY bucket, Attributes
+            )
+        )
+        GROUP BY bucket
+        ORDER BY bucket
+    """, {**params, **{"latency_type": latency_type}})
+
+    if rows is None:
+        return []
+    return [
+        {
+            "metric_name": metric_name,
+            "timestamp": r[0],
+            "avg": round(r[1] / r[2], 3) if r[2] > 0 else 0.0,
+            "sample_count": int(r[2]),
+        }
+        for r in rows
+    ]
 
 
 def query_time_series(

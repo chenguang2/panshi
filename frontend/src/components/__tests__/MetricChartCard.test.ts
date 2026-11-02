@@ -63,4 +63,14 @@ describe('MetricChartCard.vue 三态机（metrics-dashboard-ux-optimization D2�
     const wrapper = mountCard({ title: 'Nginx 连接状态', data: [dp(3)], unitLabel: '活跃' })
     expect(wrapper.find('.chart-unit-label').text()).toBe('活跃')
   })
+
+  it('scopeLabel 口径标注（平均耗时卡「近 1小时」，metrics-avg-latency-card #2）', () => {
+    const wrapper = mountCard({ title: '平均耗时', data: [dp(0.8)], unit: 'ms', scopeLabel: '近 1小时' })
+    expect(wrapper.find('.chart-scope').text()).toBe('近 1小时')
+  })
+
+  it('未传 scopeLabel 时不渲染标注（QPS 等既有卡不受影响）', () => {
+    const wrapper = mountCard({ title: 'QPS', data: [dp(2)], unit: '/s' })
+    expect(wrapper.find('.chart-scope').exists()).toBe(false)
+  })
 })
