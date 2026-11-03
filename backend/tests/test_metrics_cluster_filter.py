@@ -168,6 +168,29 @@ class TestEndpointFilter:
         sql, p = calls_with_ips()[0]
         assert "Attributes['ip'] IN" in sql
 
+    async def test_fast_ratio_filter(self, async_authed_client, isolated_session):
+        """快速响应占比（metrics-fast-ratio-card）：边界查询与两条主查询都必须带 ips。"""
+        async with isolated_session() as session:
+            cluster_id = await seed_nodes(session)
+
+        def fake(sql, params=None):
+            CAPTURED.append((sql, params or {}))
+            if "ExplicitBounds" in sql:
+                return [([10.0, 20.0],)]
+            if "argMax(BucketCounts" in sql:
+                return [([500, 0], 500)]  # 区间分布主查询（D9）：(f_deltas, c_inc)
+            return [(1793595300, 500, 500)]
+
+        with patch("app.services.metrics_service.execute_query", fake):
+            resp = await async_authed_client.get(
+                "/api/v1/metrics/fast-ratio", params={"filter": f"cluster:{cluster_id}"}
+            )
+        assert resp.status_code == 200
+        assert resp.json()["threshold_ms"] == 10.0
+        assert resp.json()["bucket_stats"] is not None
+        assert len(calls_with_ips()) == 3  # 边界查询 + series 主查询 + 区间分布主查询（D9）
+        assert all("Attributes['ip'] IN" in sql for sql, _ in calls_with_ips())
+
     async def test_route_stats_filter(self, async_authed_client, isolated_session):
         async with isolated_session() as session:
             cluster_id = await seed_nodes(session)

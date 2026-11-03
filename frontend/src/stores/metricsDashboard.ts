@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { getMetricSummary, getMetricTimeSeries, getAvgLatencySeries } from '@/api/metrics'
+import { getMetricSummary, getMetricTimeSeries, getAvgLatencySeries, getFastRatioSeries } from '@/api/metrics'
+import type { FastRatioBucketStats } from '@/api/metrics'
 import type { MetricDataPoint } from '@/types/metrics'
 
 const intervalMap: Record<string, string> = {
@@ -16,8 +17,10 @@ interface ChartDefinition {
   metricName: string
   labelFilter?: string
   unit?: string
-  /** 加载通道（metrics-avg-latency-card D3）：缺省走 query_time_series；histogram_avg 走专用 avg-latency 端点 */
-  kind?: 'histogram_avg'
+  /** 加载通道（metrics-avg-latency-card D3）：缺省走 query_time_series；
+   *  histogram_avg 走专用 avg-latency 端点；histogram_ratio 走 fast-ratio 端点
+   *  （metrics-fast-ratio-card D4） */
+  kind?: 'histogram_avg' | 'histogram_ratio'
 }
 
 // 「Nginx 连接状态」图的 4 条序列（active/reading/writing/waiting）
@@ -45,6 +48,13 @@ const CONNECTION_CHART_DEFS: ChartDefinition[] = CONNECTION_SERIES.map((s) => ({
 export const BUSINESS_CHARTS: ChartDefinition[] = [
   { key: 'qps', label: 'QPS', metricName: 'edge_http_requests_total', unit: '/s' },
   { key: 'avg_latency', label: '平均耗时', metricName: 'edge_http_latency', unit: 'ms', kind: 'histogram_avg' },
+  {
+    key: 'fast_ratio',
+    label: '快速响应占比',
+    metricName: 'edge_http_latency',
+    unit: '%',
+    kind: 'histogram_ratio',
+  },
   // connections 卡片由 CONNECTION_CHART_DEFS 加载（4 状态序列），此处仅保留占位定义供视图渲染
   { key: 'connections', label: 'Nginx 连接状态', metricName: 'edge_nginx_http_current_connections' },
   { key: 'errors', label: '采集错误率', metricName: 'edge_metric_errors_total', unit: '/s' },
@@ -75,6 +85,17 @@ export const useMetricsDashboardStore = defineStore('metricsDashboard', () => {
   // lastUpdated 供「更新于 HH:mm:ss」；refreshTick 供扩展四卡/基础设施区跟随刷新周期 reload
   const lastUpdated = ref<number | null>(null)
   const refreshTick = ref(0)
+
+  // ── 快速响应占比阈值（metrics-fast-ratio-card D2/D5）──
+  // 阈值只能取桶边界（bounds 由接口返回）：桶内数值无法精确统计，故控件是下拉而非输入框
+  const fastRatioThresholdMs = ref<number>(10)
+  const fastRatioBounds = ref<number[]>([])
+  // 各桶区间占比/计数（D9 区间分布，2026-11-03）：null = 窗口无请求/加载失败 → 分布整块不渲染（D12）
+  const fastRatioBuckets = ref<FastRatioBucketStats | null>(null)
+  // 头部窗口聚合占比（D13）：ΣΔ前 k 桶 / ΣΔCount，与分布条同源；头部值不再取「最近一桶」
+  const fastRatioWindowRatio = ref<number | null>(null)
+  // 平均耗时卡头部窗口聚合均值（D13 同改）：ΣΔSum / ΣΔCount，全窗口
+  const avgLatencyWindowMs = ref<number | null>(null)
 
   // ── 集群/节点筛选（metrics-cluster-node-filter D4）──
   // clusterId：null=全部集群；-1=未纳管节点；>0=具体集群。nodeIp 仅在具体集群下有意义。
@@ -120,23 +141,53 @@ export const useMetricsDashboardStore = defineStore('metricsDashboard', () => {
 
   async function loadSingleChart(cd: ChartDefinition): Promise<void> {
     try {
-      // histogram_avg 通道：平均耗时卡走专用端点（metrics-avg-latency-card D3），其余走通用 time-series
-      const data =
-        cd.kind === 'histogram_avg'
-          ? await getAvgLatencySeries(timeRange.value, intervalForRange(), filterParam.value)
-          : await getMetricTimeSeries(
-              cd.metricName,
-              timeRange.value,
-              intervalForRange(),
-              cd.labelFilter,
-              filterParam.value,
-            )
-      chartDataMap.value[cd.key] = data
+      if (cd.kind === 'histogram_ratio') {
+        // 快速响应占比卡：阈值随请求下发，响应带回权威阈值与边界枚举（可回退）
+        const res = await getFastRatioSeries(
+          timeRange.value,
+          intervalForRange(),
+          filterParam.value,
+          fastRatioThresholdMs.value,
+        )
+        chartDataMap.value[cd.key] = res.points
+        fastRatioThresholdMs.value = res.thresholdMs
+        fastRatioBounds.value = res.bounds
+        fastRatioBuckets.value = res.bucketStats ?? null
+        fastRatioWindowRatio.value = res.windowRatio ?? null
+      } else {
+        // histogram_avg 通道：平均耗时卡走专用端点（metrics-avg-latency-card D3），其余走通用 time-series
+        if (cd.kind === 'histogram_avg') {
+          const res = await getAvgLatencySeries(timeRange.value, intervalForRange(), filterParam.value)
+          chartDataMap.value[cd.key] = res.points
+          avgLatencyWindowMs.value = res.windowAvgMs
+        } else {
+          chartDataMap.value[cd.key] = await getMetricTimeSeries(
+            cd.metricName,
+            timeRange.value,
+            intervalForRange(),
+            cd.labelFilter,
+            filterParam.value,
+          )
+        }
+      }
       errorMap.value[cd.key] = null
     } catch {
+      if (cd.kind === 'histogram_ratio') {
+        fastRatioBuckets.value = null
+        fastRatioWindowRatio.value = null
+      }
+      if (cd.kind === 'histogram_avg') avgLatencyWindowMs.value = null
       chartDataMap.value[cd.key] = []
       errorMap.value[cd.key] = '数据加载失败'
     }
+  }
+
+  /** 切换快速响应占比阈值：仅重发该卡（不触发全页刷新，与其他筛选的整页 reload 语义不同） */
+  async function setFastRatioThreshold(ms: number): Promise<void> {
+    if (fastRatioThresholdMs.value === ms) return
+    fastRatioThresholdMs.value = ms
+    const cd = BUSINESS_CHARTS.find((d) => d.key === 'fast_ratio')
+    if (cd) await loadSingleChart(cd)
   }
 
   // 业务图加载目标：普通业务图 + 连接状态 4 序列（跳过 connections 占位定义）
@@ -261,10 +312,16 @@ export const useMetricsDashboardStore = defineStore('metricsDashboard', () => {
     clusterId,
     nodeIp,
     filterParam,
+    fastRatioThresholdMs,
+    fastRatioBounds,
+    fastRatioBuckets,
+    fastRatioWindowRatio,
+    avgLatencyWindowMs,
     loadAllCharts,
     loadInfraCharts,
     loadSourceStatus,
     retryChart,
+    setFastRatioThreshold,
     setTimeRange,
     setRefreshInterval,
     toggleAutoRefresh,

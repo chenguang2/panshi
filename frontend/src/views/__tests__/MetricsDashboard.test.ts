@@ -6,6 +6,8 @@ import MetricsDashboard from '../MetricsDashboard.vue'
 vi.mock('@/api/metrics', () => ({
   getMetricTimeSeries: vi.fn(),
   getMetricSummary: vi.fn(),
+  getAvgLatencySeries: vi.fn(),
+  getFastRatioSeries: vi.fn(),
 }))
 vi.mock('@/api/clusters', () => ({
   listClusters: vi.fn(),
@@ -21,7 +23,7 @@ vi.mock('vue-router', () => ({
   useRouter: () => routerMock,
 }))
 
-import { getMetricTimeSeries, getMetricSummary } from '@/api/metrics'
+import { getMetricTimeSeries, getMetricSummary, getAvgLatencySeries, getFastRatioSeries } from '@/api/metrics'
 import { listClusters } from '@/api/clusters'
 import { fetchAllClusterNodes } from '@/composables/useClusterUtils'
 import { useMetricsDashboardStore } from '@/stores/metricsDashboard'
@@ -41,8 +43,20 @@ const stubs = {
   MetricsSourceBanner: { template: '<div class="source-banner-stub" />', props: ['sourceOk', 'target'] },
   MetricChartCard: {
     template:
-      '<div class="mc-card-stub">{{ title }}<span v-if="scopeLabel" class="chart-scope">{{ scopeLabel }}</span><span v-if="error" class="stub-error">{{ error }}</span><button class="stub-retry" @click="$emit(\'retry\')">r</button></div>',
-    props: ['title', 'data', 'error', 'unit', 'series', 'loading', 'emptyText', 'retryable', 'unitLabel', 'scopeLabel'],
+      '<div class="mc-card-stub">{{ title }}<span v-if="headValue != null" class="stub-head">{{ headValue }}</span><span v-if="scopeLabel" class="chart-scope">{{ scopeLabel }}</span><span v-if="error" class="stub-error">{{ error }}</span><button class="stub-retry" @click="$emit(\'retry\')">r</button><slot name="header-extra" /></div>',
+    props: [
+      'title',
+      'data',
+      'error',
+      'unit',
+      'series',
+      'loading',
+      'emptyText',
+      'retryable',
+      'unitLabel',
+      'scopeLabel',
+      'headValue',
+    ],
     emits: ['retry'],
   },
   RouteStatsCard: {
@@ -71,6 +85,10 @@ const stubs = {
   'a-tag': { template: '<span class="a-tag-stub"><slot /></span>' },
   'a-select': aSelectStub,
   'a-select-option': { template: '<div />', props: ['value'] },
+  LatencyBucketDistribution: {
+    template: '<div class="bucket-strip-stub">{{ stats ? "strip" : "" }}</div>',
+    props: ['stats'],
+  },
 }
 
 function mountPage() {
@@ -96,6 +114,12 @@ describe('MetricsDashboard.vue 四分区与刷新一致性（metrics-dashboard-u
       data: { items: [{ id: 3, name: '测试集群' }], total: 1 },
     } as never)
     vi.mocked(fetchAllClusterNodes).mockResolvedValue([{ ip: '10.1.1.1' }, { ip: '10.1.1.2' }] as never)
+    vi.mocked(getAvgLatencySeries).mockResolvedValue({ points: [dp(0.8)], windowAvgMs: 0.9 })
+    vi.mocked(getFastRatioSeries).mockResolvedValue({
+      points: [dp(99.97)],
+      thresholdMs: 10,
+      bounds: [10, 20, 50, 100],
+    })
   })
 
   it('渲染三个分区标题与更多指标折叠条', () => {
@@ -195,6 +219,12 @@ describe('MetricsDashboard.vue 集群/节点筛选（metrics-cluster-node-filter
       data: { items: [{ id: 3, name: '测试集群' }], total: 1 },
     } as never)
     vi.mocked(fetchAllClusterNodes).mockResolvedValue([{ ip: '10.1.1.1' }, { ip: '10.1.1.2' }] as never)
+    vi.mocked(getAvgLatencySeries).mockResolvedValue({ points: [dp(0.8)], windowAvgMs: 0.9 })
+    vi.mocked(getFastRatioSeries).mockResolvedValue({
+      points: [dp(99.97)],
+      thresholdMs: 10,
+      bounds: [10, 20, 50, 100],
+    })
   })
 
   function clusterSelect(wrapper: ReturnType<typeof mountPage>['wrapper']) {
@@ -277,5 +307,108 @@ describe('MetricsDashboard.vue 集群/节点筛选（metrics-cluster-node-filter
     await flushPromises()
     expect(store.clusterId).toBe(-1)
     expect(store.filterParam).toBe('unmanaged')
+  })
+
+  it('核心流量第一行三卡并列（QPS/平均耗时/快速响应占比），连接状态仍全宽', () => {
+    const { wrapper } = mountPage()
+    const core = wrapper.find('[data-section="core"]')
+    expect(core.classes()).toContain('core-grid')
+    const cards = core.findAll('.mc-card-stub')
+    expect(cards).toHaveLength(4)
+    expect(cards[0].text()).toContain('QPS')
+    expect(cards[1].text()).toContain('平均耗时')
+    expect(cards[2].text()).toContain('快速响应占比')
+    expect(cards[3].text()).toContain('Nginx 连接状态')
+    // 第一行三卡不得占满整行；连接状态独占整行
+    expect(cards[0].classes()).not.toContain('span-full')
+    expect(cards[2].classes()).not.toContain('span-full')
+    expect(cards[3].classes()).toContain('span-full')
+  })
+
+  it('快速响应占比卡挂阈值下拉，选项来自接口 bounds（读数据不硬编码）', async () => {
+    const { wrapper } = mountPage()
+    await flushPromises()
+    const core = wrapper.find('[data-section="core"]')
+    const select = core.find('.fast-ratio-threshold select')
+    expect(select.exists()).toBe(true)
+    const labels = select.findAll('option').map((o) => o.text())
+    expect(labels).toEqual(['10ms', '20ms', '50ms', '100ms'])
+  })
+
+  it('切换阈值只重发占比卡（不触发整页刷新）', async () => {
+    const { wrapper, store } = mountPage()
+    await flushPromises()
+    vi.mocked(getMetricTimeSeries).mockClear()
+    vi.mocked(getFastRatioSeries).mockClear()
+
+    const select = wrapper.find('[data-section="core"] .fast-ratio-threshold select')
+    await select.setValue('100')
+    await flushPromises()
+
+    expect(vi.mocked(getFastRatioSeries)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(getFastRatioSeries).mock.calls[0][3]).toBe(100)
+    expect(vi.mocked(getMetricTimeSeries)).not.toHaveBeenCalled()
+    expect(store.fastRatioThresholdMs).toBe(10) // 响应回写的权威值
+  })
+})
+
+describe('耗时区间分布条（metrics-fast-ratio-card D11/D12）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    routeMock.query = {}
+    routerMock.replace.mockClear()
+    vi.mocked(getMetricTimeSeries).mockResolvedValue([dp()])
+    vi.mocked(getMetricSummary).mockResolvedValue({
+      summary: {},
+      connectionStates: {},
+      sourceOk: true,
+      sourceTarget: 'ch:9000',
+    })
+    vi.mocked(listClusters).mockResolvedValue({ data: { items: [], total: 0 } } as never)
+    vi.mocked(fetchAllClusterNodes).mockResolvedValue([] as never)
+    vi.mocked(getAvgLatencySeries).mockResolvedValue({ points: [dp(0.8)], windowAvgMs: 0.9 })
+  })
+
+  it('bucket_stats 存在时在核心流量区渲染全宽分布条（随占比卡同源）', async () => {
+    vi.mocked(getFastRatioSeries).mockResolvedValue({
+      points: [dp(99.97)],
+      thresholdMs: 10,
+      bounds: [10, 20, 50, 100],
+      bucketStats: { bounds: [10, 20, 50, 100], ratios: [99.5, 0.4, 0.1, 0], counts: [995, 4, 1, 0], total: 1000 },
+    })
+    const { wrapper } = mountPage()
+    await flushPromises()
+    const core = wrapper.find('[data-section="core"]')
+    expect(core.find('.bucket-strip-stub').exists()).toBe(true)
+    // 三卡 + 连接状态卡数量不变（分布条不是第五张卡）
+    expect(core.findAll('.mc-card-stub')).toHaveLength(4)
+  })
+
+  it('bucket_stats 为 null（窗口无请求/加载中）时整块不渲染', async () => {
+    vi.mocked(getFastRatioSeries).mockResolvedValue({
+      points: [],
+      thresholdMs: 10,
+      bounds: [10, 20, 50, 100],
+      bucketStats: null,
+    })
+    const { wrapper } = mountPage()
+    await flushPromises()
+    expect(wrapper.find('[data-section="core"] .bucket-strip-stub').exists()).toBe(false)
+  })
+
+  it('占比卡头部使用窗口聚合口径（headValue = store.fastRatioWindowRatio，D13）', async () => {
+    vi.mocked(getFastRatioSeries).mockResolvedValue({
+      points: [dp(100)],
+      thresholdMs: 10,
+      bounds: [10, 20, 50, 100],
+      windowRatio: 99.98,
+    })
+    const { wrapper } = mountPage()
+    await flushPromises()
+    const ratioCard = wrapper.find('[data-section="core"]').findAll('.mc-card-stub')[2]
+    expect(ratioCard.find('.stub-head').text()).toBe('99.98')
+    // 平均耗时卡头部 = 窗口聚合均值（D13 同改）；QPS 卡不传 headValue（保持 data 末点口径）
+    expect(wrapper.find('[data-section="core"]').findAll('.mc-card-stub')[1].find('.stub-head').text()).toBe('0.9')
+    expect(wrapper.find('[data-section="core"]').findAll('.mc-card-stub')[0].find('.stub-head').exists()).toBe(false)
   })
 })

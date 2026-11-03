@@ -37,11 +37,13 @@ def _reset():
 class TestQueryAvgLatencySeries:
     def test_returns_uniform_shape(self):
         with patch("app.services.metrics_service.execute_query", capture(LATENCY_ROWS)):
-            rows = query_avg_latency_series("edge_http_latency", "1h", "5m")
-        assert rows == [
+            result = query_avg_latency_series("edge_http_latency", "1h", "5m")
+        assert result["points"] == [
             {"metric_name": "edge_http_latency", "timestamp": 1793595300, "avg": 0.823, "sample_count": 500},
             {"metric_name": "edge_http_latency", "timestamp": 1793595600, "avg": 1.011, "sample_count": 800},
         ]
+        # D13：头部窗口聚合口径 = ΣΔSum/ΣΔCount（全窗口，3 位舍入，与 sparkline 同源聚合）
+        assert result["window_avg_ms"] == 0.939  # (411.5+808.8)/(500+800)
 
     def test_sql_shape(self):
         with patch("app.services.metrics_service.execute_query", capture([])):
@@ -50,6 +52,9 @@ class TestQueryAvgLatencySeries:
         assert "otel_metrics_histogram" in sql
         assert "lagInFrame" in sql
         assert "argMax(Sum" in sql and "argMax(Count" in sql
+        # 差分必须按序列分区（2026-11-02 修复）：多节点时 Attributes 每桶多行，
+        # 无 PARTITION BY 会把别的节点当上一个点 → 增量错乱（常见表现：平均耗时恒 0）
+        assert sql.count("PARTITION BY Attributes") == 2
         assert params["name"] == "edge_http_latency"
         assert params["latency_type"] == "request"
         assert "ips" not in params
@@ -73,7 +78,7 @@ class TestQueryAvgLatencySeries:
 
     def test_empty_rows(self):
         with patch("app.services.metrics_service.execute_query", capture(None)):
-            assert query_avg_latency_series("edge_http_latency", "1h", "5m") == []
+            assert query_avg_latency_series("edge_http_latency", "1h", "5m") == {"points": [], "window_avg_ms": None}
 
 
 @pytest.mark.asyncio
@@ -84,6 +89,13 @@ class TestAvgLatencyEndpoint:
         assert resp.status_code == 200
         data = resp.json()["data"]
         assert data[0]["avg"] == 0.823 and data[0]["timestamp"] == 1793595300
+
+    async def test_endpoint_returns_window_avg(self, async_authed_client):
+        """D13：响应信封带 window_avg_ms（头部窗口聚合口径，与占比卡同约定）。"""
+        with patch("app.services.metrics_service.execute_query", capture(LATENCY_ROWS)):
+            resp = await async_authed_client.get("/api/v1/metrics/avg-latency")
+        assert resp.status_code == 200
+        assert resp.json()["window_avg_ms"] == 0.939
 
     async def test_endpoint_filter_passthrough(self, async_authed_client, isolated_session):
         async with isolated_session() as session:

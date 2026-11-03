@@ -3,9 +3,12 @@
     <div class="chart-header">
       <span class="chart-title">{{ title }}</span>
       <span v-if="scopeLabel" class="chart-scope">{{ scopeLabel }}</span>
-      <span v-if="latestValue !== null" class="chart-value">{{ formattedValue }}</span>
-      <span v-if="unitLabel && latestValue !== null" class="chart-unit-label">{{ unitLabel }}</span>
-      <span v-if="unit && unit !== 'bytes' && unit !== 'bytes/s'" class="chart-unit">{{ unit }}</span>
+      <span class="chart-number">
+        <span v-if="latestValue !== null" class="chart-value">{{ formattedValue }}</span>
+        <span v-if="unitLabel && latestValue !== null" class="chart-unit-label">{{ unitLabel }}</span>
+        <span v-if="unit && unit !== 'bytes' && unit !== 'bytes/s'" class="chart-unit">{{ unit }}</span>
+      </span>
+      <span v-if="$slots['header-extra']" class="chart-header-extra"><slot name="header-extra" /></span>
     </div>
     <div class="chart-body">
       <div v-if="loading" class="chart-skeleton" aria-hidden="true"></div>
@@ -55,6 +58,9 @@ const props = withDefaults(
     unitLabel?: string
     /** 标题旁口径标注（平均耗时卡「近 {time range}」，metrics-avg-latency-card 文案 #2） */
     scopeLabel?: string
+    /** 头部值显式覆盖（metrics-fast-ratio-card D13）：fast_ratio 卡传窗口聚合占比（与分布条同源）；
+     *  null/缺省走 data 末点原逻辑，其他卡零影响 */
+    headValue?: number | null
   }>(),
   {
     error: null,
@@ -80,6 +86,8 @@ const hasData = computed(() => (props.series ? props.series.length > 0 : props.d
 // 2. 最近一个 sample_count >= 2 的点的 avg——刚开的计数器桶常只有 1 个样本，
 //    单点无增量可算（rate=0），直接取会令 QPS 卡片频繁闪现 0.000
 const latestValue = computed<number | null>(() => {
+  // D13：fast_ratio 卡显式传窗口聚合口径，优先于 data 末点
+  if (props.headValue != null) return props.headValue
   if (!hasData.value) return null
   const pts = props.data
   for (let i = pts.length - 1; i >= 0; i--) {
@@ -95,6 +103,8 @@ const latestValue = computed<number | null>(() => {
 function formatMetricValue(v: number): string {
   if (props.unit === 'bytes') return formatFileSize(v)
   if (props.unit === 'bytes/s') return `${formatFileSize(v)}/s`
+  // 占比固定两位小数：99.97% / 100.00%（metrics-fast-ratio-card D6）
+  if (props.unit === '%') return v.toFixed(2)
   if (v >= 100) return Number(v.toFixed(1)).toString()
   if (v >= 10) return Number(v.toFixed(2)).toString()
   return Number(v.toFixed(3)).toString()
@@ -148,7 +158,10 @@ const chartOption = computed(() => {
         type: 'line' as const,
         data: props.data.map((d) => [d.timestamp * 1000, d.avg]),
         smooth: true,
-        showSymbol: false,
+        // 单点（窗口内只有一个有效桶，如无流量时段后的最后一分钟）无折线可画，
+        // 必须显形否则卡片看着像空的（metrics-fast-ratio-card 实机发现）
+        showSymbol: props.data.length === 1,
+        symbolSize: 6,
         lineStyle: { width: 2, color: '#1677ff' },
         areaStyle: { color: 'rgba(22,119,255,0.08)' },
       },
@@ -171,6 +184,21 @@ const chartOption = computed(() => {
   align-items: baseline;
   gap: 6px;
   margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.chart-header-extra {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* 数值与单位不可被换行拆开（窄卡时否则会出现「99.93 / %」折行） */
+.chart-number {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  white-space: nowrap;
 }
 
 .chart-title {

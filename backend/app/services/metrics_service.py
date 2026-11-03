@@ -123,6 +123,9 @@ def query_avg_latency_series(
     - lagInFrame 默认取自身 → 首桶增量为 0（与 QPS 卡 counter 差分一致）
     - 负增量（计数器重启）钳 0；c_inc=0 的桶 avg=0.0（无请求被处理的事实语义）
     - ips：集群筛选 ip 集合（None=不过滤）
+
+    返回 ``{"points": [...], "window_avg_ms": float | None}``——window_avg_ms 为
+    全窗口聚合均值（design D13，头部口径），ΣΔCount=0 时为 None。
     """
     since_sec = _parse_since_seconds(since)
     interval_sec = _parse_interval_seconds(interval)
@@ -142,8 +145,10 @@ def query_avg_latency_series(
                 Attributes,
                 s_last,
                 c_last,
-                greatest(s_last - lagInFrame(s_last, 1, s_last) OVER (ORDER BY bucket ASC), 0) AS s_inc,
-                greatest(c_last - lagInFrame(c_last, 1, c_last) OVER (ORDER BY bucket ASC), 0) AS c_inc
+                greatest(s_last - lagInFrame(s_last, 1, s_last)
+                         OVER (PARTITION BY Attributes ORDER BY bucket ASC), 0) AS s_inc,
+                greatest(c_last - lagInFrame(c_last, 1, c_last)
+                         OVER (PARTITION BY Attributes ORDER BY bucket ASC), 0) AS c_inc
             FROM (
                 SELECT
                     toUnixTimestamp(toStartOfInterval(TimeUnix,
@@ -165,8 +170,8 @@ def query_avg_latency_series(
     """, {**params, **{"latency_type": latency_type}})
 
     if rows is None:
-        return []
-    return [
+        return {"points": [], "window_avg_ms": None}
+    points = [
         {
             "metric_name": metric_name,
             "timestamp": r[0],
@@ -175,6 +180,250 @@ def query_avg_latency_series(
         }
         for r in rows
     ]
+    # 头部窗口聚合口径（design D13）：ΣΔSum / ΣΔCount 全窗口单次舍入，与快速响应占比卡同约定
+    total_s = sum(float(r[1]) for r in rows)
+    total_c = sum(float(r[2]) for r in rows)
+    window_avg_ms = round(total_s / total_c, 3) if total_c > 0 else None
+    return {"points": points, "window_avg_ms": window_avg_ms}
+
+
+# 快速响应占比的兜底阈值（ms）：取不到 ExplicitBounds 时使用（design D2）
+DEFAULT_FAST_RATIO_THRESHOLD_MS = 10.0
+
+
+def query_latency_bounds(
+    metric_name: str,
+    since: str = "1h",
+    latency_type: str = "request",
+    ips: list[str] | None = None,
+) -> list[float]:
+    """取窗口内最新的 histogram 桶边界（ExplicitBounds）。
+
+    桶边界由 Edge 采集端定义（本仓库无控制点），故一律读数据、不硬编码
+    （metrics-fast-ratio-card design D2）。无行时返回 []。
+    """
+    since_sec = _parse_since_seconds(since)
+    ip_where = _ip_where(ips)
+    params: dict[str, Any] = {"name": metric_name, "since": since_sec, "latency_type": latency_type}
+    if ips is not None:
+        params["ips"] = ips
+
+    rows = execute_query(f"""
+        SELECT ExplicitBounds
+        FROM otel_metrics_histogram
+        WHERE MetricName = %(name)s
+          AND Attributes['type'] = %(latency_type)s
+          AND TimeUnix > now() - INTERVAL %(since)s SECOND
+          {ip_where}
+        ORDER BY TimeUnix DESC
+        LIMIT 1
+    """, params)
+    if not rows or not rows[0][0]:
+        return []
+    return [float(b) for b in rows[0][0]]
+
+
+def _resolve_bound_index(bounds: list[float], threshold_ms: float | None) -> int:
+    """把阈值解析为桶下标（1-based，供 `BucketCounts[i]` 使用）。
+
+    阈值只能是桶边界上的值：桶是区间计数，桶内任意点（如 30ms）不可精确得知，
+    故非边界值一律拒绝（端点转 400 中文），不插值、不吸附（design D1/D2）。
+    """
+    if not bounds:
+        return 1
+    if threshold_ms is None:
+        return 1
+    for i, b in enumerate(bounds, start=1):
+        if abs(b - float(threshold_ms)) < 1e-6:
+            return i
+    legal = " / ".join(f"{b:g}" for b in bounds)
+    raise ValueError(f"阈值须为采集桶边界之一（{legal} ms），桶内数值无法精确统计")
+
+
+def _fast_bucket_prefix_expr(bound_index: int) -> str:
+    """`BucketCounts` 前 N 桶求和表达式（N = 1-based 桶下标 = 阈值在 ExplicitBounds 中的位置）。
+
+    **关键语义（2026-11-02 实测纠正）**：ClickHouse `otel_metrics_histogram.BucketCounts`
+    是**逐桶非累计**计数——`BucketCounts[1]` = 落在 (‑∞, bounds[0]] 的请求数，
+    `BucketCounts[2]` = 落在 (bounds[0], bounds[1]] 的请求数，依此类推。
+    故「≤阈值(bounds[k-1])」= 前 k 个桶的**前缀和**（k 即 `_resolve_bound_index`
+    返回的 1-based 边界下标），直接取 `BucketCounts[k]` 只会得到「该格自身」的数量——
+    首边界之外全是极小值（实测 50ms 选项曾返回 0.01%，而真实应为 99.99%）。
+    """
+    n = max(1, int(bound_index))
+    return f"arraySum(arraySlice(BucketCounts, 1, {n}))"
+
+
+def query_fast_ratio_series(
+    metric_name: str,
+    since: str = "1h",
+    interval: str = "5m",
+    latency_type: str = "request",
+    threshold_ms: float | None = None,
+    ips: list[str] | None = None,
+) -> dict[str, Any]:
+    """快速响应占比时间序列（metrics-fast-ratio-card design D1-D4）。
+
+    histogram 专用：每桶窗口增量**精确占比**
+    `ΣΔBucketCounts[i] / ΣΔCount * 100`，i 为阈值所在桶边界下标（1-based）。
+    - 零插值：桶边界处可精确计数，桶内分布不可知（P95/P99 插值在 10ms 首桶下是伪值）
+    - ΔCount=0 的桶不出点（0% 会被误读为「全部请求都很慢」）
+    - 阈值/边界随结果返回，前端下拉选项据此渲染（不硬编码）
+    """
+    since_sec = _parse_since_seconds(since)
+    interval_sec = _parse_interval_seconds(interval)
+    ip_where = _ip_where(ips)
+    bounds = query_latency_bounds(metric_name, since=since, latency_type=latency_type, ips=ips)
+    bound_index = _resolve_bound_index(bounds, threshold_ms)
+    threshold = bounds[bound_index - 1] if bounds else DEFAULT_FAST_RATIO_THRESHOLD_MS
+
+    params: dict[str, Any] = {"name": metric_name, "since": since_sec, "latency_type": latency_type}
+    if ips is not None:
+        params["ips"] = ips
+
+    rows = execute_query(f"""
+        SELECT
+            bucket,
+            greatest(sum(f_inc), 0) AS f_total,
+            greatest(sum(c_inc), 0) AS c_total
+        FROM (
+            SELECT
+                bucket,
+                Attributes,
+                c_last,
+                greatest(f_last - lagInFrame(f_last, 1, f_last)
+                         OVER (PARTITION BY Attributes ORDER BY bucket ASC), 0) AS f_inc,
+                greatest(c_last - lagInFrame(c_last, 1, c_last)
+                         OVER (PARTITION BY Attributes ORDER BY bucket ASC), 0) AS c_inc
+            FROM (
+                SELECT
+                    toUnixTimestamp(toStartOfInterval(TimeUnix,
+                                  INTERVAL {interval_sec} SECOND)) AS bucket,
+                    Attributes,
+                    argMax({_fast_bucket_prefix_expr(bound_index)}, TimeUnix) AS f_last,
+                    argMax(Count, TimeUnix) AS c_last,
+                    count(*) AS sample_count
+                FROM otel_metrics_histogram
+                WHERE MetricName = %(name)s
+                  AND Attributes['type'] = %(latency_type)s
+                  AND TimeUnix > now() - INTERVAL %(since)s SECOND
+                  {ip_where}
+                GROUP BY bucket, Attributes
+            )
+        )
+        GROUP BY bucket
+        ORDER BY bucket
+    """, params)
+
+    points: list[dict[str, Any]] = []
+    total_fast = 0.0
+    total_count = 0
+    for r in rows or []:
+        c_total = int(r[2])
+        if c_total <= 0:
+            continue  # design D3：无请求桶不出点
+        total_fast += float(r[1])
+        total_count += c_total
+        points.append({
+            "metric_name": metric_name,
+            "timestamp": r[0],
+            "avg": round(float(r[1]) / c_total * 100, 2),
+            "sample_count": c_total,
+        })
+    # 头部窗口聚合口径（design D13）：ΣΔ前 k 桶 / ΣΔCount，全窗口单次舍入，
+    # 与 bucket_stats 同源（阈值=首边界时严格等于首枚 chip 值）
+    window_ratio = round(total_fast / total_count * 100, 2) if total_count > 0 else None
+    return {"points": points, "threshold_ms": threshold, "bounds": bounds, "window_ratio": window_ratio}
+
+
+def query_fast_ratio_bucket_stats(
+    metric_name: str,
+    since: str = "1h",
+    interval: str = "5m",
+    latency_type: str = "request",
+    ips: list[str] | None = None,
+    bounds: list[float] | None = None,
+) -> dict[str, Any] | None:
+    """各桶区间自身的精确占比与计数（metrics-fast-ratio-card design D9，2026-11-03 扩展）。
+
+    窗口聚合（非时间序列）：`counts[i] = ΣΔBucketCounts[i]`（lagInFrame 逐元素差分、
+    负增量钳 0、跨序列跨时段求和），`ratios[i] = counts[i] / ΣΔCount × 100`（两位小数）。
+    差分语义与 query_fast_ratio_series 完全同构（重置安全、多序列分区继承）；含溢出桶
+    `(bounds[-1], +∞)`，数组长度 = len(bounds) + 1。分布与阈值无关——阈值只影响
+    series 的累计前缀，阈值切换重发属幂等冗余。
+
+    - 窗口总请求 `ΣΔCount ≤ 0` → 返回 None（不显示全 0 分布，D3 同语义）
+    - 取不到桶边界 → 返回 None（无法给桶贴标签）
+    - `bounds` 由调用方复用 series 查询结果传入，避免重复发边界查询
+    """
+    if bounds is None:
+        bounds = query_latency_bounds(metric_name, since=since, latency_type=latency_type, ips=ips)
+    if not bounds:
+        return None
+    since_sec = _parse_since_seconds(since)
+    interval_sec = _parse_interval_seconds(interval)
+    ip_where = _ip_where(ips)
+    params: dict[str, Any] = {"name": metric_name, "since": since_sec, "latency_type": latency_type}
+    if ips is not None:
+        params["ips"] = ips
+
+    rows = execute_query(f"""
+        SELECT
+            f_deltas,
+            c_inc
+        FROM (
+            SELECT
+                bucket,
+                Attributes,
+                c_last,
+                arrayMap((f, p) -> greatest(f - p, 0),
+                         arraySlice(f_arr, 1, least(length(f_arr), length(f_prev))),
+                         arraySlice(f_prev, 1, least(length(f_arr), length(f_prev)))) AS f_deltas,
+                greatest(c_last - c_prev, 0) AS c_inc
+            FROM (
+                SELECT
+                    bucket,
+                    Attributes,
+                    f_arr,
+                    c_last,
+                    lagInFrame(f_arr, 1, f_arr)
+                        OVER (PARTITION BY Attributes ORDER BY bucket ASC) AS f_prev,
+                    lagInFrame(c_last, 1, c_last)
+                        OVER (PARTITION BY Attributes ORDER BY bucket ASC) AS c_prev
+                FROM (
+                    SELECT
+                        toUnixTimestamp(toStartOfInterval(TimeUnix,
+                                      INTERVAL {interval_sec} SECOND)) AS bucket,
+                        Attributes,
+                        argMax(BucketCounts, TimeUnix) AS f_arr,
+                        argMax(Count, TimeUnix) AS c_last
+                    FROM otel_metrics_histogram
+                    WHERE MetricName = %(name)s
+                      AND Attributes['type'] = %(latency_type)s
+                      AND TimeUnix > now() - INTERVAL %(since)s SECOND
+                      {ip_where}
+                    GROUP BY bucket, Attributes
+                )
+            )
+        )
+    """, params)
+
+    # SQL 已按元素钳 0；此处仅跨序列/跨时段按元素位置求和（长度不齐短行补 0）
+    bucket_sums: list[float] = []
+    total = 0
+    for f_deltas, c_inc in rows or []:
+        total += max(int(c_inc or 0), 0)
+        for i, d in enumerate(f_deltas or []):
+            if d is None:
+                continue
+            if i >= len(bucket_sums):
+                bucket_sums.extend([0.0] * (i + 1 - len(bucket_sums)))
+            bucket_sums[i] += float(d)
+    if total <= 0:
+        return None
+    ratios = [round(s / total * 100, 2) for s in bucket_sums]
+    counts = [int(s) for s in bucket_sums]
+    return {"bounds": [float(b) for b in bounds], "ratios": ratios, "counts": counts, "total": total}
 
 
 def query_time_series(

@@ -16,6 +16,8 @@ from app.models.cluster import Node
 from app.services.metrics_service import (
     parse_filter,
     query_avg_latency_series,
+    query_fast_ratio_bucket_stats,
+    query_fast_ratio_series,
     query_metric_names,
     query_time_series,
     query_summary,
@@ -185,14 +187,64 @@ async def get_avg_latency(
         ips, warning = await _resolve_filter(filter_str, db)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    data = await asyncio.to_thread(
+    result = await asyncio.to_thread(
         query_avg_latency_series,
         "edge_http_latency",
         since=since,
         interval=interval,
         ips=ips,
     )
-    return _filter_response(data, warning)
+    resp = _filter_response(result["points"], warning)
+    # 头部窗口聚合口径（design D13）：与快速响应占比卡同约定
+    resp["window_avg_ms"] = result.get("window_avg_ms")
+    return resp
+
+
+@router.get("/metrics/fast-ratio")
+async def get_fast_ratio(
+    since: str = Query("1h", pattern=r"^\d+[smhd]$"),
+    interval: str = Query("5m", pattern=r"^\d+[smh]$"),
+    filter_str: str | None = Query(None, alias="filter"),
+    threshold_ms: float | None = Query(None, gt=0, le=600000),
+    db: AsyncSession = Depends(get_db),
+):
+    """快速响应占比（metrics-fast-ratio-card）。
+
+    响应信封：`data` = 占比点数组，`threshold_ms` = 生效阈值（桶边界），
+    `bounds` = 可选阈值枚举（下拉选项来源，读数据不硬编码），
+    `bucket_stats` = 各桶区间占比/计数（design D9，2026-11-03 扩展；窗口无请求为 null）。
+    """
+    try:
+        ips, warning = await _resolve_filter(filter_str, db)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    try:
+        result = await asyncio.to_thread(
+            query_fast_ratio_series,
+            "edge_http_latency",
+            since=since,
+            interval=interval,
+            threshold_ms=threshold_ms,
+            ips=ips,
+        )
+    except ValueError as e:
+        # 阈值不在桶边界上（桶内不可精确统计）
+        raise HTTPException(status_code=400, detail=str(e))
+    resp = _filter_response(result["points"], warning)
+    resp["threshold_ms"] = result["threshold_ms"]
+    resp["bounds"] = result["bounds"]
+    # 头部窗口聚合口径（design D13）：与分布条同源，替代「最近一桶」语义
+    resp["window_ratio"] = result.get("window_ratio")
+    # 区间分布（D9）：复用 series 已取的 bounds；分布与阈值无关，随同一响应返回
+    resp["bucket_stats"] = await asyncio.to_thread(
+        query_fast_ratio_bucket_stats,
+        "edge_http_latency",
+        since=since,
+        interval=interval,
+        ips=ips,
+        bounds=result["bounds"],
+    )
+    return resp
 
 
 @router.get("/metrics/node-health")

@@ -74,3 +74,65 @@ describe('MetricChartCard.vue 三态机（metrics-dashboard-ux-optimization D2�
     expect(wrapper.find('.chart-scope').exists()).toBe(false)
   })
 })
+
+describe('MetricChartCard.vue 占比与头部扩展槽（metrics-fast-ratio-card D6）', () => {
+  it('unit=% 时头部值固定两位小数', () => {
+    const wrapper = mountCard({ title: '快速响应占比', data: [dp(99.973)], unit: '%' })
+    expect(wrapper.find('.chart-value').text()).toBe('99.97')
+    expect(wrapper.find('.chart-unit').text()).toBe('%')
+  })
+
+  it('unit=% 时 100 显示为 100.00（不与普通数值共用 1 位小数规则）', () => {
+    const wrapper = mountCard({ title: '快速响应占比', data: [dp(100)], unit: '%' })
+    expect(wrapper.find('.chart-value').text()).toBe('100.00')
+  })
+
+  it('headValue 提供时头部值用窗口聚合口径（D13：与分布条同源），不取 data 末点', () => {
+    const wrapper = mountCard({ title: '快速响应占比', data: [dp(100)], unit: '%', headValue: 99.98 })
+    expect(wrapper.find('.chart-value').text()).toBe('99.98')
+  })
+
+  it('headValue 为 null 时回落 data 末点（其他卡零影响，不回归）', () => {
+    const wrapper = mountCard({ title: '快速响应占比', data: [dp(100)], unit: '%', headValue: null })
+    expect(wrapper.find('.chart-value').text()).toBe('100.00')
+  })
+
+  it('普通数值卡仍走原格式化（不回归）', () => {
+    const wrapper = mountCard({ title: '平均耗时', data: [dp(0.8123)], unit: 'ms' })
+    expect(wrapper.find('.chart-value').text()).toBe('0.812')
+  })
+
+  it('header-extra 插槽渲染在头部（阈值下拉挂载点）', () => {
+    const wrapper = mount(MetricChartCard, {
+      props: { title: '快速响应占比', data: [dp(99.9)], unit: '%' } as never,
+      slots: { 'header-extra': '<select class="thr-select"><option>10ms</option></select>' },
+    })
+    expect(wrapper.find('.chart-header-extra .thr-select').exists()).toBe(true)
+  })
+
+  it('无 header-extra 插槽时不渲染扩展容器（其他卡布局不变）', () => {
+    const wrapper = mountCard({ title: 'QPS', data: [dp(1)], unit: '/s' })
+    expect(wrapper.find('.chart-header-extra').exists()).toBe(false)
+  })
+
+  it('单点数据显形：窗口内只有一个有效桶时显示数据点（否则卡片看着像空的）', () => {
+    const wrapper = mountCard({ title: '快速响应占比', data: [dp(99.9)], unit: '%' })
+    const option = wrapper.findComponent({ name: 'VChart' }).props('option') as {
+      series: Array<{ showSymbol: boolean; data: unknown[] }>
+    }
+    expect(option.series[0].showSymbol).toBe(true)
+    expect(option.series[0].data).toHaveLength(1)
+  })
+
+  it('多点数据保持无符号 sparkline（不回归）', () => {
+    const data = [
+      { metric_name: 'm', timestamp: 1000, avg: 99.9, sample_count: 1 },
+      { metric_name: 'm', timestamp: 2000, avg: 99.8, sample_count: 1 },
+    ]
+    const wrapper = mountCard({ title: '快速响应占比', data, unit: '%' })
+    const option = wrapper.findComponent({ name: 'VChart' }).props('option') as {
+      series: Array<{ showSymbol: boolean }>
+    }
+    expect(option.series[0].showSymbol).toBe(false)
+  })
+})

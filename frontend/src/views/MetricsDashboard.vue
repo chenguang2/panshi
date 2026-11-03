@@ -61,7 +61,7 @@
 
     <!-- ── 核心流量 ── -->
     <div class="section-header">核心流量</div>
-    <section class="chart-grid" data-section="core">
+    <section class="chart-grid core-grid" data-section="core">
       <MetricChartCard
         title="QPS"
         :data="store.chartDataMap['qps'] || []"
@@ -81,8 +81,37 @@
         :loading="store.loading"
         unit="ms"
         empty-text="暂无上报数据"
+        :head-value="store.avgLatencyWindowMs"
         @retry="store.retryChart('avg_latency')"
       />
+      <MetricChartCard
+        title="快速响应占比"
+        :scope-label="`近 ${timeRangeLabel}`"
+        :data="store.chartDataMap['fast_ratio'] || []"
+        :error="metricCardError('fast_ratio')"
+        :retryable="store.sourceOk !== false"
+        :loading="store.loading"
+        unit="%"
+        empty-text="暂无上报数据"
+        :head-value="store.fastRatioWindowRatio"
+        @retry="store.retryChart('fast_ratio')"
+      >
+        <template #header-extra>
+          <span class="fast-ratio-threshold">
+            <span class="thr-label">≤</span>
+            <a-select
+              class="thr-select"
+              size="small"
+              :value="store.fastRatioThresholdMs"
+              :options="fastRatioThresholdOptions"
+              :disabled="store.fastRatioBounds.length === 0"
+              @change="handleThresholdChange"
+            />
+          </span>
+        </template>
+      </MetricChartCard>
+      <!-- 耗时区间分布（metrics-fast-ratio-card D9/D11）：全宽条，随占比卡同一请求数据驱动显隐（D12） -->
+      <LatencyBucketDistribution v-if="store.fastRatioBuckets" class="span-full" :stats="store.fastRatioBuckets" />
       <MetricChartCard
         title="Nginx 连接状态"
         class="span-full"
@@ -169,6 +198,7 @@ import { useMetricsDashboardStore, INFRA_CHARTS, CONNECTION_SERIES } from '@/sto
 import { listClusters } from '@/api/clusters'
 import { fetchAllClusterNodes } from '@/composables/useClusterUtils'
 import MetricChartCard from '@/components/MetricChartCard.vue'
+import LatencyBucketDistribution from '@/components/LatencyBucketDistribution.vue'
 import MetricsSourceBanner from '@/components/MetricsSourceBanner.vue'
 import RouteStatsCard from '@/components/RouteStatsCard.vue'
 import StatusAnalysisChart from '@/components/StatusAnalysisChart.vue'
@@ -182,6 +212,16 @@ const infraOpen = ref(false)
 // 平均耗时卡口径标注（metrics-avg-latency-card 文案 #2）
 const TIME_RANGE_LABELS: Record<string, string> = { '1h': '1小时', '6h': '6小时', '24h': '24小时', '7d': '7天' }
 const timeRangeLabel = computed(() => TIME_RANGE_LABELS[store.timeRange] || store.timeRange)
+
+// ── 快速响应占比阈值（metrics-fast-ratio-card D2/D5）──
+// 选项 = 采集桶边界（接口返回，不硬编码）；阈值只能是边界值，故用下拉而非输入框
+const fastRatioThresholdOptions = computed(() => store.fastRatioBounds.map((b) => ({ value: b, label: `${b}ms` })))
+
+function handleThresholdChange(value: unknown) {
+  const ms = Number(value)
+  if (!Number.isFinite(ms)) return
+  void store.setFastRatioThreshold(ms)
+}
 
 // ── 集群/节点筛选（metrics-cluster-node-filter D4）──
 const route = useRoute()
@@ -390,6 +430,38 @@ onUnmounted(() => {
 /* 连接状态 4 状态序列全宽横排（metrics-avg-latency-card 布局 A） */
 .span-full {
   grid-column: 1 / -1;
+}
+
+/* 核心流量第一行三卡并列（metrics-fast-ratio-card D5）；窄屏由下方媒体查询收敛单列 */
+.core-grid {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+/* 中宽屏（侧边栏占位后内容区 ~700-1000px）三卡过窄 → 2 列 + 占比卡整行，
+   保持「无空格」同时头部不折行 */
+@media (max-width: 1180px) and (min-width: 801px) {
+  .core-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .core-grid > :nth-child(3) {
+    grid-column: 1 / -1;
+  }
+}
+
+.fast-ratio-threshold {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.fast-ratio-threshold .thr-select {
+  min-width: 74px;
+}
+
+.fast-ratio-threshold .thr-select :deep(.ant-select-selector) {
+  padding: 0 6px;
+  font-size: 11px;
 }
 
 .analysis-grid {

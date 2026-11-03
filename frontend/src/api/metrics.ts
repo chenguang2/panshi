@@ -140,16 +140,68 @@ export async function getNodeHealth(
   return res.data.data as NodeHealthItem[]
 }
 
-/** 平均请求处理耗时（metrics-avg-latency-card）：histogram 窗口增量 ΔSum/ΔCount，单位 ms */
-export async function getAvgLatencySeries(
-  since: string,
-  interval: string,
-  filter?: string,
-): Promise<MetricDataPoint[]> {
+/** 平均请求处理耗时（metrics-avg-latency-card）：histogram 窗口增量 ΔSum/ΔCount，单位 ms。
+ *  D13：windowAvgMs = 全窗口聚合均值（头部口径，与快速响应占比卡同约定）；null = 窗口无增量。 */
+export interface AvgLatencySeries {
+  points: MetricDataPoint[]
+  windowAvgMs: number | null
+}
+
+export async function getAvgLatencySeries(since: string, interval: string, filter?: string): Promise<AvgLatencySeries> {
   const params: Record<string, string> = { since, interval }
   if (filter) params.filter = filter
   const res = await api.get('/metrics/avg-latency', { params })
-  return res.data.data as MetricDataPoint[]
+  return {
+    points: (res.data.data ?? []) as MetricDataPoint[],
+    windowAvgMs: typeof res.data.window_avg_ms === 'number' ? res.data.window_avg_ms : null,
+  }
+}
+
+/** 各桶区间精确占比/计数（metrics-fast-ratio-card D9，2026-11-03 扩展）。
+ *  含溢出桶 (bounds[-1], +∞)，数组长度 = len(bounds)+1；窗口无请求时后端返回 null。 */
+export interface FastRatioBucketStats {
+  bounds: number[]
+  /** 各桶占窗口总请求的百分比（两位小数） */
+  ratios: number[]
+  /** 各桶请求计数 */
+  counts: number[]
+  /** 窗口总请求 ΣΔCount */
+  total: number
+}
+
+/** 快速响应占比（metrics-fast-ratio-card）：histogram 桶计数增量精确占比，单位 %。
+ *  阈值只能取桶边界（bounds），由后端校验；bounds 同时是下拉选项来源。 */
+export interface FastRatioSeries {
+  points: MetricDataPoint[]
+  /** 生效阈值（ms），后端按桶边界解析后的权威值 */
+  thresholdMs: number
+  /** 可选阈值枚举（= ExplicitBounds，读数据不硬编码） */
+  bounds: number[]
+  /** 各桶区间占比/计数（D9 区间分布）；缺省/null = 窗口无请求或无边界，不显示分布 */
+  bucketStats?: FastRatioBucketStats | null
+  /** 头部窗口聚合占比（D13）：ΣΔ前 k 桶 / ΣΔCount，全窗口单次舍入；null = 窗口无请求 */
+  windowRatio?: number | null
+}
+
+const FAST_RATIO_DEFAULT_THRESHOLD = 10
+
+export async function getFastRatioSeries(
+  since: string,
+  interval: string,
+  filter?: string,
+  thresholdMs?: number,
+): Promise<FastRatioSeries> {
+  const params: Record<string, string | number> = { since, interval }
+  if (filter) params.filter = filter
+  if (thresholdMs != null) params.threshold_ms = thresholdMs
+  const res = await api.get('/metrics/fast-ratio', { params })
+  return {
+    points: (res.data.data ?? []) as MetricDataPoint[],
+    thresholdMs: typeof res.data.threshold_ms === 'number' ? res.data.threshold_ms : FAST_RATIO_DEFAULT_THRESHOLD,
+    bounds: (res.data.bounds ?? []) as number[],
+    bucketStats: (res.data.bucket_stats ?? null) as FastRatioBucketStats | null,
+    windowRatio: typeof res.data.window_ratio === 'number' ? res.data.window_ratio : null,
+  }
 }
 
 export async function getRouteNameMap(edgeUuids: string[]): Promise<Record<string, { name: string; uri: string }>> {
