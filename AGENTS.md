@@ -209,6 +209,10 @@ openspec/        # 变更工件；openspec/specs/ = main specs
 
 62. **跑后端全量测试会杀掉常驻开发服务——已修，但别再引入同类** — `develop/linux/stop.sh` 第 3 步「孤儿清扫」是 `pgrep -f 'uvicorn app\.main:app'` + **项目路径锚点**复核，**完全不看端口**；`tests/test_dev_scripts.py` 若在不设 `PANSHI_PROJECT_ROOT` 的情况下调 stop.sh，锚点就退回真实仓库根 → 把开发机上 12344/12345 的常驻服务一并 SIGKILL（2026-11-01 实测：全量 `uv run pytest` 跑完前后端双双掉线、`/health` 000；单跑该测试文件同样复现 `before=200 → after=000`）。修复：`_script_env()` 默认把锚点隔离到 `tmp_path`（显式传 `project_root=` 的锚点语义用例不受影响），并已实测「14 passed 且 after=200」。**推论**：任何会调用 start/stop 脚本的测试都必须显式隔离 `PANSHI_PROJECT_ROOT` + PID 文件 + 端口三件套，否则它会成为开发环境的隐形杀手；排查「服务莫名其妙没了」先查最近跑过哪些测试。
 
+63. **manual-screenshots.mjs 的 `--only` 是精确匹配** — 截图组名须写全（如 `--only 16-01-dashboard`；传 `16-01` 会静默产出「完成，共 0 张」且退出码 0，极易误判为已重拍）。名称以 `frontend/scripts/manual-screenshots.mjs` 的 SHOTS 清单 `name` 字段为准。
+
+64. **同页并存的头部大数与分布/汇总展示必须同口径** — 指标卡「头部大数」与页面上任何分布/汇总展示若同标签（如「≤10ms 占比」）必须同源同义，否则必被误读（2026-11-03 实锤：快速响应占比头部=最近一桶 100.00% vs 分布条窗口聚合 99.98%）。既定约定（metrics-fast-ratio-card design D13）：头部大数=窗口汇总（`window_ratio`/`window_avg_ms`，全窗口单次舍入）、折线=逐桶趋势（悬停看单桶）；新指标卡头部一律窗口聚合口径，禁止「最近一桶」头部 + 「近 N」scopeLabel 组合；共享卡扩展头值用 `MetricChartCard` 的可选 `headValue` prop（null/缺省回落 data 末点，其他卡零影响）。
+
 ## 新增功能步骤
 
 1. 在 `backend/app/schemas/` 定义 Pydantic 模型

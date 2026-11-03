@@ -78,7 +78,7 @@ export async function getRouteStats(
 }
 
 // ── Status Analysis ──
-interface StatusAnalysisItem {
+export interface StatusAnalysisItem {
   status_class: string
   request_count: number
   percentage: number

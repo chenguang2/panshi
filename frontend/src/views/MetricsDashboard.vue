@@ -36,26 +36,29 @@
       </a-button>
       <span v-if="lastUpdatedText" class="last-updated">更新于 {{ lastUpdatedText }}</span>
       <a-tag v-if="store.loading" color="processing">加载中...</a-tag>
-      <div class="control-group filter-group">
-        <label>集群</label>
-        <a-select
-          class="cluster-filter"
-          :value="clusterSelectValue"
-          :options="clusterSelectOptions"
-          style="width: 160px"
-          @change="onClusterChange"
-        />
-      </div>
-      <div class="control-group filter-group">
-        <label>节点</label>
-        <a-select
-          class="node-filter"
-          :value="nodeSelectValue"
-          :options="nodeSelectOptions"
-          :disabled="nodeSelectDisabled"
-          style="width: 150px"
-          @change="onNodeChange"
-        />
+      <!-- 筛选对：集群+节点永不分离换行（metrics-query-ux D8 同款，窄屏整对下移） -->
+      <div class="filter-pair">
+        <div class="control-group filter-group">
+          <label>集群</label>
+          <a-select
+            class="cluster-filter"
+            :value="clusterSelectValue"
+            :options="clusterSelectOptions"
+            style="width: 160px"
+            @change="onClusterChange"
+          />
+        </div>
+        <div class="control-group filter-group">
+          <label>节点</label>
+          <a-select
+            class="node-filter"
+            :value="nodeSelectValue"
+            :options="nodeSelectOptions"
+            :disabled="nodeSelectDisabled"
+            style="width: 150px"
+            @change="onNodeChange"
+          />
+        </div>
       </div>
     </div>
 
@@ -192,11 +195,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, watch } from 'vue'
 import { ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
 import { ReloadOutlined, CaretDownOutlined } from '@ant-design/icons-vue'
 import { useMetricsDashboardStore, INFRA_CHARTS, CONNECTION_SERIES } from '@/stores/metricsDashboard'
-import { listClusters } from '@/api/clusters'
-import { fetchAllClusterNodes } from '@/composables/useClusterUtils'
+import { useMetricsFilter } from '@/composables/useMetricsFilter'
 import MetricChartCard from '@/components/MetricChartCard.vue'
 import LatencyBucketDistribution from '@/components/LatencyBucketDistribution.vue'
 import MetricsSourceBanner from '@/components/MetricsSourceBanner.vue'
@@ -223,89 +224,31 @@ function handleThresholdChange(value: unknown) {
   void store.setFastRatioThreshold(ms)
 }
 
-// ── 集群/节点筛选（metrics-cluster-node-filter D4）──
-const route = useRoute()
-const router = useRouter()
-interface SelectOption {
-  value: number | string
-  label: string
-  disabled?: boolean
-}
-const clusterOptions = ref<SelectOption[]>([])
-const nodeOptions = ref<SelectOption[]>([])
-const nodeLoading = ref(false)
-const nodeSelectOptions = computed<SelectOption[]>(() => [{ value: '', label: '全部节点' }, ...nodeOptions.value])
-
-// a-select 值映射：0=全部集群（store 态为 null），-1=未纳管
-const clusterSelectValue = computed(() => store.clusterId ?? 0)
-const nodeSelectValue = computed(() => store.nodeIp ?? '')
-const nodeSelectDisabled = computed(() => store.clusterId == null || store.clusterId === -1)
-
-async function loadClusterOptions(): Promise<void> {
-  try {
-    const res = await listClusters({ page: 1, page_size: 500 })
-    const items = ((res.data?.items ?? []) as { id: number; name: string }[]).filter((c) => c.id != null)
-    clusterOptions.value = items.map((c) => ({ value: c.id, label: c.name }))
-  } catch {
-    // 集群清单拉取失败不阻塞页面（下拉仅缺选项，全部视角仍可用）
-  }
-}
-
-// 固定项在前：全部集群(0) / 平台集群 / 未纳管节点(-1)
-const clusterSelectOptions = computed<SelectOption[]>(() => [
-  { value: 0, label: '全部集群' },
-  ...clusterOptions.value,
-  { value: -1, label: '未纳管节点' },
-])
-
-async function onClusterChange(v: number | string): Promise<void> {
-  const id = Number(v)
-  if (!Number.isFinite(id)) return
-  store.setClusterFilter(id === 0 ? null : id)
-  nodeOptions.value = []
-  if (store.clusterId != null && store.clusterId > 0) {
-    nodeLoading.value = true
-    try {
-      const nodes = await fetchAllClusterNodes<{ ip: string }>(store.clusterId)
-      // 「全部节点」首项由 nodeSelectOptions 固定提供，这里只放具体节点
-      nodeOptions.value = nodes.filter((n) => !!n.ip).map((n) => ({ value: n.ip, label: n.ip }))
-    } catch {
-      nodeOptions.value = []
-    } finally {
-      nodeLoading.value = false
-    }
-  }
-  onFilterChanged()
-}
-
-function onNodeChange(v: number | string): void {
-  const ip = String(v)
-  store.setNodeFilter(ip === '' ? null : ip)
-  onFilterChanged()
-}
-
+// ── 集群/节点筛选（metrics-query-ux D6：两级联动共享态机 useMetricsFilter，原内联实现抽取）──
 /** 筛选变化 → 与手动刷新同路径的全页 reload + URL 同步（不产生历史记录） */
-function onFilterChanged(): void {
+function handleFilterChanged(): void {
   store.loadAllCharts()
-  const query: Record<string, string> = {}
-  // URL 规范形：未纳管写 unmanaged（与 restoreFilterFromQuery 回读一致）
-  if (store.clusterId != null) query.cluster = store.clusterId === -1 ? 'unmanaged' : String(store.clusterId)
-  if (store.nodeIp) query.node = store.nodeIp
-  const replaced = router.replace({ query })
-  if (replaced && typeof replaced.catch === 'function') replaced.catch(() => {})
+  filter.replaceQuery(filter.filterQueryPatch())
 }
 
-/** URL 回显：失效 id 由后端 warning 语义静默回退，前端不校验存在性 */
-function restoreFilterFromQuery(): void {
-  const q = route.query
-  if (q.cluster === 'unmanaged') {
-    store.setClusterFilter(-1)
-  } else if (typeof q.cluster === 'string') {
-    const id = Number(q.cluster)
-    if (Number.isFinite(id) && id > 0) store.setClusterFilter(id)
-  }
-  if (typeof q.node === 'string' && q.node) store.setNodeFilter(q.node)
-}
+const filter = useMetricsFilter({
+  getClusterId: () => store.clusterId,
+  getNodeIp: () => store.nodeIp,
+  applyCluster: (id) => store.setClusterFilter(id),
+  applyNode: (ip) => store.setNodeFilter(ip),
+  onFilterChanged: handleFilterChanged,
+})
+const {
+  clusterSelectOptions,
+  nodeSelectOptions,
+  clusterSelectValue,
+  nodeSelectValue,
+  nodeSelectDisabled,
+  loadClusterOptions,
+  onClusterChange,
+  onNodeChange,
+  restoreFilterFromQuery,
+} = filter
 
 // 连接状态多序列：过滤无数据序列，避免渲染空线
 const connectionSeries = computed(() =>
@@ -411,6 +354,13 @@ onUnmounted(() => {
 .last-updated {
   font-size: 12px;
   color: var(--muted);
+}
+
+/* 集群+节点整对换行，窄屏不拆散（metrics-query-ux D8 同款） */
+.filter-pair {
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
 .section-header {

@@ -40,6 +40,8 @@ const SHOTS = [
   { name: '00-03-db-management', path: '/database-management' },
   // ── 第 24 章 指标总览（metrics-dashboard-ux-optimization 四分区版式，等数据上屏再截） ──
   { name: '16-01-dashboard', path: '/metrics/dashboard', steps: [{ waitMs: 9000 }] },
+  // 指标查询页（metrics-query-ux-optimization：默认指标+分组下拉+筛选+刷新编排，等数据上屏再截）
+  { name: '16-02-query', path: '/metrics', steps: [{ waitMs: 6000 }] },
   // 集群/节点筛选态（metrics-cluster-node-filter：选 app 集群 + 唯一上报节点，等 reload 再截）
   {
     name: '16-02-dashboard-filter',
