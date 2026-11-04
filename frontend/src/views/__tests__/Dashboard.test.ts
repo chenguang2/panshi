@@ -742,11 +742,11 @@ describe('Dashboard - 打磨（批次 8）', () => {
     expect(chipOf('用户管理').find('.chip-count').text()).toBe(String(STATS.users))
   })
 
-  it('8.4b 「数据库管理」chip 副标注「含数据库切换等高危操作；迁移与恢复已拆独立入口」', async () => {
+  it('8.4b 「数据库管理」chip 不带副标注（风险提示归目标页，入口按钮只做跳转）', async () => {
     okApiMock()
     const { wrapper } = await mountDashboard({ role: 'admin' })
     const chip = wrapper.findAll('.quick-chip').find((c) => c.text().includes('数据库管理'))!
-    expect(chip.find('.chip-note').text()).toBe('含数据库切换等高危操作；迁移与恢复已拆独立入口')
+    expect(chip.find('.chip-note').exists()).toBe(false)
   })
 })
 

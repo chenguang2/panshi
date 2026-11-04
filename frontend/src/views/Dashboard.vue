@@ -361,7 +361,6 @@ const quickLinks: Array<LinkItem & Gate & ChipExtra> = [
     path: '/database-management',
     permission: 'database_management',
     feature: 'database_management',
-    note: '含数据库切换等高危操作；迁移与恢复已拆独立入口',
   },
   {
     title: 'Ansible 主机清单',
