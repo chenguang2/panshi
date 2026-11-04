@@ -17,4 +17,4 @@
 - [x] 4.1 后端域回归 `pytest -k relay` + 全量 `uv run pytest -q`
 - [x] 4.2 实机验收（真实 UI）：①bj 首次弹「尚无成功下发记录」截图（relay-drift-first.png）→ 真实下发成功（快照=3 启用节点，白名单刷新为正确态）→ 二次弹窗一致；②禁用 192.168.0.14 → 琥珀警示「本次将移除 1 个节点：192.168.0.14:16620」+ okText「开始下发（将移除 1 个节点）」截图（relay-drift-warning.png → 手册 32-06）+ 取消后快照未变/drift 保留（后置断言）；③恢复节点 → 回到一致；全程零 console 错误（验收 harness 事故：取消误触确认一次真实下发——结果即白名单刷新为预期态，无副作用）
 - [x] 4.3 手册第 32 章「网关操作」节补漂移提示说明（注意三点之三）+ 新增 32-06-relay-push-drift.png 截图
-- [ ] 4.4 `openspec validate --all` 0 error 后 commit
+- [x] 4.4 `openspec validate --all` 0 error 后 commit（198 passed / 0 error，commit 7ed31ae9）

@@ -3,7 +3,7 @@
 ## ADDED Requirements
 
 ### Requirement: 下发漂移预览
-系统 SHALL 持久化每个区域最后一次成功写入网关机的白名单快照（`relay_gateways.last_pushed_nodes`，`ip:管理端口` 列表 + `last_pushed_at`）：`push-config` 与 `init` 终态成功时 SHALL 更新快照（`allow_empty=true` 的空名单下发成功后 SHALL 如实写空列表），终态失败或假成功 SHALL NOT 更新，sshd-setup SHALL NOT 触碰快照。快照写入 SHALL 经与 SSE 生命周期解耦的后台任务完成（生成器 `finally` 内不写库）。`GET /relay/gateways` SHALL 逐区域回填 `push_drift`（当前启用节点集合相对快照的 `{added, removed}` 差集；无快照为 null）与 `last_pushed_at`，纯平台侧计算。前端「下发配置」确认弹窗 SHALL 呈现漂移：将移除节点时 SHALL 琥珀警示并列出移除节点清单（≤10 全列，超出列前 10 并标注总数）且确认按钮文案 SHALL 标明移除数；仅新增 SHALL 以弱化文案提示；无快照 SHALL 提示首次写入；集合一致 SHALL 不加提示行。0 启用节点的危险确认路径不受本需求影响。漂移提示为 advisory 性质：快照不代表网关机实况（人工手改、SSE 断连窗口不覆盖）。
+系统 SHALL 持久化每个区域最后一次成功写入网关机的白名单快照（`relay_gateways.last_pushed_nodes`，`ip:管理端口` 列表 + `last_pushed_at`）：`push-config` 与 `init` 终态成功时 SHALL 更新快照（`allow_empty=true` 的空名单下发成功后 SHALL 如实写空列表），终态失败或假成功 SHALL NOT 更新，sshd-setup SHALL NOT 触碰快照。快照写入 SHALL 在终态成功后的流收尾阶段经请求会话完成，SHALL NOT 写在生成器 `finally` 内（客户端断连即跳过——快照停留旧值，与 advisory 定位一致）。`GET /relay/gateways` SHALL 逐区域回填 `push_drift`（当前启用节点集合相对快照的 `{added, removed}` 差集；无快照为 null）与 `last_pushed_at`，纯平台侧计算。前端「下发配置」确认弹窗 SHALL 呈现漂移：将移除节点时 SHALL 琥珀警示并列出移除节点清单（≤10 全列，超出列前 10 并标注总数）且确认按钮文案 SHALL 标明移除数；仅新增 SHALL 以弱化文案提示；无快照 SHALL 提示首次写入；集合一致 SHALL 不加提示行。0 启用节点的危险确认路径不受本需求影响。漂移提示为 advisory 性质：快照不代表网关机实况（人工手改、SSE 断连窗口不覆盖）。
 
 #### Scenario: 将移除节点时警示
 - **WHEN** 上次成功下发含节点 A、B、C、D，当前启用节点为 A、B、C（D 被禁用），管理员点击「下发配置」
