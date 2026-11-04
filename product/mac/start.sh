@@ -36,7 +36,9 @@ cd "$PROJECT_ROOT"
 BACKEND_LOG="$PROJECT_ROOT/backend.log"
 
 # ---------- 停止已有进程（带进程名双重确认）----------
-PRE_PID=$(lsof -ti:"$PORT" 2>/dev/null)
+# || true 必须：端口空闲时 lsof 退出码 1，set -e 下无保护会让 start.sh 静默死亡
+# （2026-11-04 冒烟实测：仅打印首行即退出，包永远起不来；对齐 linux 版）
+PRE_PID=$(lsof -ti:"$PORT" 2>/dev/null || true)
 # 逐 PID 校验（lsof 可能返回多行 PID；多行一起传给 ps 会让守卫失效）
 for pid in $PRE_PID; do
     [ -z "$pid" ] && continue

@@ -84,8 +84,11 @@ echo ""
 echo "[4/5] 安装后端依赖..."
 # standalone Python 内置了 /install 硬编码路径，设 PYTHONHOME 强制指向拷贝后的 Python
 export PYTHONHOME="$TARGET_PYTHON_DIR"
-echo "  使用 PyPI 镜像: https://mirrors.aliyun.com/pypi/simple/"
-"$TARGET_DIR/backend/.venv/bin/pip" install -i https://mirrors.aliyun.com/pypi/simple/ -e "$TARGET_DIR/backend"
+# 依赖安装统一入口（product/tools/install-backend-deps.sh）：uv 优先（缓存激进）/
+# pip 退化；导出 WHEELS_DIR=<repo>/product/wheels 则完全离线（由 vendor-wheels.sh 落盘）。
+# 镜像默认 aliyun，可经 PIP_INDEX_URL 覆盖（与 gen-linux.sh 同一实现，2026-11-04 起
+# mac 不再裸 pip + 硬编码镜像——瞬时网络故障无重试面即死）。
+"$PROJECT_ROOT/product/tools/install-backend-deps.sh" "$TARGET_DIR"
 unset PYTHONHOME
 echo "  后端依赖安装完成"
 
@@ -94,10 +97,33 @@ echo "[4.6/5] 安装 Ansible collections..."
 mkdir -p "$TARGET_DIR/backend/ansible/collections"
 cp "$PROJECT_ROOT/backend/ansible/collections/requirements.yml" "$TARGET_DIR/backend/ansible/collections/requirements.yml" 2>/dev/null || true
 if [ -f "$TARGET_DIR/backend/ansible/collections/requirements.yml" ]; then
-    "$TARGET_DIR/backend/.venv/bin/ansible-galaxy" collection install \
+    # tarball 随 backend/ansible/ 整目录拷贝已进包；galaxy.ansible.com 国内常不可达，
+    # 与 gen-linux.sh 同链：本地 tarball 优先 → requirements.yml → 直接下载兜底。
+    COLLECTION_TARBALL="$PROJECT_ROOT/backend/ansible/collections/ansible-utils-6.0.2.tar.gz"
+    if [ -f "$COLLECTION_TARBALL" ]; then
+        echo "  使用本地缓存 tarball 安装..."
+        "$TARGET_DIR/backend/.venv/bin/ansible-galaxy" collection install \
+            "$COLLECTION_TARBALL" \
+            -p "$TARGET_DIR/backend/ansible/collections"
+        echo "  Ansible collections (本地) 安装完成"
+    elif "$TARGET_DIR/backend/.venv/bin/ansible-galaxy" collection install \
         -r "$TARGET_DIR/backend/ansible/collections/requirements.yml" \
-        -p "$TARGET_DIR/backend/ansible/collections"
-    echo "  Ansible collections 安装完成"
+        -p "$TARGET_DIR/backend/ansible/collections" 2>/dev/null; then
+        echo "  Ansible collections 安装完成"
+    else
+        echo "  galaxy.ansible.com 不可用，尝试直接下载 tarball..."
+        TARBALL_URL="https://galaxy.ansible.com/api/v3/plugin/ansible/content/published/collections/artifacts/ansible-utils-6.0.2.tar.gz"
+        if curl -fsSL "$TARBALL_URL" -o /tmp/ansible-utils-6.0.2.tar.gz; then
+            "$TARGET_DIR/backend/.venv/bin/ansible-galaxy" collection install \
+                /tmp/ansible-utils-6.0.2.tar.gz \
+                -p "$TARGET_DIR/backend/ansible/collections"
+            echo "  Ansible collections (tarball) 安装完成"
+            rm -f /tmp/ansible-utils-6.0.2.tar.gz
+        else
+            echo "  警告: 所有源均不可用（galaxy.ansible.com / 本地 tarball）"
+            echo "  请手动下载 $TARBALL_URL 放到 $COLLECTION_TARBALL 后重新执行本脚本"
+        fi
+    fi
 else
     echo "  警告: requirements.yml 不存在，跳过 collection 安装"
 fi
@@ -122,6 +148,22 @@ print('  .pth 已修正为相对路径: ' + rel)
     fi
 fi
 echo "  路径修正完成"
+
+# 修正 .venv/bin/ 下所有 Python 脚本的 shebang（pip 写入的是构建机绝对路径）
+# 改为 #!/usr/bin/env python3 以支持部署目录迁移到任意目标机器（对齐 gen-linux.sh 4.5.1）
+echo ""
+echo "[4.5.1/5] 修正 shebang 为可移植路径..."
+SHEBANG_FIX_COUNT=0
+for f in "$TARGET_DIR/backend/.venv/bin/"*; do
+    if [ -f "$f" ] && [ -x "$f" ]; then
+        first_line=$(head -1 "$f")
+        if echo "$first_line" | grep -q "^#!.*python" && ! echo "$first_line" | grep -q "^#!/usr/bin/env python3"; then
+            sed -i '' '1s|^#!.*python.*|#!/usr/bin/env python3|' "$f"
+            SHEBANG_FIX_COUNT=$((SHEBANG_FIX_COUNT + 1))
+        fi
+    fi
+done
+echo "  已修正 $SHEBANG_FIX_COUNT 个脚本 shebang"
 
 # ---------- 5. 构建前端 ----------
 echo ""
@@ -150,6 +192,28 @@ echo "  启停脚本已拷贝到: $TARGET_DIR/"
 echo "拷贝 features.yaml..."
 cp "$PROJECT_ROOT/backend/features.yaml" "$TARGET_DIR/backend/"
 echo "  features.yaml 已拷贝到: $TARGET_DIR/backend/"
+
+# 拷贝 db_config.json（数据库连接配置，与 features.yaml 同级）
+# 缺失时后端首次启动会按 DATABASE_URL/默认 SQLite 自动生成
+if [ -f "$PROJECT_ROOT/backend/db_config.json" ]; then
+    echo "拷贝 db_config.json..."
+    cp "$PROJECT_ROOT/backend/db_config.json" "$TARGET_DIR/backend/"
+    chmod 600 "$TARGET_DIR/backend/db_config.json"
+    echo "  db_config.json 已拷贝到: $TARGET_DIR/backend/"
+else
+    echo "警告: 未找到 $PROJECT_ROOT/backend/db_config.json，跳过（目标机首次启动将生成默认配置）"
+fi
+
+# 拷贝 .jwt_secret（JWT 签名 + Fernet 加密双角色密钥；db_config.json 已随包时
+# 缺它目标机将重新生成密钥 → 包内已加密的数据库连接密码全部不可解，建议 34）
+if [ -f "$PROJECT_ROOT/backend/data/.jwt_secret" ]; then
+    echo "拷贝 .jwt_secret..."
+    cp "$PROJECT_ROOT/backend/data/.jwt_secret" "$TARGET_DIR/backend/data/"
+    chmod 600 "$TARGET_DIR/backend/data/.jwt_secret"
+    echo "  .jwt_secret 已拷贝到: $TARGET_DIR/backend/data/"
+else
+    echo "警告: 未找到 backend/data/.jwt_secret（开发态自动生成物），跳过"
+fi
 
 # 创建 data/.gitkeep（空目录占位）
 touch "$TARGET_DIR/backend/data/.gitkeep"

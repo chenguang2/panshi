@@ -213,6 +213,10 @@ openspec/        # 变更工件；openspec/specs/ = main specs
 
 64. **同页并存的头部大数与分布/汇总展示必须同口径** — 指标卡「头部大数」与页面上任何分布/汇总展示若同标签（如「≤10ms 占比」）必须同源同义，否则必被误读（2026-11-03 实锤：快速响应占比头部=最近一桶 100.00% vs 分布条窗口聚合 99.98%）。既定约定（metrics-fast-ratio-card design D13）：头部大数=窗口汇总（`window_ratio`/`window_avg_ms`，全窗口单次舍入）、折线=逐桶趋势（悬停看单桶）；新指标卡头部一律窗口聚合口径，禁止「最近一桶」头部 + 「近 N」scopeLabel 组合；共享卡扩展头值用 `MetricChartCard` 的可选 `headValue` prop（null/缺省回落 data 末点，其他卡零影响）。
 
+65. **product/ 打包脚本受源码守卫测试约束** — `backend/tests/test_product_packaging.py` 钉住 mac 打包链关键防线（2026-11-04 排查 gen-mac.sh「生成失败」确立）：① `product/mac/start.sh` 的 `PRE_PID=$(lsof ...)` 必须带 `|| true`——`set -e` 下目标机端口空闲（首发常态）lsof 退出码 1 会静默杀掉 start.sh，生成的包永远起不来（linux 版有保护、mac 版曾漏）；② gen-mac.sh 第 4 步必须走 `product/tools/install-backend-deps.sh`（uv 缓存/镜像覆盖/离线兜底），禁裸 pip + 硬编码镜像（瞬时网络故障即死，2026-11-03 实锤）；③ ansible collections 本地 tarball 优先（galaxy.ansible.com 国内常不通，tarball 随 backend/ansible/ 已进包）；④ 4.5.1 shebang 修正（包移动后 venv 控制台脚本不失效）；⑤ db_config.json + .jwt_secret 条件随包（建议 34）；⑥ mac 专属必须项不可删（venv `--copies --without-pip` + 手补 `libpython3.11.dylib`、sed 一律 BSD `sed -i ''`）。改 `product/mac/*.sh` 或 gen-linux.sh 同类段落时跑该测试收口。
+
+66. **`backend/.venv/bin` 脚本 shebang 漂移 = 「No module named 'cryptography'」假象** — 2026-11-04 实测：本机 `.venv/bin/` 曾整体携带外项目（test-03）的死路径 shebang，`uv run uvicorn` 命中坏脚本后 shell 经 PATH 兜底到 **Homebrew 全局 Python 3.14 的 uvicorn**（`/opt/homebrew/bin/uvicorn`），全局环境没有项目依赖 → 崩溃循环伪装成「venv 缺包」（实际 site-packages 完好，`uv run --no-sync python -c "import cryptography"` 可证）。排查口诀：backend 起不来报某依赖 ModuleNotFoundError 时，先 `head -1 backend/.venv/bin/uvicorn` 看 shebang 是否指向本项目 venv，再查 `command -v uvicorn` 是否被全局解释器劫持；修复 = 把 `.venv/bin` 脚本 shebang 批量改写为本 venv python 绝对路径（或 `uv sync --reinstall-package <pkg>` 重写入口点）。
+
 ## 新增功能步骤
 
 1. 在 `backend/app/schemas/` 定义 Pydantic 模型
