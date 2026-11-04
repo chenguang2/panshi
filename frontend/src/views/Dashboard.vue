@@ -214,7 +214,6 @@
         <div class="card-body quick-body">
           <router-link v-for="l in visibleQuickLinks" :key="l.path" :to="l.path" class="quick-chip">
             {{ l.title }}
-            <span v-if="l.note" class="chip-note">{{ l.note }}</span>
             <span v-if="l.countKey && statsLoaded" class="chip-count">{{ stats[l.countKey] }}</span>
           </router-link>
         </div>
@@ -226,7 +225,6 @@
         <div class="card-body quick-body">
           <router-link v-for="l in visibleMoreLinks" :key="l.path" :to="l.path" class="quick-chip quick-chip-muted">
             {{ l.title }}
-            <span v-if="l.note" class="chip-note">{{ l.note }}</span>
             <span v-if="l.countKey && statsLoaded" class="chip-count">{{ stats[l.countKey] }}</span>
           </router-link>
         </div>
@@ -346,10 +344,9 @@ const nodesLoaded = ref(false)
 /** 「更新于」时间锚点（D6）：本机时间，首次成功加载前不渲染 */
 const lastUpdated = ref<string | null>(null)
 
-/** chip 计数徽章（消费 stats 闲置计数）与风险副标注（D8） */
+/** chip 计数徽章（消费 stats 闲置计数）；风险副标注（D8）已随「数据库管理」红字提示移除——入口按钮只做跳转，风险提示归目标页 */
 interface ChipExtra {
   countKey?: 'plugin_configs' | 'plugin_metadata' | 'global_rules' | 'static_resources' | 'users'
-  note?: string
 }
 
 /** 快捷入口 = 运维操作（键值映射见 D4，2026-10-10 从 AppSidebar 逐项核实；防漂移测试钉住） */
@@ -795,11 +792,6 @@ onMounted(() => {
   border-radius: 8px;
   padding: 0 6px;
   line-height: 16px;
-}
-
-.chip-note {
-  font-size: 11px;
-  color: var(--danger);
 }
 
 /* 明细截断提示（软措辞，D5） */
