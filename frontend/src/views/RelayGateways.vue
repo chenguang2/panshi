@@ -2,9 +2,12 @@
   <div class="relay-gateways">
     <PageHeader
       title="中继区域管理"
-      description="维护跨中心中继网关的区域注册表：每个路局一条区域记录（网关 HTTP 腿 + SSH 跳板）。区域路由为空的集群按直连执行；首次装机点「初始化网关」写入 8443 配置并启动服务，节点白名单变更点「下发配置」同步。"
+      description="维护各局中继网关注册信息：配置网关地址与 SSH 跳板后，该局节点的管理与数据通道将经由网关中转；未配置区域的集群按直连执行。"
     >
       <template #actions>
+        <button class="btn btn-secondary" :disabled="checkingAll || streamBusy" @click="handleCheckAll">
+          {{ checkingAll ? '体检中…' : '全量体检' }}
+        </button>
         <button class="btn btn-primary" @click="openCreate">+ 新建区域</button>
       </template>
     </PageHeader>
@@ -36,43 +39,75 @@
               <span class="mono">{{ record.openresty_prefix || '—' }}</span>
             </template>
             <template v-else-if="column.key === 'status'">
-              <span :class="record.status === 'enabled' ? 'badge badge-success' : 'badge badge-neutral'">
-                {{ record.status === 'enabled' ? '启用' : '禁用（直连回退）' }}
-              </span>
-              <!-- 清单漂移：区域已注册但 ansible inventory/gateways 缺该局主机组（init/push 前置会拦并给补齐片段） -->
-              <a-tag
-                v-if="record.inventory_group_missing"
-                color="warning"
-                title="ansible 清单 inventory/gateways 缺该局主机组，初始化/下发会被前置拦截"
-                >清单缺组</a-tag
-              >
+              <div class="status-cell">
+                <div>
+                  <span :class="record.status === 'enabled' ? 'badge badge-success' : 'badge badge-neutral'">
+                    {{ record.status === 'enabled' ? '启用' : '禁用（直连回退）' }}
+                  </span>
+                  <!-- 清单漂移：区域已注册但 ansible inventory/gateways 缺该局主机组（init/push 前置会拦并给补齐片段） -->
+                  <a-tag
+                    v-if="record.inventory_group_missing"
+                    color="warning"
+                    title="ansible 清单 inventory/gateways 缺该局主机组，初始化/下发会被前置拦截"
+                    >清单缺组</a-tag
+                  >
+                </div>
+                <div class="health-line">
+                  <span class="health-state" :class="healthCls(record)" :title="healthDetail(record)">{{
+                    healthText(record)
+                  }}</span>
+                  <span v-if="healthState[record.id]" class="health-time mono">{{ healthTime(record) }}</span>
+                </div>
+              </div>
+            </template>
+            <template v-else-if="column.key === 'updated_at'">
+              <span>{{ formatDateTime(record.updated_at) }}</span>
             </template>
             <template v-else-if="column.key === 'actions'">
               <div class="table-actions">
-                <button class="btn btn-secondary btn-sm" :disabled="busy" @click="openEdit(record)">编辑</button>
-                <button class="btn btn-secondary btn-sm" :disabled="busy" @click="handleToggle(record)">
-                  {{ record.status === 'enabled' ? '禁用' : '启用' }}
+                <button class="btn btn-secondary btn-sm" :disabled="rowBusy(record)" @click="openEdit(record)">
+                  编辑
                 </button>
-                <button class="btn btn-secondary btn-sm" :disabled="busy || testing" @click="handleTest(record)">
+                <button
+                  class="btn btn-secondary btn-sm"
+                  :disabled="rowBusy(record) || testing"
+                  @click="handleTest(record)"
+                >
                   {{ testingId === record.id ? '测试中…' : '连通性测试' }}
                 </button>
-                <button class="btn btn-secondary btn-sm" :disabled="busy" @click="handleInit(record)">
-                  {{ activeId === record.id && activeKind === 'init' ? '初始化中…' : '初始化网关' }}
-                </button>
-                <button class="btn btn-primary btn-sm" :disabled="busy" @click="handlePush(record)">
+                <button class="btn btn-primary btn-sm" :disabled="streamBusy" @click="handlePush(record)">
                   {{ activeId === record.id && activeKind === 'push' ? '下发中…' : '下发配置' }}
                 </button>
-                <button class="btn btn-secondary btn-sm" @click="openConfigPreview(record)">查看配置</button>
-                <button class="btn btn-secondary btn-sm" :disabled="busy" @click="openSshdSetup(record)">
-                  {{ activeId === record.id && activeKind === 'sshd' ? '配置中…' : '配置跳板转发' }}
-                </button>
-                <button class="btn btn-danger btn-sm" :disabled="busy" @click="handleDelete(record)">删除</button>
+                <a-dropdown :trigger="['click']">
+                  <button class="btn btn-secondary btn-sm" :disabled="rowBusy(record)">更多 ▾</button>
+                  <template #overlay>
+                    <a-menu>
+                      <a-menu-item key="init" :disabled="streamBusy" @click="handleInit(record)">
+                        {{ activeId === record.id && activeKind === 'init' ? '初始化中…' : '初始化网关' }}
+                      </a-menu-item>
+                      <a-menu-item key="sshd" :disabled="streamBusy" @click="openSshdSetup(record)">
+                        {{ activeId === record.id && activeKind === 'sshd' ? '配置中…' : '配置跳板转发' }}
+                      </a-menu-item>
+                      <a-menu-item key="preview" :disabled="rowBusy(record)" @click="openConfigPreview(record)">
+                        查看配置
+                      </a-menu-item>
+                      <a-menu-item key="toggle" :disabled="rowBusy(record)" @click="handleToggle(record)">
+                        {{ record.status === 'enabled' ? '禁用' : '启用' }}
+                      </a-menu-item>
+                      <a-menu-divider />
+                      <a-menu-item key="delete" danger :disabled="rowBusy(record)" @click="handleDelete(record)">
+                        删除
+                      </a-menu-item>
+                    </a-menu>
+                  </template>
+                </a-dropdown>
               </div>
             </template>
           </template>
         </a-table>
         <div v-if="!loading && regions.length === 0" class="empty-hint">
-          暂无区域。未配置任何区域时，全部集群按现状直连执行。
+          暂无区域。未配置任何区域时，全部集群按现状直连执行。点击右上角「新建区域」开始；首次装机流程：新建区域 →
+          初始化网关 → 集群挂接区域 → 下发配置。
         </div>
       </div>
     </div>
@@ -104,8 +139,15 @@
             <div class="form-group">
               <div class="field-inline">
                 <label class="form-label">展示名 <span class="required">*</span></label>
-                <input type="text" class="form-input" v-model="form.name" placeholder="如：路局A" />
+                <input
+                  type="text"
+                  class="form-input"
+                  :class="{ 'has-error': formErrors.name }"
+                  v-model="form.name"
+                  placeholder="如：路局A"
+                />
               </div>
+              <span v-if="formErrors.name" class="form-error">{{ formErrors.name }}</span>
             </div>
             <div class="form-group">
               <div class="field-inline">
@@ -123,11 +165,13 @@
               <input
                 type="text"
                 class="form-input"
+                :class="{ 'has-error': formErrors.http_base_url }"
                 v-model="form.http_base_url"
                 placeholder="如 http://10.10.1.1:8443（留空 = 直连）"
               />
             </div>
-            <span class="form-hint">该局网关的 HTTP 反向代理地址；留空表示该区域直连</span>
+            <span v-if="formErrors.http_base_url" class="form-error">{{ formErrors.http_base_url }}</span>
+            <span v-else class="form-hint">该局网关的 HTTP 反向代理地址；留空表示该区域直连</span>
           </div>
           <div class="form-group">
             <div class="field-inline">
@@ -135,11 +179,13 @@
               <input
                 type="text"
                 class="form-input"
+                :class="{ 'has-error': formErrors.ssh_jump }"
                 v-model="form.ssh_jump"
                 placeholder="如 tunnel@10.10.1.1:22（留空 = 直连）"
               />
             </div>
-            <span class="form-hint">跳板专用账号与网关地址；留空表示该区域 SSH 直连</span>
+            <span v-if="formErrors.ssh_jump" class="form-error">{{ formErrors.ssh_jump }}</span>
+            <span v-else class="form-hint">跳板专用账号与网关地址；留空表示该区域 SSH 直连</span>
           </div>
           <div class="form-group">
             <div class="field-inline">
@@ -147,11 +193,13 @@
               <input
                 type="text"
                 class="form-input"
+                :class="{ 'has-error': formErrors.openresty_prefix }"
                 v-model="form.openresty_prefix"
                 placeholder="如 /work/jboss/tunnel/openresty-1.21.4.1/nginx"
               />
             </div>
-            <span class="form-hint">网关机 OpenResty 安装前缀（含 conf/sbin/logs）；「初始化网关」必填</span>
+            <span v-if="formErrors.openresty_prefix" class="form-error">{{ formErrors.openresty_prefix }}</span>
+            <span v-else class="form-hint">网关机 OpenResty 安装前缀（含 conf/sbin/logs）；「初始化网关」必填</span>
           </div>
         </div>
         <div class="modal-footer">
@@ -159,6 +207,47 @@
           <button class="btn btn-primary" :disabled="submitting" @click="handleSubmit">
             {{ submitting ? '保存中…' : '保存' }}
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 体检结果弹窗（单区域 / 全量共用，按区域分组；分段逐条 + 节点明细 + 可复制） -->
+    <div v-if="resultModal.open" class="modal-overlay" @click.self="closeResultModal">
+      <div class="modal modal-wide">
+        <div class="modal-header">
+          <h2>{{ resultModal.title }}</h2>
+          <button class="modal-close" @click="closeResultModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div v-if="resultModal.loading" class="config-hint">探测中…（探测为真实网络 IO，关闭弹窗不会中断）</div>
+          <template v-else>
+            <div v-for="r in resultModal.results" :key="r.region" class="health-result-group">
+              <div class="health-result-head">
+                <span class="health-result-name">{{ regionDisplayName(r.region) }}</span>
+                <span :class="r.ok ? 'badge badge-success' : 'badge badge-danger'">
+                  {{ r.ok ? '✓ 可达' : '✗ 异常' }}
+                </span>
+              </div>
+              <ul class="health-result-segs">
+                <li v-for="(s, i) in r.segments" :key="i" :class="s.ok ? 'seg-ok' : 'seg-fail'">
+                  <div class="seg-main">
+                    <span class="seg-name">{{ s.name }}</span>
+                    <span class="seg-status">{{ s.ok ? '✓ 可达' : `✗ ${s.error || '不可达'}` }}</span>
+                    <span v-if="s.elapsed_ms != null" class="seg-elapsed mono">{{ s.elapsed_ms }}ms</span>
+                  </div>
+                  <ul v-if="(s.nodes || []).some((n) => n.note)" class="seg-notes">
+                    <li v-for="n in (s.nodes || []).filter((x) => x.note)" :key="n.node">
+                      └ {{ n.node }}：{{ n.note }}
+                    </li>
+                  </ul>
+                </li>
+              </ul>
+            </div>
+          </template>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" :disabled="resultModal.loading" @click="copyResult">复制结果</button>
+          <button class="btn btn-secondary" @click="closeResultModal">关闭</button>
         </div>
       </div>
     </div>
@@ -210,7 +299,8 @@
           <p class="config-hint">
             网关 sshd 默认禁止 TCP 转发（跳板查询会报 <code>administratively prohibited</code>）。此处以 root
             在网关机写入 <code>/etc/ssh/sshd_config.d/relay-tunnel.conf</code>
-            （放行转发 + 仅允许连本局节点 SSH 端口）并重载 sshd；校验失败会自动回滚，不影响正在运行的 sshd。
+            （放行转发 + 仅允许连本局节点 SSH 端口）并重载 sshd；校验失败会自动回滚，不影响正在运行的 sshd。 若网关 sshd
+            不接受端口白名单格式（部分系统如 LinxOS），将自动降级为仅放行转发并回显原因；校验失败会自动回滚。
           </p>
           <div class="form-group">
             <div class="field-inline">
@@ -280,13 +370,18 @@ import {
   type RelayHealthResult,
 } from '@/api/relay'
 import { getApiErrorMessage } from '@/utils/error'
+import { formatDateTime } from '@/utils/format'
 
 const CODE_PATTERN = /^[a-z][a-z0-9-]{1,31}$/
+// 与后端 schemas/relay.py 同规则的格式硬校验（前端 inline + 后端 400/422 双层）
+const HTTP_BASE_URL_PATTERN = /^https?:\/\/[A-Za-z0-9.-]+(:\d{1,5})?$/
+const SSH_JUMP_PATTERN = /^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+(:\d{1,5})?$/
 
 const regions = ref<RelayGateway[]>([])
 const loading = ref(false)
 const testing = ref(false)
 const testingId = ref<number | null>(null)
+const checkingAll = ref(false)
 const activeKind = ref<'init' | 'push' | 'sshd' | null>(null)
 const activeId = ref<number | null>(null)
 
@@ -294,6 +389,9 @@ const activeId = ref<number | null>(null)
 // 与「安装 OpenResty」一致，可实时看到 stdout 行、进度与终态。
 const installStream = useInstallStream()
 const { installing: execInstalling, error: execError, status: execStreamStatus } = installStream
+// execInstalling 来自组合式函数（测试劫持时是 {value} 形对象，非真 ref）：
+// 模板直接引用不会被解包（始终真值→按钮恒禁用，2026-11-03 实测），统一经 computed 包装。
+const streamBusy = computed(() => execInstalling.value === true)
 const execDrawerVisible = ref(false)
 const execDrawerTitle = ref('执行结果')
 
@@ -312,8 +410,6 @@ const execHighlights = ref<string[]>([])
 let finalEvent: Record<string, unknown> | null = null
 let elapsedTimer: number | undefined
 
-const busy = computed(() => execInstalling.value)
-
 const columns = [
   { title: '区域码', key: 'code' },
   { title: '展示名', dataIndex: 'name', key: 'name' },
@@ -321,8 +417,23 @@ const columns = [
   { title: 'SSH 跳板', key: 'ssh_jump' },
   { title: 'OpenResty 前缀', key: 'openresty_prefix' },
   { title: '状态', key: 'status' },
-  { title: '操作', key: 'actions', width: 400 },
+  { title: '更新时间', key: 'updated_at' },
+  { title: '操作', key: 'actions', width: 240 },
 ]
+
+// ── 区域健康状态（组件态：体检是只读时点探测，不落库；刷新后回落「未检测」） ──
+interface HealthMeta {
+  result: RelayHealthResult
+  checkedAt: string
+}
+const healthState: Record<number, HealthMeta> = reactive({})
+
+/** busy 精确语义（D6）：流式操作（init/push/sshd）全局串行（单执行抽屉约束），
+ * 非流式操作（编辑/测试/预览/启停/删除）按行禁用——仅正在执行的行被整体禁用，
+ * 其他区域操作不受牵连，与后端 _INFLIGHT 按区域守卫的并发语义对齐。 */
+function rowBusy(record: RelayGateway): boolean {
+  return execInstalling.value && activeId.value === record.id
+}
 
 const modal = reactive({ open: false, editing: false })
 const submitting = ref(false)
@@ -335,7 +446,13 @@ const form = reactive({
   openresty_prefix: '',
   status: 'enabled',
 })
-const formErrors = reactive({ code: '' })
+const formErrors = reactive({
+  code: '',
+  name: '',
+  http_base_url: '',
+  ssh_jump: '',
+  openresty_prefix: '',
+})
 
 // 配置预览弹窗（只读）：内容由后端用与下发相同的渲染函数产出
 const configModal = reactive({
@@ -344,6 +461,53 @@ const configModal = reactive({
   regionName: '',
   data: null as RelayConfigPreview | null,
 })
+
+// 体检结果弹窗（单区域 / 全量共用）：探测期间即打开（loading），完成后填充并更新健康列；
+// 用户提前关闭不中断探测（resultDismissed），完成时仅补一行终态 message、不再弹回。
+const resultModal = reactive({
+  open: false,
+  loading: false,
+  title: '',
+  results: [] as RelayHealthResult[],
+})
+let resultDismissed = false
+
+function closeResultModal() {
+  resultModal.open = false
+  resultDismissed = true
+}
+
+function regionDisplayName(code: string): string {
+  const row = regions.value.find((r) => r.code === code)
+  return row ? `「${row.name}」（${code}）` : code
+}
+
+function buildResultText(results: RelayHealthResult[]): string {
+  return results
+    .map((r) => {
+      const segLines = r.segments.map((s) => {
+        const head = `${s.name}：${s.ok ? '✓ 可达' : `✗ ${s.error || '不可达'}`}`
+        const notes = (s.nodes || []).filter((n) => n.note).map((n) => `  └ ${n.node}：${n.note}`)
+        return [head, ...notes].join('\n')
+      })
+      return `${regionDisplayName(r.region)}\n${segLines.join('\n')}`
+    })
+    .join('\n\n')
+}
+
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text)
+    message.success('已复制到剪贴板')
+  } catch {
+    message.error('复制失败，请手动选择文本复制')
+  }
+}
+
+async function copyResult() {
+  const text = buildResultText(resultModal.results)
+  if (text) await copyText(text)
+}
 
 async function openConfigPreview(record: RelayGateway) {
   configModal.open = true
@@ -358,15 +522,6 @@ async function openConfigPreview(record: RelayGateway) {
     configModal.open = false
   } finally {
     configModal.loading = false
-  }
-}
-
-async function copyText(text: string) {
-  try {
-    await navigator.clipboard.writeText(text)
-    message.success('已复制到剪贴板')
-  } catch {
-    message.error('复制失败，请手动选择文本复制')
   }
 }
 
@@ -392,7 +547,7 @@ function openCreate() {
   form.ssh_jump = ''
   form.openresty_prefix = ''
   form.status = 'enabled'
-  formErrors.code = ''
+  clearFormErrors()
 }
 
 function openEdit(record: RelayGateway) {
@@ -405,46 +560,71 @@ function openEdit(record: RelayGateway) {
   form.ssh_jump = record.ssh_jump || ''
   form.openresty_prefix = record.openresty_prefix || ''
   form.status = record.status
-  formErrors.code = ''
+  clearFormErrors()
 }
 
 function closeModal() {
   modal.open = false
 }
 
-function validateCode(): boolean {
+function clearFormErrors() {
+  formErrors.code = ''
+  formErrors.name = ''
+  formErrors.http_base_url = ''
+  formErrors.ssh_jump = ''
+  formErrors.openresty_prefix = ''
+}
+
+function validateForm(): boolean {
+  clearFormErrors()
+  let ok = true
   if (!CODE_PATTERN.test(form.code)) {
     formErrors.code = '区域码格式错误：小写字母开头，仅含小写字母/数字/中划线，长度 2-32'
-    return false
+    ok = false
   }
-  formErrors.code = ''
-  return true
+  if (!form.name.trim()) {
+    formErrors.name = '请输入展示名'
+    ok = false
+  }
+  const http = form.http_base_url.trim()
+  if (http && !HTTP_BASE_URL_PATTERN.test(http)) {
+    formErrors.http_base_url = '网关 HTTP 腿格式错误：须以 http:// 或 https:// 开头，如 http://10.10.1.1:8443'
+    ok = false
+  }
+  const jump = form.ssh_jump.trim()
+  if (jump && !SSH_JUMP_PATTERN.test(jump)) {
+    formErrors.ssh_jump = 'SSH 跳板格式错误：须为 账号@主机[:端口]，如 tunnel@10.10.1.1:22'
+    ok = false
+  }
+  const prefix = form.openresty_prefix.trim()
+  if (prefix && !prefix.startsWith('/')) {
+    formErrors.openresty_prefix =
+      'OpenResty 前缀格式错误：须为以 / 开头的绝对路径，如 /work/jboss/tunnel/openresty-1.21.4.1/nginx'
+    ok = false
+  }
+  return ok
 }
 
 async function handleSubmit() {
-  if (!validateCode()) return
-  if (!form.name) {
-    message.error('请输入展示名')
-    return
-  }
+  if (!validateForm()) return
   submitting.value = true
   try {
     if (modal.editing) {
       await updateRelayGateway(form.id, {
-        name: form.name,
-        http_base_url: form.http_base_url || null,
-        ssh_jump: form.ssh_jump || null,
-        openresty_prefix: form.openresty_prefix || null,
+        name: form.name.trim(),
+        http_base_url: form.http_base_url.trim() || null,
+        ssh_jump: form.ssh_jump.trim() || null,
+        openresty_prefix: form.openresty_prefix.trim() || null,
         status: form.status,
       })
       message.success('区域已更新')
     } else {
       await createRelayGateway({
         code: form.code,
-        name: form.name,
-        http_base_url: form.http_base_url || null,
-        ssh_jump: form.ssh_jump || null,
-        openresty_prefix: form.openresty_prefix || null,
+        name: form.name.trim(),
+        http_base_url: form.http_base_url.trim() || null,
+        ssh_jump: form.ssh_jump.trim() || null,
+        openresty_prefix: form.openresty_prefix.trim() || null,
         status: form.status,
       })
       message.success('区域已创建')
@@ -466,7 +646,7 @@ function handleToggle(record: RelayGateway) {
       'p',
       null,
       next === 'disabled'
-        ? `禁用后「${record.name}」的节点将回退直连执行（直连通常不可达，操作会失败并附提示）。确认禁用？`
+        ? `禁用后「${record.name}」区域的节点不再经网关中转，将按直连路径执行（跨中心场景通常不可达，相关操作会失败）。确认禁用？`
         : `启用后「${record.name}」的节点将按网关路由执行。确认启用？`,
     ),
     okText: '确认',
@@ -482,29 +662,88 @@ function handleToggle(record: RelayGateway) {
   })
 }
 
+// ── 区域体检：单区域「连通性测试」与页头「全量体检」共用结果弹窗与健康列更新 ──
+function applyHealthResult(result: RelayHealthResult, checkedAt: string) {
+  const row = regions.value.find((r) => r.code === result.region)
+  if (row) healthState[row.id] = { result, checkedAt }
+}
+
+function healthCls(record: RelayGateway): string {
+  const hs = healthState[record.id]
+  if (!hs) return 'is-unknown'
+  return hs.result.ok ? 'is-ok' : 'is-fail'
+}
+
+function healthText(record: RelayGateway): string {
+  const hs = healthState[record.id]
+  if (!hs) return '未检测'
+  if (hs.result.ok) return '✓ 正常'
+  const failed = hs.result.segments.find((s) => !s.ok)
+  return failed ? `✗ ${failed.name}不可达` : '✗ 异常'
+}
+
+function healthDetail(record: RelayGateway): string {
+  const hs = healthState[record.id]
+  if (!hs) return ''
+  const lines = hs.result.segments.map((s) => `${s.name}：${s.ok ? '✓ 可达' : `✗ ${s.error || '不可达'}`}`)
+  if (hs.result.error) lines.push(`错误：${hs.result.error}`)
+  return `体检时间 ${formatDateTime(hs.checkedAt)}\n${lines.join('\n')}`
+}
+
+function healthTime(record: RelayGateway): string {
+  const hs = healthState[record.id]
+  return hs ? formatDateTime(hs.checkedAt) : ''
+}
+
 async function handleTest(record: RelayGateway) {
   testing.value = true
   testingId.value = record.id
+  resultDismissed = false
+  resultModal.open = true
+  resultModal.loading = true
+  resultModal.title = `体检结果 · ${record.name}`
+  resultModal.results = []
   try {
     const res = await relayHealthCheck(record.code)
     const result = res.data as RelayHealthResult
-    const lines = result.segments
-      .map((s) => {
-        const head = `${s.name}：${s.ok ? '✓ 可达' : `✗ ${s.error || '不可达'}`}`
-        const notes = (s.nodes || []).filter((n) => n.ssh_skipped && n.note).map((n) => `\u3000└ ${n.node}：${n.note}`)
-        return [head, ...notes].join('\n')
-      })
-      .join('\n')
-    if (result.ok) {
-      message.success(`「${record.name}」连通性测试通过\n${lines}`)
-    } else {
-      message.warning(`「${record.name}」连通性异常\n${lines}`)
-    }
+    applyHealthResult(result, new Date().toISOString())
+    resultModal.loading = false
+    resultModal.results = [result]
+    resultModal.open = !resultDismissed
+    if (result.ok) message.success(`「${record.name}」连通性测试通过`)
+    else message.warning(`「${record.name}」连通性异常，详见体检结果`)
   } catch (e) {
+    resultModal.open = false
     message.error(getApiErrorMessage(e))
   } finally {
     testing.value = false
     testingId.value = null
+  }
+}
+
+async function handleCheckAll() {
+  checkingAll.value = true
+  resultDismissed = false
+  resultModal.open = true
+  resultModal.loading = true
+  resultModal.title = '全量体检结果'
+  resultModal.results = []
+  try {
+    const res = await relayHealthCheck()
+    const data = res.data as { regions: RelayHealthResult[] }
+    const checkedAt = new Date().toISOString()
+    data.regions.forEach((r) => applyHealthResult(r, checkedAt))
+    resultModal.loading = false
+    resultModal.results = data.regions
+    resultModal.open = !resultDismissed
+    const okCount = data.regions.filter((r) => r.ok).length
+    if (okCount === data.regions.length) message.success(`全量体检完成：${okCount} 个区域可达`)
+    else message.warning(`全量体检完成：${okCount}/${data.regions.length} 个区域可达，详见体检结果`)
+  } catch (e) {
+    resultModal.open = false
+    message.error(getApiErrorMessage(e))
+  } finally {
+    checkingAll.value = false
   }
 }
 
@@ -615,7 +854,7 @@ function cancelExec() {
 }
 
 function handleInit(record: RelayGateway) {
-  const modal = showOverlayModal({
+  showOverlayModal({
     title: '初始化网关',
     content: h('div', null, [
       h(
@@ -666,10 +905,38 @@ function submitSshdSetup() {
 }
 
 function handlePush(record: RelayGateway) {
+  // 空名单防护（openspec: relay-push-empty-whitelist-guard）：0 启用节点时危险确认，
+  // 显式携带 allow_empty 才放行；正常路径展示本次白名单规模与全量替换语义。
+  const enabledCount = record.enabled_node_count ?? 0
+  if (enabledCount === 0) {
+    showOverlayModal({
+      title: '下发网关配置',
+      content: h('div', null, [
+        h(
+          'p',
+          null,
+          '该区域当前没有启用节点，下发将把该局网关白名单清空，该局所有经网关的发布/节点任务将被 403 拒绝。',
+        ),
+        h(
+          'p',
+          { style: 'color: var(--muted); font-size: 12px' },
+          '若为误操作，请先到集群节点列表将节点状态改为「启用」，再重新下发；确要清空（如区域下线）再继续。',
+        ),
+      ]),
+      okText: '仍要下发（白名单为空）',
+      okDanger: true,
+      onOk: () => startExec(record, 'push', { allow_empty: true }),
+    })
+    return
+  }
   showOverlayModal({
     title: '下发网关配置',
     content: h('div', null, [
-      h('p', null, `将「${record.name}」的节点白名单（nginx map）推送到该局全部网关机。`),
+      h(
+        'p',
+        null,
+        `将「${record.name}」的节点白名单推送到该局全部网关机：本次将下发 ${enabledCount} 个启用节点（共 ${record.total_node_count ?? enabledCount} 个节点；全量替换，未启用的节点将从白名单移除）。`,
+      ),
       h(
         'p',
         { style: 'color: var(--muted); font-size: 12px' },
@@ -753,6 +1020,10 @@ onUnmounted(() => {
 .region-table :deep(.ant-table-tbody > tr:hover > td) {
   background: var(--bg);
 }
+/* 状态列：启用状态 + 健康态两行；nowrap 全表一致（统一标准 #54） */
+.region-table :deep(td .status-cell) {
+  white-space: nowrap;
+}
 .table-actions {
   display: flex;
   align-items: center;
@@ -764,6 +1035,31 @@ onUnmounted(() => {
   font-size: 13px;
   color: var(--muted);
   border-top: 1px solid var(--border);
+}
+
+/* ── 状态列健康态（最近一次体检结果 + 体检时间） ── */
+.health-line {
+  margin-top: 4px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.health-state {
+  cursor: default;
+}
+.health-state.is-ok {
+  color: var(--success, #16a34a);
+}
+.health-state.is-fail {
+  color: var(--danger, #dc2626);
+}
+.health-state.is-unknown {
+  color: var(--muted);
+  opacity: 0.75;
+}
+.health-time {
+  color: var(--muted);
+  font-size: 11px;
 }
 
 /* ── 弹窗表单：标签与输入同行（同 ClickHouse 配置页） ── */
@@ -780,6 +1076,63 @@ onUnmounted(() => {
 .field-inline .form-input {
   flex: 1 1 140px;
   min-width: 0;
+}
+
+/* ── 体检结果弹窗（单区域 / 全量共用） ── */
+.health-result-group {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+.health-result-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.health-result-name {
+  font-weight: 600;
+}
+.health-result-segs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.health-result-segs > li {
+  padding: 4px 0;
+  border-top: 1px dashed var(--border);
+}
+.health-result-segs > li:first-child {
+  border-top: none;
+}
+.seg-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.seg-name {
+  color: var(--muted);
+}
+.seg-status {
+  font-weight: 600;
+}
+.seg-ok .seg-status {
+  color: var(--success, #16a34a);
+}
+.seg-fail .seg-status {
+  color: var(--danger, #dc2626);
+}
+.seg-elapsed {
+  color: var(--muted);
+  font-size: 12px;
+}
+.seg-notes {
+  margin: 4px 0 0;
+  padding-left: 16px;
+  color: var(--muted);
+  font-size: 12px;
+  list-style: none;
 }
 
 /* ── 配置预览弹窗内容 ── */

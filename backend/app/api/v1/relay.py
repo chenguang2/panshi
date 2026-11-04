@@ -5,13 +5,13 @@
 """
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import require_permission
 from app.core.features import feature_enabled
-from app.models.cluster import Cluster
+from app.models.cluster import Cluster, Node
 from app.models.relay import RelayGateway
 from app.schemas.relay import (
     RelayConfigFile,
@@ -19,6 +19,7 @@ from app.schemas.relay import (
     RelayGatewayCreate,
     RelayGatewayOut,
     RelayGatewayUpdate,
+    RelayPushConfigRequest,
     RelaySshdSetupRequest,
     RelayStatusUpdate,
 )
@@ -86,14 +87,37 @@ async def _refresh_routing() -> None:
     await relay_registry.ensure_fresh(force=True)
 
 
+async def _region_node_counts(db: AsyncSession) -> tuple[dict[str, int], dict[str, int]]:
+    """按区域聚合节点计数（启用/总数），供列表回填（前端下发确认展示白名单规模）。"""
+    enabled_rows = await db.execute(
+        select(Cluster.region_code, func.count(Node.id))
+        .select_from(Cluster)
+        .join(Node, Node.cluster_id == Cluster.id)
+        .where(Cluster.region_code.isnot(None), Node.status == 1)
+        .group_by(Cluster.region_code)
+    )
+    total_rows = await db.execute(
+        select(Cluster.region_code, func.count(Node.id))
+        .select_from(Cluster)
+        .outerjoin(Node, Node.cluster_id == Cluster.id)
+        .where(Cluster.region_code.isnot(None))
+        .group_by(Cluster.region_code)
+    )
+    return dict(enabled_rows.all()), dict(total_rows.all())
+
+
 @router.get("/gateways", response_model=list[RelayGatewayOut])
 async def list_gateways(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(RelayGateway).order_by(RelayGateway.id))
+    enabled_map, total_map = await _region_node_counts(db)
     out: list[RelayGatewayOut] = []
     for g in result.scalars():
         row = RelayGatewayOut.model_validate(g)
         # 清单漂移标记：区域已注册但 inventory 缺该局主机组（init/push 前置会拦并给补齐片段）
         row.inventory_group_missing = not relay_push.gateway_hosts(f"gateways_{g.code}")
+        # 区域节点计数（模式同上：端点计算注入，非库列）
+        row.enabled_node_count = enabled_map.get(g.code, 0)
+        row.total_node_count = total_map.get(g.code, 0)
         out.append(row)
     return out
 
@@ -185,8 +209,18 @@ async def init_gateway(gateway_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/gateways/{gateway_id}/push-config")
-async def push_gateway_config(gateway_id: int, db: AsyncSession = Depends(get_db)):
-    """流式下发白名单到该局网关机（openspec: relay-config-push）；同 init 走 SSE。"""
+async def push_gateway_config(
+    gateway_id: int,
+    payload: RelayPushConfigRequest | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """流式下发白名单到该局网关机（openspec: relay-config-push）；同 init 走 SSE。
+
+    空名单防护（openspec: relay-push-empty-whitelist-guard）：该区域 0 个启用节点时
+    默认 409——nginx 流量白名单只含启用节点，静默下发会把该局白名单覆盖为空表、
+    该局发布/节点任务全部 403；显式 ``allow_empty=true`` 放行（区域下线清空场景）。
+    init 不设此闸（装机引导路径：绑区域在前、挂节点在后时空白名单是合法脚手架状态）。
+    """
     gateway = await _get_or_404(db, gateway_id)
     if not gateway.openresty_prefix:
         raise HTTPException(status_code=400, detail="区域未配置 openresty_prefix，请先编辑区域填写")
@@ -194,6 +228,11 @@ async def push_gateway_config(gateway_id: int, db: AsyncSession = Depends(get_db
         relay_push.ensure_gateway_inventory(gateway.code, gateway.ssh_jump)
     except RelayPushError as e:
         raise HTTPException(status_code=503, detail=str(e))
+    payload = payload or RelayPushConfigRequest()
+    enabled_nodes = await relay_push._region_nodes(db, gateway.code)
+    if not enabled_nodes and not payload.allow_empty:
+        detail = await relay_push.empty_region_detail(db, gateway.code)
+        raise HTTPException(status_code=409, detail=detail)
     _acquire_region(gateway.code)
     try:
         edge_targets_conf = await relay_push.render_nginx_map(gateway.code, db=db)

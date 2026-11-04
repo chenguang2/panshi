@@ -13,6 +13,9 @@ export interface RelayGateway {
   status: 'enabled' | 'disabled' | string
   /** 清单漂移标记（后端列表计算注入，非库列）：true = ansible inventory 缺该局主机组，init/push 前置会拦 */
   inventory_group_missing?: boolean | null
+  /** 区域节点计数（后端列表聚合注入，非库列）：下发确认弹窗展示白名单规模 */
+  enabled_node_count?: number
+  total_node_count?: number
   created_at?: string | null
   updated_at?: string | null
 }

@@ -8,11 +8,21 @@ from app.main import app
 from app.core.database import get_db
 from app.models.user import User
 from app.core.security import hash_password
-from app.models.cluster import Cluster
+from app.models.cluster import Cluster, Node
 from app.models.relay import RelayGateway
 from tests.api_helpers import AuthedTestClient, isolated_app_lifespan
 
 CODE_PATTERN_MSG = "区域code格式错误"
+FORMAT_MSG_HTTP = "网关 HTTP 腿格式错误"
+FORMAT_MSG_SSH = "SSH 跳板格式错误"
+FORMAT_MSG_PREFIX = "OpenResty 前缀格式错误"
+
+
+def _detail_text(resp) -> str:
+    """422 的 detail 是 dict 列表（FastAPI 校验错误）、400 是字符串；统一成可断言的可读文本。"""
+    import json
+
+    return json.dumps(resp.json().get("detail", ""), ensure_ascii=False)
 
 
 def _sse_events(text: str) -> list[dict]:
@@ -25,6 +35,23 @@ def _sse_events(text: str) -> list[dict]:
         if chunk.startswith("data: "):
             events.append(json.loads(chunk[len("data: "):]))
     return events
+
+
+def _seed_region_nodes(test_db, *, enabled: int, disabled: int) -> None:
+    """给 seed 集群 c1（id=1）挂接区域 luju 并按数量造启用/禁用节点。"""
+    import asyncio
+
+    async def _seed():
+        c = await test_db.get(Cluster, 1)
+        c.region_code = "luju"
+        for i in range(enabled):
+            test_db.add(Node(cluster_id=1, ip=f"10.20.0.{i}", ssh_port=22,
+                             management_port=9180, edge_path="/opt/edge", status=1))
+        for j in range(disabled):
+            test_db.add(Node(cluster_id=1, ip=f"10.30.0.{j}", ssh_port=22,
+                             management_port=9180, edge_path="/opt/edge", status=0))
+        await test_db.commit()
+    asyncio.run(_seed())
 
 
 @pytest.fixture(autouse=True)
@@ -183,8 +210,11 @@ class TestRelayGatewayApi:
         assert final["rc"] == 0
         assert final["hosts_pattern"] == "gateways_luju"
 
-    def test_push_streams_events(self, client, gateway_inventory, monkeypatch):
+    def test_push_streams_events(self, client, test_db, gateway_inventory, monkeypatch):
         from app.services import relay_push
+
+        # 空名单守卫要求区域有启用节点（openspec: relay-push-empty-whitelist-guard）
+        _seed_region_nodes(test_db, enabled=1, disabled=0)
 
         def fake_run(**kw):
             assert kw.get("event_handler") is not None
@@ -200,6 +230,105 @@ class TestRelayGatewayApi:
         events = _sse_events(resp.text)
         assert "TASK [写入白名单 map]" in [e["line"] for e in events if "line" in e]
         assert events[-1]["rc"] == 0
+
+    # ── 空名单下发防护（openspec: relay-push-empty-whitelist-guard） ─────────
+    def test_push_empty_region_rejected_409(self, client, test_db, gateway_inventory, monkeypatch):
+        """0 启用节点时默认 409：detail 点名集群/禁用数并给出「改为启用」动作；不触发 ansible。"""
+        from app.services import relay_push
+
+        def _no_ansible(**kw):
+            raise AssertionError("空名单拒绝时不得触发 ansible")
+
+        monkeypatch.setattr(relay_push, "_run_ansible_push", _no_ansible)
+        _seed_region_nodes(test_db, enabled=0, disabled=4)
+        created = client.post("/api/v1/relay/gateways", json={
+            "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
+        resp = client.post(f"/api/v1/relay/gateways/{created['id']}/push-config")
+        assert resp.status_code == 409
+        detail = resp.json()["detail"]
+        assert "请先将节点状态改为「启用」" in detail
+        import asyncio
+
+        cluster_name = asyncio.run(test_db.get(Cluster, 1)).name
+        assert f"「{cluster_name}」的 4 个节点均为禁用状态" in detail
+        assert "确认空名单下发" in detail
+
+    def test_push_empty_region_allow_empty_streams(self, client, test_db, gateway_inventory, monkeypatch):
+        """显式 allow_empty=true 放行空名单下发（区域下线清空场景）。"""
+        from app.services import relay_push
+
+        def fake_run(**kw):
+            kw["event_handler"]({"stdout": "TASK [写入白名单 map]"})
+            return {"rc": 0, "status": "successful"}
+
+        monkeypatch.setattr(relay_push, "_run_ansible_push", fake_run)
+        _seed_region_nodes(test_db, enabled=0, disabled=4)
+        created = client.post("/api/v1/relay/gateways", json={
+            "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
+        resp = client.post(f"/api/v1/relay/gateways/{created['id']}/push-config",
+                           json={"allow_empty": True})
+        assert resp.status_code == 200, resp.text
+        assert "text/event-stream" in resp.headers["content-type"]
+        assert _sse_events(resp.text)[-1]["rc"] == 0
+
+    def test_push_with_enabled_node_streams_without_flag(self, client, test_db, gateway_inventory, monkeypatch):
+        """≥1 启用节点时不带 allow_empty 照常下发（禁用节点不进白名单，但不禁闸）。"""
+        from app.services import relay_push
+
+        def fake_run(**kw):
+            kw["event_handler"]({"stdout": "TASK [写入白名单 map]"})
+            return {"rc": 0, "status": "successful"}
+
+        monkeypatch.setattr(relay_push, "_run_ansible_push", fake_run)
+        _seed_region_nodes(test_db, enabled=1, disabled=1)
+        created = client.post("/api/v1/relay/gateways", json={
+            "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
+        resp = client.post(f"/api/v1/relay/gateways/{created['id']}/push-config")
+        assert resp.status_code == 200, resp.text
+        assert _sse_events(resp.text)[-1]["rc"] == 0
+
+    def test_push_empty_region_without_clusters_detail(self, client, gateway_inventory, monkeypatch):
+        """区域无挂接集群时的 detail 变体：提示先挂接集群并启用节点。"""
+        from app.services import relay_push
+
+        monkeypatch.setattr(relay_push, "_run_ansible_push",
+                            lambda **kw: (_ for _ in ()).throw(AssertionError("不得触发 ansible")))
+        created = client.post("/api/v1/relay/gateways", json={
+            "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
+        resp = client.post(f"/api/v1/relay/gateways/{created['id']}/push-config")
+        assert resp.status_code == 409
+        assert "没有挂接集群或启用节点" in resp.json()["detail"]
+
+    def test_list_gateways_reports_node_counts(self, client, test_db):
+        """列表逐区域回填 enabled_node_count / total_node_count（无挂接区域为 0/0）。"""
+        import asyncio
+
+        from sqlalchemy import select
+
+        async def _seed():
+            c1 = await test_db.get(Cluster, 1)
+            c1.region_code = "luju"
+            test_db.add(Node(cluster_id=1, ip="10.20.0.1", ssh_port=22, management_port=9180,
+                             edge_path="/opt/edge", status=1))
+            test_db.add(Node(cluster_id=1, ip="10.30.0.1", ssh_port=22, management_port=9180,
+                             edge_path="/opt/edge", status=0))
+            c2 = Cluster(name="c2", status=1, region_code="luju")
+            test_db.add(c2)
+            await test_db.flush()  # 取自增 id，不硬编码（同会话种子数据可能已占用 id=2）
+            test_db.add(Node(cluster_id=c2.id, ip="10.20.0.2", ssh_port=22, management_port=9180,
+                             edge_path="/opt/edge", status=1))
+            await test_db.commit()
+
+        asyncio.run(_seed())
+        client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "路局A"})
+        client.post("/api/v1/relay/gateways", json={"code": "tianjin", "name": "路局B"})
+        resp = client.get("/api/v1/relay/gateways")
+        assert resp.status_code == 200
+        rows = {r["code"]: r for r in resp.json()}
+        assert rows["luju"]["enabled_node_count"] == 2
+        assert rows["luju"]["total_node_count"] == 3
+        assert rows["tianjin"]["enabled_node_count"] == 0
+        assert rows["tianjin"]["total_node_count"] == 0
 
     def test_busy_region_returns_409(self, client, gateway_inventory):
         from app.api.v1 import relay
@@ -298,6 +427,99 @@ class TestRelayGatewayApi:
                 assert bare.post("/api/v1/relay/gateways", json={"code": "x", "name": "x"}).status_code in (401, 403)
         finally:
             app.dependency_overrides.clear()
+
+
+class TestRelayGatewayFieldFormat:
+    """路由字段格式硬校验（openspec: relay-region-ux-optimization D4）：
+
+    http_base_url 须匹配 http(s)://host[:port]（不含路径）；ssh_jump 须匹配
+    账号@主机[:端口]；openresty_prefix 须为以 / 开头的绝对路径。strip 先于格式校验。
+    """
+
+    @pytest.fixture
+    def client(self, test_db, test_db_factory):
+        async def override_get_db():
+            async with test_db_factory() as session:
+                yield session
+
+        app.dependency_overrides[get_db] = override_get_db
+
+        import asyncio
+
+        async def _seed():
+            if await test_db.get(User, 1) is None:
+                test_db.add(User(id=1, username="api_user", password_hash=hash_password("password123"),
+                                 role="admin", status=1))
+            await test_db.commit()
+        asyncio.run(_seed())
+
+        with isolated_app_lifespan(), AuthedTestClient(app) as c:
+            yield c
+        app.dependency_overrides.clear()
+
+    @pytest.mark.parametrize("bad", [
+        "10.10.1.1:8443",  # 漏协议
+        "ftp://10.10.1.1:8443",  # 错协议
+        "http://10.10.1.1:8443/",  # 带尾斜杠路径
+        "http://10.10.1.1:8443/api",  # 带路径
+    ])
+    def test_create_http_base_url_bad_format_rejected(self, client, bad):
+        resp = client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "x", "http_base_url": bad})
+        assert resp.status_code in (400, 422), resp.text
+        assert FORMAT_MSG_HTTP in _detail_text(resp), resp.text
+
+    @pytest.mark.parametrize("good", ["http://10.10.1.1:8443", "https://gw.example.com", "http://192.168.0.13"])
+    def test_create_http_base_url_good_passes(self, client, good):
+        resp = client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "x", "http_base_url": good})
+        assert resp.status_code in (200, 201), resp.text
+        assert resp.json()["http_base_url"] == good
+
+    @pytest.mark.parametrize("bad", ["10.10.1.1:22", "tunnel@", "@10.10.1.1"])
+    def test_create_ssh_jump_bad_format_rejected(self, client, bad):
+        resp = client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "x", "ssh_jump": bad})
+        assert resp.status_code in (400, 422), resp.text
+        assert FORMAT_MSG_SSH in _detail_text(resp), resp.text
+
+    def test_create_ssh_jump_without_port_passes(self, client):
+        resp = client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "x", "ssh_jump": "tunnel@10.10.1.1"})
+        assert resp.status_code in (200, 201), resp.text
+        assert resp.json()["ssh_jump"] == "tunnel@10.10.1.1"
+
+    @pytest.mark.parametrize("bad", ["work/openresty", " work/openresty", "C:/openresty"])
+    def test_create_openresty_prefix_not_absolute_rejected(self, client, bad):
+        resp = client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "x", "openresty_prefix": bad})
+        assert resp.status_code in (400, 422), resp.text
+        assert FORMAT_MSG_PREFIX in _detail_text(resp), resp.text
+
+    @pytest.mark.parametrize("field, bad", [
+        ("http_base_url", "10.10.1.1:8443"),
+        ("ssh_jump", "10.10.1.1:22"),
+        ("openresty_prefix", "work/openresty"),
+    ])
+    def test_update_same_rules(self, client, field, bad):
+        created = client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "x"}).json()
+        resp = client.put(f"/api/v1/relay/gateways/{created['id']}", json={field: bad})
+        assert resp.status_code in (400, 422), resp.text
+
+    def test_update_good_values_pass(self, client):
+        created = client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "x"}).json()
+        resp = client.put(f"/api/v1/relay/gateways/{created['id']}", json={
+            "http_base_url": "http://10.10.1.1:8443",
+            "ssh_jump": "tunnel@10.10.1.1",
+            "openresty_prefix": "/work/openresty/nginx",
+        })
+        assert resp.status_code == 200, resp.text
+
+    def test_strip_runs_before_format_validation(self, client):
+        """既有 strip 行为保留：带首尾空白的合法值 strip 后通过格式校验。"""
+        resp = client.post("/api/v1/relay/gateways", json={
+            "code": "kjc", "name": "路局K",
+            "http_base_url": " https://192.168.0.13:8443 ",
+            "openresty_prefix": " /work/jboss/tunnel/openresty-1.21.4.1/nginx ",
+        })
+        assert resp.status_code in (200, 201), resp.text
+        assert resp.json()["http_base_url"] == "https://192.168.0.13:8443"
+        assert resp.json()["openresty_prefix"] == "/work/jboss/tunnel/openresty-1.21.4.1/nginx"
 
 
 class TestRelayHealthEndpoint:

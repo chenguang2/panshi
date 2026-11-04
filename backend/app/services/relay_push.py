@@ -16,7 +16,7 @@ from typing import AsyncGenerator
 
 import yaml
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.cluster import Cluster, Node
@@ -83,6 +83,36 @@ async def render_nginx_map(
         lines.append(f'    "{n.ip}:{n.management_port}"        "{n.ip}:{n.management_port}";')
     lines.append("}")
     return "\n".join(lines) + "\n"
+
+
+async def empty_region_detail(db: AsyncSession, region_code: str) -> str:
+    """0 启用节点时的下发拒绝说明（push-config 409 detail）。
+
+    点名挂接集群与禁用节点数，给出「将节点状态改为启用」的修复动作——
+    2026-11-04 实锤：bj 区域 test-2 四节点全部禁用，下发静默清空白名单，排障无提示。
+    """
+    rows = (
+        await db.execute(
+            select(Cluster.name, func.count(Node.id))
+            .outerjoin(Node, Node.cluster_id == Cluster.id)
+            .where(Cluster.region_code == region_code)
+            .group_by(Cluster.id, Cluster.name)
+            .order_by(Cluster.id)
+        )
+    ).all()
+    if not rows:
+        return (
+            "该区域当前没有挂接集群或启用节点，下发将清空该局网关白名单；"
+            "请先挂接集群并启用节点，或确认空名单下发"
+        )
+    parts = [
+        f"「{name}」无节点" if total == 0 else f"「{name}」的 {total} 个节点均为禁用状态"
+        for name, total in rows
+    ]
+    return (
+        f"该区域当前没有启用节点（{'、'.join(parts)}），下发将清空该局网关白名单；"
+        "请先将节点状态改为「启用」后重试，或确认空名单下发"
+    )
 
 
 def _sshd_header(region_code: str) -> str:

@@ -8,6 +8,31 @@ from pydantic import BaseModel, Field, field_validator
 CODE_PATTERN = re.compile(r"^[a-z][a-z0-9-]{1,31}$")
 CODE_ERROR_MSG = "区域code格式错误: 以小写字母开头，仅含小写字母/数字/中划线，长度2-32"
 STATUS_VALUES = ("enabled", "disabled")
+# 路由字段格式硬校验（openspec: relay-region-ux-optimization D4）：坏配置的代价（init
+# 静默失败/探测误报）远大于填写成本，前端 inline + 后端 400/422 双层硬失败。
+HTTP_BASE_URL_PATTERN = re.compile(r"^https?://[A-Za-z0-9.\-]+(:\d{1,5})?$")
+HTTP_BASE_URL_ERROR_MSG = "网关 HTTP 腿格式错误: 须以 http:// 或 https:// 开头且不含路径，如 http://10.10.1.1:8443"
+SSH_JUMP_PATTERN = re.compile(r"^[A-Za-z0-9._\-]+@[A-Za-z0-9.\-]+(:\d{1,5})?$")
+SSH_JUMP_ERROR_MSG = "SSH 跳板格式错误: 须为 账号@主机[:端口]，如 tunnel@10.10.1.1:22"
+OPENRESTY_PREFIX_ERROR_MSG = "OpenResty 前缀格式错误: 须为以 / 开头的绝对路径，如 /work/jboss/tunnel/openresty-1.21.4.1/nginx"
+
+
+def _validate_http_base_url(v: Optional[str]) -> Optional[str]:
+    if v is not None and not HTTP_BASE_URL_PATTERN.match(v):
+        raise ValueError(HTTP_BASE_URL_ERROR_MSG)
+    return v
+
+
+def _validate_ssh_jump(v: Optional[str]) -> Optional[str]:
+    if v is not None and not SSH_JUMP_PATTERN.match(v):
+        raise ValueError(SSH_JUMP_ERROR_MSG)
+    return v
+
+
+def _validate_openresty_prefix(v: Optional[str]) -> Optional[str]:
+    if v is not None and not v.startswith("/"):
+        raise ValueError(OPENRESTY_PREFIX_ERROR_MSG)
+    return v
 
 
 class RelayGatewayCreate(BaseModel):
@@ -40,6 +65,22 @@ class RelayGatewayCreate(BaseModel):
             return None
         v = v.strip()
         return v or None
+
+    # 格式校验定义在 strip 之后（Pydantic 按定义顺序运行）：先去空白再校验格式
+    @field_validator("http_base_url")
+    @classmethod
+    def validate_http_base_url(cls, v: Optional[str]) -> Optional[str]:
+        return _validate_http_base_url(v)
+
+    @field_validator("ssh_jump")
+    @classmethod
+    def validate_ssh_jump(cls, v: Optional[str]) -> Optional[str]:
+        return _validate_ssh_jump(v)
+
+    @field_validator("openresty_prefix")
+    @classmethod
+    def validate_openresty_prefix(cls, v: Optional[str]) -> Optional[str]:
+        return _validate_openresty_prefix(v)
 
 
 class RelayGatewayUpdate(BaseModel):
@@ -75,6 +116,22 @@ class RelayGatewayUpdate(BaseModel):
         v = v.strip()
         return v or None
 
+    # 同 Create：格式校验在 strip 之后
+    @field_validator("http_base_url")
+    @classmethod
+    def validate_http_base_url(cls, v: Optional[str]) -> Optional[str]:
+        return _validate_http_base_url(v)
+
+    @field_validator("ssh_jump")
+    @classmethod
+    def validate_ssh_jump(cls, v: Optional[str]) -> Optional[str]:
+        return _validate_ssh_jump(v)
+
+    @field_validator("openresty_prefix")
+    @classmethod
+    def validate_openresty_prefix(cls, v: Optional[str]) -> Optional[str]:
+        return _validate_openresty_prefix(v)
+
 
 class RelayStatusUpdate(BaseModel):
     status: str
@@ -99,9 +156,22 @@ class RelayGatewayOut(BaseModel):
     updated_at: Optional[datetime] = None
     # 清单漂移标记（列表端点计算注入，非库列）：True = inventory/gateways 缺该局主机组
     inventory_group_missing: Optional[bool] = None
+    # 区域节点计数（列表端点聚合注入，非库列）：下发确认弹窗展示白名单规模
+    enabled_node_count: int = 0
+    total_node_count: int = 0
 
     class Config:
         from_attributes = True
+
+
+class RelayPushConfigRequest(BaseModel):
+    """下发白名单请求体。
+
+    ``allow_empty``：该区域 0 启用节点时，默认 409 拒绝（防静默清空网关白名单，
+    openspec: relay-push-empty-whitelist-guard）；显式置 true 放行（区域下线清空场景）。
+    """
+
+    allow_empty: bool = False
 
 
 class RelayConfigFile(BaseModel):
