@@ -48,7 +48,7 @@
 | 12 | DNS 代理 | [12-dns-proxy.md](12-dns-proxy.md) |
 | 13 | 绑定域名并验证 | [13-domain-verify.md](13-domain-verify.md) |
 
-## 第二篇 · 进阶与运维（第 14-31 章，覆盖左侧菜单剩余项）
+## 第二篇 · 进阶与运维（第 14-32 章，覆盖左侧菜单剩余项）
 
 | 章 | 内容（菜单项） | 文件 |
 | --- | --- | --- |
@@ -70,6 +70,7 @@
 | 29 | Ansible 主机清单 | [29-ansible-inventory.md](29-ansible-inventory.md) |
 | 30 | 节点任务 | [30-node-tasks.md](30-node-tasks.md) |
 | 31 | 审计日志 | [31-audit-log.md](31-audit-log.md) |
+| 32 | 中继区域管理 | [32-relay-gateways.md](32-relay-gateways.md) |
 
 ## 附录（客户端环境配置）
 

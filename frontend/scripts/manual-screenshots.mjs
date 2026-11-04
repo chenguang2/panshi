@@ -215,6 +215,42 @@ const SHOTS = [
     viewportShot: true,
     actions: [{ click: '[data-test="task-files-entry"]' }, { waitMs: 500 }],
   },
+  // ── 第 32 章 中继区域管理（relay-region-ux-optimization：体检/健康列/操作收纳；含空名单危险确认） ──
+  { name: '32-01-relay-list', path: '/relay-gateways' },
+  {
+    name: '32-02-relay-more-menu',
+    path: '/relay-gateways',
+    viewportShot: true,
+    actions: [{ click: 'tbody tr >> nth=0 >> button:has-text("更多")' }, { waitMs: 400 }],
+  },
+  {
+    // 体检为真实网络 IO，等结果组上屏（全区域探测可达数十秒）
+    name: '32-03-relay-health-modal',
+    path: '/relay-gateways',
+    viewportShot: true,
+    actions: [
+      { click: 'button:has-text("全量体检")' },
+      { wait: { text: '可达', timeout: 180_000 } },
+      { waitMs: 500 },
+    ],
+  },
+  {
+    name: '32-04-relay-form',
+    path: '/relay-gateways',
+    viewportShot: true,
+    actions: [{ click: 'tbody tr >> nth=0 >> button:has-text("编辑")' }, { waitMs: 400 }],
+  },
+  {
+    // 空名单防护（relay-push-empty-whitelist-guard）：0 启用节点区域（上海局）的危险确认；截图不点确认，无下发
+    name: '32-05-relay-push-danger',
+    path: '/relay-gateways',
+    viewportShot: true,
+    actions: [
+      { click: 'tbody tr:has-text("上海局") button:has-text("下发配置")' },
+      { wait: { text: '仍要下发', timeout: 10_000 } },
+      { waitMs: 300 },
+    ],
+  },
 ]
 
 mkdirSync(OUT_DIR, { recursive: true })

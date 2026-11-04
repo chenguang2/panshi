@@ -20,4 +20,4 @@
 - [x] 3.1 后端全量：`cd backend && uv run pytest -q` 全绿（实测 2870 passed / 11 skipped / 0 failed；常驻开发服务未受影响）
 - [x] 3.2 前端全量：`cd frontend && npx vitest run --no-file-parallelism` 全绿（首轮 UpstreamList 序号列用例单点红，隔离复跑 26/26 绿 + 全量串行复跑 184 文件/2539 用例全绿，定性为波动，与本次改动无依赖交集）
 - [x] 3.3 手工链路验收（真实 UI）：真机 Playwright 实测——kjc（0 启用）弹危险确认（红「仍要下发（白名单为空）」+「将节点状态改为「启用」」两层提示，截图 /tmp/opencode/relay-push-danger-kjc.png）；bj（4 节点 3 启用）弹动态计数「本次将下发 3 个启用节点（共 4 个节点；全量替换…）」（截图 /tmp/opencode/relay-push-normal-bj.png）；另以真实后端 API 实测 kjc push-config → 409 detail 点名「「kjc」的 1 个节点均为禁用状态」
-- [ ] 3.4 `openspec validate --all` 0 error 后 commit
+- [x] 3.4 `openspec validate --all` 0 error 后 commit（实测 validate 199 passed / 0 error，commit 83dbe617）
