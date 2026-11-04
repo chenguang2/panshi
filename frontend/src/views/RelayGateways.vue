@@ -942,7 +942,7 @@ function handlePush(record: RelayGateway) {
       h(
         'p',
         { style: 'color: var(--muted); font-size: 12px' },
-        '双机全部成功才算成功；sshd PermitOpen 腿暂缓（需特权，待部署方案确定后开启）。确认后打开执行日志，可实时查看过程。',
+        '该局全部网关机都下发成功才算成功；sshd PermitOpen 腿不随本次下发（由「更多 ▾ → 配置跳板转发」单独配置）。确认后打开执行日志，可实时查看过程。',
       ),
     ]),
     okText: driftOkText(record),
