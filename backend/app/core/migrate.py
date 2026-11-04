@@ -164,6 +164,8 @@ COLUMN_MIGRATIONS = [
     ("ps_db_migration_log", "duration_seconds", "FLOAT"),
     ("ps_db_migration_log", "started_at", "DATETIME"),
     ("relay_gateways", "openresty_prefix", "VARCHAR(255)"),
+    ("relay_gateways", "last_pushed_nodes", "TEXT"),
+    ("relay_gateways", "last_pushed_at", "DATETIME"),
     ("ps_db_backup_config", "source_name", "VARCHAR(64)"),
     ("ps_db_backup_config", "targets_migrated", "BOOLEAN DEFAULT FALSE"),
     ("ps_upstream", "last_publish_status", "VARCHAR(16)"),

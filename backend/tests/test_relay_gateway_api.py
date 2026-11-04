@@ -2,6 +2,9 @@
 
 覆盖：CRUD、code 格式/唯一/不可变、删除挂接约束、启停、集群 region_code 挂接。
 """
+import json
+from datetime import datetime
+
 import pytest
 
 from app.main import app
@@ -35,6 +38,13 @@ def _sse_events(text: str) -> list[dict]:
         if chunk.startswith("data: "):
             events.append(json.loads(chunk[len("data: "):]))
     return events
+
+
+def _gateway_row(test_db, gateway_id: int) -> RelayGateway:
+    """按 id 读回区域行（独立事件循环执行，规避请求内嵌 aio 上下文）。"""
+    import asyncio
+
+    return asyncio.run(test_db.get(RelayGateway, gateway_id))
 
 
 def _seed_region_nodes(test_db, *, enabled: int, disabled: int) -> None:
@@ -298,6 +308,150 @@ class TestRelayGatewayApi:
         resp = client.post(f"/api/v1/relay/gateways/{created['id']}/push-config")
         assert resp.status_code == 409
         assert "没有挂接集群或启用节点" in resp.json()["detail"]
+
+    # ── 下发快照（openspec: relay-push-drift-preview） ─────────
+    def test_push_success_records_snapshot(self, client, test_db, gateway_inventory, monkeypatch):
+        """push 终态成功 → 快照写入启用节点清单与时间；禁用节点不入快照。"""
+        from app.services import relay_push
+
+        def fake_run(**kw):
+            kw["event_handler"]({"stdout": "TASK [写入白名单 map]"})
+            return {"rc": 0, "status": "successful"}
+
+        monkeypatch.setattr(relay_push, "_run_ansible_push", fake_run)
+        _seed_region_nodes(test_db, enabled=2, disabled=1)
+        created = client.post("/api/v1/relay/gateways", json={
+            "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
+        resp = client.post(f"/api/v1/relay/gateways/{created['id']}/push-config")
+        assert resp.status_code == 200, resp.text
+        assert _sse_events(resp.text)[-1]["rc"] == 0
+        row = _gateway_row(test_db, created["id"])
+        assert row.last_pushed_at is not None
+        assert sorted(json.loads(row.last_pushed_nodes)) == [
+            "10.20.0.0:9180", "10.20.0.1:9180"]
+
+    def test_push_failure_keeps_snapshot(self, client, test_db, gateway_inventory, monkeypatch):
+        """push 终态失败（rc!=0）→ 快照保持原值。"""
+        from app.services import relay_push
+
+        def fake_run(**kw):
+            kw["event_handler"]({"stdout": "TASK [写入白名单 map]"})
+            return {"rc": 1, "status": "failed"}
+
+        monkeypatch.setattr(relay_push, "_run_ansible_push", fake_run)
+        _seed_region_nodes(test_db, enabled=1, disabled=0)
+        created = client.post("/api/v1/relay/gateways", json={
+            "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
+        resp = client.post(f"/api/v1/relay/gateways/{created['id']}/push-config")
+        assert _sse_events(resp.text)[-1]["rc"] == 1
+        row = _gateway_row(test_db, created["id"])
+        assert row.last_pushed_at is None
+        assert row.last_pushed_nodes is None
+
+    def test_push_false_success_keeps_snapshot(self, client, test_db, gateway_inventory, monkeypatch):
+        """rc=0 空匹配假成功（改判 failed）→ 不得写快照（AGENTS #21② 守卫联动）。"""
+        from app.services import relay_push
+
+        def fake_run(**kw):
+            kw["event_handler"]({"stdout": "Could not match supplied host pattern: gateways_luju"})
+            return {"rc": 0, "status": "successful"}
+
+        monkeypatch.setattr(relay_push, "_run_ansible_push", fake_run)
+        _seed_region_nodes(test_db, enabled=1, disabled=0)
+        created = client.post("/api/v1/relay/gateways", json={
+            "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
+        resp = client.post(f"/api/v1/relay/gateways/{created['id']}/push-config")
+        final = _sse_events(resp.text)[-1]
+        assert final["rc"] == 0 and final["status"] == "failed"
+        row = _gateway_row(test_db, created["id"])
+        assert row.last_pushed_at is None
+        assert row.last_pushed_nodes is None
+
+    def test_init_success_records_snapshot(self, client, test_db, gateway_inventory, monkeypatch):
+        """init 终态成功也写快照（init 同样写白名单脚手架）；无节点时快照为空列表。"""
+        from app.services import relay_init
+
+        def fake_run(**kw):
+            kw["event_handler"]({"stdout": "PLAY [初始化中继网关]"})
+            return {"rc": 0, "status": "successful"}
+
+        monkeypatch.setattr(relay_init, "_run_ansible_init", fake_run)
+        created = client.post("/api/v1/relay/gateways", json={
+            "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
+        resp = client.post(f"/api/v1/relay/gateways/{created['id']}/init")
+        assert resp.status_code == 200, resp.text
+        assert _sse_events(resp.text)[-1]["rc"] == 0
+        row = _gateway_row(test_db, created["id"])
+        assert row.last_pushed_at is not None
+        assert json.loads(row.last_pushed_nodes) == []
+
+    def test_allow_empty_push_records_empty_snapshot(self, client, test_db, gateway_inventory, monkeypatch):
+        """allow_empty 空名单下发成功 → 快照如实写 []（下次弹窗据此显示将移除全部）。"""
+        from app.services import relay_push
+
+        def fake_run(**kw):
+            kw["event_handler"]({"stdout": "TASK [写入白名单 map]"})
+            return {"rc": 0, "status": "successful"}
+
+        monkeypatch.setattr(relay_push, "_run_ansible_push", fake_run)
+        _seed_region_nodes(test_db, enabled=0, disabled=2)
+        created = client.post("/api/v1/relay/gateways", json={
+            "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
+        resp = client.post(f"/api/v1/relay/gateways/{created['id']}/push-config",
+                           json={"allow_empty": True})
+        assert resp.status_code == 200, resp.text
+        assert _sse_events(resp.text)[-1]["rc"] == 0
+        row = _gateway_row(test_db, created["id"])
+        assert row.last_pushed_at is not None
+        assert json.loads(row.last_pushed_nodes) == []
+
+    # ── 漂移预览回填（openspec: relay-push-drift-preview） ─────────
+    def _seed_snapshot(self, test_db, gateway_id: int, nodes: list[str], at: datetime) -> None:
+        import asyncio
+
+        async def _seed():
+            gw = await test_db.get(RelayGateway, gateway_id)
+            gw.last_pushed_nodes = json.dumps(nodes)
+            gw.last_pushed_at = at
+            await test_db.commit()
+
+        asyncio.run(_seed())
+
+    def test_list_gateways_push_drift_null_when_never_pushed(self, client, test_db):
+        """从未成功下发（快照为空）→ push_drift 为 null（区别于「一致」的空差集）。"""
+        _seed_region_nodes(test_db, enabled=1, disabled=0)
+        created = client.post("/api/v1/relay/gateways", json={
+            "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
+        resp = client.get("/api/v1/relay/gateways")
+        item = next(x for x in resp.json() if x["id"] == created["id"])
+        assert item["push_drift"] is None
+        assert item["last_pushed_at"] is None
+
+    def test_list_gateways_push_drift_added_removed(self, client, test_db):
+        """快照与当前启用集合差集：快照有现无 → removed；现有快照无 → added。"""
+        _seed_region_nodes(test_db, enabled=2, disabled=0)
+        created = client.post("/api/v1/relay/gateways", json={
+            "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
+        self._seed_snapshot(test_db, created["id"],
+                            ["10.20.0.0:9180", "10.99.9.9:9999"],
+                            datetime(2026, 11, 4, 1, 2, 3))
+        resp = client.get("/api/v1/relay/gateways")
+        item = next(x for x in resp.json() if x["id"] == created["id"])
+        assert item["push_drift"] == {
+            "added": ["10.20.0.1:9180"], "removed": ["10.99.9.9:9999"]}
+        assert item["last_pushed_at"] == "2026-11-04T01:02:03"
+
+    def test_list_gateways_drift_empty_lists_when_identical(self, client, test_db):
+        """快照与当前启用集合一致 → added/removed 均为空列表（非 null）。"""
+        _seed_region_nodes(test_db, enabled=2, disabled=1)
+        created = client.post("/api/v1/relay/gateways", json={
+            "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
+        self._seed_snapshot(test_db, created["id"],
+                            ["10.20.0.0:9180", "10.20.0.1:9180"],
+                            datetime(2026, 11, 4, 1, 2, 3))
+        resp = client.get("/api/v1/relay/gateways")
+        item = next(x for x in resp.json() if x["id"] == created["id"])
+        assert item["push_drift"] == {"added": [], "removed": []}
 
     def test_list_gateways_reports_node_counts(self, client, test_db):
         """列表逐区域回填 enabled_node_count / total_node_count（无挂接区域为 0/0）。"""

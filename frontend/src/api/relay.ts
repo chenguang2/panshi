@@ -16,6 +16,9 @@ export interface RelayGateway {
   /** 区域节点计数（后端列表聚合注入，非库列）：下发确认弹窗展示白名单规模 */
   enabled_node_count?: number
   total_node_count?: number
+  /** 下发快照（relay-push-drift-preview）：最后一次成功下发时间与漂移差集 */
+  last_pushed_at?: string | null
+  push_drift?: { added: string[]; removed: string[] } | null
   created_at?: string | null
   updated_at?: string | null
 }

@@ -14,7 +14,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, AsyncGenerator, Callable
+from typing import Any, AsyncGenerator, Awaitable, Callable
 import queue
 
 import yaml
@@ -1151,6 +1151,7 @@ async def _stream_ansible_events(
     initial_line: str = "正在连接远程主机并启动 Ansible...",
     final_extra: dict[str, Any] | None = None,
     fail_on_empty_hosts: bool = False,
+    on_result: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
 ) -> AsyncGenerator[str, None]:
     """把一次 ansible 执行转成 SSE 事件流（实时 stdout 行 + 进度 + 终态）。
 
@@ -1225,6 +1226,10 @@ async def _stream_ansible_events(
             "未对任何主机执行（rc=0 假成功守卫，AGENTS #21②）"
         )
     yield f"data: {json.dumps(final)}\n\n"
+    # 终态回调（relay-push-drift-preview）：在生成器体内、终态事件之后执行——
+    # 写库等收尾不得放进 finally（客户端断连时 CancelledError 击穿，规则 #33）。
+    if on_result is not None:
+        await on_result(final)
 
 
 async def _run_ansible_stream(

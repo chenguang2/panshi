@@ -10,7 +10,7 @@
 import asyncio
 import logging
 from pathlib import Path
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Awaitable, Callable
 from urllib.parse import urlparse
 
 from app.services.ansible_service import PRIVATE_DATA_DIR, _stream_ansible_events
@@ -94,10 +94,13 @@ async def stream_init_region(
     listen_port: int,
     openresty_prefix: str,
     edge_targets_conf: str,
+    on_success: Callable[[], Awaitable[None]] | None = None,
 ) -> AsyncGenerator[str, None]:
     """流式初始化该局全部网关机：写 server 块 + 白名单，nginx -t 后启动/重载。幂等可重跑。
 
     纯数据入参（不触库）：调用方（端点）已在其会话内完成配置渲染与审计提交。
+    ``on_success``（relay-push-drift-preview）：终态成功后在生成器体内回调一次，
+    调用方闭包用请求会话写下发快照；断连则不回调（advisory 定位）。
     """
     extravars = {
         "region_code": region_code,
@@ -120,10 +123,15 @@ async def stream_init_region(
             event_handler=event_handler,
         )
 
+    async def _forward(final: dict) -> None:
+        if on_success is not None and final.get("rc") == 0 and final.get("status") != "failed":
+            await on_success()
+
     async for event in _stream_ansible_events(
         _call,
         initial_line="正在连接网关机并执行初始化（首次装机约 10–60 秒）...",
         final_extra={"hosts_pattern": extravars["hosts_pattern"], "listen_port": listen_port},
         fail_on_empty_hosts=True,  # 空匹配 rc=0 假成功守卫（AGENTS #21②）
+        on_result=_forward,
     ):
         yield event

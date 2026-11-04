@@ -12,7 +12,7 @@ import asyncio
 import logging
 import os
 from pathlib import Path
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Awaitable, Callable
 
 import yaml
 
@@ -231,10 +231,14 @@ async def stream_push_region(
     openresty_prefix: str,
     edge_targets_conf: str,
     relay_sshd_conf: str,
+    on_success: Callable[[], Awaitable[None]] | None = None,
 ) -> AsyncGenerator[str, None]:
     """流式下发该局白名单到全部网关机（当前仅 nginx 腿）；全部成功才算成功（幂等可重跑）。
 
     纯数据入参（不触库）：调用方（端点）已在其会话内完成白名单渲染与审计提交。
+    ``on_success``（relay-push-drift-preview）：终态成功（rc=0 且非假成功改判）后在
+    生成器体内回调一次——调用方闭包用请求会话写下发快照；终态失败不回调；
+    客户端断连则生成器被取消、回调不执行（快照停留旧值，advisory 定位）。
     """
     extravars = {
         "region_code": region_code,
@@ -256,10 +260,15 @@ async def stream_push_region(
             event_handler=event_handler,
         )
 
+    async def _forward(final: dict) -> None:
+        if on_success is not None and final.get("rc") == 0 and final.get("status") != "failed":
+            await on_success()
+
     async for event in _stream_ansible_events(
         _call,
         initial_line="正在下发白名单到网关机...",
         final_extra={"hosts_pattern": extravars["hosts_pattern"]},
         fail_on_empty_hosts=True,  # 空匹配 rc=0 假成功守卫（AGENTS #21②）
+        on_result=_forward,
     ):
         yield event

@@ -349,7 +349,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, h, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, h, onMounted, onUnmounted, reactive, ref, type VNode } from 'vue'
 import { message } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import NodeExecutionResultDrawer from '@/components/NodeExecutionResultDrawer.vue'
@@ -937,15 +937,50 @@ function handlePush(record: RelayGateway) {
         null,
         `将「${record.name}」的节点白名单推送到该局全部网关机：本次将下发 ${enabledCount} 个启用节点（共 ${record.total_node_count ?? enabledCount} 个节点；全量替换，未启用的节点将从白名单移除）。`,
       ),
+      // 下发漂移（openspec: relay-push-drift-preview）：相对快照的将新增/将移除提示
+      pushDriftLine(record),
       h(
         'p',
         { style: 'color: var(--muted); font-size: 12px' },
         '双机全部成功才算成功；sshd PermitOpen 腿暂缓（需特权，待部署方案确定后开启）。确认后打开执行日志，可实时查看过程。',
       ),
     ]),
-    okText: '开始下发',
+    okText: driftOkText(record),
     onOk: () => startExec(record, 'push'),
   })
+}
+
+const DRIFT_LIST_LIMIT = 10
+
+function driftFmt(list: string[]): string {
+  return list.length > DRIFT_LIST_LIMIT ? `${list.slice(0, DRIFT_LIST_LIMIT).join('、')} 等` : list.join('、')
+}
+
+function pushDriftLine(record: RelayGateway): VNode | null {
+  const drift = record.push_drift
+  if (!drift) {
+    return h('p', { style: 'color: var(--muted); font-size: 12px' }, '该区域尚无成功下发记录，本次为首次写入白名单。')
+  }
+  if (drift.removed.length > 0) {
+    return h(
+      'p',
+      { style: 'color: #d48806; font-size: 12px' },
+      `与上次成功下发（${formatDateTime(record.last_pushed_at)}）相比，本次将移除 ${drift.removed.length} 个节点：${driftFmt(drift.removed)}。`,
+    )
+  }
+  if (drift.added.length > 0) {
+    return h(
+      'p',
+      { style: 'color: var(--muted); font-size: 12px' },
+      `较上次成功下发将新增 ${drift.added.length} 个节点：${driftFmt(drift.added)}。`,
+    )
+  }
+  return null
+}
+
+function driftOkText(record: RelayGateway): string {
+  const removed = record.push_drift?.removed.length ?? 0
+  return removed > 0 ? `开始下发（将移除 ${removed} 个节点）` : '开始下发'
 }
 
 function handleDelete(record: RelayGateway) {

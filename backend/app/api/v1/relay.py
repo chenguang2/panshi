@@ -3,6 +3,8 @@
 全局端点（无 cluster_id）：/relay/gateways CRUD + 启停。
 权限：require_permission("relay_gateway")（router 级，AGENTS #19 形态 1）。
 """
+import json
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
@@ -14,12 +16,13 @@ from app.core.features import feature_enabled
 from app.models.cluster import Cluster, Node
 from app.models.relay import RelayGateway
 from app.schemas.relay import (
-    RelayConfigFile,
-    RelayConfigPreview,
     RelayGatewayCreate,
     RelayGatewayOut,
-    RelayGatewayUpdate,
     RelayPushConfigRequest,
+    RelayPushDrift,
+    RelayConfigFile,
+    RelayConfigPreview,
+    RelayGatewayUpdate,
     RelaySshdSetupRequest,
     RelayStatusUpdate,
 )
@@ -87,15 +90,23 @@ async def _refresh_routing() -> None:
     await relay_registry.ensure_fresh(force=True)
 
 
-async def _region_node_counts(db: AsyncSession) -> tuple[dict[str, int], dict[str, int]]:
-    """按区域聚合节点计数（启用/总数），供列表回填（前端下发确认展示白名单规模）。"""
+async def _region_node_counts(
+    db: AsyncSession,
+) -> tuple[dict[str, int], dict[str, int], dict[str, list[str]]]:
+    """按区域聚合节点计数与启用节点清单（"ip:管理端口"），供列表回填。
+
+    启用行一次查询同时派生计数与清单（漂移预览 relay-push-drift-preview 用）。
+    """
     enabled_rows = await db.execute(
-        select(Cluster.region_code, func.count(Node.id))
+        select(Cluster.region_code, Node.ip, Node.management_port)
         .select_from(Cluster)
         .join(Node, Node.cluster_id == Cluster.id)
         .where(Cluster.region_code.isnot(None), Node.status == 1)
-        .group_by(Cluster.region_code)
     )
+    enabled_lists: dict[str, list[str]] = {}
+    for region_code, ip, port in enabled_rows.all():
+        enabled_lists.setdefault(region_code, []).append(f"{ip}:{port}")
+    enabled_counts = {k: len(v) for k, v in enabled_lists.items()}
     total_rows = await db.execute(
         select(Cluster.region_code, func.count(Node.id))
         .select_from(Cluster)
@@ -103,13 +114,24 @@ async def _region_node_counts(db: AsyncSession) -> tuple[dict[str, int], dict[st
         .where(Cluster.region_code.isnot(None))
         .group_by(Cluster.region_code)
     )
-    return dict(enabled_rows.all()), dict(total_rows.all())
+    return enabled_counts, dict(total_rows.all()), enabled_lists
 
 
 @router.get("/gateways", response_model=list[RelayGatewayOut])
 async def list_gateways(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(RelayGateway).order_by(RelayGateway.id))
-    enabled_map, total_map = await _region_node_counts(db)
+    enabled_map, total_map, enabled_lists = await _region_node_counts(db)
+
+    def _parse_snapshot(raw: str | None) -> list[str] | None:
+        """快照 JSON 防御性解析：缺失/坏值回退 None（诚实「无快照」态）。"""
+        if raw is None:
+            return None
+        try:
+            data = json.loads(raw)
+        except ValueError:
+            return None
+        return data if isinstance(data, list) else None
+
     out: list[RelayGatewayOut] = []
     for g in result.scalars():
         row = RelayGatewayOut.model_validate(g)
@@ -118,6 +140,16 @@ async def list_gateways(db: AsyncSession = Depends(get_db)):
         # 区域节点计数（模式同上：端点计算注入，非库列）
         row.enabled_node_count = enabled_map.get(g.code, 0)
         row.total_node_count = total_map.get(g.code, 0)
+        # 下发漂移（relay-push-drift-preview）：当前启用集合相对快照的差集
+        snapshot = _parse_snapshot(g.last_pushed_nodes)
+        if snapshot is None:
+            row.push_drift = None
+        else:
+            current = set(enabled_lists.get(g.code, []))
+            last = set(snapshot)
+            row.push_drift = RelayPushDrift(
+                added=sorted(current - last), removed=sorted(last - current)
+            )
         out.append(row)
     return out
 
@@ -195,11 +227,21 @@ async def init_gateway(gateway_id: int, db: AsyncSession = Depends(get_db)):
     _acquire_region(gateway.code)
     try:
         edge_targets_conf = await relay_push.render_nginx_map(gateway.code, db=db)
+        enabled_nodes = await relay_push._region_nodes(db, gateway.code)
+
+        async def _record_snapshot() -> None:
+            """终态成功 → 写下发快照（请求会话仍在依赖生命周期内，事务仅在终态后开启）。"""
+            gateway.last_pushed_nodes = json.dumps(
+                sorted(f"{n.ip}:{n.management_port}" for n in enabled_nodes))
+            gateway.last_pushed_at = datetime.utcnow()
+            await db.commit()
+
         stream = relay_init.stream_init_region(
             region_code=gateway.code,
             listen_port=relay_init.listen_port_of(gateway.http_base_url),
             openresty_prefix=gateway.openresty_prefix,
             edge_targets_conf=edge_targets_conf,
+            on_success=_record_snapshot,
         )
         await db.commit()  # 落审计 + 释放写锁，流内 ansible 期间不再持事务
     except BaseException:
@@ -233,15 +275,24 @@ async def push_gateway_config(
     if not enabled_nodes and not payload.allow_empty:
         detail = await relay_push.empty_region_detail(db, gateway.code)
         raise HTTPException(status_code=409, detail=detail)
+    pushed_nodes = sorted(f"{n.ip}:{n.management_port}" for n in enabled_nodes)
     _acquire_region(gateway.code)
     try:
         edge_targets_conf = await relay_push.render_nginx_map(gateway.code, db=db)
         relay_sshd_conf = await relay_push.render_permit_open(gateway.code, db=db)
+
+        async def _record_snapshot() -> None:
+            """终态成功 → 写下发快照（请求会话仍在依赖生命周期内，事务仅在终态后开启）。"""
+            gateway.last_pushed_nodes = json.dumps(pushed_nodes)
+            gateway.last_pushed_at = datetime.utcnow()
+            await db.commit()
+
         stream = relay_push.stream_push_region(
             region_code=gateway.code,
             openresty_prefix=gateway.openresty_prefix,
             edge_targets_conf=edge_targets_conf,
             relay_sshd_conf=relay_sshd_conf,
+            on_success=_record_snapshot,
         )
         await db.commit()  # 落审计 + 释放写锁（同 init）
     except BaseException:

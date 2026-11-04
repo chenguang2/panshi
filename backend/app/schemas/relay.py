@@ -144,6 +144,17 @@ class RelayStatusUpdate(BaseModel):
         return v
 
 
+class RelayPushDrift(BaseModel):
+    """下发漂移（列表端点计算注入，非库列）：当前启用节点集合相对快照的差集。
+
+    - added: 现有快照无 → 本次将新增
+    - removed: 快照有现无 → 本次将移除（全量替换会从网关白名单拿掉）
+    """
+
+    added: list[str] = []
+    removed: list[str] = []
+
+
 class RelayGatewayOut(BaseModel):
     id: int
     code: str
@@ -159,6 +170,10 @@ class RelayGatewayOut(BaseModel):
     # 区域节点计数（列表端点聚合注入，非库列）：下发确认弹窗展示白名单规模
     enabled_node_count: int = 0
     total_node_count: int = 0
+    # 下发快照（relay-push-drift-preview）：last_pushed_at 来自库列；
+    # push_drift 无快照为 null（区别于「一致」的空差集）
+    last_pushed_at: Optional[datetime] = None
+    push_drift: Optional[RelayPushDrift] = None
 
     class Config:
         from_attributes = True

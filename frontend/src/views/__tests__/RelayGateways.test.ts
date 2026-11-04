@@ -687,6 +687,84 @@ describe('RelayGateways', () => {
     expect(body).toEqual({ allow_empty: true })
   })
 
+  // ── 下发漂移预览（openspec: relay-push-drift-preview） ─────────
+  async function openPushDialog(overrides: Record<string, unknown>) {
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/relay/gateways') {
+        return Promise.resolve({ data: [{ ...REGIONS[0], ...overrides }] })
+      }
+      return Promise.reject(new Error(`unmocked get ${url}`))
+    })
+    const wrapper = await mountPage()
+    const pushBtn = wrapper.findAll('button').find((b) => b.text().includes('下发配置'))!
+    await pushBtn.trigger('click')
+    await flushPromises()
+    return (globalThis as Record<string, unknown>).__lastOverlayOpts as {
+      content: unknown
+      okText: string
+    }
+  }
+
+  it('下发漂移：将移除节点时警示并改确认文案', async () => {
+    const opts = await openPushDialog({
+      enabled_node_count: 3,
+      total_node_count: 3,
+      last_pushed_at: '2026-11-04T09:00:00',
+      push_drift: { added: [], removed: ['10.99.9.9:9999'] },
+    })
+    const text = vnodeText(opts.content)
+    // last_pushed_at 为 naive UTC（#26），formatDateTime 按 Asia/Shanghai 展示 → +8h
+    expect(text).toContain('与上次成功下发（2026/11/04 17:00:00）相比，本次将移除 1 个节点：10.99.9.9:9999。')
+    expect(opts.okText).toBe('开始下发（将移除 1 个节点）')
+  })
+
+  it('下发漂移：仅新增时灰字提示，确认文案不变', async () => {
+    const opts = await openPushDialog({
+      enabled_node_count: 3,
+      total_node_count: 3,
+      last_pushed_at: '2026-11-04T09:00:00',
+      push_drift: { added: ['10.20.0.1:9180'], removed: [] },
+    })
+    const text = vnodeText(opts.content)
+    expect(text).toContain('较上次成功下发将新增 1 个节点：10.20.0.1:9180。')
+    expect(text).not.toContain('将移除')
+    expect(opts.okText).toBe('开始下发')
+  })
+
+  it('下发漂移：无快照提示首次写入', async () => {
+    const opts = await openPushDialog({})
+    const text = vnodeText(opts.content)
+    expect(text).toContain('该区域尚无成功下发记录，本次为首次写入白名单。')
+    expect(opts.okText).toBe('开始下发')
+  })
+
+  it('下发漂移：与上次一致不加提示行', async () => {
+    const opts = await openPushDialog({
+      enabled_node_count: 2,
+      total_node_count: 3,
+      last_pushed_at: '2026-11-04T09:00:00',
+      push_drift: { added: [], removed: [] },
+    })
+    const text = vnodeText(opts.content)
+    expect(text).not.toContain('上次成功下发')
+    expect(text).not.toContain('首次写入白名单')
+    expect(opts.okText).toBe('开始下发')
+  })
+
+  it('下发漂移：移除清单超过 10 个时截断标注总数', async () => {
+    const removed = Array.from({ length: 12 }, (_, i) => `10.90.0.${i}:9180`)
+    const opts = await openPushDialog({
+      enabled_node_count: 3,
+      total_node_count: 3,
+      last_pushed_at: '2026-11-04T09:00:00',
+      push_drift: { added: [], removed },
+    })
+    const text = vnodeText(opts.content)
+    expect(text).toContain('本次将移除 12 个节点：')
+    expect(text).toContain('10.90.0.9:9180 等。')
+    expect(text).not.toContain('10.90.0.10:9180')
+  })
+
   it('执行完成后按钮文案恢复（回归：activeId/activeKind 未清空导致卡在「初始化中...」）', async () => {
     const wrapper = await mountPage()
     await flushPromises()

@@ -1,7 +1,7 @@
 """跨中心区域注册表模型（openspec: add-relay-gateway / relay-region-registry）。"""
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Integer, String
+from sqlalchemy import Column, DateTime, Integer, String, Text
 
 from app.core.database import Base
 
@@ -24,5 +24,9 @@ class RelayGateway(Base):
     ssh_jump = Column(String(255), nullable=True)
     openresty_prefix = Column(String(255), nullable=True)
     status = Column(String(16), nullable=False, default="enabled")
+    # 下发快照（relay-push-drift-preview）：最后一次成功写入网关机的白名单内容
+    # （JSON 数组，元素 "ip:管理端口"）；写入走终态成功回调（生成器体内，#33 合规）。
+    last_pushed_nodes = Column(Text, nullable=True)
+    last_pushed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
