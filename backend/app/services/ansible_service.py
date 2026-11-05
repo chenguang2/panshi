@@ -333,10 +333,18 @@ def _ansible_false_success_error(result: dict, ip: str) -> str | None:
     P2①：自 node_task_service 下沉至此——由 run_playbook 唯一出口统一调用，
     新调用方自动免疫（调用侧逐点补守卫会漏，S4/M24 两次实证）。
 
-    现为 `classify_ansible_failure(rc=0)` 的薄封装：**rc=0 语义不变**（无命中
-    返回 None，不会因 rc 兜底编造原因），既有调用方与测试契约保持有效。
+    **标记只认「清单缺失」两类（2026-11-05 收窄）**：曾封装
+    `classify_ansible_failure(rc=0)` 全量标记，「timeout」等宽泛子串命中了
+    **载荷本身**——edge_read_env 腿的 stdout 就是 edge.env 文件内容，配置里
+    `resolver_timeout: 5` 被当「执行超时」，成功读取被翻转成失败。超时/认证/
+    连接等宽泛归因只属于 classify 的 rc≠0 路径，不得翻转 rc=0 的有内容输出。
     """
-    return classify_ansible_failure(result, ip, rc=0)
+    raw = "\n".join(
+        str(result.get(k) or "") for k in ("stdout", "shell_stdout", "stderr")
+    ).lower()
+    if "no hosts matched" in raw or "could not match supplied host pattern" in raw:
+        return f"节点 {ip} 不在 Ansible 主机清单中，请在 inventory/host 文件中添加该节点的 SSH 连接信息"
+    return None
 
 
 # ── 取消通道（openspec node-task-center D3）─────────────────────────────

@@ -1338,6 +1338,44 @@ class TestSshControlPathEscaping:
         assert "%%" not in self._as_ssh_sees(SSH_CONTROL_PATH)
 
 
+class TestFalseSuccessGuardPayloadKeyword:
+    """假成功守卫只认「清单缺失」标记（2026-11-05 事故）。
+
+    edge.env 读取腿（edge_read_env）的 stdout **就是文件内容本身**——
+    配置里出现 `resolver_timeout: 5` 等字样时，旧守卫的宽泛「timeout」子串
+    标记命中，把 rc=0 的成功读取翻成 -1「执行超时」，UI 报「读取 edge.env
+    失败」。守卫的语义是「rc=0 但节点不在清单」（#21），超时/认证/连接类
+    宽泛标记属于 classify 的 rc≠0 归因路径，不得用于翻转成功结果。
+    """
+
+    def test_config_payload_with_timeout_keyword_does_not_flip(self):
+        from app.services.ansible_service import _ansible_false_success_error
+
+        stdout = (
+            "PLAY [Run edge] ****************************************************************\n"
+            'ok: [192.168.0.14] => {\n'
+            '    "msg": [\n'
+            '        "  #dns:",\n'
+            '        "  #    resolver_timeout: 5",\n'
+            '        "  http:",\n'
+            '        "      listen:",\n'
+            '        "        - addr: 0.0.0.0:16610"\n'
+            "    ]\n"
+            "}\n"
+            "PLAY RECAP *********************************************************************\n"
+            "192.168.0.14               : ok=2    changed=0    unreachable=0    failed=0\n"
+        )
+        assert _ansible_false_success_error({"stdout": stdout, "stderr": ""}, "192.168.0.14") is None
+
+    def test_inventory_miss_still_flips(self):
+        from app.services.ansible_service import _ansible_false_success_error
+
+        result = {"stdout": "skipping: no hosts matched", "stderr": ""}
+        msg = _ansible_false_success_error(result, "192.168.0.14")
+        assert msg is not None
+        assert "不在 Ansible 主机清单中" in msg
+
+
 def test_stream_ansible_events_empty_match_guard_is_opt_in():
     """fail_on_empty_hosts 默认关（不动既有消费方）；开启后 rc=0 + 空匹配判失败。"""
     import asyncio
