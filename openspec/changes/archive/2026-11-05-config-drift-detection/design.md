@@ -27,8 +27,8 @@
 **D1 基线 = 快照留存实发载荷（新增 `edge_payload` 列），不在检测时重推导。**
 `publish_resource` 落快照处把 `edge_data`（dict/list 原样 `json.dumps`）存入新列。备选「检测时用平台对象现调 convert_*_to_edge_format 重推导」被否：平台对象可能已编辑（pending_publish），推导结果是「现在想发的」而非「当时发过的」，会把平台未发布改动误报成 Edge 漂移，语义不纯。存量旧版本列值为 NULL → 检测降级「无法评估（基线缺失，请重新发布）」。列注册 COLUMN_MIGRATIONS（#118 强制），触发 PG 方言冒烟（#103）。
 
-**D2 对比算法：规范化 JSON 字段级递归 diff + 服务端自管理字段白名单。**
-结构：`{added: {path: edge_value}, removed: {path: baseline_value}, changed: [{path, baseline, edge}]}`。路径用点号+数组下标。白名单（Edge 运行态自管理、与下发意图无关的字段）在对比前双侧剔除：`id`（Edge 侧 hex 与平台 UUID 本就不同，#101）、`update_time`/`create_time` 类时间戳、上游健康检查动态状态（`checks.active.healthy`/`unhealthy_history` 等运行态子树——上游运行态里健康数据恒动，不剔除必误报；实施时按 Edge GET 实测响应形态圈定，#43 夹具教训：mock 必须取自真实响应）。等价比较用 Python 值相等（数字/字符串规范化：Edge 侧数值可能回传字符串型端口，实施时按实测做类型归一）。
+**D2 对比算法：基线驱动的规范化 JSON 字段级递归 diff + 服务端自管理字段白名单。**
+结构：`{removed: {path: baseline_value}, changed: [{path, baseline, edge}]}`——以基线为驱动逐路径比对（基线字段在运行态缺失 → removed；两侧都有但值不等 → changed）；**运行态独有字段不报**（Edge 服务端默认展开属正常行为，非旁路修改；旁路新增资源在列表层以「Edge 多出资源」呈现）。路径用点号+数组下标。白名单（对比前双侧剔除）：`id`（Edge 侧 hex 与平台 UUID 本就不同，#101）、`update_time`/`create_time` 类时间戳、上游健康检查动态状态子树——实施时按 Edge GET 实测响应形态圈定（#43 夹具教训：mock 必须取自真实响应）。等价比较做数值/字符串归一（Edge 回传字符串型端口 vs 基线数值视为等价）。敏感字段（SSL 私钥等）diff 输出走 `mask_fields` 占位脱敏，不回显原文。
 
 **D3 检测服务 `services/drift_detection.py`：资源类型注册表驱动 + 纯函数 diff + 编排薄层。**
 **类型注册表**（用户裁决：全部发布资源）——每类一份适配配置 `{resource_type: {edge_resource: RESOURCE_PATHS 键, match: 匹配键, whitelist: 运行态白名单, edge_list_fn, edge_get_fn}}`，清单以 publish_resource 全部调用方枚举为准（实施时先 grep 调用点钉死类型清单，#51 同款纪律）；不经编排的资源（静态资源 zip、节点部署）固定进「未纳入检测」提示区。
