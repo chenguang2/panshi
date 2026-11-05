@@ -11,13 +11,14 @@
 
 ## 2. 字段级 diff 纯函数
 
-- [ ] 2.1 RED：`tests/test_drift_diff.py`——added/removed/changed 三类差异、嵌套 dict/list 路径（点号+下标）、白名单剔除（id/时间戳/上游健康动态子树）、数值-字符串类型归一（Edge 回传字符串端口 vs 基线数值）、双侧等价 → 空 diff
-- [ ] 2.2 GREEN：`services/drift_detection.py` 实现 `diff_edge_payload(baseline, actual, whitelist)` 纯函数；白名单常量集中单处（按 Edge GET 实测形态圈定，实施前抓 dev Edge 真实响应钉形状，#43）
+- [ ] 2.1 RED：`tests/test_drift_diff.py`——added/removed/changed 三类差异、嵌套 dict/list 路径（点号+下标）、白名单剔除（id/时间戳/上游健康动态子树等按类型注册表）、数值-字符串类型归一（Edge 回传字符串端口 vs 基线数值）、双侧等价 → 空 diff、敏感字段脱敏输出（私钥等占位符）
+- [ ] 2.2 GREEN：`services/drift_detection.py` 实现 `diff_edge_payload(baseline, actual, whitelist, mask_fields)` 纯函数；白名单/脱敏清单按类型集中在注册表单处（实施前抓 dev Edge 真实响应钉形状，#43）
+- [ ] 2.3 类型注册表：grep publish_resource 全部调用方钉死类型清单（#51 纪律），每类登记 edge_resource 路径/匹配键/白名单/脱敏字段；不经编排的资源（静态资源 zip/节点部署）固定进未纳入提示区
 
 ## 3. 检测编排与端点
 
-- [ ] 3.1 RED：`tests/test_drift_detection.py` 编排矩阵（mock EdgeClient，形状取实测）——一致；字段漂移（changed/added/removed 各一）；Edge 缺失基线资源（「Edge 已删除」）；Edge 多出旁路资源；未发布资源（无法评估·未发布）；旧快照无 edge_payload（无法评估·基线缺失）；Edge 读取异常（单资源降级不中断整批）；范围外资源类型列入 out_of_scope_types
-- [ ] 3.2 GREEN：`services/drift_detection.py` 编排（活跃节点抽样 1 个建 EdgeClient；路由 name 匹配/上游 id 匹配；复用 max(version) 最新快照查询形态）；`api/v1/cluster_drift.py` 只读端点 `GET /clusters/{cluster_id}/drift`（router 级 get_current_user，#19；注册 main.py）
+- [ ] 3.1 RED：`tests/test_drift_detection.py` 编排矩阵（mock EdgeClient，形状取实测）——一致；字段漂移（changed/added/removed 各一）；Edge 缺失基线资源（「Edge 已删除」）；Edge 多出旁路资源；未发布资源（无法评估·未发布）；旧快照无 edge_payload（无法评估·基线缺失）；Edge 读取异常（单资源降级不中断整批）；路由/上游/插件组/全局规则/SSL/流代理六类各一例冒烟；范围外资源类型列入 out_of_scope_types
+- [ ] 3.2 GREEN：`services/drift_detection.py` 编排（活跃节点抽样 1 个建 EdgeClient；按注册表匹配键定位运行态；复用 max(version) 最新快照查询形态）；`api/v1/cluster_drift.py` 只读端点 `GET /clusters/{cluster_id}/drift`（router 级 get_current_user，#19；注册 main.py）
 - [ ] 3.3 安全采样：`tests/test_security_guard.py` UNAUTHENTICATED_SAMPLES 补 `GET /clusters/{id}/drift`；兜底路由语义确认（#34：新路由注册在兜底之前）
 - [ ] 3.4 后端域回归 + 全量收口：`pytest -k "drift or publish or relay"` → 全量 `uv run pytest`（0 failed）
 

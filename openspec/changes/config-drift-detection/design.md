@@ -14,7 +14,7 @@
 **Goals:**
 - 精确基线：快照留存实发载荷，检测回答「Edge 是否被绕过平台改过」。
 - 三态结论 + 字段级差异，可解释、可复检、只读。
-- 首期路由 + 上游；通道与模型对扩展资源类型开放。
+- 范围 = 全部经统一发布编排的资源类型（用户裁决），注册表驱动、对新增类型开放。
 
 **Non-Goals:**
 - 不做自动修复/一键回写（独立立项）。
@@ -30,14 +30,15 @@
 **D2 对比算法：规范化 JSON 字段级递归 diff + 服务端自管理字段白名单。**
 结构：`{added: {path: edge_value}, removed: {path: baseline_value}, changed: [{path, baseline, edge}]}`。路径用点号+数组下标。白名单（Edge 运行态自管理、与下发意图无关的字段）在对比前双侧剔除：`id`（Edge 侧 hex 与平台 UUID 本就不同，#101）、`update_time`/`create_time` 类时间戳、上游健康检查动态状态（`checks.active.healthy`/`unhealthy_history` 等运行态子树——上游运行态里健康数据恒动，不剔除必误报；实施时按 Edge GET 实测响应形态圈定，#43 夹具教训：mock 必须取自真实响应）。等价比较用 Python 值相等（数字/字符串规范化：Edge 侧数值可能回传字符串型端口，实施时按实测做类型归一）。
 
-**D3 检测服务 `services/drift_detection.py`：纯函数 diff + 编排薄层。**
-编排：取集群活跃节点抽样 1 个 → 建 EdgeClient → 遍历路由/上游：查各自最新 ConfigVersion（复用既有 max(version) 查询形态）→ 无版本 = 无法评估（未发布）→ 有版本无 edge_payload = 无法评估（基线缺失）→ 有基线：路由按 name 匹配 Edge list（平台 name 唯一约束已有）+ upstream 按 Edge id 匹配（发布用平台 id 作 Edge id，UUID 带横线形态，#101 两种 id 并存——匹配键以发布路径写入的 id 为准）→ get_route/get_upstream 逐字段 diff。任何 Edge 读取异常 → 该资源独立「无法评估」（错误走既有中文转译），不中断整批。端点 `GET /clusters/{cluster_id}/drift`（只读，router 级 get_current_user 依赖对齐 cluster_*.py，#19 采样补 `GET /clusters/{id}/drift`——GET 无审计骨架，仅鉴权采样）。
+**D3 检测服务 `services/drift_detection.py`：资源类型注册表驱动 + 纯函数 diff + 编排薄层。**
+**类型注册表**（用户裁决：全部发布资源）——每类一份适配配置 `{resource_type: {edge_resource: RESOURCE_PATHS 键, match: 匹配键, whitelist: 运行态白名单, edge_list_fn, edge_get_fn}}`，清单以 publish_resource 全部调用方枚举为准（实施时先 grep 调用点钉死类型清单，#51 同款纪律）；不经编排的资源（静态资源 zip、节点部署）固定进「未纳入检测」提示区。
+编排：取集群活跃节点抽样 1 个 → 建 EdgeClient → 按注册表逐类型遍历资源：查各自最新 ConfigVersion（复用既有 max(version) 查询形态）→ 无版本 = 无法评估（未发布）→ 有版本无 edge_payload = 无法评估（基线缺失）→ 有基线：按注册表匹配键对 Edge list 定位运行态对象（路由 name 唯一约束已有；其余类型以发布路径写入 Edge 的 id 为匹配键，#101 两种 id 并存）→ get 逐字段 diff。任何 Edge 读取异常 → 该资源独立「无法评估」（错误走既有中文转译），不中断整批。端点 `GET /clusters/{cluster_id}/drift`（只读，router 级 get_current_user 依赖对齐 cluster_*.py，#19 采样补 `GET /clusters/{id}/drift`——GET 无审计骨架，仅鉴权采样）。
 
 **D4 响应与 UI：三态分组 + 差异抽屉。**
-响应 schema：`{cluster_id, checked_at, summary: {ok, drift, unknown, out_of_scope}, routes: [...], upstreams: [...], out_of_scope_types: [...]}`，每资源 `{resource_id, name, status: ok|drift|unknown, reason?, diff?}`。前端：ClusterList 行操作「漂移检测」（loading 态，检测秒级~十秒级）→ 结果抽屉（AppModal 形态，#25）：summary 计数条 + 按类型分组列表 + 漂移项展开 diff 表格（字段路径/基线值/运行态值三列）+「重新检测」按钮。api/clusters.ts 加 `getClusterDrift`。不做常驻状态列（避免诱导轮询）。
+响应 schema：`{cluster_id, checked_at, summary: {ok, drift, unknown, out_of_scope}, types: {route: [...], upstream: [...], ...}, out_of_scope_types: [...]}`，每资源 `{resource_id, name, status: ok|drift|unknown, reason?, diff?}`。前端：ClusterList 行操作「漂移检测」（loading 态，检测秒级~十秒级）→ 结果抽屉（AppModal 形态，#25）：summary 计数条 + 按类型分组列表 + 漂移项展开 diff 表格（字段路径/基线值/运行态值三列）+「重新检测」按钮。api/clusters.ts 加 `getClusterDrift`。不做常驻状态列（避免诱导轮询）。
 
 **D5 测试策略。**
-diff 纯函数单测（added/removed/changed/白名单剔除/类型归一）；编排层 mock EdgeClient（#43：mock 数据形状取自 Edge GET 实测形态——实施前先对 dev Edge 抓真实响应钉形状）；列迁移用例（sqlite+PG smoke #103）；发布落实发载荷断言（扩展 publish 既有测试 + `test_publish_response.py` 守卫核对 #18）；E2E 不新增（组件测试覆盖抽屉三态）。
+diff 纯函数单测（added/removed/changed/白名单剔除/类型归一/敏感字段脱敏）；编排层 mock EdgeClient（#43：mock 数据形状取自 Edge GET 实测形态——实施前先对 dev Edge 抓真实响应钉形状）；类型注册表覆盖全部 publish_resource 调用方类型（grep 调用点钉清单后逐类一例冒烟）；列迁移用例（sqlite+PG smoke #103）；发布落实发载荷断言（扩展 publish 既有测试 + `test_publish_response.py` 守卫核对 #18）；E2E 不新增（组件测试覆盖抽屉三态）。
 
 ## Risks / Trade-offs
 
