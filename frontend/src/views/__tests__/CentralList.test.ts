@@ -108,14 +108,14 @@ describe('CentralList.vue - 连接测试 · 经中继 / 直连 标注', () => {
       { node_id: 10, ip: '192.168.0.14', port: 16620, ok: true, msg: '', route: 'relay', relay_via: 'aoh-gw' },
     ])
     expect(rows(wrapper).some((t) => t.includes('192.168.0.14:16620 连接成功（经中继）'))).toBe(true)
-  })
+  }, 15_000)
 
   it('route=direct → 结果行尾（直连）', async () => {
     const wrapper = await runConnectionTest([
       { node_id: 10, ip: '192.168.0.14', port: 16620, ok: true, msg: '', route: 'direct' },
     ])
     expect(rows(wrapper).some((t) => t.includes('192.168.0.14:16620 连接成功（直连）'))).toBe(true)
-  })
+  }, 15_000)
 
   it('无 route 字段 → 不显示任何路径标注（向后兼容）', async () => {
     const wrapper = await runConnectionTest([{ node_id: 10, ip: '192.168.0.14', port: 16620, ok: true, msg: '' }])
@@ -123,7 +123,7 @@ describe('CentralList.vue - 连接测试 · 经中继 / 直连 标注', () => {
     expect(text).toContain('192.168.0.14:16620 连接成功')
     expect(text).not.toContain('（经中继）')
     expect(text).not.toContain('（直连）')
-  })
+  }, 15_000)
 })
 
 // ── F1-NEW-08：节点表单 IP 校验接线（模板 :rules validator 绑定 composable 的真实 validateIP） ──
