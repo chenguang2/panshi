@@ -21,6 +21,17 @@ const argOf = (flag) => {
   return i >= 0 ? args[i + 1] : undefined
 }
 
+// 轮询型页面（指标总览/查询等自动刷新）networkidle 永不满足 → goto 30s 必超时。
+// 超时视为「页面已可用」继续截图（后续 waitMs 仍会等待渲染），不让单组失败拖垮整批。
+async function gotoResilient(page, url) {
+  try {
+    await page.goto(url, { waitUntil: 'networkidle' })
+  } catch (e) {
+    if (e?.name === 'TimeoutError') console.warn(`[warn] networkidle 超时（继续截图）: ${url}`)
+    else throw e
+  }
+}
+
 const BASE_URL = process.env.MANUAL_BASE_URL || 'http://localhost:12345'
 const OUT_DIR = resolve(argOf('--out') || resolve(FRONTEND_ROOT, '..', 'docs/user-manual/images'))
 const ONLY = argOf('--only')
@@ -285,10 +296,10 @@ let count = 0
 for (const shot of SHOTS) {
   if (ONLY && shot.name !== ONLY) continue
   if (shot.preLogin) {
-    await page.goto(`${BASE_URL}/login`, { waitUntil: 'networkidle' })
+    await gotoResilient(page, `${BASE_URL}/login`)
   } else {
     if (await needLogin()) await login()
-    await page.goto(`${BASE_URL}${shot.path}`, { waitUntil: 'networkidle' })
+    await gotoResilient(page, `${BASE_URL}${shot.path}`)
   }
   await page.waitForTimeout(500) // 等待渲染稳定
   for (const act of shot.actions || []) {
