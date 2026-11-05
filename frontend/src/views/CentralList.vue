@@ -152,6 +152,7 @@
                   <template #actions>
                     <button class="btn btn-secondary btn-sm" @click.stop="viewClusterDetail(cluster)">详情</button>
                     <button class="btn btn-ghost btn-sm" @click.stop="testCluster(cluster)">连接测试</button>
+                    <button class="btn btn-ghost btn-sm" @click.stop="openDrift(cluster)">漂移检测</button>
                     <button class="btn btn-ghost btn-sm" @click.stop="editCluster(cluster)">编辑</button>
                     <a-dropdown :trigger="['click']">
                       <button class="btn btn-ghost btn-sm" @click.stop>更多 ▾</button>
@@ -254,6 +255,7 @@
                   <template #actions>
                     <button class="btn btn-secondary btn-sm" @click.stop="viewClusterDetail(cluster)">详情</button>
                     <button class="btn btn-ghost btn-sm" @click.stop="testCluster(cluster)">连接测试</button>
+                    <button class="btn btn-ghost btn-sm" @click.stop="openDrift(cluster)">漂移检测</button>
                     <button class="btn btn-ghost btn-sm" @click.stop="editCluster(cluster)">编辑</button>
                     <a-dropdown :trigger="['click']">
                       <button class="btn btn-ghost btn-sm" @click.stop>更多 ▾</button>
@@ -536,6 +538,13 @@
     <!-- 集群详情弹窗：共享组件唯一实现（cluster-ux-close-loop 3.6） -->
     <ClusterDetailModal :cluster="detailCluster" :visible="detailVisible" @close="detailVisible = false" />
 
+    <!-- 漂移检测结果抽屉（config-drift-detection，与集群管理同款入口/抽屉） -->
+    <ClusterDriftDrawer
+      v-model:open="driftVisible"
+      :cluster-id="driftCluster?.id ?? null"
+      :cluster-name="driftCluster?.name"
+    />
+
     <!-- Test Connection Modal -->
     <div class="modal-overlay" :style="{ display: testVisible ? 'flex' : 'none' }">
       <div class="modal">
@@ -604,6 +613,7 @@ import {
 } from '@/composables/useClusterUtils'
 import api from '@/api'
 import ClusterDetailModal from '@/components/ClusterDetailModal.vue'
+import ClusterDriftDrawer from '@/components/ClusterDriftDrawer.vue'
 import { useClusterRouteBadge } from '@/composables/useClusterRouteBadge'
 import { formatDateTime } from '@/utils/format'
 import type { Cluster, Upstream, Plugin } from '@/types'
@@ -1199,6 +1209,15 @@ const editCluster = (cluster: Cluster) => {
 // ── Cluster detail modal ──
 const detailVisible = ref(false)
 const detailCluster = ref<Cluster | null>(null)
+
+// ── 漂移检测（config-drift-detection）：与集群管理同款入口，拉取/复检由抽屉自持 ──
+const driftVisible = ref(false)
+const driftCluster = ref<Cluster | null>(null)
+
+function openDrift(c: Cluster) {
+  driftCluster.value = c
+  driftVisible.value = true
+}
 
 function viewClusterDetail(cluster: Cluster) {
   detailCluster.value = cluster

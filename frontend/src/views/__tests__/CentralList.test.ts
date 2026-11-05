@@ -430,13 +430,13 @@ describe('CentralList.vue - 空状态与 actions 统一（B6）', () => {
     expect(wrapper.findAll('button').some((b) => b.text() === '清除筛选')).toBe(false)
   })
 
-  it('卡片 actions 统一顺序「详情 / 连接测试 / 编辑 / 删除」，详情为 btn-secondary', async () => {
+  it('卡片 actions 统一顺序「详情 / 连接测试 / 漂移检测 / 编辑 / 删除」，详情为 btn-secondary', async () => {
     const wrapper = await mountCentral(oneCluster)
     await flushPromises()
     const actionsRow = wrapper.find('.cl-card-actions')
     expect(actionsRow.exists()).toBe(true)
     const labels = actionsRow.findAll('button').map((b) => b.text())
-    expect(labels).toEqual(['详情', '连接测试', '编辑', '更多 ▾', '删除'])
+    expect(labels).toEqual(['详情', '连接测试', '漂移检测', '编辑', '更多 ▾', '删除'])
     expect(actionsRow.findAll('button')[0].classes()).toContain('btn-secondary')
   })
 })
