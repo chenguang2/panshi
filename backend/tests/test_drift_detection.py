@@ -16,13 +16,14 @@ from sqlalchemy import select
 from app.models.cluster import (
     ConfigVersion,
     Node,
+    PluginConfig,
     PluginMetadata,
     Route,
     StreamProxy,
     Upstream,
 )
 from app.services.edge_client import EdgeClient
-from app.services.drift_detection import detect_cluster_drift
+from app.services.drift_detection import detect_cluster_drift, _parse_entries
 
 
 def _entry(edge_id: str, value: dict, key_prefix="/edge/routes") -> dict:
@@ -251,3 +252,134 @@ class TestDriftOrchestration:
             result = await detect_cluster_drift(s, 1)
         assert result["cluster_error"] == "集群中没有活跃的 edge 节点"
         assert result["summary"]["ok"] == 0
+
+
+# ── 多节点语义（2026-11-05 global_comm 真实事故驱动）──────────────
+
+def _node_lists(route_entries=None, upstream_entries=None, stream_entries=None,
+                pm_entries=None):
+    """构造单节点采集返回（_collect_edge_lists_for_node 形态）。"""
+    return {
+        "route": route_entries or [],
+        "upstream": upstream_entries or [],
+        "plugin_config": [],
+        "global_rule": [],
+        "plugin_metadata": pm_entries or [],
+        "ssl": [],
+        "stream_route": stream_entries or [],
+    }
+
+
+class TestMultiNode:
+    @pytest.fixture
+    async def world2(self, isolated_session):
+        async with isolated_session() as s:
+            s.add(Node(cluster_id=1, ip="10.0.0.14", service_port=80,
+                       management_port=9180, edge_path="/edge", status=1))
+            s.add(Node(cluster_id=1, ip="10.0.0.15", service_port=80,
+                       management_port=9180, edge_path="/edge", status=1))
+            pc = PluginConfig(cluster_id=1, name="global_comm", edge_uuid="uu-pc-1")
+            s.add(pc)
+            await s.flush()
+            # 基线：两个空插件（真实事故形态）
+            s.add(ConfigVersion(
+                cluster_id=1, resource_type="plugin_config", resource_id=pc.id,
+                version=1, config="{}",
+                edge_payload=json.dumps({"plugins": {"log_process": {}, "data_center": {}}}),
+            ))
+            await s.commit()
+            return pc.id
+
+    async def _detect(self, isolated_session):
+        async with isolated_session() as s:
+            return await detect_cluster_drift(s, 1)
+
+    @pytest.mark.asyncio
+    async def test_partial_node_drift_reported_uniform_expansion_filtered(
+        self, isolated_session, world2
+    ):
+        """节点 .15 改 data_center；两节点 log_process 均被 Edge 展开成同值：
+        data_center 报漂移（归因 .15）；log_process 展开被一致性过滤掉。"""
+        def _collect(cluster_id, ip, port):
+            entry = _entry("uu-pc-1", {}, key_prefix="/edge/plugin_configs")
+            entry["value"].setdefault("plugins", {})
+            if ip == "10.0.0.15":
+                entry["value"]["plugins"]["data_center"] = {"a": "a"}
+            # 两节点同值：Edge 确定性展开
+            entry["value"]["plugins"]["log_process"] = {"logs": "logs/process.log"}
+            return _node_lists(pm_entries=None) | {"plugin_config": _parse_entries([entry])}
+
+        with patch("app.services.drift_detection._collect_edge_lists_for_node",
+                   side_effect=_collect):
+            result = await self._detect(isolated_session)
+
+        items = {i["name"]: i for i in result["types"]["plugin_config"]["items"]}
+        item = items["global_comm"]
+        assert item["status"] == "drift"
+        assert "10.0.0.15" in (item["reason"] or "")
+        assert "10.0.0.14" in (item["reason"] or "")  # 另一节点一致
+        paths = [c["path"] for c in item["diff"]["changed"]]
+        assert "plugins.data_center" in paths
+        assert "plugins.log_process" not in paths  # 展开被过滤
+
+    @pytest.mark.asyncio
+    async def test_uniform_change_on_all_nodes_is_not_drift(
+        self, isolated_session, world2
+    ):
+        """两节点呈现完全相同的差异（Edge 展开且无旁路）→ 一致。"""
+        def _collect(cluster_id, ip, port):
+            entry = _entry("uu-pc-1", {}, key_prefix="/edge/plugin_configs")
+            entry["value"].setdefault("plugins", {})["log_process"] = {"logs": "logs/process.log"}
+            return _node_lists() | {"plugin_config": _parse_entries([entry])}
+
+        with patch("app.services.drift_detection._collect_edge_lists_for_node",
+                   side_effect=_collect):
+            result = await self._detect(isolated_session)
+
+        items = {i["name"]: i for i in result["types"]["plugin_config"]["items"]}
+        if items["global_comm"]["status"] != "ok":
+            print("DEBUG reason:", items["global_comm"]["reason"])
+            print("DEBUG diff:", json.dumps(items["global_comm"]["diff"], ensure_ascii=False))
+        assert items["global_comm"]["status"] == "ok"
+
+    @pytest.mark.asyncio
+    async def test_resource_missing_on_one_node_is_drift(
+        self, isolated_session, world2
+    ):
+        """资源在 .15 上被删、.14 仍在 → 漂移并归因。"""
+        def _collect(cluster_id, ip, port):
+            entries = []
+            if ip == "10.0.0.14":
+                entries = [_entry("uu-pc-1", {}, key_prefix="/edge/plugin_configs")]
+            return _node_lists() | {"plugin_config": _parse_entries(entries)}
+
+        with patch("app.services.drift_detection._collect_edge_lists_for_node",
+                   side_effect=_collect):
+            result = await self._detect(isolated_session)
+
+        items = {i["name"]: i for i in result["types"]["plugin_config"]["items"]}
+        item = items["global_comm"]
+        assert item["status"] == "drift"
+        assert "已删除" in (item["reason"] or "")
+        assert "10.0.0.15" in (item["reason"] or "")
+
+    @pytest.mark.asyncio
+    async def test_extra_on_one_node_reported(self, isolated_session, world2):
+        """旁路新增资源只在 .15 → 并集呈现，reason 见于 .15。"""
+        def _collect(cluster_id, ip, port):
+            print("DEBUG fake called:", ip)
+            entries = [_entry("uu-pc-1", {}, key_prefix="/edge/plugin_configs")]
+            if ip == "10.0.0.15":
+                entries.append(_entry("ghost-id", {"name": "ghost"},
+                                      key_prefix="/edge/plugin_configs"))
+            return _node_lists() | {"plugin_config": _parse_entries(entries)}
+
+        with patch("app.services.drift_detection._collect_edge_lists_for_node",
+                   side_effect=_collect):
+            result = await self._detect(isolated_session)
+
+        items = {i["name"]: i for i in result["types"]["plugin_config"]["items"]}
+        if "ghost" not in items:
+            print("DEBUG items:", json.dumps(result["types"]["plugin_config"], ensure_ascii=False))
+        assert items["ghost"]["status"] == "drift"
+        assert "10.0.0.15" in (items["ghost"]["reason"] or "")

@@ -44,6 +44,34 @@ class TestChangedAndRemoved:
         assert diff["changed"] == [{"path": "vars", "baseline": [1, 2], "edge": {"k": 1}}]
 
 
+class TestEmptyContainerCorner:
+    def test_empty_dict_baseline_vs_nonempty_edge_is_changed(self):
+        """基线空对象 + Edge 非空 → changed（真实事故：插件参数 {} → {"a":"a"}
+        被基线驱动逐键走漏过——空基线没有键可走，Edge 侧字段又按默认展开忽略）。
+        空基线代表「平台发送的就是空」，Edge 出现内容即旁路修改。"""
+        diff = diff_edge_payload({"plugins": {"data_center": {}}},
+                                 {"plugins": {"data_center": {"a": "a"}}})
+        assert diff["changed"] == [{
+            "path": "plugins.data_center",
+            "baseline": {},
+            "edge": {"a": "a"},
+        }]
+
+    def test_empty_list_baseline_vs_nonempty_edge_is_changed(self):
+        diff = diff_edge_payload({"hosts": []}, {"hosts": ["10.0.0.1"]})
+        assert diff["changed"] == [{"path": "hosts", "baseline": [], "edge": ["10.0.0.1"]}]
+
+    def test_nonempty_baseline_keys_still_ignored_on_edge_side(self):
+        """非空基线的 Edge 独有键仍按默认展开忽略（规则不变，只修空容器）。"""
+        diff = diff_edge_payload({"plugins": {"monitor": {"x": 1}}},
+                                 {"plugins": {"monitor": {"x": 1, "expanded": True}}})
+        assert diff == {"removed": {}, "changed": []}
+
+    def test_both_empty_is_consistent(self):
+        diff = diff_edge_payload({"data_center": {}}, {"data_center": {}})
+        assert diff == {"removed": {}, "changed": []}
+
+
 class TestBaselineDrivenIgnores:
     def test_edge_only_fields_ignored(self):
         """Edge 服务端默认展开（运行态独有字段）不算漂移。"""

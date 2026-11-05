@@ -159,6 +159,16 @@ def diff_edge_payload(
                     "edge": _masked(prefix, ac, mask),
                 })
                 return
+            if not bl and ac:
+                # 空容器基线 + Edge 非空 → 旁路修改（真实事故：插件参数 {} →
+                # {"a":"a"} 被逐键走漏过；空基线代表「平台发送的就是空」，
+                # 此处出现内容不是服务端默认展开）。空 vs 空恒一致。
+                changed.append({
+                    "path": prefix,
+                    "baseline": _masked(prefix, bl, mask),
+                    "edge": _masked(prefix, ac, mask),
+                })
+                return
             for k, v in bl.items():
                 if k in wl and k not in mask:
                     continue
@@ -170,6 +180,13 @@ def diff_edge_payload(
             return
         if isinstance(bl, list):
             if not isinstance(ac, list):
+                changed.append({
+                    "path": prefix,
+                    "baseline": _masked(prefix, bl, mask),
+                    "edge": _masked(prefix, ac, mask),
+                })
+                return
+            if not bl and ac:
                 changed.append({
                     "path": prefix,
                     "baseline": _masked(prefix, bl, mask),
@@ -207,8 +224,8 @@ def _parse_entries(raw) -> list:
     return entries
 
 
-def _collect_edge_lists(cluster_id: int, node_ip: str, node_port: int) -> dict:
-    """单活跃节点全类型列表采集。阻塞网络 IO——只在 to_thread 内调用，
+def _collect_edge_lists_for_node(cluster_id: int, node_ip: str, node_port: int) -> dict:
+    """单节点全类型列表采集。阻塞网络 IO——只在 to_thread 内调用，
     线程闭包内不触碰请求级 db 会话（事件循环纯度黑名单 #190）。"""
     client = EdgeClient(cluster_id, node_ip=node_ip, node_port=node_port)
     result: dict = {}
@@ -239,8 +256,106 @@ def _item(rid, name, status, reason=None, diff=None) -> dict:
     }
 
 
+def _match_entry(entries, edge_id):
+    return next((e for e in entries if e["match_id"] == str(edge_id)), None)
+
+
+def _merge_node_diffs(baseline_raw: str, conf: dict, per_node_entries: dict) -> tuple:
+    """跨节点 diff 汇总（多节点语义，2026-11-05 真实事故驱动）：
+
+    - 逐节点 diff 基线 vs 运行态；
+    - **路径级一致性过滤**：changed/removed 路径若在所有可达节点上呈现完全相同
+      （同路径同值）→ 判定为 Edge 确定性展开（如 log_process 空插件被 lua 补
+      默认），不算漂移；仅部分节点出现或各节点值不同 → 真旁路漂移；
+    - 单节点集群不做过滤（无对照，全部如实上报）。
+
+    返回 (status, reason, diff)。per_node_entries: {node_label: entry 或 None
+    （该节点缺资源）或 "__error__" 字符串（该类型读取失败）}。
+    """
+    labels = list(per_node_entries.keys())
+    readable = {lb: e for lb, e in per_node_entries.items() if not isinstance(e, str)}
+    if not readable:
+        first_err = per_node_entries[labels[0]]
+        return "unknown", f"Edge 读取失败：{first_err}", None
+
+    missing_nodes = [lb for lb, e in readable.items() if e is None]
+    if missing_nodes:
+        # 任一节点整个资源缺失即漂移（发布是全节点幂等 PUT，缺 = 被旁路删除）
+        others = [lb for lb in readable if lb not in missing_nodes]
+        detail = f"Edge 已删除该资源（节点 {', '.join(missing_nodes)}"
+        detail += f"；{', '.join(others)} 仍存在）" if others else "）"
+        return "drift", detail, None
+
+    node_diffs: dict = {}
+    for lb, e in readable.items():
+        try:
+            baseline = conf["normalize"](json.loads(baseline_raw))
+        except ValueError:
+            return "unknown", "基线损坏：实发载荷非合法 JSON", None
+        node_diffs[lb] = diff_edge_payload(baseline, e["value"], mask_fields=conf["mask"])
+
+    uniform_filter = len(node_diffs) >= 2
+    kept_changed: list = []
+    kept_removed: dict = {}
+    drift_nodes: set = set()
+
+    changed_paths: set = set()
+    for d in node_diffs.values():
+        for c in d["changed"]:
+            changed_paths.add(c["path"])
+    for path in sorted(changed_paths):
+        per_node = {}
+        for lb, d in node_diffs.items():
+            entry = next((c for c in d["changed"] if c["path"] == path), None)
+            if entry is not None:
+                per_node[lb] = json.dumps(entry["edge"], sort_keys=True, default=str)
+            else:
+                per_node[lb] = None  # 该路径在此节点无差异
+        distinct = {v for v in per_node.values() if v is not None}
+        all_present = all(v is not None for v in per_node.values())
+        if uniform_filter and all_present and len(distinct) == 1:
+            continue  # 全节点同路径同值差异 → Edge 确定性展开（部分节点出现必属旁路）
+        hit = [lb for lb, v in per_node.items() if v is not None]
+        drift_nodes.update(hit)
+        first = next(d for lb, d in node_diffs.items() if lb in hit)
+        kept_changed.append(
+            next(c for c in first["changed"] if c["path"] == path)
+        )
+
+    removed_paths: set = set()
+    for d in node_diffs.values():
+        removed_paths.update(d["removed"].keys())
+    for path in sorted(removed_paths):
+        per_node = {}
+        for lb, d in node_diffs.items():
+            if path in d["removed"]:
+                per_node[lb] = json.dumps(d["removed"][path], sort_keys=True, default=str)
+            else:
+                per_node[lb] = None
+        distinct = {v for v in per_node.values() if v is not None}
+        all_present = all(v is not None for v in per_node.values())
+        if uniform_filter and all_present and len(distinct) == 1:
+            continue  # 全节点同路径同值缺失 → Edge 侧行为，非旁路
+        hit = [lb for lb, v in per_node.items() if v is not None]
+        drift_nodes.update(hit)
+        first = next(d for lb, d in node_diffs.items() if lb in hit)
+        kept_removed[path] = first["removed"][path]
+
+    if not drift_nodes:
+        return "ok", None, None
+    consistent = [lb for lb in readable if lb not in drift_nodes]
+    reason = f"节点 {', '.join(sorted(drift_nodes))} 与基线不一致"
+    if consistent:
+        reason += f"（{', '.join(sorted(consistent))} 一致）"
+    return "drift", reason, {"removed": kept_removed, "changed": kept_changed}
+
+
 async def detect_cluster_drift(db: AsyncSession, cluster_id: int) -> dict:
-    """按集群执行只读漂移检测，返回三态结论与字段级差异（不写库）。"""
+    """按集群执行只读漂移检测，返回三态结论与字段级差异（不写库）。
+
+    采集**全部活跃节点**（多节点对照：全节点一致的差异 = Edge 确定性展开，
+    仅部分节点出现 = 真旁路——2026-11-05 global_comm 真实事故驱动）。
+    """
     result = {
         "cluster_id": cluster_id,
         "checked_at": datetime.utcnow().isoformat(),
@@ -260,18 +375,20 @@ async def detect_cluster_drift(db: AsyncSession, cluster_id: int) -> dict:
     if not nodes:
         result["cluster_error"] = "集群中没有活跃的 edge 节点"
         return result
-    node = nodes[0]
 
-    # 线程闭包内不触碰请求级 db 会话；client 在线程内构建
-    lists = await asyncio.to_thread(
-        _collect_edge_lists, cluster_id, node.ip, node.management_port
-    )
+    # 每节点独立采集（to_thread；线程闭包内不触碰请求级 db 会话）
+    node_lists: dict = {}
+    for n in nodes:
+        label = n.ip or f"node-{n.id}"
+        try:
+            node_lists[label] = await asyncio.to_thread(
+                _collect_edge_lists_for_node, cluster_id, n.ip, n.management_port
+            )
+        except Exception as e:
+            node_lists[label] = {"__node_error__": str(e)}
 
     for type_key, conf in DRIFT_TYPE_REGISTRY.items():
         edge_key = conf["edge_key"]
-        collected = lists.get(edge_key)
-        error = collected.get("__error__") if isinstance(collected, dict) else None
-        entries = [] if error else collected
 
         rows = (
             await db.execute(
@@ -298,7 +415,20 @@ async def detect_cluster_drift(db: AsyncSession, cluster_id: int) -> dict:
             snaps[cv.resource_id] = cv
 
         items: list = []
-        matched_ids: set = set()
+        # 每节点的该类型条目表（或错误标记）；平台 edge_id 集合（extras 判定用）
+        per_node_type: dict = {}
+        for label, lists in node_lists.items():
+            if "__node_error__" in lists:
+                per_node_type[label] = "__node_error__"
+                continue
+            collected = lists.get(edge_key)
+            if isinstance(collected, dict) and "__error__" in collected:
+                # dict 形态错误标记（值为消息），与 entries 列表严格区分
+                per_node_type[label] = collected
+            else:
+                per_node_type[label] = collected or []
+        platform_edge_ids = {str(v) for v in edge_map.values()}
+
         for rid, edge_id in edge_map.items():
             display = name_map.get(rid) or f"{conf['label']}#{rid}"
             if rid not in snaps:
@@ -311,35 +441,41 @@ async def detect_cluster_drift(db: AsyncSession, cluster_id: int) -> dict:
                     reason="基线缺失：该快照不含实发载荷（旧版本），请重新发布以建立基线",
                 ))
                 continue
-            if error:
-                items.append(_item(rid, display, "unknown", reason=f"Edge 读取失败：{error}"))
+            per_node_entries = {}
+            for lb, e in per_node_type.items():
+                if e == "__node_error__" or (isinstance(e, dict) and "__error__" in e):
+                    per_node_entries[lb] = (
+                        e.get("__error__") if isinstance(e, dict) else "节点不可达"
+                    )
+                else:
+                    per_node_entries[lb] = _match_entry(e, edge_id)
+            errors = {lb: v for lb, v in per_node_entries.items()
+                      if isinstance(v, str)}
+            if len(errors) == len(per_node_entries):
+                items.append(_item(
+                    rid, display, "unknown",
+                    reason=f"Edge 读取失败：{next(iter(errors.values()))}",
+                ))
                 continue
-            try:
-                baseline = conf["normalize"](json.loads(cv.edge_payload))
-            except ValueError:
-                items.append(_item(rid, display, "unknown", reason="基线损坏：实发载荷非合法 JSON"))
-                continue
-            entry = next(
-                (e for e in entries if e["match_id"] == str(edge_id)), None
-            )
-            if entry is None:
-                items.append(_item(rid, display, "drift", reason="Edge 已删除该资源"))
-                continue
-            matched_ids.add(entry["match_id"])
-            diff = diff_edge_payload(baseline, entry["value"], mask_fields=conf["mask"])
-            if diff["removed"] or diff["changed"]:
-                items.append(_item(rid, display, "drift", diff=diff))
-            else:
-                items.append(_item(rid, display, "ok"))
 
-        # Edge 多出的旁路资源（平台无对应发布记录）
-        for e in entries:
-            if e["match_id"] in matched_ids or not e["match_id"]:
+            status, reason, diff = _merge_node_diffs(cv.edge_payload, conf, per_node_entries)
+            items.append(_item(rid, display, status, reason=reason, diff=diff))
+
+        # Edge 多出的旁路资源（跨节点并集；平台无对应发布记录恒报，不按一致性过滤）
+        seen_extra: set = set()
+        for lb, e in per_node_type.items():
+            if e == "__node_error__" or (isinstance(e, dict) and "__error__" in e):
                 continue
-            display = e["value"].get("name") or e["match_id"]
-            items.append(_item(
-                None, display, "drift", reason="Edge 多出的旁路资源（平台无此发布记录）",
-            ))
+            for entry in e:
+                mid = entry["match_id"]
+                if not mid or mid in platform_edge_ids or mid in seen_extra:
+                    continue
+                seen_extra.add(mid)
+                display = entry["value"].get("name") or mid
+                items.append(_item(
+                    None, display, "drift",
+                    reason=f"Edge 多出的旁路资源（平台无此发布记录；见于 {lb}）",
+                ))
 
         result["types"][type_key] = {"label": conf["label"], "items": items}
 
