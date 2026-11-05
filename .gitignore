@@ -109,5 +109,6 @@ docs/monitor/应用可观测性系统培训.pdf
 # =============================================
 # 运行时数据（不入库）
 backend/ansible/inventory/host
+backend/ansible/inventory/gateways
 backend/ansible/inventory/backups/
 data/
