@@ -7,6 +7,7 @@ that appeared 12+ times across clusters.py, routes.py, and plugin_metadata.py.
 
 import asyncio
 import json
+import logging
 from datetime import datetime
 from typing import Any, Awaitable, Optional, Callable
 from fastapi import HTTPException, status
@@ -19,6 +20,8 @@ from app.models.static_resource import StaticResource
 from app.schemas.cluster import ConfigVersionListResponse, ConfigVersionResponse
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 from app.services.edge_logger import get_edge_logger
+
+logger = logging.getLogger(__name__)
 
 
 async def get_or_404(
@@ -450,6 +453,12 @@ async def delete_on_nodes(
             node_result["status"] = "failed"
             node_result["error"] = str(e)
         results.append(node_result)
+
+    ok_count = sum(1 for r in results if r["status"] == "success")
+    logger.info(
+        "集群 %s 资源删除下发完成: 成功 %d / 失败 %d / 共 %d 节点",
+        cluster_id, ok_count, len(results) - ok_count, len(results),
+    )
     return results
 
 
@@ -558,6 +567,12 @@ def build_publish_response(
     else:
         base["status"] = "error"
         base["message"] = f"{resource_name}发布失败：无法连接到任何 edge 服务器"
+    # 全域发布唯一出口（AGENTS.md #18）的单行摘要：edge_logger 走 DB/前端流不进 app.log，
+    # 这里补 logging 侧留痕，排障时按 request_id 可与审计记录互查。
+    logger.info(
+        "发布 %s: %s (成功 %d / 失败 %d / 共 %d 节点)",
+        resource_name or "资源", base["message"], success_count, fail_count, total_nodes,
+    )
     return base
 
 

@@ -1,3 +1,4 @@
+import logging
 import time
 
 from fastapi import APIRouter, Depends, HTTPException, status, Header, Request
@@ -12,6 +13,8 @@ from app.models.user import User, UserPermission
 from app.schemas.auth import LoginRequest, LoginResponse, UserInfo, ChangePasswordRequest
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -49,6 +52,7 @@ def _ensure_not_rate_limited(username: str, ip: str) -> None:
         and now - entry[1] < _LOGIN_FAILURE_WINDOW_SECONDS
         and entry[0] >= _LOGIN_MAX_FAILURES
     ):
+        logger.warning("登录限流触发: username=%s ip=%s", username, ip)
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="登录失败次数过多，请稍后再试",
@@ -83,6 +87,7 @@ async def login(
 
     if not user or not verify_password(request.password, user.password_hash):
         _record_login_failure(request.username, ip)
+        logger.info("登录失败: username=%s ip=%s", request.username, ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="用户名或密码错误",
@@ -90,6 +95,7 @@ async def login(
         )
 
     if user.status != 1:
+        logger.info("登录拒绝（用户已禁用）: username=%s ip=%s", user.username, ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="用户已禁用",
@@ -97,6 +103,7 @@ async def login(
         )
 
     _clear_login_failures(request.username, ip)
+    logger.info("登录成功: username=%s ip=%s", user.username, ip)
 
     # 附带 pwd_ver claim：密码重置/变更后存量 token 自动失效（M2b）
     access_token = create_access_token(

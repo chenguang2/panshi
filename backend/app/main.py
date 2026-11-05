@@ -2,19 +2,44 @@ import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager, suppress
+from contextvars import ContextVar
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request, status
 
 _log_dir = Path(__file__).resolve().parent.parent / "logs"
 _log_dir.mkdir(exist_ok=True)
-logging.basicConfig(
-    level=logging.WARNING,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-    filename=str(_log_dir / "app.log"),
-    filemode="a",
+
+# 请求关联 ID（optimization-audit 批次 C）：审计/排障日志经 [request_id] 字段
+# 串联同一请求，响应头 X-Request-ID 可与 app.log 互查；请求上下文外为 "-"。
+_request_id_var: ContextVar[str] = ContextVar("request_id", default="-")
+
+
+class _RequestIdLogFilter(logging.Filter):
+    """把当前请求 ID 注入每条日志记录。"""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.request_id = _request_id_var.get()
+        return True
+
+
+# INFO 级 + 滚动（10MB×5）：此前 WARNING 级导致运行期 INFO 日志全部丢弃，排障只能靠复现。
+_log_handler = RotatingFileHandler(
+    _log_dir / "app.log", maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8"
 )
+_log_handler.setFormatter(
+    logging.Formatter(
+        "%(asctime)s [%(levelname)s] [%(request_id)s] %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+)
+_log_handler.addFilter(_RequestIdLogFilter())
+logging.basicConfig(level=logging.INFO, handlers=[_log_handler])
+# INFO 级下过噪的第三方库黑名单（httpx/httpcore：EdgeClient 每次 Edge API 调用都会产生请求行日志）
+for _noisy_logger in ("httpx", "httpcore"):
+    logging.getLogger(_noisy_logger).setLevel(logging.WARNING)
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.gzip import GZipMiddleware
@@ -124,6 +149,21 @@ app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 from app.core.maintenance import maintenance_middleware
 app.middleware("http")(maintenance_middleware)
+
+
+# ── 请求 ID 中间件：rid 注入 ContextVar（供日志 Filter 读取）+ 响应头 X-Request-ID ──
+# 客户端报障时引用该 ID，即可在 app.log 中精确定位整条请求日志链。
+# 注意：SSE 流式响应在中间件返回后才持续产出，流内日志不带 rid（已知边界，可接受）。
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    rid = uuid4().hex[:12]
+    token = _request_id_var.set(rid)
+    try:
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = rid
+        return response
+    finally:
+        _request_id_var.reset(token)
 
 
 @app.exception_handler(Exception)

@@ -62,7 +62,7 @@ cd frontend && node scripts/manual-screenshots.mjs [--only 00-01-login] [--out /
 
 Vite 代理将 `/api` 请求转发到 `localhost:12344`（读取 `backend/.port` 文件，缺省 12344）。
 
-**日志位置**：应用日志 `backend/logs/app.log`（level=WARNING）；uvicorn 访问/stdout `backend.log`、前端 `frontend.log`（仓库根，start.sh 重定向）。E2E spec 内直接调 API 用前缀 `/api/v1`（勿用 `/api`），且须先登录取 token 带 `Authorization` 头（2026-08-29 起全部要求鉴权）。
+**日志位置**：应用日志 `backend/logs/app.log`（level=INFO，RotatingFileHandler 10MB×5，行内含 `[request_id]`，响应头 `X-Request-ID` 可与日志互查）；uvicorn 访问/stdout `backend.log`、前端 `frontend.log`（仓库根，start.sh 重定向）。E2E spec 内直接调 API 用前缀 `/api/v1`（勿用 `/api`），且须先登录取 token 带 `Authorization` 头（2026-08-29 起全部要求鉴权）。
 
 ## 国内网络环境（重要约定）
 
