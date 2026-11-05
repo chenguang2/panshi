@@ -610,7 +610,7 @@ describe('ClusterList.vue - 空状态与入口（B6）', () => {
     expect(wrapper.findAll('.cl-card-name').map((n) => n.text())).toContain('甲')
   })
 
-  it('卡片 actions 统一顺序「详情 / 连接测试 / 编辑 / 删除」，删除为危险色最右', async () => {
+  it('卡片 actions 统一顺序「详情 / 连接测试 / 漂移检测 / 编辑 / 删除」，删除为危险色最右', async () => {
     mockApiGet.mockImplementation((url: string) => {
       if (url === '/clusters' || url === '/clusters/my')
         return Promise.resolve({
@@ -647,6 +647,28 @@ describe('ClusterList.vue - 空状态与入口（B6）', () => {
     expect(detailBtn.classes()).toContain('btn-secondary')
     const delBtn = actionsRow.findAll('button').at(-1)!
     expect(delBtn.attributes('style') || '').toContain('--danger')
+  })
+
+  it('未分组组头置顶（2026-11-05 用户裁决，与统一管理同规则：第一行，命名分组字母序在后）', async () => {
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/clusters' || url === '/clusters/my')
+        return Promise.resolve({
+          data: {
+            items: [
+              { id: 1, name: 'b-g', display_name: '乙组集群', group_name: 'b组', status: 1 },
+              { id: 2, name: 'a-g', display_name: '甲组集群', group_name: 'a组', status: 1 },
+              { id: 3, name: 'ung', display_name: '未归类', group_name: '', status: 1 },
+            ],
+            total: 3,
+          },
+        })
+      return Promise.resolve({ data: {} })
+    })
+    const wrapper = await mountPage()
+    await flushPromises()
+    const names = wrapper.findAll('.cl-group-name').map((g) => g.text().trim())
+    expect(names).toEqual(['未分组', 'a组', 'b组'])
+    wrapper.unmount()
   })
 
   it('PageHeader 提供「备份下载」入口，点击打开共享备份弹窗', async () => {

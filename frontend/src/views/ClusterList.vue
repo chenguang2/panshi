@@ -275,8 +275,10 @@ const groupedClusters = computed(() => {
     map.get(key)!.push(c)
   }
   const keys = Array.from(map.keys()).sort((a, b) => {
-    if (!a) return 1
-    if (!b) return -1
+    // 未分组统一置顶（2026-11-05 用户裁决，与统一管理同规则）：新建/待整理集群
+    // 第一时间可见可操作；有分组名按字母序在后
+    if (!a) return -1
+    if (!b) return 1
     return a.localeCompare(b)
   })
   for (const key of keys) groups.push({ name: key, clusters: map.get(key)! })
