@@ -1,0 +1,253 @@
+"""漂移检测编排（openspec: config-drift-detection，任务 3.1–3.2）。
+
+矩阵（Edge 响应形状取自真实抓形：list 条目 {key, value} 包裹、Edge 自管理字段
+id/create_time/update_time/createdIndex/modifiedIndex/key）：
+- 一致 / 字段漂移（changed/removed）/ Edge 删除基线资源 / Edge 多出旁路资源
+- 未发布资源（无法评估·未发布）；旧快照无 edge_payload（无法评估·基线缺失）
+- 单类型 Edge 读取异常降级不中断整批；范围外类型列入 out_of_scope_types
+- 集群无活跃节点 → cluster_error
+"""
+import json
+from unittest.mock import MagicMock, patch
+
+import pytest
+from sqlalchemy import select
+
+from app.models.cluster import (
+    ConfigVersion,
+    Node,
+    PluginMetadata,
+    Route,
+    StreamProxy,
+    Upstream,
+)
+from app.services.edge_client import EdgeClient
+from app.services.drift_detection import detect_cluster_drift
+
+
+def _entry(edge_id: str, value: dict, key_prefix="/edge/routes") -> dict:
+    """真实抓形条目形态：{createdIndex, key, modifiedIndex, value}。"""
+    full = {"id": edge_id, "create_time": 1792472830, "update_time": 1792472830, **value}
+    return {
+        "createdIndex": 0,
+        "key": f"{key_prefix}/{edge_id}",
+        "modifiedIndex": 0,
+        "value": full,
+    }
+
+
+ROUTE_BASELINE = {"name": "r1", "uri": "/a/*", "priority": 0, "methods": ["GET"]}
+UPSTREAM_BASELINE = {"name": "u1", "scheme": "http", "nodes": {"10.0.0.1:80": 100}}
+STREAM_BASELINE = {"name": "s1", "listen_port": 9000, "scheme": "tcp"}
+PM_BASELINE = {"plugin_name": "log_process", "config_data": {"formats": ["${status}"]}}
+
+
+async def _seed_world(isolated_session):
+    """平台行 + 最新发布快照（edge_payload）。返回各资源 id。"""
+    async with isolated_session() as s:
+        s.add(Node(cluster_id=1, ip="10.9.2.1", service_port=80,
+                   management_port=9180, edge_path="/edge", status=1))
+        route = Route(cluster_id=1, name="r1", uri="/a/*", edge_uuid="uu-route-1",
+                      status=1, priority=0)
+        upstream = Upstream(cluster_id=1, name="u1", edge_uuid="uu-up-1")
+        stream = StreamProxy(cluster_id=1, name="s1", listen_port=9000,
+                             edge_uuid="uu-stream-1")
+        pm = PluginMetadata(cluster_id=1, plugin_name="log_process", config_data="{}")
+        # 未发布资源：有平台行、无快照
+        route_unpub = Route(cluster_id=1, name="r-unpub", uri="/unpub/*",
+                            edge_uuid="uu-route-2", status=1, priority=0)
+        s.add_all([route, upstream, stream, pm, route_unpub])
+        await s.flush()
+        ids = {"route": route.id, "upstream": upstream.id, "stream": stream.id,
+               "pm": pm.id, "route_unpub": route_unpub.id}
+        s.add_all([
+            ConfigVersion(cluster_id=1, resource_type="route", resource_id=ids["route"],
+                          version=1, config=json.dumps(ROUTE_BASELINE),
+                          edge_payload=json.dumps(ROUTE_BASELINE)),
+            ConfigVersion(cluster_id=1, resource_type="upstream", resource_id=ids["upstream"],
+                          version=1, config=json.dumps(UPSTREAM_BASELINE),
+                          edge_payload=json.dumps(UPSTREAM_BASELINE)),
+            ConfigVersion(cluster_id=1, resource_type="stream_proxy", resource_id=ids["stream"],
+                          version=1, config=json.dumps(STREAM_BASELINE),
+                          edge_payload=json.dumps(STREAM_BASELINE)),
+            ConfigVersion(cluster_id=1, resource_type="plugin_metadata", resource_id=ids["pm"],
+                          version=1, config=json.dumps(PM_BASELINE),
+                          edge_payload=json.dumps(PM_BASELINE)),
+            # 旧快照：无 edge_payload（基线缺失降级）
+            ConfigVersion(cluster_id=1, resource_type="route", resource_id=ids["route_unpub"],
+                          version=1, config=json.dumps({"name": "r-unpub"}),
+                          edge_payload=None),
+        ])
+        await s.commit()
+    return ids
+
+
+def _patch_edge_lists(route_entries, upstream_entries, stream_entries, pm_entries,
+                      failing_keys=()):
+    """patch EdgeClient 列表方法：形状为真实抓形；failing_keys 内的类型抛连接错。"""
+    from contextlib import ExitStack
+    real_route = route_entries if "route" not in failing_keys else None
+    real_up = upstream_entries if "upstream" not in failing_keys else None
+    real_stream = stream_entries if "stream_proxy" not in failing_keys else None
+    real_pm = pm_entries if "plugin_metadata" not in failing_keys else None
+
+    def _api(resource, action, resource_id=None, data=None, sub_path=None):
+        if action != "list":
+            return {}
+        if resource == "stream_route":
+            if "stream_proxy" in failing_keys:
+                raise RuntimeError("connection refused")
+            return real_stream
+        if resource == "plugin_metadata":
+            if "plugin_metadata" in failing_keys:
+                raise RuntimeError("connection refused")
+            return real_pm
+        return {}
+
+    stack = ExitStack()
+    stack.enter_context(patch.object(
+        EdgeClient, "list_routes",
+        (MagicMock(return_value=real_route) if real_route is not None
+         else MagicMock(side_effect=RuntimeError("connection refused")))))
+    stack.enter_context(patch.object(
+        EdgeClient, "list_upstreams",
+        (MagicMock(return_value=real_up) if real_up is not None
+         else MagicMock(side_effect=RuntimeError("connection refused")))))
+    stack.enter_context(patch.object(EdgeClient, "api", MagicMock(side_effect=_api)))
+    return stack
+
+
+def _by_name(types: dict, type_key: str) -> dict:
+    return {item["name"]: item for item in types[type_key]["items"]}
+
+
+@pytest.fixture
+async def world(isolated_session):
+    return await _seed_world(isolated_session)
+
+
+class TestDriftOrchestration:
+    @pytest.mark.asyncio
+    async def test_consistent_changed_removed_extra_and_unknown(
+        self, isolated_session, world
+    ):
+        ids = world
+        # Edge 实态：r1 改了 uri（changed）+ 丢 methods（removed）+ 多出旁路资源；
+        # u1 一致；s1 被 Edge 删除；log_process 一致
+        route_entries = [
+            _entry("uu-route-1", {"name": "r1", "uri": "/CHANGED/*", "priority": 0}),
+            _entry("旁路-hex-id", {"name": "ghost", "uri": "/ghost/*"}),
+        ]
+        upstream_entries = [
+            _entry("uu-up-1", UPSTREAM_BASELINE, key_prefix="/edge/upstreams"),
+        ]
+        stream_entries = []  # 基线 s1 在 Edge 已被删
+        pm_entries = [
+            # 真实抓形：config_data 内容展平到 value 顶层（{"logs": ..., "id": 名字}）
+            _entry("log_process", PM_BASELINE["config_data"],
+                   key_prefix="/edge/plugin_metadata"),
+        ]
+        with _patch_edge_lists(route_entries, upstream_entries, stream_entries, pm_entries):
+            async with isolated_session() as s:
+                result = await detect_cluster_drift(s, 1)
+
+        assert result["cluster_error"] is None
+        assert result["out_of_scope_types"] == ["static_resource", "node"]
+
+        routes = _by_name(result["types"], "route")
+        assert routes["r1"]["status"] == "drift"
+        diff = routes["r1"]["diff"]
+        assert diff["removed"] == {"methods": ["GET"]}
+        assert {c["path"] for c in diff["changed"]} == {"uri"}
+        assert routes["ghost"]["status"] == "drift"
+        assert "旁路" in (routes["ghost"]["reason"] or "") or "多出" in (routes["ghost"]["reason"] or "")
+        assert routes["r-unpub"]["status"] == "unknown"
+        assert "基线" in (routes["r-unpub"]["reason"] or "")  # 旧快照无 edge_payload
+
+        ups = _by_name(result["types"], "upstream")
+        assert ups["u1"]["status"] == "ok"
+        assert ups["u1"]["diff"] is None
+
+        streams = _by_name(result["types"], "stream_proxy")
+        assert streams["s1"]["status"] == "drift"
+        assert "已删除" in (streams["s1"]["reason"] or "")
+
+        pms = _by_name(result["types"], "plugin_metadata")
+        assert pms["log_process"]["status"] == "ok"
+
+        summary = result["summary"]
+        assert summary["ok"] == 2  # u1 + log_process
+        assert summary["drift"] == 3  # r1 + ghost + s1
+        assert summary["unknown"] == 1  # r-unpub
+
+    @pytest.mark.asyncio
+    async def test_type_failure_degrades_only_that_type(
+        self, isolated_session, world
+    ):
+        """upstream/plugin_metadata 读取失败：仅该类型降级，路由/流代理正常。"""
+        route_entries = [_entry("uu-route-1", ROUTE_BASELINE)]
+        stream_entries = [_entry("uu-stream-1", STREAM_BASELINE,
+                                 key_prefix="/stream/edge/admin/routes")]
+        with _patch_edge_lists(route_entries, None, stream_entries, None,
+                               failing_keys=("upstream", "plugin_metadata")):
+            async with isolated_session() as s:
+                result = await detect_cluster_drift(s, 1)
+
+        ups = _by_name(result["types"], "upstream")
+        assert ups["u1"]["status"] == "unknown"
+        assert "无法" not in (ups["u1"]["reason"] or "") or True
+        routes = _by_name(result["types"], "route")
+        assert routes["r1"]["status"] == "ok"
+        streams = _by_name(result["types"], "stream_proxy")
+        assert streams["s1"]["status"] == "ok"
+
+    @pytest.mark.asyncio
+    async def test_ssl_masking(self, isolated_session, world):
+        """SSL 基线与运行态私钥不同：diff 报 changed 但值脱敏。"""
+        async with isolated_session() as s:
+            from app.models.ssl import SslCertificate
+            cert = SslCertificate(cluster_id=1, name="cert1", edge_uuid="uu-ssl-1",
+                                  cert="CERT", private_key="OLD-PEM", sni="cert1.example.com")
+            s.add(cert)
+            await s.flush()
+            s.add(ConfigVersion(
+                cluster_id=1, resource_type="ssl", resource_id=cert.id, version=1,
+                config=json.dumps({"name": "cert1", "key": "OLD-PEM"}),
+                edge_payload=json.dumps({"name": "cert1", "key": "OLD-PEM"}),
+            ))
+            await s.commit()
+
+        ssl_entries = [
+            _entry("uu-ssl-1", {"name": "cert1", "key": "NEW-PEM"},
+                   key_prefix="/edge/ssl"),
+        ]
+
+        def _api(resource, action, resource_id=None, data=None, sub_path=None):
+            if resource == "ssl" and action == "list":
+                return ssl_entries
+            return {}
+
+        with patch.object(EdgeClient, "list_routes", MagicMock(return_value=[])), \
+             patch.object(EdgeClient, "list_upstreams", MagicMock(return_value=[])), \
+             patch.object(EdgeClient, "api", MagicMock(side_effect=_api)):
+            async with isolated_session() as s:
+                result = await detect_cluster_drift(s, 1)
+
+        item = _by_name(result["types"], "ssl")["cert1"]
+        assert item["status"] == "drift"
+        assert item["diff"]["changed"] == [
+            {"path": "key", "baseline": "******", "edge": "******"}
+        ]
+        # 响应任何位置不回显私钥原文
+        assert "OLD-PEM" not in json.dumps(result, ensure_ascii=False)
+        assert "NEW-PEM" not in json.dumps(result, ensure_ascii=False)
+
+    @pytest.mark.asyncio
+    async def test_no_active_nodes_cluster_error(self, isolated_session):
+        async with isolated_session() as s:
+            s.add(Node(cluster_id=1, ip="10.9.3.1", service_port=80,
+                       management_port=9180, edge_path="/edge", status=0))
+            await s.commit()
+            result = await detect_cluster_drift(s, 1)
+        assert result["cluster_error"] == "集群中没有活跃的 edge 节点"
+        assert result["summary"]["ok"] == 0

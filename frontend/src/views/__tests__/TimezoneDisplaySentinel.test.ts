@@ -34,7 +34,11 @@ vi.mock('vue-router', () => ({
   useRoute: () => ({ query: {} }),
 }))
 
-vi.mock('ant-design-vue', () => ({ message: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() } }))
+// Modal 导出供 ClusterDriftDrawer → AppModal 消费（config-drift-detection 后加入 ClusterList）
+vi.mock('ant-design-vue', () => ({
+  message: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() },
+  Modal: { open: vi.fn(), confirm: vi.fn() },
+}))
 
 // naive UTC（无时区后缀），+8 后跨日：2026-09-15 00:30:45
 const NAIVE_UTC = '2026-09-14T16:30:45'

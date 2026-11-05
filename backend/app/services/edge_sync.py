@@ -147,7 +147,8 @@ async def publish_resource(
     - post_publish_fn: 发布后的附加动作（plugin_metadata 的 reload_plugins）
     """
     new_version, publish_ts = await _create_config_version(
-        db, resource_type, resource.id, cluster_id, config_data, resource
+        db, resource_type, resource.id, cluster_id, config_data, resource,
+        edge_data=edge_data,
     )
 
     if post_version_hook is not None:
@@ -336,6 +337,7 @@ async def _create_config_version(
     cluster_id: int,
     config_data: dict,
     entity: Any,
+    edge_data: Any = None,
 ) -> tuple:
     """创建版本记录，返回 (新版本号, 本次发布时间戳 created_at)。
 
@@ -362,6 +364,13 @@ async def _create_config_version(
         resource_id=resource_id,
         version=new_version,
         config=json.dumps(config_data, ensure_ascii=False),
+        # 实发载荷留痕（config-drift-detection D1）：漂移检测基线。显式 JSON
+        # 序列化（#48 TEXT-JSON 铁律）；非结构化载荷兜底 str()，None → NULL。
+        edge_payload=(
+            json.dumps(edge_data, ensure_ascii=False)
+            if isinstance(edge_data, (dict, list))
+            else (None if edge_data is None else str(edge_data))
+        ),
         created_at=created_at,
     )
     db.add(config_version)

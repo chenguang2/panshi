@@ -66,6 +66,7 @@
             <template #actions>
               <button class="btn btn-secondary btn-sm cl-action-btn" @click="viewCluster(c)">详情</button>
               <button class="btn btn-ghost btn-sm cl-action-btn" @click="testCluster(c)">连接测试</button>
+              <button class="btn btn-ghost btn-sm cl-action-btn" @click="openDrift(c)">漂移检测</button>
               <button class="btn btn-ghost btn-sm cl-action-btn" @click="editCluster(c)">编辑</button>
               <a-dropdown :trigger="['click']">
                 <button class="btn btn-ghost btn-sm cl-action-btn" type="button">更多 ▾</button>
@@ -89,6 +90,13 @@
     <!-- Detail Modal -->
     <!-- 集群详情弹窗：共享组件唯一实现（cluster-ux-close-loop 3.6） -->
     <ClusterDetailModal :cluster="detailCluster" :visible="detailVisible" @close="detailVisible = false" />
+
+    <!-- 漂移检测结果抽屉（config-drift-detection）：组件自持拉取与复检 -->
+    <ClusterDriftDrawer
+      v-model:open="driftVisible"
+      :cluster-id="driftCluster?.id ?? null"
+      :cluster-name="driftCluster?.name"
+    />
 
     <!-- Test Connection Modal -->
     <div class="modal-overlay" :style="{ display: testVisible ? 'flex' : 'none' }">
@@ -158,6 +166,7 @@ import { message } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import ClusterFormModal from '@/components/ClusterFormModal.vue'
 import ClusterDetailModal from '@/components/ClusterDetailModal.vue'
+import ClusterDriftDrawer from '@/components/ClusterDriftDrawer.vue'
 import ClusterBackupDialog from '@/components/ClusterBackupDialog.vue'
 import ClusterCard from '@/components/ClusterCard.vue'
 import api from '@/api'
@@ -315,6 +324,15 @@ async function loadClusters() {
 // Detail
 const detailVisible = ref(false)
 const detailCluster = ref<Cluster | null>(null)
+
+// ── 漂移检测（config-drift-detection）：入口状态，拉取/复检由抽屉自持 ──
+const driftVisible = ref(false)
+const driftCluster = ref<Cluster | null>(null)
+
+function openDrift(c: Cluster) {
+  driftCluster.value = c
+  driftVisible.value = true
+}
 function viewCluster(c: Cluster) {
   detailCluster.value = c
   detailVisible.value = true

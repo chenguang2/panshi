@@ -642,7 +642,7 @@ describe('ClusterList.vue - 空状态与入口（B6）', () => {
     const actionsRow = wrapper.find('.cl-card-actions')
     expect(actionsRow.exists()).toBe(true)
     const labels = actionsRow.findAll('button').map((b) => b.text())
-    expect(labels).toEqual(['详情', '连接测试', '编辑', '更多 ▾', '删除'])
+    expect(labels).toEqual(['详情', '连接测试', '漂移检测', '编辑', '更多 ▾', '删除'])
     const detailBtn = actionsRow.findAll('button')[0]
     expect(detailBtn.classes()).toContain('btn-secondary')
     const delBtn = actionsRow.findAll('button').at(-1)!

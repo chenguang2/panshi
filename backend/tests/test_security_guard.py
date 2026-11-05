@@ -100,6 +100,8 @@ UNAUTHENTICATED_SAMPLES = [
     ("post", "/api/v1/relay/gateways/1/sshd-setup"),
     ("get", "/api/v1/relay/gateways/1/config-preview"),
     ("get", "/api/v1/relay/health-check"),
+    # 漂移检测（config-drift-detection）：只读但须鉴权
+    ("get", "/api/v1/clusters/1/drift"),
     # 自助改密（default-password-guard-switch）：须鉴权（凭当前 token 定位用户）
     ("post", "/api/v1/auth/change-password"),
 ]

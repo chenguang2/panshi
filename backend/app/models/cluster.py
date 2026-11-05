@@ -142,6 +142,10 @@ class ConfigVersion(Base):
     resource_id = Column(Integer, nullable=False)
     version = Column(Integer, nullable=False)
     config = Column(Text, nullable=False)
+    # 实发 Edge 载荷（config-drift-detection D1）：漂移检测的不可变基线。
+    # 发布时把 publish_resource 收到的 edge_data 原样 JSON 序列化留存；
+    # 存量历史版本为 NULL → 检测降级「无法评估（基线缺失）」。
+    edge_payload = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     created_by = Column(String(50), default="system")
 
