@@ -1580,8 +1580,9 @@ onMounted(async () => {
 
 .cluster-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 12px;
+  /* 与集群管理 .cl-grid 同规则（2026-11-05 用户裁决统一卡片大小）：固定 3 列 + 16px 间距 */
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
   position: relative;
   z-index: 1;
 }
