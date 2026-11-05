@@ -47,6 +47,7 @@ const VIEWPORT = { width: 1600, height: 900 } // 统一视口
  */
 const SHOTS = [
   { name: '00-01-login', path: '/login', preLogin: true },
+
   { name: '00-02-dashboard-empty', path: '/' },
   { name: '00-03-db-management', path: '/database-management' },
   // ── 第 24 章 指标总览（metrics-dashboard-ux-optimization 四分区版式，等数据上屏再截） ──
@@ -105,15 +106,15 @@ const SHOTS = [
   {
     name: '03-02-edgeenv-selected',
     path: '/edge-env?cluster_id=4',
-    actions: [{ select: { selector: 'select', value: '7' } }],
+    actions: [{ select: { selector: 'select', value: '8' } }],
   },
   {
     name: '03-03-edgeenv-read-done',
     path: '/edge-env?cluster_id=4',
     actions: [
-      { select: { selector: 'select', value: '7' } },
+      { select: { selector: 'select', value: '8' } },
       { click: 'button:has-text("读取节点配置")' },
-      { wait: { text: 'ok: [192.168.0.13]', timeout: 60_000 } },
+      { wait: { text: 'ok: [192.168.0.14]', timeout: 120_000 } },
       { waitMs: 300 },
     ],
     viewportShot: true,
@@ -122,9 +123,9 @@ const SHOTS = [
     name: '03-04-edgeenv-editor',
     path: '/edge-env?cluster_id=4',
     actions: [
-      { select: { selector: 'select', value: '7' } },
+      { select: { selector: 'select', value: '8' } },
       { click: 'button:has-text("读取节点配置")' },
-      { wait: { text: '内容来自 192.168.0.13', timeout: 60_000 } },
+      { wait: { text: '内容来自 192.168.0.14', timeout: 120_000 } },
       { waitMs: 500 },
     ],
   },
@@ -132,9 +133,9 @@ const SHOTS = [
     name: '03-07-publish-nodes',
     path: '/edge-env?cluster_id=4',
     actions: [
-      { select: { selector: 'select', value: '7' } },
+      { select: { selector: 'select', value: '8' } },
       { click: 'button:has-text("读取节点配置")' },
-      { wait: { text: '内容来自 192.168.0.13', timeout: 60_000 } },
+      { wait: { text: '内容来自 192.168.0.14', timeout: 120_000 } },
       { type: { selector: '.monaco-editor', text: '\n# manual-demo-change' } },
       { click: 'button:has-text("发布")' },
       { wait: { text: '确认变更', timeout: 10_000 } },
@@ -148,16 +149,16 @@ const SHOTS = [
     name: '03-08-publish-node-checked',
     path: '/edge-env?cluster_id=4',
     actions: [
-      { select: { selector: 'select', value: '7' } },
+      { select: { selector: 'select', value: '8' } },
       { click: 'button:has-text("读取节点配置")' },
-      { wait: { text: '内容来自 192.168.0.13', timeout: 60_000 } },
+      { wait: { text: '内容来自 192.168.0.14', timeout: 120_000 } },
       { type: { selector: '.monaco-editor', text: '\n# manual-demo-change' } },
       { click: 'button:has-text("发布")' },
       { wait: { text: '确认变更', timeout: 10_000 } },
       { click: 'button:has-text("继续选择节点")' },
       { wait: { text: '发布节点', timeout: 10_000 } },
       { click: 'a:has-text("取消全选")' },
-      { click: '.publish-node-item:has-text("192.168.0.13")' },
+      { click: '.publish-node-item:has-text("192.168.0.14")' },
       { waitMs: 300 },
     ],
     viewportShot: true,
