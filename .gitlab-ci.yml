@@ -1,0 +1,56 @@
+# GitLab CI —— 迁移到 GitLab 后即生效（本文件预置于 GitHub 阶段，本地仅做 YAML/命令等价性验证）。
+# 范围（对应 docs/refactoring/optimization-audit-2026-11-05.md 批次 B）：
+#   - backend：pytest 全量（默认 sqlite 隔离库，零真实库接触；PG 冒烟按 AGENTS.md #103 触发式另行手动跑）
+#   - frontend：vue-tsc -b 类型检查（#27）+ vitest 串行全量（--no-file-parallelism，#208）
+# 有意不进 CI：E2E（需 Playwright 浏览器环境）、打包产物、部署。
+# 环境适配点（迁移时按实际 runner 调整）：image 若拉不动官方镜像，换成内部 registry 地址；
+# 镜像源已按国内网络约定内联（tuna / npmmirror）。
+
+stages:
+  - test
+
+.default-rules: &default-rules
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+backend-tests:
+  <<: *default-rules
+  stage: test
+  image: python:3.11-slim
+  interruptible: true
+  variables:
+    PIP_INDEX_URL: https://pypi.tuna.tsinghua.edu.cn/simple
+    UV_CACHE_DIR: .uv-cache
+  cache:
+    key: backend-uv
+    paths:
+      - .uv-cache
+  script:
+    - pip install uv
+    - cd backend
+    - uv sync
+    - uv run pytest --junitxml=report.xml
+  artifacts:
+    when: always
+    reports:
+      junit: backend/report.xml
+
+frontend-tests:
+  <<: *default-rules
+  stage: test
+  image: node:22
+  interruptible: true
+  variables:
+    npm_config_registry: https://registry.npmmirror.com
+  cache:
+    key:
+      files:
+        - frontend/package-lock.json
+    paths:
+      - .npm-cache
+  script:
+    - cd frontend
+    - npm ci --cache .npm-cache --prefer-offline
+    - npx vue-tsc -b
+    - npx vitest run --no-file-parallelism
