@@ -164,13 +164,14 @@ async def delete_user(
 async def reset_password(
     user_id: int,
     request: PasswordResetRequest,
+    http_request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
 ):
     user = await edge_sync.get_or_404(db, User, id=user_id, detail="用户不存在")
 
     user.password_hash = hash_password(request.new_password)
-    enrich_audit(request, resource_id=user_id, detail=f"重置用户 {user.username} 密码")
+    enrich_audit(http_request, resource_id=user_id, detail=f"重置用户 {user.username} 密码")
     await db.commit()
     return {"message": "密码重置成功"}
 
@@ -190,6 +191,7 @@ async def get_user_clusters(
 async def assign_clusters(
     user_id: int,
     request: ClusterAssignRequest,
+    http_request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
 ):
@@ -200,7 +202,7 @@ async def assign_clusters(
     for cluster_id in request.cluster_ids:
         db.add(UserCluster(user_id=user_id, cluster_id=cluster_id))
 
-    enrich_audit(request, resource_id=user_id, detail="分配集群权限")
+    enrich_audit(http_request, resource_id=user_id, detail="分配集群权限")
     await db.commit()
     return {"message": "Clusters assigned"}
 
@@ -220,6 +222,7 @@ async def get_user_permissions(
 async def update_user_permissions(
     user_id: int,
     request: PermissionRequest,
+    http_request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
 ):
@@ -230,6 +233,6 @@ async def update_user_permissions(
     for perm in request.permissions:
         db.add(UserPermission(user_id=user_id, resource_type=perm, enabled=1))
 
-    enrich_audit(request, resource_id=user_id, detail="更新用户权限")
+    enrich_audit(http_request, resource_id=user_id, detail="更新用户权限")
     await db.commit()
     return {"message": "Permissions updated", "permissions": request.permissions}

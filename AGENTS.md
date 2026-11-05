@@ -219,6 +219,8 @@ openspec/        # 变更工件；openspec/specs/ = main specs
 
 67. **默认口令守卫开关 `features.force_default_password_change`（default-password-guard-switch）** — 显式 opt-in **默认关**：`features.py::is_default_password_guard_enabled()` 是唯一读取点（登录标记与 `deps.get_current_user` 拦截同源，勿各自 get_features）。开启后登录时 bcrypt 复核种子默认口令（常量单一定义 `security.py::SEED_DEFAULT_PASSWORD`，seed/守卫/封口共用），命中则 LoginResponse 带 `must_change_password=true` 且 token 嵌 `pwd_chg` claim；带 claim 令牌在白名单（改密/登出/本人权限）外全域 403，`detail` 为结构化 `{"code": "default_password_change_required", "message": ...}`（前端拦截器按 code 派发 `panshi:force-change-password` 事件）。改密收敛靠既有 pwd_ver 吊销（旧 token 401 → 重登），无需清理 claim。**所有设口令路径（建号/管理员重置/自助改密）共享 `validate_password_strength`，一律禁止等于种子默认口令**。自助改密端点 `POST /auth/change-password` 返回新 token+user+permissions，前端须整体换发会话（`stores/auth.applySession`），不得让用户二次登录。前端弹窗 `ForceChangePasswordDialog` 三消费点：Login 强制弹窗（不可关）、App.vue 403 事件兜底（不可关）、顶栏用户菜单一般入口（closable）。#61 四层接线中②③层 N/A（本开关无新路由/菜单，属执行路径行为开关）。开关开启前签发的 token 无 claim 不受拦截，最长 24h 收敛。
 
+68. **裸 `uv run python` 探针会落在真实活动库（conftest 隔离只在 pytest 导入期生效）** — 2026-11-05 实测：为调试审计行直接跑 `uv run python`（import app.main + AuthedTestClient 发请求），因无 conftest 的引擎重定向，读写全部落在 `db_config.json` 活动库（含真实历史数据），污染了 dev 库（探针用户 + 两条审计行 + 误重置 qcg 口令，靠 DB 直连清理恢复）。规则：① 任何绕开 pytest 的脚本探针，先 `print(get_db_url())` 确认落点，非临时库即停；② 需要真实 app 行为验证时一律写成 pytest 用例（自动隔离）或显式 `TEST_DB_BACKEND` 风格重定向；③ 对活动库的一切手工写操作（UPDATE/DELETE）前先 SELECT 复核目标行，写后复核影响行数；④ bcrypt 口令一旦覆盖不可逆，重置他人账号前必须确认原口令已知可恢复。
+
 ## 新增功能步骤
 
 1. 在 `backend/app/schemas/` 定义 Pydantic 模型

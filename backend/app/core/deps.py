@@ -110,6 +110,7 @@ async def get_current_user(
 async def get_current_admin_user(
     authorization: Optional[str] = Header(None),
     db: AsyncSession = Depends(get_db),
+    request: Request = None,
 ) -> User:
     """管理员守卫：未认证 401，非 admin 角色 403。"""
     if not authorization:
@@ -133,6 +134,10 @@ async def get_current_admin_user(
         pwd_ver = payload.get("pwd_ver")
         if pwd_ver is not None and pwd_ver != password_version(user.password_hash):
             raise HTTPException(status_code=401, detail="凭据已更新，请重新登录")
+
+        # 审计用户回填（对齐 get_current_user）：经本守卫放行的管理端点
+        # （users/system 等）审计行此前 username 恒为 NULL。
+        _backfill_audit_user(request, user)
         return user
     except HTTPException:
         raise
