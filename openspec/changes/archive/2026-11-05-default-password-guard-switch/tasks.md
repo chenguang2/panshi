@@ -41,5 +41,5 @@
 
 - [x] 6.1 AGENTS.md：features.yaml 开关清单/约定处补 `force_default_password_change` 一行说明（opt-in 默认关 + 四层接线中②③ N/A 的裁决注记）
 - [x] 6.2 `openspec validate --all` 0 error 收口（#53）
-- [ ] 6.3 归档合并：主 spec 增 `account-password-security`；同步修正 `login-page-assist` Purpose「无自助改密流程」表述（MODIFIED 块取自主 spec 现文，#53）
+- [x] 6.3 归档合并：主 spec 增 `account-password-security`；同步修正 `login-page-assist` Purpose「无自助改密流程」表述（MODIFIED 块取自主 spec 现文，#53）
 - [ ] 6.4 提交推送 + 交付报告（含部署启用指引：features.yaml 写 true 即热生效）
