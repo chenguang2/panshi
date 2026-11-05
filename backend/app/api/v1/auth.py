@@ -8,7 +8,15 @@ from typing import Optional
 
 from app.core.database import get_db
 from app.core.deps import get_current_user
-from app.core.security import verify_password, create_access_token
+from app.core.features import is_default_password_guard_enabled
+from app.core.security import (
+    SEED_DEFAULT_PASSWORD,
+    verify_password,
+    create_access_token,
+    hash_password,
+)
+from app.core.audit_hook import audit_start
+from app.services.audit import enrich_audit
 from app.models.user import User, UserPermission
 from app.schemas.auth import LoginRequest, LoginResponse, UserInfo, ChangePasswordRequest
 
@@ -105,9 +113,24 @@ async def login(
     _clear_login_failures(request.username, ip)
     logger.info("登录成功: username=%s ip=%s", user.username, ip)
 
+    # 默认口令守卫（default-password-guard-switch D2/D3）：仅开关开启时复核
+    # （关闭态零额外 bcrypt 成本）；命中则在响应置标记并在 token 嵌 pwd_chg claim，
+    # 由 get_current_user 出口硬拦截。任何用户命中即标记，不限于种子 admin。
+    must_change_password = False
+    if is_default_password_guard_enabled() and verify_password(
+        SEED_DEFAULT_PASSWORD, user.password_hash
+    ):
+        must_change_password = True
+        logger.info("登录检测到默认口令: username=%s ip=%s", user.username, ip)
+
     # 附带 pwd_ver claim：密码重置/变更后存量 token 自动失效（M2b）
     access_token = create_access_token(
-        data={"sub": str(user.id), "username": user.username, "role": user.role},
+        data={
+            "sub": str(user.id),
+            "username": user.username,
+            "role": user.role,
+            **({"pwd_chg": 1} if must_change_password else {}),
+        },
         password_hash=user.password_hash,
     )
     
@@ -118,8 +141,56 @@ async def login(
         access_token=access_token,
         token_type="Bearer",
         user=UserInfo(id=user.id, username=user.username, role=user.role, status=user.status),
-        permissions=permissions if user.role != 'admin' else []
+        permissions=permissions if user.role != 'admin' else [],
+        must_change_password=must_change_password,
     )
+
+
+@router.post("/change-password")
+async def change_password(
+    body: ChangePasswordRequest,
+    http_request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """自助修改密码（default-password-guard-switch D4）：旧口令验证 → 更新 →
+    签发新 token（pwd_ver 自动吊销旧 token）→ 连同 user/permissions 返回，
+    前端免二次登录刷新会话。通用能力，不依赖守卫开关。
+
+    鉴权走标准 DI（get_current_user 自动注入 request）——守卫白名单按
+    request.url.path 放行本端点，且未认证请求在 body 校验前即 401 短路
+    （对齐 test_security_guard 的采样语义）。"""
+    if not verify_password(body.old_password, current_user.password_hash):
+        logger.info(
+            "改密失败（旧密码不符）: username=%s ip=%s",
+            current_user.username, _client_ip(http_request),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="旧密码不正确",
+        )
+
+    current_user.password_hash = hash_password(body.new_password)
+    enrich_audit(http_request, resource_id=current_user.id, detail=f"用户 {current_user.username} 修改自己的密码")
+    await db.commit()
+
+    access_token = create_access_token(
+        data={"sub": str(current_user.id), "username": current_user.username, "role": current_user.role},
+        password_hash=current_user.password_hash,
+    )
+    perm_result = await db.execute(
+        select(UserPermission).where(
+            UserPermission.user_id == current_user.id, UserPermission.enabled == 1
+        )
+    )
+    permissions = [p.resource_type for p in perm_result.scalars().all()]
+    logger.info("改密成功: username=%s ip=%s", current_user.username, _client_ip(http_request))
+    return {
+        "access_token": access_token,
+        "token_type": "Bearer",
+        "user": UserInfo(id=current_user.id, username=current_user.username, role=current_user.role, status=current_user.status),
+        "permissions": permissions if current_user.role != "admin" else [],
+    }
 
 
 @router.post("/logout")
@@ -129,10 +200,13 @@ async def logout():
 
 @router.get("/me/permissions")
 async def get_my_permissions(
+    http_request: Request,
     db: AsyncSession = Depends(get_db),
     authorization: Optional[str] = Header(None)
 ):
-    user = await get_current_user(authorization, db)
+    # 直调注入 http_request：默认口令守卫的白名单按 request.url.path 放行（本端点在白名单内），
+    # 不传 request 会被自家 403 门拦住。
+    user = await get_current_user(authorization, db, http_request)
     if user.role == 'admin':
         return {"permissions": []}
     result = await db.execute(select(UserPermission).where(UserPermission.user_id == user.id, UserPermission.enabled == 1))

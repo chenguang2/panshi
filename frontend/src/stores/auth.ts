@@ -24,14 +24,19 @@ export const useAuthStore = defineStore('auth', () => {
     return permissions.value.includes(resource)
   }
 
+  /** 会话写入的单一实现：login 与自助改密换发 token 共用（default-password-guard-switch） */
+  const applySession = (data: { access_token: string; user: User; permissions?: string[] }) => {
+    token.value = data.access_token
+    user.value = data.user
+    permissions.value = data.permissions || []
+    localStorage.setItem('token', data.access_token)
+    localStorage.setItem('user', JSON.stringify(data.user))
+    localStorage.setItem('permissions', JSON.stringify(data.permissions || []))
+  }
+
   const login = async (username: string, password: string) => {
     const response = await api.post<LoginResponse>('/auth/login', { username, password })
-    token.value = response.data.access_token
-    user.value = response.data.user
-    permissions.value = response.data.permissions || []
-    localStorage.setItem('token', response.data.access_token)
-    localStorage.setItem('user', JSON.stringify(response.data.user))
-    localStorage.setItem('permissions', JSON.stringify(response.data.permissions || []))
+    applySession(response.data)
     return response.data
   }
 
@@ -55,5 +60,5 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  return { token, user, permissions, hasPermission, login, logout, clearSession }
+  return { token, user, permissions, hasPermission, login, logout, clearSession, applySession }
 })

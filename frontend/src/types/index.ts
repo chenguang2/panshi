@@ -11,6 +11,16 @@ export interface LoginResponse {
   token_type: string
   user: User
   permissions?: string[]
+  /** 默认口令守卫（default-password-guard-switch）：开关开启且口令为种子默认值时 true */
+  must_change_password?: boolean
+}
+
+/** 自助改密响应（POST /auth/change-password）：新 token + 刷新会话所需用户信息 */
+export interface ChangePasswordResponse {
+  access_token: string
+  token_type: string
+  user: User
+  permissions?: string[]
 }
 
 export interface RoutePagination {

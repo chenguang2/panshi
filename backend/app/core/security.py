@@ -84,6 +84,11 @@ JWT_SECRET_KEY = _resolve_jwt_secret()
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "1440"))
 
+# 种子默认口令的唯一常量定义（default-password-guard-switch D2）：seed.py 与
+# 默认口令守卫/口令设置封口共用，禁止两处字面量漂移。该值随 AGENTS.md 公开可知，
+# 守卫的存在意义 = 部署方 opt-in 后强制把账号迁离默认值。
+SEED_DEFAULT_PASSWORD = "panshi123"
+
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))

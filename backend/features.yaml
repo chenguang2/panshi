@@ -22,6 +22,10 @@ features:
   clickhouse_config: true
   audit_log: true
   # 中继总开关（敏感：改变节点网络路径，默认关；显式开启后才经区域网关路由）
+  # 默认口令守卫（敏感：改变登录/拦截行为，默认关 = 不列出；显式 true 后登录
+  # 检测种子默认口令并硬强制改密，热生效免重启。启用前签发的 token 不受拦截，
+  # 最长 24h 过期或下次登录收敛）
+  # force_default_password_change: true
   relay_gateway: true
 enabled_plugins:
   - proxy_rewrite

@@ -3,6 +3,8 @@ from typing import Optional, List
 from datetime import datetime
 import re
 
+from app.core.security import SEED_DEFAULT_PASSWORD
+
 
 class UserBase(BaseModel):
     username: str = Field(..., min_length=2, max_length=50)
@@ -11,7 +13,11 @@ class UserBase(BaseModel):
 
 
 def validate_password_strength(v: str) -> str:
-    """共享密码强度校验：6-50 字符，至少一个字母和一个数字。"""
+    """共享密码强度校验：6-50 字符，至少一个字母和一个数字，且不得为种子默认口令。
+
+    默认口令禁令（default-password-guard-switch D6）在本共享函数生效 —— 经它
+    校验的全部设口令路径（建号 / 管理员重置 / 自助改密）自动封口，无旁路。
+    """
     if len(v) < 6:
         raise ValueError('密码长度不能少于6个字符')
     if len(v) > 50:
@@ -20,6 +26,8 @@ def validate_password_strength(v: str) -> str:
         raise ValueError('密码必须包含至少一个字母')
     if not re.search(r'\d', v):
         raise ValueError('密码必须包含至少一个数字')
+    if v == SEED_DEFAULT_PASSWORD:
+        raise ValueError('不得使用系统默认口令')
     return v
 
 

@@ -39,6 +39,7 @@ KNOWN_FEATURES: frozenset[str] = frozenset({
     "clickhouse_config",
     "audit_log",
     "relay_gateway",
+    "force_default_password_change",
 })
 
 # Known concurrency parameter names in the `concurrency` namespace.
@@ -78,6 +79,18 @@ def get_features() -> dict:
 def feature_enabled(name: str) -> bool:
     """Return True if the given feature is enabled (default: True)."""
     return get_features().get("features", {}).get(name, True)
+
+
+def is_default_password_guard_enabled() -> bool:
+    """默认口令守卫总开关（default-password-guard-switch D1）。
+
+    显式 opt-in：未列出/false = 关闭，不沿用 feature_enabled 的 opt-out 缺省
+    （对齐 relay_gateway 先例）。mtime 热加载，改完即时生效免重启。
+    登录标记（auth.py）与请求拦截（deps.py）同源读本助手，禁止两处各自读取。
+    """
+    return bool(
+        get_features().get("features", {}).get("force_default_password_change", False)
+    )
 
 
 def get_enabled_plugins() -> list[str]:

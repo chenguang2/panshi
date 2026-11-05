@@ -170,6 +170,8 @@ ROUTE_MAP: dict[tuple[str, str], tuple[str, str, bool]] = {
     ("PUT", "/api/v1/admin/users/{user_id}"): ("user", "update", False),
     ("DELETE", "/api/v1/admin/users/{user_id}"): ("user", "delete", False),
     ("PUT", "/api/v1/admin/users/{user_id}/password"): ("user", "change_password", False),
+    # 自助改密（default-password-guard-switch）：复用 user/change_password 标签
+    ("POST", "/api/v1/auth/change-password"): ("user", "change_password", False),
     ("PUT", "/api/v1/admin/users/{user_id}/permissions"): ("user_permissions", "update", False),
     ("PUT", "/api/v1/admin/users/{user_id}/clusters"): ("user_clusters", "assign", False),
     # ClickHouse / Ansible 清单 / 节点任务 / 自启动 / 插件开关

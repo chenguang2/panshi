@@ -10,8 +10,17 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.features import is_default_password_guard_enabled
 from app.core.security import decode_access_token, password_version
 from app.models.user import User, UserPermission
+
+# 默认口令守卫白名单（default-password-guard-switch D3）：前缀精确清单，
+# 仅放行自助改密 / 登出 / 本人权限查询。
+_DEFAULT_PWD_ALLOWED_PATHS = (
+    "/api/v1/auth/change-password",
+    "/api/v1/auth/logout",
+    "/api/v1/auth/me/permissions",
+)
 
 
 def _backfill_audit_user(request: Request | None, user: User) -> None:
@@ -65,6 +74,21 @@ async def get_current_user(
         pwd_ver = payload.get("pwd_ver")
         if pwd_ver is not None and pwd_ver != password_version(user.password_hash):
             raise HTTPException(status_code=401, detail="凭据已更新，请重新登录")
+
+        # 默认口令守卫（default-password-guard-switch D3）：带 pwd_chg claim 的令牌
+        # 在开关开启时仅放行白名单端点。判定实时读开关（中途关闭立即放行）；改密后
+        # pwd_ver 吊销旧令牌自然收敛，无需清理。开关开启前签发的存量令牌无本 claim，
+        # 不受拦截（最长 24h 或下次登录收敛，spec 已固化）。
+        if payload.get("pwd_chg") and is_default_password_guard_enabled():
+            path = request.url.path if request is not None else ""
+            if not path.startswith(_DEFAULT_PWD_ALLOWED_PATHS):
+                raise HTTPException(
+                    status_code=403,
+                    detail={
+                        "code": "default_password_change_required",
+                        "message": "检测到当前仍在使用默认口令，请先修改密码",
+                    },
+                )
 
         _backfill_audit_user(request, user)
         return user

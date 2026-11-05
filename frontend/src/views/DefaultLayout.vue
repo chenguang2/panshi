@@ -29,6 +29,7 @@
             </a-space>
             <template #overlay>
               <a-menu>
+                <a-menu-item @click="changePwdOpen = true">修改密码</a-menu-item>
                 <a-menu-item @click="handleLogout">退出登录</a-menu-item>
               </a-menu>
             </template>
@@ -40,6 +41,8 @@
       </div>
     </div>
     <GlobalSearch ref="globalSearchRef" />
+    <!-- 顶栏「修改密码」一般入口（closable 模式；守卫强制场景由 Login/App 各自挂载不可关闭实例） -->
+    <ForceChangePasswordDialog v-model:open="changePwdOpen" closable />
   </div>
 </template>
 
@@ -52,6 +55,8 @@ import { useAuthStore } from '@/stores/auth'
 import { useThemeStore } from '@/stores/theme'
 import AppSidebar from '@/components/AppSidebar.vue'
 import GlobalSearch from '@/components/GlobalSearch.vue'
+import ForceChangePasswordDialog from '@/components/ForceChangePasswordDialog.vue'
+import type { ChangePasswordResponse } from '@/types'
 import { useSidebarResponsive } from '@/composables/useSidebarResponsive'
 import { pageNameMap, sectionMap } from '@/router/navMeta'
 
@@ -86,6 +91,14 @@ const handleLogout = async () => {
   await authStore.logout()
   message.success('已退出登录')
   router.push('/login')
+}
+
+// ── 顶栏「修改密码」一般入口（default-password-guard-switch D4：完整自助改密）──
+const changePwdOpen = ref(false)
+
+function handleChangePwdSuccess(data: ChangePasswordResponse) {
+  authStore.applySession(data)
+  changePwdOpen.value = false
 }
 </script>
 

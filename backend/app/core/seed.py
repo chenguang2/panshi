@@ -1,7 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.user import User
-from app.core.security import hash_password
+from app.core.security import hash_password, SEED_DEFAULT_PASSWORD
 
 
 async def seed_data(db: AsyncSession):
@@ -12,7 +12,7 @@ async def seed_data(db: AsyncSession):
     if not existing_admin.scalar_one_or_none():
         admin_user = User(
             username="admin",
-            password_hash=hash_password("panshi123"),
+            password_hash=hash_password(SEED_DEFAULT_PASSWORD),
             role="admin",
             status=1
         )

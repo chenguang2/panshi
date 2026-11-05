@@ -84,6 +84,9 @@
         <div class="login-footer-copy">&copy; 2011~2026 EmbraceSource</div>
       </div>
     </div>
+
+    <!-- 默认口令守卫：强制改密弹窗（不可关闭，改密成功换发 token 后进入系统） -->
+    <ForceChangePasswordDialog v-model:open="forcePwdOpen" :tip="FORCE_PWD_TIP" @success="handleForcePwdSuccess" />
   </div>
 </template>
 
@@ -92,6 +95,8 @@ import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { showOverlayModal } from '@/composables/useOverlayModal'
+import ForceChangePasswordDialog from '@/components/ForceChangePasswordDialog.vue'
+import type { ChangePasswordResponse } from '@/types'
 import logoIcon from '@/assets/icon.png'
 
 const router = useRouter()
@@ -99,6 +104,15 @@ const authStore = useAuthStore()
 
 const submitting = ref(false)
 const errorMsg = ref('')
+const forcePwdOpen = ref(false)
+const FORCE_PWD_TIP = '检测到当前仍在使用默认口令，为保障系统安全，请修改密码后继续使用。'
+
+/** 改密成功：store.login 已写入旧 token，这里用端点返回的新 token 整体换发后进入系统 */
+function handleForcePwdSuccess(data: ChangePasswordResponse) {
+  authStore.applySession(data)
+  forcePwdOpen.value = false
+  router.push('/')
+}
 
 interface LoginForm {
   username: string
@@ -142,8 +156,13 @@ async function handleLogin() {
 
   submitting.value = true
   try {
-    await authStore.login(formState.username.trim(), formState.password.trim())
-    router.push('/')
+    const result = await authStore.login(formState.username.trim(), formState.password.trim())
+    if (result.must_change_password) {
+      // 默认口令守卫：登录态已写入（store.login），拦截跳转，强制改密成功后再进入
+      forcePwdOpen.value = true
+    } else {
+      router.push('/')
+    }
   } catch (error: any) {
     errorMsg.value = error.response?.data?.detail || '用户名或密码错误，请重试'
   } finally {

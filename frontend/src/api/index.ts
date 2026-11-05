@@ -29,6 +29,20 @@ api.interceptors.request.use(
   },
 )
 
+// ── 默认口令守卫（default-password-guard-switch D5）：403 + code → 广播拉起强制改密弹窗 ──
+// 事件范式与迁移锁横幅同款（window CustomEvent）；App.vue 常驻监听，
+// 覆盖「刷新页面后仍持带标记 token」的存量会话场景。
+export const FORCE_CHANGE_PASSWORD_EVENT = 'panshi:force-change-password'
+
+function isDefaultPasswordGuardError(error: AxiosError): boolean {
+  if (error.response?.status !== 403) return false
+  const data: unknown = error.response.data
+  if (!data || typeof data !== 'object' || !('detail' in data)) return false
+  const detail = (data as { detail?: unknown }).detail
+  if (typeof detail !== 'object' || detail === null) return false
+  return (detail as { code?: unknown }).code === 'default_password_change_required'
+}
+
 // ── 迁移锁全局横幅（db-migration-ux-optimization D5：503 事件驱动，零轮询）──
 // 事件走站点既有 window CustomEvent 模式（同 EdgePackManagementDialog）；
 // 组件侧监听见 components/MigrationLockBanner.vue。
@@ -84,6 +98,10 @@ api.interceptors.response.use(
         router.push('/login')
         return Promise.reject(error)
       })
+    }
+    if (isDefaultPasswordGuardError(error)) {
+      window.dispatchEvent(new CustomEvent(FORCE_CHANGE_PASSWORD_EVENT))
+      return Promise.reject(error)
     }
     if (isMigrationLockError(error)) {
       const data = error.response?.data as { detail?: unknown } | undefined

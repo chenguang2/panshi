@@ -100,6 +100,8 @@ UNAUTHENTICATED_SAMPLES = [
     ("post", "/api/v1/relay/gateways/1/sshd-setup"),
     ("get", "/api/v1/relay/gateways/1/config-preview"),
     ("get", "/api/v1/relay/health-check"),
+    # 自助改密（default-password-guard-switch）：须鉴权（凭当前 token 定位用户）
+    ("post", "/api/v1/auth/change-password"),
 ]
 
 # 设计公开的端点（frontend bootstrap 需要）

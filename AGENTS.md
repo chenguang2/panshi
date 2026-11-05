@@ -217,6 +217,8 @@ openspec/        # 变更工件；openspec/specs/ = main specs
 
 66. **`backend/.venv/bin` 脚本 shebang 漂移 = 「No module named 'cryptography'」假象** — 2026-11-04 实测：本机 `.venv/bin/` 曾整体携带外项目（test-03）的死路径 shebang，`uv run uvicorn` 命中坏脚本后 shell 经 PATH 兜底到 **Homebrew 全局 Python 3.14 的 uvicorn**（`/opt/homebrew/bin/uvicorn`），全局环境没有项目依赖 → 崩溃循环伪装成「venv 缺包」（实际 site-packages 完好，`uv run --no-sync python -c "import cryptography"` 可证）。排查口诀：backend 起不来报某依赖 ModuleNotFoundError 时，先 `head -1 backend/.venv/bin/uvicorn` 看 shebang 是否指向本项目 venv，再查 `command -v uvicorn` 是否被全局解释器劫持；修复 = 把 `.venv/bin` 脚本 shebang 批量改写为本 venv python 绝对路径（或 `uv sync --reinstall-package <pkg>` 重写入口点）。
 
+67. **默认口令守卫开关 `features.force_default_password_change`（default-password-guard-switch）** — 显式 opt-in **默认关**：`features.py::is_default_password_guard_enabled()` 是唯一读取点（登录标记与 `deps.get_current_user` 拦截同源，勿各自 get_features）。开启后登录时 bcrypt 复核种子默认口令（常量单一定义 `security.py::SEED_DEFAULT_PASSWORD`，seed/守卫/封口共用），命中则 LoginResponse 带 `must_change_password=true` 且 token 嵌 `pwd_chg` claim；带 claim 令牌在白名单（改密/登出/本人权限）外全域 403，`detail` 为结构化 `{"code": "default_password_change_required", "message": ...}`（前端拦截器按 code 派发 `panshi:force-change-password` 事件）。改密收敛靠既有 pwd_ver 吊销（旧 token 401 → 重登），无需清理 claim。**所有设口令路径（建号/管理员重置/自助改密）共享 `validate_password_strength`，一律禁止等于种子默认口令**。自助改密端点 `POST /auth/change-password` 返回新 token+user+permissions，前端须整体换发会话（`stores/auth.applySession`），不得让用户二次登录。前端弹窗 `ForceChangePasswordDialog` 三消费点：Login 强制弹窗（不可关）、App.vue 403 事件兜底（不可关）、顶栏用户菜单一般入口（closable）。#61 四层接线中②③层 N/A（本开关无新路由/菜单，属执行路径行为开关）。开关开启前签发的 token 无 claim 不受拦截，最长 24h 收敛。
+
 ## 新增功能步骤
 
 1. 在 `backend/app/schemas/` 定义 Pydantic 模型
