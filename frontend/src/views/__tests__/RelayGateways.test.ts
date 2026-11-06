@@ -318,11 +318,11 @@ describe('RelayGateways', () => {
     expect(text).toContain('登记区域')
     expect(text).toContain('初始化网关')
     expect(text).toContain('下发配置')
-    // 对照表默认折叠（details 无 open 属性），但标题可见
+    // 对照表独立卡默认展开（示例页形态）
     const guide = wrapper.find('.relay-guide')
     expect(guide.exists()).toBe(true)
-    expect((guide.element as HTMLDetailsElement).open).toBe(false)
-    expect(guide.text()).toContain('有什么区别')
+    expect((guide.element as HTMLDetailsElement).open).toBe(true)
+    expect(guide.text()).toContain('何时用哪个')
   })
 
   it('连接方式分段：新建默认「有网关机」；切直连清空并禁用两腿；保存载荷两腿置 null', async () => {

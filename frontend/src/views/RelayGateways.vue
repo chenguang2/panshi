@@ -29,59 +29,61 @@
           <span class="barrow">→</span>
           <span class="bstep"><b>③</b>下发配置<i>推送节点白名单</i></span>
         </div>
-        <details class="install-guide relay-guide">
-          <summary>「初始化网关 / 下发配置 / 配置跳板转发」有什么区别？</summary>
-          <div class="guide-body">
-            <div class="guide-col">
-              <h4>🚀 初始化网关</h4>
-              <p class="when">何时用：首次装机、网关机重装 OpenResty 后</p>
-              <ul>
-                <li>写入 <b>8443 监听 server 块</b> + 当前白名单</li>
-                <li>校验后 reload，<b>幂等可重复执行</b></li>
-                <li>要求已填 OpenResty 前缀</li>
-              </ul>
-            </div>
-            <div class="guide-col">
-              <h4>📦 下发配置</h4>
-              <p class="when">何时用：集群挂接、节点增删、节点启停之后</p>
-              <ul>
-                <li>只推<b>节点白名单</b>（全量替换），不动 8443 监听</li>
-                <li><b>幂等</b>；空名单有危险确认</li>
-                <li>不执行会被网关 403 拦截</li>
-              </ul>
-            </div>
-            <div class="guide-col">
-              <h4>🔑 配置跳板转发</h4>
-              <p class="when">何时用：跳板 SSH 部署且网关 sshd 默认禁转发时</p>
-              <ul>
-                <li>root 写 sshd drop-in 放行 <b>PermitOpen</b></li>
-                <li><b>一次即可</b>；格式不兼容自动降级</li>
-                <li>root 密码仅本次使用，不保存</li>
-              </ul>
-            </div>
-            <div class="guide-symptom">
-              <h5>常见症状 → 建议动作</h5>
-              <table>
-                <tbody>
-                  <tr>
-                    <td>HTTP 腿不可达</td>
-                    <td>先执行 <b>「更多 ▾ → 初始化网关」</b></td>
-                  </tr>
-                  <tr>
-                    <td>SSH 腿报 administratively prohibited</td>
-                    <td>执行 <b>「配置跳板转发」</b> 放行</td>
-                  </tr>
-                  <tr>
-                    <td>状态列出现「清单缺组」</td>
-                    <td>重新<b>保存一次该区域</b>（补齐 SSH 用户）即可重建清单组</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </details>
       </div>
     </div>
+
+    <!-- 动作对照（独立卡，默认展开：学习内容是本页核心价值之一；示例页形态） -->
+    <details class="install-guide relay-guide" open>
+      <summary>「初始化网关 / 下发配置 / 配置跳板转发」，何时用哪个？（点击可收起）</summary>
+      <div class="guide-body">
+        <div class="guide-col">
+          <h4>🚀 初始化网关</h4>
+          <p class="when">何时用：首次装机、网关机重装 OpenResty 后</p>
+          <ul>
+            <li>写入 <b>8443 监听 server 块</b> + 当前白名单</li>
+            <li>校验后 reload，<b>幂等可重复执行</b></li>
+            <li>要求已填 OpenResty 前缀</li>
+          </ul>
+        </div>
+        <div class="guide-col">
+          <h4>📦 下发配置</h4>
+          <p class="when">何时用：集群挂接、节点增删、节点启停之后</p>
+          <ul>
+            <li>只推<b>节点白名单</b>（全量替换），不动 8443 监听</li>
+            <li><b>幂等</b>；空名单有危险确认</li>
+            <li>不执行会被网关 403 拦截</li>
+          </ul>
+        </div>
+        <div class="guide-col">
+          <h4>🔑 配置跳板转发</h4>
+          <p class="when">何时用：跳板 SSH 部署且网关 sshd 默认禁转发时</p>
+          <ul>
+            <li>root 写 sshd drop-in 放行 <b>PermitOpen</b></li>
+            <li><b>一次即可</b>；格式不兼容自动降级</li>
+            <li>root 密码仅本次使用，不保存</li>
+          </ul>
+        </div>
+        <div class="guide-symptom">
+          <h5>常见症状 → 建议动作</h5>
+          <table>
+            <tbody>
+              <tr>
+                <td>HTTP 腿不可达</td>
+                <td>先执行 <b>「更多 ▾ → 初始化网关」</b></td>
+              </tr>
+              <tr>
+                <td>SSH 腿报 administratively prohibited</td>
+                <td>执行 <b>「配置跳板转发」</b> 放行</td>
+              </tr>
+              <tr>
+                <td>状态列出现「清单缺组」</td>
+                <td>重新<b>保存一次该区域</b>（补齐 SSH 用户）即可重建清单组</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </details>
 
     <div class="card">
       <div class="card-header">
@@ -1557,7 +1559,7 @@ onUnmounted(() => {
 
 /* 折叠对照表（install-guide 范式） */
 .relay-guide {
-  margin-top: 10px;
+  margin: 16px 0 0;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
