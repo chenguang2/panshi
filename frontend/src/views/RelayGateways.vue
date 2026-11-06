@@ -314,7 +314,10 @@
                   placeholder="如 tunnel@10.10.1.1:22"
                 />
                 <span v-if="formErrors.ssh_jump" class="form-error">{{ formErrors.ssh_jump }}</span>
-                <span v-else class="form-hint">安装、初始化等 SSH 任务先跳到这台网关机再进局内。</span>
+                <span v-else class="form-hint"
+                  >安装、初始化等 SSH 任务先跳到这台网关机再进局内；这是通道地址，登录账号在下方「SSH
+                  凭据」填写（可与跳板账号不同）。</span
+                >
               </div>
               <div class="form-group label-top span-2">
                 <label class="form-label">OpenResty 前缀 <span class="optional">选填</span></label>
@@ -336,7 +339,10 @@
 
           <div class="form-section">
             <div class="form-section-title"><i class="sec-no">3</i>SSH 凭据</div>
-            <div class="form-section-desc">写入网关清单，供平台登录网关机执行配置。</div>
+            <div class="form-section-desc">
+              写入网关清单，供平台登录网关机执行配置。与上方「SSH
+              跳板」分工不同：跳板是进局的通道，这里是登录网关机的账号；两者用同一账号时，两处都填它即可。
+            </div>
             <div class="form-grid">
               <div class="form-group label-top span-2">
                 <label class="form-label">SSH 用户 <span class="required">*</span></label>
@@ -348,7 +354,9 @@
                   placeholder="网关机上的账号，如 jboss / tunnel"
                 />
                 <span v-if="formErrors.ssh_user" class="form-error">{{ formErrors.ssh_user }}</span>
-                <span v-else class="form-hint">平台用这个账号登录网关机执行配置，会写入网关清单。</span>
+                <span v-else class="form-hint"
+                  >平台用这个账号登录网关机执行配置（区别于上方只作通道的跳板账号），会写入网关清单。</span
+                >
               </div>
               <div class="form-group label-top">
                 <label class="form-label">SSH 口令 <span class="optional">选填</span></label>
