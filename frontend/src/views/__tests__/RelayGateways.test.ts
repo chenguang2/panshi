@@ -325,69 +325,32 @@ describe('RelayGateways', () => {
     expect(guide.text()).toContain('何时用哪个')
   })
 
-  it('连接方式分段：新建默认「有网关机」；切直连清空并禁用两腿；保存载荷两腿置 null', async () => {
-    mockPost.mockResolvedValue({ data: { id: 9, code: 'tianjin', name: '路局B', status: 'enabled' } })
+  it('直连语义降级为提示：分组说明含直连文案，不再有分段选择（用户裁决：直连非主动创建场景）', async () => {
     const wrapper = await mountPage()
     const buttons = wrapper.findAll('button')
     await buttons.find((b) => b.text().includes('新建区域'))!.trigger('click')
     await flushPromises()
 
-    // 默认有网关机：两腿可输入
+    expect(wrapper.find('.segment-control').exists()).toBe(false)
+    const desc = wrapper.findAll('.form-section-desc')[1]! // 组2 网关两腿连接
+    expect(desc.text()).toContain('两腿均留空会成为「直连区域」')
+    // 两腿输入保持可用（无禁用联动）
     const http = wrapper.findAll('.modal input.form-input').find((i) => i.attributes('placeholder')?.includes('8443'))!
     expect(http.attributes('disabled')).toBeUndefined()
-    await http.setValue('http://10.10.1.1:8443')
-
-    // 切直连：清空 + 禁用
-    await wrapper.findAll('.segment-control input[type=radio]')[1]!.setValue('direct')
-    await flushPromises()
-    const http2 = wrapper.findAll('.modal input.form-input').find((i) => i.attributes('placeholder')?.includes('8443'))!
-    expect((http2.element as HTMLInputElement).value).toBe('')
-    expect(http2.attributes('disabled')).not.toBeUndefined()
-
-    await inputs0_1_5(wrapper)
-    await wrapper
-      .findAll('.modal button.btn-primary')
-      .find((b) => b.text().includes('保存'))!
-      .trigger('click')
-    await flushPromises()
-
-    expect(mockPost).toHaveBeenCalledWith(
-      '/relay/gateways',
-      expect.objectContaining({ code: 'tianjin', http_base_url: null, ssh_jump: null }),
-    )
   })
 
-  it('删除保护：挂接区域删除菜单禁用并提示解挂（attached_cluster_count）', async () => {
-    // REGIONS[0] luju 注入挂接计数
+  it('编辑存量直连区域：两腿为空且可编辑，表格保留直连徽章', async () => {
     const wrapper = await mountPage()
     await flushPromises()
-    const row = wrapper.find('.mock-row[data-code="luju"]')
-    const del = row.findAll('.mock-menu-item').find((b) => b.text().startsWith('删除'))!
-    expect(del.classes()).toContain('mock-menu-disabled')
-    expect(del.text()).toContain('已被 1 个集群挂接')
-    // 无挂接区域（direct）保持可点
-    const del2 = wrapper
-      .find('.mock-row[data-code="direct"]')
-      .findAll('.mock-menu-item')
-      .find((b) => b.text().startsWith('删除'))!
-    expect(del2.classes()).not.toContain('mock-menu-disabled')
-  })
-
-  it('编辑两腿全空的区域：分段回显「直连区域」', async () => {
-    const wrapper = await mountPage()
-    await flushPromises()
-    // REGIONS 里 direct 区域两腿为空
     const row = wrapper.find('.mock-row[data-code="direct"]')
-    expect(row.find('.legs-cell').exists()).toBe(false)
     expect(row.text()).toContain('直连 · 无网关机')
 
     const editBtn = row.findAll('.mock-menu-item').find((b) => b.text().startsWith('编辑'))!
     await editBtn.trigger('click')
     await flushPromises()
-    const checked = wrapper
-      .findAll('.segment-control input[type=radio]')
-      .find((r) => (r.element as HTMLInputElement).checked)!
-    expect((checked.element as HTMLInputElement).value).toBe('direct')
+    const http = wrapper.findAll('.modal input.form-input').find((i) => i.attributes('placeholder')?.includes('8443'))!
+    expect((http.element as HTMLInputElement).value).toBe('')
+    expect(http.attributes('disabled')).toBeUndefined()
   })
 
   it('有网关机模式但两腿全空保存：一次性 info 提示（等价直连）', async () => {

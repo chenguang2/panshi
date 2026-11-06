@@ -242,164 +242,156 @@
           <div class="form-section">
             <div class="form-section-title"><i class="sec-no">1</i>基础身份</div>
             <div class="form-section-desc">区域码是集群挂接的钥匙；展示名给人看。</div>
-            <div class="form-group label-top">
-              <label class="form-label">区域码 <span class="required">*</span></label>
-              <input
-                type="text"
-                class="form-input"
-                :class="{ 'has-error': formErrors.code }"
-                v-model="form.code"
-                :disabled="modal.editing"
-                placeholder="小写字母开头，如 luju"
-              />
-              <span v-if="formErrors.code" class="form-error">{{ formErrors.code }}</span>
-              <span v-else class="form-hint">
-                {{
-                  modal.editing
-                    ? '🔒 创建后不可修改；集群靠它挂接本区域'
-                    : '创建后不可修改；集群靠它挂接本区域，同时用作网关清单分组名（gateways_区域码）'
-                }}
-              </span>
-            </div>
-            <div class="form-group label-top">
-              <label class="form-label">展示名 <span class="required">*</span></label>
-              <input
-                type="text"
-                class="form-input"
-                :class="{ 'has-error': formErrors.name }"
-                v-model="form.name"
-                placeholder="如：济南局"
-              />
-              <span v-if="formErrors.name" class="form-error">{{ formErrors.name }}</span>
-              <span v-else class="form-hint">显示给人看的名字：列表、弹窗与执行日志都用它，可随时改。</span>
-            </div>
-            <div class="form-group label-top">
-              <label class="form-label">状态</label>
-              <select class="form-input" v-model="form.status">
-                <option value="enabled">启用</option>
-                <option value="disabled">禁用（该区域回退直连）</option>
-              </select>
-              <span class="form-hint">禁用只是「改走直连」：网关机上的配置原样保留，随时可再启用。</span>
+            <div class="form-grid">
+              <div class="form-group label-top">
+                <label class="form-label">区域码 <span class="required">*</span></label>
+                <input
+                  type="text"
+                  class="form-input mono-input"
+                  :class="{ 'has-error': formErrors.code }"
+                  v-model="form.code"
+                  :disabled="modal.editing"
+                  placeholder="小写字母开头，如 luju"
+                />
+                <span v-if="formErrors.code" class="form-error">{{ formErrors.code }}</span>
+                <span v-else class="form-hint">
+                  {{
+                    modal.editing
+                      ? '🔒 创建后不可修改'
+                      : '创建后不可修改；集群靠它挂接本区域，同时用作网关清单分组名（gateways_区域码）'
+                  }}
+                </span>
+              </div>
+              <div class="form-group label-top">
+                <label class="form-label">展示名 <span class="required">*</span></label>
+                <input
+                  type="text"
+                  class="form-input"
+                  :class="{ 'has-error': formErrors.name }"
+                  v-model="form.name"
+                  placeholder="如：济南局"
+                />
+                <span v-if="formErrors.name" class="form-error">{{ formErrors.name }}</span>
+                <span v-else class="form-hint">列表、弹窗与执行日志都显示它，可随时改。</span>
+              </div>
+              <div class="form-group label-top span-2">
+                <label class="form-label">状态</label>
+                <select class="form-input" v-model="form.status">
+                  <option value="enabled">启用</option>
+                  <option value="disabled">禁用（该区域回退直连）</option>
+                </select>
+                <span class="form-hint">禁用只是「改走直连」：网关机上的配置原样保留，随时可再启用。</span>
+              </div>
             </div>
           </div>
 
           <div class="form-section">
             <div class="form-section-title"><i class="sec-no">2</i>网关两腿连接</div>
-            <div class="form-section-desc">平台到该局的两条通道；局内本就互通的选「直连区域」即可。</div>
-            <div class="segment-control">
-              <label :class="{ active: connMode === 'gateway' }">
-                <input type="radio" value="gateway" v-model="connMode" @change="onConnModeChange" />
-                有网关机
-                <small>两腿都经网关中转</small>
-              </label>
-              <label :class="{ active: connMode === 'direct' }">
-                <input type="radio" value="direct" v-model="connMode" @change="onConnModeChange" />
-                直连区域（无网关机）
-                <small>两腿留空，全部操作按直连执行；适合网络本就互通的局</small>
-              </label>
+            <div class="form-section-desc">
+              平台到该局的两条通道。<b>两腿均留空会成为「直连区域」</b>——仅作过渡（如网关地址未定），
+              一般应填写网关机地址；局内本就互通的局无需建中继区域。
             </div>
-            <div class="form-group label-top">
-              <label class="form-label">网关 HTTP 腿</label>
-              <input
-                type="text"
-                class="form-input"
-                :class="{ 'has-error': formErrors.http_base_url }"
-                v-model="form.http_base_url"
-                :disabled="connMode === 'direct'"
-                placeholder="如 https://10.10.1.1:8443"
-              />
-              <span v-if="formErrors.http_base_url" class="form-error">{{ formErrors.http_base_url }}</span>
-              <span v-else class="form-hint"
-                >发布、回滚等管理请求经它进入该局（网关机 8443 反向代理）；直连模式下此字段留空。</span
-              >
-            </div>
-            <div class="form-group label-top">
-              <label class="form-label">SSH 跳板</label>
-              <input
-                type="text"
-                class="form-input"
-                :class="{ 'has-error': formErrors.ssh_jump }"
-                v-model="form.ssh_jump"
-                :disabled="connMode === 'direct'"
-                placeholder="如 tunnel@10.10.1.1:22"
-              />
-              <span v-if="formErrors.ssh_jump" class="form-error">{{ formErrors.ssh_jump }}</span>
-              <span v-else class="form-hint"
-                >安装、初始化等 SSH 任务先跳到这台网关机再进局内；直连模式下此字段留空。</span
-              >
-            </div>
-            <div class="form-group label-top">
-              <label class="form-label">OpenResty 前缀</label>
-              <input
-                type="text"
-                class="form-input"
-                :class="{ 'has-error': formErrors.openresty_prefix }"
-                v-model="form.openresty_prefix"
-                placeholder="如 /work/jboss/tunnel/openresty-1.21.4.1/nginx"
-              />
-              <span v-if="formErrors.openresty_prefix" class="form-error">{{ formErrors.openresty_prefix }}</span>
-              <span v-else class="form-hint"
-                >网关机上 nginx 的安装目录（含 conf/sbin/logs）；只有要用「初始化网关」时必填，可以先建区域后补。</span
-              >
+            <div class="form-grid">
+              <div class="form-group label-top">
+                <label class="form-label">网关 HTTP 腿 <span class="optional">选填</span></label>
+                <input
+                  type="text"
+                  class="form-input mono-input"
+                  :class="{ 'has-error': formErrors.http_base_url }"
+                  v-model="form.http_base_url"
+                  placeholder="如 https://10.10.1.1:8443"
+                />
+                <span v-if="formErrors.http_base_url" class="form-error">{{ formErrors.http_base_url }}</span>
+                <span v-else class="form-hint">发布、回滚等管理请求经它进入该局（网关机 8443 反向代理）。</span>
+              </div>
+              <div class="form-group label-top">
+                <label class="form-label">SSH 跳板 <span class="optional">选填</span></label>
+                <input
+                  type="text"
+                  class="form-input mono-input"
+                  :class="{ 'has-error': formErrors.ssh_jump }"
+                  v-model="form.ssh_jump"
+                  placeholder="如 tunnel@10.10.1.1:22"
+                />
+                <span v-if="formErrors.ssh_jump" class="form-error">{{ formErrors.ssh_jump }}</span>
+                <span v-else class="form-hint">安装、初始化等 SSH 任务先跳到这台网关机再进局内。</span>
+              </div>
+              <div class="form-group label-top span-2">
+                <label class="form-label">OpenResty 前缀 <span class="optional">选填</span></label>
+                <input
+                  type="text"
+                  class="form-input mono-input"
+                  :class="{ 'has-error': formErrors.openresty_prefix }"
+                  v-model="form.openresty_prefix"
+                  placeholder="如 /work/jboss/tunnel/openresty-1.21.4.1/nginx"
+                />
+                <span v-if="formErrors.openresty_prefix" class="form-error">{{ formErrors.openresty_prefix }}</span>
+                <span v-else class="form-hint"
+                  >网关机上 nginx 的安装目录（含
+                  conf/sbin/logs）；只有要用「初始化网关」时必填，可以先建区域后补。</span
+                >
+              </div>
             </div>
           </div>
 
           <div class="form-section">
             <div class="form-section-title"><i class="sec-no">3</i>SSH 凭据</div>
             <div class="form-section-desc">写入网关清单，供平台登录网关机执行配置。</div>
-            <div class="form-group label-top">
-              <label class="form-label">SSH 用户 <span class="required">*</span></label>
-              <input
-                type="text"
-                class="form-input"
-                :class="{ 'has-error': formErrors.ssh_user }"
-                v-model="form.ssh_user"
-                placeholder="网关机上的账号，如 jboss / tunnel"
-              />
-              <span v-if="formErrors.ssh_user" class="form-error">{{ formErrors.ssh_user }}</span>
-              <span v-else class="form-hint">平台用这个账号登录网关机执行配置，会写入网关清单。</span>
-            </div>
-            <div class="form-group label-top">
-              <label class="form-label">SSH 口令</label>
-              <input
-                type="password"
-                class="form-input"
-                v-model="form.ssh_password"
-                :placeholder="modal.editing ? '已从服务端加载（加载动作已记录审计）' : '留空 = 用密钥登录'"
-                autocomplete="new-password"
-              />
-              <span class="form-hint"
-                >口令不出现在列表里；编辑时自动按需从服务端加载回填，单独查看会记录审计日志。</span
-              >
-            </div>
-            <div class="form-group label-top">
-              <label class="form-label">SSH 端口</label>
-              <input type="number" min="1" max="65535" class="form-input" v-model.number="form.ssh_port" />
-              <span class="form-hint">网关机的 SSH 端口，默认 22，改过才需要填。</span>
+            <div class="form-grid">
+              <div class="form-group label-top span-2">
+                <label class="form-label">SSH 用户 <span class="required">*</span></label>
+                <input
+                  type="text"
+                  class="form-input"
+                  :class="{ 'has-error': formErrors.ssh_user }"
+                  v-model="form.ssh_user"
+                  placeholder="网关机上的账号，如 jboss / tunnel"
+                />
+                <span v-if="formErrors.ssh_user" class="form-error">{{ formErrors.ssh_user }}</span>
+                <span v-else class="form-hint">平台用这个账号登录网关机执行配置，会写入网关清单。</span>
+              </div>
+              <div class="form-group label-top">
+                <label class="form-label">SSH 口令 <span class="optional">选填</span></label>
+                <input
+                  type="password"
+                  class="form-input"
+                  v-model="form.ssh_password"
+                  :placeholder="modal.editing ? '已从服务端加载（加载动作已记录审计）' : '留空 = 用密钥登录'"
+                  autocomplete="new-password"
+                />
+                <span class="form-hint">口令不出现在列表里；编辑时自动按需加载回填，查看会记录审计。</span>
+              </div>
+              <div class="form-group label-top">
+                <label class="form-label">SSH 端口 <span class="optional">默认 22</span></label>
+                <input type="number" min="1" max="65535" class="form-input" v-model.number="form.ssh_port" />
+                <span class="form-hint">网关机的 SSH 端口，改过才需要填。</span>
+              </div>
             </div>
           </div>
 
           <details class="install-guide advanced-section">
             <summary>高级参数（一般不用改）</summary>
-            <div class="form-group label-top">
-              <label class="form-label">Python 解释器</label>
-              <input
-                type="text"
-                class="form-input"
-                v-model="form.ansible_python_interpreter"
-                placeholder="如 /work/jboss/anaconda3/bin/python3"
-              />
-              <span class="form-hint">仅当网关机系统默认 Python 低于 3.8（老机器常见）时填写。</span>
-            </div>
-            <div class="form-group label-top">
-              <label class="form-label">SSH 公共参数</label>
-              <input
-                type="text"
-                class="form-input"
-                v-model="form.ssh_common_args"
-                placeholder="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-              />
-              <span class="form-hint">追加给每条 SSH 连接的参数；默认已跳过指纹确认，一般无需修改。</span>
+            <div class="form-grid">
+              <div class="form-group label-top span-2">
+                <label class="form-label">Python 解释器 <span class="optional">选填</span></label>
+                <input
+                  type="text"
+                  class="form-input mono-input"
+                  v-model="form.ansible_python_interpreter"
+                  placeholder="如 /work/jboss/anaconda3/bin/python3"
+                />
+                <span class="form-hint">仅当网关机系统默认 Python 低于 3.8（老机器常见）时填写。</span>
+              </div>
+              <div class="form-group label-top span-2">
+                <label class="form-label">SSH 公共参数 <span class="optional">选填</span></label>
+                <input
+                  type="text"
+                  class="form-input mono-input"
+                  v-model="form.ssh_common_args"
+                  placeholder="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+                />
+                <span class="form-hint">追加给每条 SSH 连接的参数；默认已跳过指纹确认，一般无需修改。</span>
+              </div>
             </div>
           </details>
         </div>
@@ -652,22 +644,6 @@ const form = reactive({
   ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null',
 })
 
-// 连接方式分段（relay-gateways-ux-redesign D2）：纯前端派生自两腿字段——
-// 任一非空即「有网关机」；直连 = 两腿全空（保存时强制置 null，schema 语义不变）
-const connMode = ref<'gateway' | 'direct'>('gateway')
-
-function deriveConnMode() {
-  connMode.value = form.http_base_url.trim() || form.ssh_jump.trim() ? 'gateway' : 'direct'
-}
-
-function onConnModeChange() {
-  if (connMode.value === 'direct') {
-    form.http_base_url = ''
-    form.ssh_jump = ''
-    formErrors.http_base_url = ''
-    formErrors.ssh_jump = ''
-  }
-}
 const formErrors = reactive({
   code: '',
   name: '',
@@ -776,7 +752,6 @@ function openCreate() {
   form.ansible_python_interpreter = ''
   form.ssh_common_args = '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
   clearFormErrors()
-  connMode.value = 'gateway' // 新建默认「有网关机」（蓝图 §5 组②）
 }
 
 function openEdit(record: RelayGateway) {
@@ -795,7 +770,6 @@ function openEdit(record: RelayGateway) {
   form.ansible_python_interpreter = record.ansible_python_interpreter || ''
   form.ssh_common_args = record.ssh_common_args || '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
   clearFormErrors()
-  deriveConnMode()
   // 口令不出列表：编辑时按需单查（单查走审计）
   fetchGatewayCredential(record.id)
     .then((r: { data: { ssh_password: string | null } }) => {
@@ -855,12 +829,9 @@ function validateForm(): boolean {
 
 async function handleSubmit() {
   if (!validateForm()) return
-  // 直连派生（relay-gateways-ux-redesign D2）：分段=直连 → 两腿强制空；分段=有网关机但两腿全空 →
-  // 等价直连，允许保存但一次性提示，避免误留空
-  if (connMode.value === 'direct') {
-    form.http_base_url = ''
-    form.ssh_jump = ''
-  } else if (!form.http_base_url.trim() && !form.ssh_jump.trim()) {
+  // 直连语义（relay-gateways-ux-redesign D2 修订）：无分段选择——两腿全空即直连区域，
+  // 允许保存但一次性提示，避免误留空
+  if (!form.http_base_url.trim() && !form.ssh_jump.trim()) {
     message.info('两腿均为空，将按直连区域保存')
   }
   submitting.value = true
@@ -1764,34 +1735,31 @@ onUnmounted(() => {
   color: var(--muted);
   line-height: 1.55;
 }
-.segment-control {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 12px;
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 14px;
 }
-.segment-control label {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 8px 12px;
-  cursor: pointer;
-  transition:
-    border-color 0.15s,
-    background 0.15s;
-  font-size: 13px;
+.form-grid .span-2 {
+  grid-column: span 2;
 }
-.segment-control label.active {
-  border-color: var(--accent);
-  background: var(--accent-bg);
+@media (max-width: 640px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .form-grid .span-2 {
+    grid-column: span 1;
+  }
 }
-.segment-control input {
-  margin-right: 6px;
+.form-input.mono-input {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
 }
-.segment-control label.active small,
-.segment-control small {
+.form-label .optional {
   color: var(--muted);
+  font-weight: 400;
+  font-size: 11px;
+  margin-left: 4px;
 }
 .advanced-section {
   margin-top: 14px;
