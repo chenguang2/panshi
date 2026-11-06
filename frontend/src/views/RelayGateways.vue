@@ -1764,8 +1764,8 @@ onUnmounted(() => {
 }
 .form-section-title {
   font-size: 13px;
-  font-weight: 600;
-  color: var(--fg);
+  font-weight: 700;
+  color: var(--accent);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1868,8 +1868,8 @@ onUnmounted(() => {
   cursor: pointer;
   padding: 9px 12px;
   font-size: 12px;
-  font-weight: 600;
-  color: var(--muted);
+  font-weight: 700;
+  color: var(--accent);
   display: flex;
   align-items: center;
   gap: 6px;
