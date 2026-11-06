@@ -34,9 +34,6 @@
   .ph h1 { margin: 0; font-size: 20px; }
   .ph .desc { margin: 4px 0 0; color: var(--muted); font-size: 13px; max-width: 640px; }
   .ph-actions { display: flex; align-items: center; gap: 10px; }
-  .view-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); }
-  .view-toggle button { border: none; background: transparent; padding: 7px 14px; font-size: 13px; cursor: pointer; color: var(--muted); }
-  .view-toggle button.on { background: var(--accent); color: #fff; }
 
   .btn { border: 1px solid var(--border); background: var(--surface); color: var(--fg); border-radius: 6px; padding: 7px 14px; font-size: 13px; cursor: pointer; }
   .btn:hover { border-color: var(--accent); color: var(--accent); }
@@ -51,6 +48,43 @@
   .banner-text { font-size: 13px; line-height: 1.65; color: oklch(30% 0.06 230); }
   .banner-text b { color: oklch(30% 0.1 220); }
   .banner-text p { margin: 2px 0 0; }
+
+  /* ── 动作对照（现页面第 2 部分原样复刻，两视图共用） ── */
+  .relay-guide {
+    margin: 16px 0 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .relay-guide > summary {
+    list-style: none; cursor: pointer; padding: 11px 16px;
+    font-size: 13px; font-weight: 600; color: var(--accent);
+    display: flex; align-items: center; gap: 8px; user-select: none;
+  }
+  .relay-guide > summary::-webkit-details-marker { display: none; }
+  .relay-guide > summary::before { content: '▸'; transition: transform 0.15s; font-size: 11px; }
+  .relay-guide[open] > summary::before { transform: rotate(90deg); }
+  .relay-guide .guide-body {
+    margin: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+    border-top: 1px dashed var(--border); padding: 14px 16px 0;
+  }
+  .guide-col h4 { font-size: 13px; margin: 0 0 2px; display: flex; align-items: center; gap: 6px; color: var(--fg); font-weight: 700; }
+  .guide-col .when { font-size: 12px; color: var(--accent); font-weight: 600; margin: 0 0 6px; }
+  .guide-col ul { padding-left: 16px; font-size: 12px; color: var(--muted); line-height: 1.7; margin: 0; }
+  .guide-col ul b { color: var(--fg); font-weight: 500; }
+  .guide-symptom { grid-column: 1 / -1; margin: 2px 0 16px; padding: 10px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; }
+  .guide-symptom h5 { margin: 0 0 6px; font-size: 12px; color: var(--muted); }
+  .guide-symptom table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .guide-symptom td { padding: 4px 8px 4px 0; vertical-align: top; color: var(--muted); }
+  .guide-symptom td:first-child { color: var(--danger); white-space: nowrap; padding-right: 16px; }
+  .guide-symptom td:last-child b { color: var(--accent); font-weight: 600; }
+
+  /* ── 视图切换工具行（新增的第 2/3 部分之间小行，两视图共用） ── */
+  .viewbar { display: flex; justify-content: flex-end; align-items: center; }
+  .view-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); }
+  .view-toggle button { border: none; background: transparent; padding: 7px 14px; font-size: 13px; cursor: pointer; color: var(--muted); }
+  .view-toggle button.on { background: var(--accent); color: #fff; }
 
   /* ── 设计标注条 ── */
   .legend { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); padding: 10px 14px; border: 1px dashed var(--border-strong); border-radius: 8px; background: var(--surface); }
@@ -172,10 +206,6 @@
       <p class="desc">维护各局中继网关注册信息：配置网关地址与 SSH 跳板后，该局节点的管理与数据通道将经由网关中转；未配置区域的集群按直连执行。</p>
     </div>
     <div class="ph-actions">
-      <div class="view-toggle">
-        <button id="vTopo" class="on">拓扑视图</button>
-        <button id="vTable">表格视图</button>
-      </div>
       <button class="btn">全量体检</button>
       <button class="btn primary" data-demo="打开现有「新建区域」弹窗（基础身份 / 网关两腿连接 / 网关机 SSH 凭据 / 高级参数）">+ 新建区域</button>
     </div>
@@ -190,13 +220,65 @@
     </div>
   </div>
 
-  <!-- 设计标注 -->
-  <div class="legend">
-    <span class="lg"><span class="no">1</span>点网关机 → 打开现有「编辑区域」弹窗</span>
-    <span class="lg"><span class="no">2</span>点两腿标签 → 弹窗并聚焦「网关两腿连接」分组</span>
-    <span class="lg"><span class="no">3</span>点集群卡 → 挂接 / 解挂弹窗</span>
-    <span class="lg"><span class="no">4</span>点节点行 → 只读详情 + 跳节点管理</span>
-    <span class="lg"><span class="no">5</span>卡头动作区与现表格逐字一致（测试 / 下发配置 / 更多▾）</span>
+  <!-- 第 2 部分：动作对照（现页面原样，两视图共用） -->
+  <details class="relay-guide" open>
+    <summary>「初始化网关 / 下发配置 / 配置跳板转发」，何时用哪个？（点击可收起）</summary>
+    <div class="guide-body">
+      <div class="guide-col">
+        <h4>🚀 初始化网关</h4>
+        <p class="when">何时用：首次装机、网关机重装 OpenResty 后</p>
+        <ul>
+          <li>写入 <b>8443 监听 server 块</b> + 当前白名单</li>
+          <li>校验后 reload，<b>幂等可重复执行</b></li>
+          <li>要求已填 OpenResty 前缀</li>
+        </ul>
+      </div>
+      <div class="guide-col">
+        <h4>📦 下发配置</h4>
+        <p class="when">何时用：集群挂接、节点增删、节点启停之后</p>
+        <ul>
+          <li>只推<b>节点白名单</b>（全量替换），不动 8443 监听</li>
+          <li><b>幂等</b>；空名单有危险确认</li>
+          <li>不执行会被网关 403 拦截</li>
+        </ul>
+      </div>
+      <div class="guide-col">
+        <h4>🔑 配置跳板转发</h4>
+        <p class="when">何时用：跳板 SSH 部署且网关 sshd 默认禁转发时</p>
+        <ul>
+          <li>root 写 sshd drop-in 放行 <b>PermitOpen</b></li>
+          <li><b>一次即可</b>；格式不兼容自动降级</li>
+          <li>root 密码仅本次使用，不保存</li>
+        </ul>
+      </div>
+      <div class="guide-symptom">
+        <h5>常见症状 → 建议动作</h5>
+        <table>
+          <tbody>
+            <tr>
+              <td>HTTP 腿不可达</td>
+              <td>先执行 <b>「更多 ▾ → 初始化网关」</b></td>
+            </tr>
+            <tr>
+              <td>SSH 腿报 administratively prohibited</td>
+              <td>执行 <b>「配置跳板转发」</b> 放行</td>
+            </tr>
+            <tr>
+              <td>状态列出现「清单缺组」</td>
+              <td>重新<b>保存一次该区域</b>（补齐 SSH 用户）即可重建清单组</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </details>
+
+  <!-- 第 2/3 部分之间的视图切换工具行（两视图共用；表格视图下仅有此新增小行） -->
+  <div class="viewbar">
+    <div class="view-toggle">
+      <button id="vTopo" class="on">拓扑视图</button>
+      <button id="vTable">表格视图</button>
+    </div>
   </div>
 
   <!-- ══════════ 区域一：济南局（完整中继） ══════════ -->
@@ -361,6 +443,17 @@ SSH跳板：✓ 可达
       </tbody>
     </table>
   </section>
+
+  <!-- 设计标注（评审用，非页面内容） -->
+  <div class="legend" style="margin-top: 12px; border-style: dashed; opacity: 0.85">
+    <b style="color: var(--accent)">设计标注 · 非页面内容：</b>
+    <span class="lg"><span class="no">1</span>点网关机 → 打开现有「编辑区域」弹窗</span>
+    <span class="lg"><span class="no">2</span>点两腿标签 → 弹窗并聚焦「网关两腿连接」分组</span>
+    <span class="lg"><span class="no">3</span>点集群卡 → 挂接 / 解挂弹窗</span>
+    <span class="lg"><span class="no">4</span>点节点行 → 只读详情 + 跳节点管理</span>
+    <span class="lg"><span class="no">5</span>卡头动作区与现表格逐字一致（测试 / 下发配置 / 更多▾）</span>
+    <span class="lg"><span class="no">6</span>表格视图 = 现页面逐字不动；拓扑视图 = 仅第 3 部分（区域列表卡）换为链路卡，第 1/2 部分原样共用</span>
+  </div>
 
   <div class="foot">设计示例页 · 全部数据为虚构 · 视觉/文案基准：《relay-region-topology-blueprint.md》§4 · 批准后按 openspec 流程实施</div>
 </div>
