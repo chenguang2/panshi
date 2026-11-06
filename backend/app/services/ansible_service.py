@@ -333,17 +333,21 @@ def _ansible_false_success_error(result: dict, ip: str) -> str | None:
     P2①：自 node_task_service 下沉至此——由 run_playbook 唯一出口统一调用，
     新调用方自动免疫（调用侧逐点补守卫会漏，S4/M24 两次实证）。
 
-    **标记只认「清单缺失」两类（2026-11-05 收窄）**：曾封装
+    **标记只认「清单缺失」与「UNREACHABLE」两类（2026-11-05 收窄）**：曾封装
     `classify_ansible_failure(rc=0)` 全量标记，「timeout」等宽泛子串命中了
     **载荷本身**——edge_read_env 腿的 stdout 就是 edge.env 文件内容，配置里
     `resolver_timeout: 5` 被当「执行超时」，成功读取被翻转成失败。超时/认证/
-    连接等宽泛归因只属于 classify 的 rc≠0 路径，不得翻转 rc=0 的有内容输出。
+    权限/磁盘等宽泛归因只属于 classify 的 rc≠0 路径，不得翻转 rc=0 的有内容输出。
+    UNREACHABLE 两标记保留：`UNREACHABLE!` 与 `"unreachable": true` 是 ansible
+    特有 token（cmd_exec_bugs 钉定的真实假成功形态），载荷内容不可能出现。
     """
     raw = "\n".join(
         str(result.get(k) or "") for k in ("stdout", "shell_stdout", "stderr")
     ).lower()
     if "no hosts matched" in raw or "could not match supplied host pattern" in raw:
         return f"节点 {ip} 不在 Ansible 主机清单中，请在 inventory/host 文件中添加该节点的 SSH 连接信息"
+    if "unreachable!" in raw or '"unreachable": true' in raw:
+        return f"节点 {ip} 无法连接（UNREACHABLE），请检查网络与 SSH 服务（22 端口）"
     return None
 
 
