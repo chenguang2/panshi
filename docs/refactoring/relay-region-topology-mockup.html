@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>中继区域管理 · 拓扑视图 — 设计示例页</title>
+<style>
+  /* 令牌取自 frontend/src/styles/theme.css */
+  :root {
+    --bg: oklch(97% 0.005 250);
+    --surface: oklch(100% 0 0);
+    --fg: oklch(20% 0.02 240);
+    --muted: oklch(50% 0.018 240);
+    --border: oklch(88% 0.008 240);
+    --border-strong: oklch(74% 0.02 240);
+    --accent: oklch(56% 0.16 210);
+    --accent-bg: oklch(56% 0.16 210 / 10%);
+    --success: #16a34a;
+    --warning: #d48806;
+    --danger: #dc2626;
+    --orange: #e07a1f;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 14px; line-height: 1.6;
+  }
+  .page { max-width: 1180px; margin: 0 auto; padding: 24px 28px 80px; display: flex; flex-direction: column; gap: 16px; }
+
+  /* ── 页头 ── */
+  .ph { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  .ph h1 { margin: 0; font-size: 20px; }
+  .ph .desc { margin: 4px 0 0; color: var(--muted); font-size: 13px; max-width: 640px; }
+  .ph-actions { display: flex; align-items: center; gap: 10px; }
+  .view-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); }
+  .view-toggle button { border: none; background: transparent; padding: 7px 14px; font-size: 13px; cursor: pointer; color: var(--muted); }
+  .view-toggle button.on { background: var(--accent); color: #fff; }
+
+  .btn { border: 1px solid var(--border); background: var(--surface); color: var(--fg); border-radius: 6px; padding: 7px 14px; font-size: 13px; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { filter: brightness(1.06); color: #fff; }
+  .btn.sm { padding: 4px 10px; font-size: 12px; }
+  .mono { font-family: var(--mono); font-size: 12px; }
+
+  /* ── 说明卡（现有页面原样保留） ── */
+  .relay-banner { display: flex; gap: 12px; align-items: flex-start; border-radius: 8px; padding: 14px 16px; background: var(--accent-bg); border: 1px solid oklch(56% 0.16 210 / 28%); }
+  .banner-icon { width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; color: #fff; background: var(--accent); font-style: normal; }
+  .banner-text { font-size: 13px; line-height: 1.65; color: oklch(30% 0.06 230); }
+  .banner-text b { color: oklch(30% 0.1 220); }
+  .banner-text p { margin: 2px 0 0; }
+
+  /* ── 设计标注条 ── */
+  .legend { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); padding: 10px 14px; border: 1px dashed var(--border-strong); border-radius: 8px; background: var(--surface); }
+  .legend .lg { display: inline-flex; align-items: center; gap: 5px; }
+  .legend .no { width: 16px; height: 16px; border-radius: 50%; background: var(--accent-bg); color: var(--accent); font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+
+  /* ── 拓扑卡 ── */
+  .topo-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .topo-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 18px 8px; }
+  .th-left { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .th-left h2 { margin: 0; font-size: 16px; }
+  .code-tag { background: var(--accent-bg); color: var(--accent); border-radius: 4px; padding: 1px 7px; font-weight: 600; }
+  .badge { border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 600; }
+  .badge.ok { background: oklch(70% 0.17 150 / 14%); color: var(--success); }
+  .badge.off { background: oklch(50% 0.018 240 / 10%); color: var(--muted); }
+  .badge.warn { background: oklch(80% 0.15 85 / 18%); color: var(--warning); }
+  .hchip { font-size: 12px; font-weight: 600; }
+  .hchip.ok { color: var(--success); }
+  .hchip.fail { color: var(--danger); }
+  .hchip.unknown { color: var(--muted); opacity: 0.75; }
+  .hchip time { color: var(--muted); font-weight: 400; font-size: 11px; margin-left: 4px; }
+  .th-actions { display: flex; align-items: center; gap: 8px; }
+  .th-sub { padding: 0 18px 12px; color: var(--muted); font-size: 12px; border-bottom: 1px solid var(--border); }
+  .th-sub b { color: var(--fg); }
+  .th-sub .sep { margin: 0 6px; opacity: 0.5; }
+  .th-sub .c-add { color: var(--warning); font-weight: 600; }
+  .th-sub .c-rm { color: var(--orange); font-weight: 600; }
+
+  /* ── 图体：平台 → 两腿 → 网关机 → 分发 → 集群们 ── */
+  .topo-body { display: flex; align-items: stretch; padding: 22px 18px 22px; gap: 0; overflow-x: auto; }
+  .col { display: flex; flex-direction: column; justify-content: center; gap: 14px; }
+  .node { background: var(--surface); border: 1.5px solid var(--border-strong); border-radius: 10px; padding: 12px 16px; min-width: 128px; text-align: center; }
+  .node .n-title { font-weight: 700; font-size: 13px; }
+  .node .n-sub { color: var(--muted); font-size: 11px; margin-top: 2px; }
+  .node .n-main { font-family: var(--mono); font-size: 12px; margin-top: 6px; }
+  .node .n-tags { margin-top: 6px; display: flex; gap: 4px; justify-content: center; flex-wrap: wrap; }
+
+  .node.editable { cursor: pointer; transition: border-color .15s, box-shadow .15s; position: relative; }
+  .node.editable:hover { border-color: var(--accent); box-shadow: 0 2px 10px oklch(56% 0.16 210 / 18%); }
+  .pencil { position: absolute; top: 6px; right: 8px; font-size: 11px; color: var(--accent); opacity: 0; transition: opacity .15s; font-style: normal; }
+  .editable:hover .pencil, .editable:hover .pencil-inline { opacity: 1; }
+  .pencil-inline { opacity: 0; transition: opacity .15s; color: var(--accent); font-style: normal; font-size: 11px; margin-left: 4px; }
+  .row-editable { cursor: pointer; }
+  .row-editable:hover .pencil-inline { opacity: 1; }
+
+  /* 边（连线 + 标签 chip 叠在线上） */
+  .edge { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; width: 168px; flex-shrink: 0; padding: 10px 0; }
+  .edge::before { content: ""; position: absolute; left: -2px; right: 12px; top: 50%; height: 2px; background: var(--border-strong); }
+  .edge::after { content: ""; position: absolute; right: 3px; top: 50%; transform: translateY(-50%); border-left: 9px solid var(--border-strong); border-top: 6px solid transparent; border-bottom: 6px solid transparent; }
+  .edge .leg-chip { position: relative; z-index: 1; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 2px 9px; font-size: 11px; color: var(--muted); max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .edge .leg-chip b { color: var(--fg); font-weight: 600; }
+  .edge .leg-chip .st-ok { color: var(--success); font-weight: 700; }
+  .edge .leg-chip .st-fail { color: var(--danger); font-weight: 700; }
+  .edge .leg-chip.dim { opacity: 0.65; border-style: dashed; }
+  .edge.clickable .leg-chip { cursor: pointer; }
+  .edge.clickable .leg-chip:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* 集群列 */
+  .col-clusters { flex: 1; min-width: 330px; gap: 12px; }
+  .cluster-card { border: 1.5px solid var(--border-strong); border-radius: 10px; padding: 10px 14px 8px; background: var(--surface); cursor: pointer; transition: border-color .15s, box-shadow .15s; position: relative; }
+  .cluster-card:hover { border-color: var(--accent); box-shadow: 0 2px 10px oklch(56% 0.16 210 / 18%); }
+  .cc-head { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 13px; margin-bottom: 4px; }
+  .cc-head .n-count { color: var(--muted); font-weight: 400; font-size: 11px; }
+  .cc-head .goto { margin-left: auto; color: var(--accent); font-size: 11px; font-weight: 400; opacity: 0; transition: opacity .15s; }
+  .cluster-card:hover .goto { opacity: 1; }
+  .nrow { display: flex; align-items: center; gap: 7px; padding: 4px 0; border-top: 1px dashed var(--border); font-family: var(--mono); font-size: 12px; cursor: pointer; }
+  .nrow:hover { background: var(--accent-bg); margin: 0 -8px; padding-left: 8px; padding-right: 8px; border-radius: 4px; }
+  .nrow:first-of-type { border-top: none; }
+  .nrow .nname { color: var(--muted); font-family: inherit; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .dot.ok { background: var(--success); }
+  .dot.off { background: oklch(65% 0.01 240); }
+  .dot.err { background: var(--danger); }
+  .tag { border-radius: 4px; padding: 0 6px; font-size: 11px; font-weight: 600; font-family: inherit; white-space: nowrap; }
+  .tag.pend { background: oklch(80% 0.15 85 / 18%); color: var(--warning); }
+  .tag.rm { background: oklch(75% 0.14 55 / 18%); color: var(--orange); }
+  .tag.skip { background: oklch(50% 0.018 240 / 8%); color: var(--muted); font-weight: 400; }
+  .tag.err { background: oklch(60% 0.2 25 / 12%); color: var(--danger); }
+  .attach-dashed { border: 1.5px dashed var(--border-strong); border-radius: 10px; padding: 9px 14px; color: var(--muted); font-size: 12px; text-align: center; cursor: pointer; background: transparent; }
+  .attach-dashed:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* 直连区域 */
+  .node.ghost { border-style: dashed; background: transparent; }
+  .direct-guide { font-size: 12px; color: var(--muted); padding: 6px 2px 0; }
+  .direct-guide button { border: none; background: none; color: var(--accent); cursor: pointer; font-size: 12px; padding: 0; text-decoration: underline; }
+
+  /* 悬空区域码提示条 */
+  .orphan-card { display: flex; align-items: center; gap: 12px; border: 1px solid oklch(80% 0.15 85 / 55%); background: oklch(80% 0.15 85 / 10%); border-radius: 8px; padding: 10px 16px; font-size: 13px; }
+  .orphan-card .tag.warn { background: oklch(80% 0.15 85 / 22%); }
+
+  /* 新建区域虚线卡 */
+  .create-card { border: 2px dashed var(--border-strong); border-radius: 10px; padding: 22px; text-align: center; color: var(--muted); cursor: pointer; background: transparent; }
+  .create-card:hover { border-color: var(--accent); color: var(--accent); }
+  .create-card b { font-size: 14px; }
+  .create-card .steps { font-size: 12px; margin-top: 4px; }
+
+  /* 表格视图（现有页面静态复刻） */
+  .table-view { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .table-view .card-header { padding: 14px 18px 6px; font-weight: 700; font-size: 15px; }
+  .table-view table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .table-view th { text-align: left; background: var(--accent-bg); border-bottom: 2px solid var(--accent); color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 10px 14px; }
+  .table-view td { padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 13px; }
+  .tr-hidden { display: none; }
+
+  /* 底部演示提示 */
+  #toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%) translateY(20px); background: oklch(25% 0.03 240); color: #fff; border-radius: 8px; padding: 10px 18px; font-size: 13px; opacity: 0; pointer-events: none; transition: all .2s; max-width: 720px; box-shadow: 0 6px 24px oklch(20% 0.02 240 / 35%); }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  .foot { color: var(--muted); font-size: 12px; text-align: center; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- 页头 -->
+  <header class="ph">
+    <div>
+      <h1>中继区域管理</h1>
+      <p class="desc">维护各局中继网关注册信息：配置网关地址与 SSH 跳板后，该局节点的管理与数据通道将经由网关中转；未配置区域的集群按直连执行。</p>
+    </div>
+    <div class="ph-actions">
+      <div class="view-toggle">
+        <button id="vTopo" class="on">拓扑视图</button>
+        <button id="vTable">表格视图</button>
+      </div>
+      <button class="btn">全量体检</button>
+      <button class="btn primary" data-demo="打开现有「新建区域」弹窗（基础身份 / 网关两腿连接 / 网关机 SSH 凭据 / 高级参数）">+ 新建区域</button>
+    </div>
+  </header>
+
+  <!-- 说明卡：现有页面原样保留 -->
+  <div class="relay-banner">
+    <span class="banner-icon">i</span>
+    <div class="banner-text">
+      <b>哪些局需要建中继区域？—— 局内网络与平台不互通时</b>
+      <p>中继区域 = 一台「跳板网关机」的登记信息。建好并挂接到集群后，该集群的发布/节点任务经它两条腿进局：<b>HTTP 腿</b>（管理请求走网关机 8443 反向代理）与 <b>SSH 腿</b>（安装/初始化类任务先跳到网关机再进局内）。局内网络本就互通的，不用建——不建或禁用都按直连执行。</p>
+    </div>
+  </div>
+
+  <!-- 设计标注 -->
+  <div class="legend">
+    <span class="lg"><span class="no">1</span>点网关机 → 打开现有「编辑区域」弹窗</span>
+    <span class="lg"><span class="no">2</span>点两腿标签 → 弹窗并聚焦「网关两腿连接」分组</span>
+    <span class="lg"><span class="no">3</span>点集群卡 → 挂接 / 解挂弹窗</span>
+    <span class="lg"><span class="no">4</span>点节点行 → 只读详情 + 跳节点管理</span>
+    <span class="lg"><span class="no">5</span>卡头动作区与现表格逐字一致（测试 / 下发配置 / 更多▾）</span>
+  </div>
+
+  <!-- ══════════ 区域一：济南局（完整中继） ══════════ -->
+  <section class="topo-card">
+    <div class="topo-head">
+      <div class="th-left">
+        <h2>济南局</h2>
+        <span class="code-tag mono">jinan</span>
+        <span class="badge ok">启用</span>
+        <span class="hchip ok" title="体检时间 2026-11-06 09:12
+网关HTTP腿：✓ 可达
+SSH跳板：✓ 可达
+抽样节点两腿：✓ 可达">✓ 正常<time>11-06 09:12</time></span>
+      </div>
+      <div class="th-actions">
+        <button class="btn sm" data-demo="探测该区域两条腿（现有 GET /relay/health-check），结果更新健康徽章">测试</button>
+        <button class="btn primary sm" data-demo="现有「下发配置」流程：漂移确认弹窗 → SSE 执行抽屉（逐字复用现表格逻辑）">下发配置</button>
+        <button class="btn sm" data-demo="现有「更多 ▾」菜单原样平移：编辑 / 初始化网关 / 配置跳板转发 / 查看配置 / 查看凭据 / 启用·禁用 / 删除">更多 ▾</button>
+      </div>
+    </div>
+    <div class="th-sub">
+      白名单 <b>3</b>/<b>5</b> 已同步<span class="sep">·</span><span class="c-add">1 个未下发</span><span class="sep">·</span><span class="c-rm">1 个待移除</span><span class="sep">·</span>上次下发 2026-11-05 18:22
+    </div>
+    <div class="topo-body">
+      <!-- 平台 -->
+      <div class="col">
+        <div class="node platform" title="中控平台：发布、节点任务的发起方。所有进局请求从这两条腿出去。">
+          <div class="n-title">中控平台</div>
+          <div class="n-sub">发布 · 任务发起方</div>
+        </div>
+      </div>
+      <!-- 两腿 -->
+      <div class="edge clickable">
+        <span class="leg-chip" data-demo="打开「编辑区域」弹窗，并滚动聚焦到「网关两腿连接」分组的「网关 HTTP 腿」输入框" title="发布、回滚等管理请求经它进入该局"><b>HTTP 腿</b> <span class="mono">10.10.1.1:8443</span> <span class="st-ok">✓</span></span>
+        <span class="leg-chip" data-demo="打开「编辑区域」弹窗，并滚动聚焦到「网关两腿连接」分组的「SSH 跳板」输入框" title="安装、初始化等 SSH 任务先跳到网关机再进局内"><b>SSH 跳板</b> <span class="mono">tunnel@10.10.1.1:22</span> <span class="st-ok">✓</span></span>
+      </div>
+      <!-- 网关机 -->
+      <div class="col">
+        <div class="node editable" data-demo="打开现有「编辑区域」弹窗（口令按需加载回填、审计不变）">
+          <i class="pencil">✎ 编辑</i>
+          <div class="n-title">网关机 · 济南局 <span class="code-tag mono" style="font-size:10px">jinan</span></div>
+          <div class="n-main">jboss@10.10.1.1:22</div>
+          <div class="n-sub mono" title="/work/jboss/tunnel/openresty-1.21.4.1/nginx">/work/jboss/tunnel/openresty…/nginx</div>
+        </div>
+      </div>
+      <!-- 分发边 -->
+      <div class="edge">
+        <span class="leg-chip" title="初始化/下发写入网关机 nginx 的节点白名单 map（edge_targets.conf）"><b>8443 白名单</b> 3 节点</span>
+        <span class="leg-chip" title="「配置跳板转发」以 root 写入 sshd drop-in（PermitOpen）"><b>sshd PermitOpen</b></span>
+      </div>
+      <!-- 集群们 -->
+      <div class="col col-clusters">
+        <div class="cluster-card" data-demo="打开「挂接 / 解挂」弹窗：区域下拉（当前：济南局）/ 解挂按钮 / 打开集群链接">
+          <div class="cc-head">胶济干线 <span class="n-count">3 节点</span><i class="pencil-inline">✎</i><span class="goto">挂接/解挂 ›</span></div>
+          <div class="nrow" data-demo="只读 popover：启用 · 白名单已同步 · 体检 ✓（网关机自身节点，走直连不适用跳板） + 「打开节点管理」链接">
+            <span class="dot ok"></span>10.10.2.1:8080<span class="tag skip">自跳直连</span>
+          </div>
+          <div class="nrow" data-demo="只读 popover：启用 · 白名单已同步 + 「打开节点管理」链接">
+            <span class="dot ok"></span>10.10.2.2:8080
+          </div>
+          <div class="nrow" data-demo="只读 popover：启用 · 未下发（不在上次成功下发快照，需「下发配置」后网关才放行）">
+            <span class="dot ok"></span>10.10.2.3:8080<span class="tag pend">未下发</span>
+          </div>
+        </div>
+        <div class="cluster-card" data-demo="打开「挂接 / 解挂」弹窗：区域下拉（当前：济南局）/ 解挂按钮 / 打开集群链接">
+          <div class="cc-head">济南枢纽 <span class="n-count">2 节点</span><i class="pencil-inline">✎</i><span class="goto">挂接/解挂 ›</span></div>
+          <div class="nrow" data-demo="只读 popover：启用 · 白名单已同步 + 「打开节点管理」链接">
+            <span class="dot ok"></span>10.10.3.1:8080
+          </div>
+          <div class="nrow" data-demo="只读 popover：已停用 · 待移除（仍在网关白名单内，「下发配置」后移除）">
+            <span class="dot off"></span>10.10.3.2:8080<span class="nname">已停用</span><span class="tag rm">待移除</span>
+          </div>
+        </div>
+        <div class="attach-dashed" data-demo="打开「挂接集群」弹窗：下拉列出未挂接本区域的集群（含其当前区域归属）">+ 挂接集群</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ 区域二：武清（直连区域） ══════════ -->
+  <section class="topo-card">
+    <div class="topo-head">
+      <div class="th-left">
+        <h2>武清本地</h2>
+        <span class="code-tag mono">wuqing</span>
+        <span class="badge ok">启用</span>
+        <span class="badge warn">直连 · 无网关机</span>
+        <span class="hchip unknown">未检测</span>
+      </div>
+      <div class="th-actions">
+        <button class="btn sm">测试</button>
+        <button class="btn primary sm" data-demo="直连区域无白名单可推：按钮置灰并提示「未配置网关机，无下发对象」">下发配置</button>
+        <button class="btn sm">更多 ▾</button>
+      </div>
+    </div>
+    <div class="th-sub">两腿均为空<span class="sep">·</span>该局集群按现状直连执行<span class="sep">·</span>局内互通的局无需登记网关机</div>
+    <div class="topo-body">
+      <div class="col">
+        <div class="node platform">
+          <div class="n-title">中控平台</div>
+          <div class="n-sub">发布 · 任务发起方</div>
+        </div>
+      </div>
+      <div class="edge clickable">
+        <span class="leg-chip dim" data-demo="打开「编辑区域」弹窗并聚焦「网关两腿连接」分组">HTTP 腿 · 未配置</span>
+        <span class="leg-chip dim" data-demo="打开「编辑区域」弹窗并聚焦「网关两腿连接」分组">SSH 跳板 · 未配置</span>
+      </div>
+      <div class="col">
+        <div class="node ghost">
+          <div class="n-title" style="color: var(--muted)">未配置网关机</div>
+          <div class="n-sub">直连路径</div>
+        </div>
+      </div>
+      <div class="edge">
+        <span class="leg-chip dim">直连</span>
+      </div>
+      <div class="col col-clusters">
+        <div class="cluster-card" data-demo="打开「挂接 / 解挂」弹窗（当前区域：武清本地）">
+          <div class="cc-head">武清核心 <span class="n-count">2 节点</span><i class="pencil-inline">✎</i><span class="goto">挂接/解挂 ›</span></div>
+          <div class="nrow"><span class="dot ok"></span>192.168.0.13:8080</div>
+          <div class="nrow"><span class="dot ok"></span>192.168.0.14:8080</div>
+        </div>
+        <div class="direct-guide">登记网关机两腿后可经中继进局（<button data-demo="打开「编辑区域」弹窗并聚焦「网关两腿连接」分组">去登记</button>）。当前按直连执行。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ 悬空区域码提示 ══════════ -->
+  <section class="orphan-card">
+    <span class="tag warn">悬空挂接</span>
+    <span>区域码 <span class="code-tag mono">luju</span> 已被 1 个集群挂接，但区域表中无注册记录 —— 该局实际按直连执行。请核对集群所属区域，或</span>
+    <button class="btn sm" data-demo="打开现有「新建区域」弹窗，区域码预填 luju">注册该区域</button>
+  </section>
+
+  <!-- ══════════ 新建区域 ══════════ -->
+  <section class="create-card" data-demo="打开现有「新建区域」弹窗（与右上角按钮等价）">
+    <b>+ 新建区域</b>
+    <div class="steps">登记区域 → 初始化网关 → 集群挂接 → 下发配置</div>
+  </section>
+
+  <!-- ══════════ 表格视图（现有页面静态复刻，切换查看） ══════════ -->
+  <section class="table-view tr-hidden" id="tableView">
+    <div class="card-header">区域列表（表格视图 = 现有页面原样保留）</div>
+    <table>
+      <thead><tr><th>区域</th><th>网关两腿</th><th>状态</th><th>健康</th><th>更新时间</th><th>操作</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><b>济南局</b> <span class="code-tag mono">jinan</span></td>
+          <td>HTTP <span class="mono">https://10.10.1.1:8443</span><br>SSH <span class="mono">tunnel@10.10.1.1:22</span></td>
+          <td><span class="badge ok">启用</span></td>
+          <td><span class="hchip ok">✓ 正常</span> <span class="mono">11-06 09:12</span></td>
+          <td>2026/11/05 18:22:31</td>
+          <td><button class="btn sm">测试</button> <button class="btn primary sm">下发配置</button> <button class="btn sm">更多 ▾</button></td>
+        </tr>
+        <tr>
+          <td><b>武清本地</b> <span class="code-tag mono">wuqing</span></td>
+          <td><span class="badge off">直连 · 无网关机</span></td>
+          <td><span class="badge ok">启用</span></td>
+          <td><span class="hchip unknown">未检测</span></td>
+          <td>2026/10/12 09:40:12</td>
+          <td><button class="btn sm">测试</button> <button class="btn sm">更多 ▾</button></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <div class="foot">设计示例页 · 全部数据为虚构 · 视觉/文案基准：《relay-region-topology-blueprint.md》§4 · 批准后按 openspec 流程实施</div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+  // 视图切换
+  var vTopo = document.getElementById('vTopo'), vTable = document.getElementById('vTable');
+  var topoCards = document.querySelectorAll('.topo-card, .orphan-card, .create-card');
+  var tableView = document.getElementById('tableView');
+  function showTable() {
+    vTable.classList.add('on'); vTopo.classList.remove('on');
+    topoCards.forEach(function (c) { c.classList.add('tr-hidden'); });
+    tableView.classList.remove('tr-hidden');
+  }
+  function showTopo() {
+    vTopo.classList.add('on'); vTable.classList.remove('on');
+    topoCards.forEach(function (c) { c.classList.remove('tr-hidden'); });
+    tableView.classList.add('tr-hidden');
+  }
+  vTopo.addEventListener('click', showTopo);
+  vTable.addEventListener('click', showTable);
+
+  // 点击演示提示
+  var toastEl = document.getElementById('toast'), toastTimer;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.classList.remove('show'); }, 4200);
+  }
+  document.querySelectorAll('[data-demo]').forEach(function (el) {
+    el.addEventListener('click', function (e) { e.stopPropagation(); toast(el.getAttribute('data-demo')); });
+  });
+</script>
+</body>
+</html>
