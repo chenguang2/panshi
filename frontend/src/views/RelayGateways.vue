@@ -12,7 +12,7 @@
       </template>
     </PageHeader>
 
-    <!-- 结论式说明卡（relay-gateways-ux-redesign：证书管理 cert-banner 范式） -->
+    <!-- 结论式说明卡（relay-gateways-ux-redesign：证书管理 cert-banner 范式，样式对齐示例页） -->
     <div class="relay-banner">
       <span class="banner-icon">i</span>
       <div class="banner-text">
@@ -22,50 +22,62 @@
           <b>HTTP 腿</b>（管理请求走网关机 8443 反向代理）与 <b>SSH 腿</b>（安装/初始化类任务先跳到网关机再进局内）。
           局内网络本就互通的，不用建——不建或禁用都按直连执行。
         </p>
-        <div class="relay-steps">
-          <span class="step-chip">① 登记区域<small>新建，填地址与账号</small></span>
-          <span class="step-arrow">→</span>
-          <span class="step-chip">② 初始化网关<small>首次装机，写入 8443 监听</small></span>
-          <span class="step-arrow">→</span>
-          <span class="step-chip">③ 下发配置<small>推送节点白名单</small></span>
+        <div class="banner-steps">
+          <span class="bstep"><b>①</b>登记区域<i>新建，填地址与账号</i></span>
+          <span class="barrow">→</span>
+          <span class="bstep"><b>②</b>初始化网关<i>首次装机，写入 8443 监听</i></span>
+          <span class="barrow">→</span>
+          <span class="bstep"><b>③</b>下发配置<i>推送节点白名单</i></span>
         </div>
-        <details class="relay-guide">
-          <summary>「初始化网关 / 下发配置 / 配置跳板转发」有什么区别？（点开看对照表）</summary>
+        <details class="install-guide relay-guide">
+          <summary>「初始化网关 / 下发配置 / 配置跳板转发」有什么区别？</summary>
           <div class="guide-body">
-            <table class="guide-table">
-              <thead>
-                <tr>
-                  <th>动作</th>
-                  <th>何时用</th>
-                  <th>做什么</th>
-                  <th>幂等性</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>初始化网关</td>
-                  <td>首次装机、网关机重装 OpenResty 后</td>
-                  <td>在网关机写入 8443 监听 server 块 + 当前白名单，校验后 reload</td>
-                  <td>幂等，可重复执行</td>
-                </tr>
-                <tr>
-                  <td>下发配置</td>
-                  <td>日常：集群挂接区域、节点增删、节点启停之后</td>
-                  <td>只推节点白名单（全量替换），不动 8443 监听</td>
-                  <td>幂等；空名单有危险确认</td>
-                </tr>
-                <tr>
-                  <td>配置跳板转发</td>
-                  <td>仅跳板 SSH 部署，且网关 sshd 默认禁转发时</td>
-                  <td>root 写 sshd drop-in 放行 PermitOpen 并 reload sshd</td>
-                  <td>幂等；格式不兼容自动降级</td>
-                </tr>
-              </tbody>
-            </table>
-            <p class="guide-hint">
-              常见症状：HTTP 腿不可达 → 先「初始化网关」；SSH 腿报 <code>administratively prohibited</code> →
-              执行「配置跳板转发」； 状态列出现「清单缺组」→ 重新保存一次该区域（补齐 SSH 用户）即可重建清单组。
-            </p>
+            <div class="guide-col">
+              <h4>🚀 初始化网关</h4>
+              <p class="when">何时用：首次装机、网关机重装 OpenResty 后</p>
+              <ul>
+                <li>写入 <b>8443 监听 server 块</b> + 当前白名单</li>
+                <li>校验后 reload，<b>幂等可重复执行</b></li>
+                <li>要求已填 OpenResty 前缀</li>
+              </ul>
+            </div>
+            <div class="guide-col">
+              <h4>📦 下发配置</h4>
+              <p class="when">何时用：集群挂接、节点增删、节点启停之后</p>
+              <ul>
+                <li>只推<b>节点白名单</b>（全量替换），不动 8443 监听</li>
+                <li><b>幂等</b>；空名单有危险确认</li>
+                <li>不执行会被网关 403 拦截</li>
+              </ul>
+            </div>
+            <div class="guide-col">
+              <h4>🔑 配置跳板转发</h4>
+              <p class="when">何时用：跳板 SSH 部署且网关 sshd 默认禁转发时</p>
+              <ul>
+                <li>root 写 sshd drop-in 放行 <b>PermitOpen</b></li>
+                <li><b>一次即可</b>；格式不兼容自动降级</li>
+                <li>root 密码仅本次使用，不保存</li>
+              </ul>
+            </div>
+            <div class="guide-symptom">
+              <h5>常见症状 → 建议动作</h5>
+              <table>
+                <tbody>
+                  <tr>
+                    <td>HTTP 腿不可达</td>
+                    <td>先执行 <b>「更多 ▾ → 初始化网关」</b></td>
+                  </tr>
+                  <tr>
+                    <td>SSH 腿报 administratively prohibited</td>
+                    <td>执行 <b>「配置跳板转发」</b> 放行</td>
+                  </tr>
+                  <tr>
+                    <td>状态列出现「清单缺组」</td>
+                    <td>重新<b>保存一次该区域</b>（补齐 SSH 用户）即可重建清单组</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </details>
       </div>
@@ -93,10 +105,17 @@
             </template>
             <template v-else-if="column.key === 'legs'">
               <div v-if="record.http_base_url || record.ssh_jump" class="legs-cell">
-                <span class="mono">HTTP {{ record.http_base_url || '—' }}</span>
-                <span class="mono">SSH {{ record.ssh_jump || '—' }}</span>
+                <span class="leg-line"
+                  ><span class="leg-label">HTTP</span><span class="mono">{{ record.http_base_url || '—' }}</span></span
+                >
+                <span class="leg-line"
+                  ><span class="leg-label">SSH</span><span class="mono">{{ record.ssh_jump || '—' }}</span></span
+                >
               </div>
-              <a-tag v-else color="info">直连 · 无网关机</a-tag>
+              <template v-else>
+                <a-tag color="info">直连 · 无网关机</a-tag>
+                <div class="direct-note">两条腿均为空</div>
+              </template>
             </template>
             <template v-else-if="column.key === 'status'">
               <div class="status-cell">
@@ -219,7 +238,8 @@
         </div>
         <div class="modal-body">
           <div class="form-section">
-            <div class="section-title">基础身份</div>
+            <div class="form-section-title"><i class="sec-no">1</i>基础身份</div>
+            <div class="form-section-desc">区域码是集群挂接的钥匙；展示名给人看。</div>
             <div class="form-group label-top">
               <label class="form-label">区域码 <span class="required">*</span></label>
               <input
@@ -262,7 +282,8 @@
           </div>
 
           <div class="form-section">
-            <div class="section-title">网关两腿连接 <small class="section-sub">平台到该局的两条通道</small></div>
+            <div class="form-section-title"><i class="sec-no">2</i>网关两腿连接</div>
+            <div class="form-section-desc">平台到该局的两条通道；局内本就互通的选「直连区域」即可。</div>
             <div class="segment-control">
               <label :class="{ active: connMode === 'gateway' }">
                 <input type="radio" value="gateway" v-model="connMode" @change="onConnModeChange" />
@@ -322,7 +343,8 @@
           </div>
 
           <div class="form-section">
-            <div class="section-title">SSH 凭据 <small class="section-sub">写入网关清单，供平台登录网关机</small></div>
+            <div class="form-section-title"><i class="sec-no">3</i>SSH 凭据</div>
+            <div class="form-section-desc">写入网关清单，供平台登录网关机执行配置。</div>
             <div class="form-group label-top">
               <label class="form-label">SSH 用户 <span class="required">*</span></label>
               <input
@@ -355,7 +377,7 @@
             </div>
           </div>
 
-          <details class="advanced-section">
+          <details class="install-guide advanced-section">
             <summary>高级参数（一般不用改）</summary>
             <div class="form-group label-top">
               <label class="form-label">Python 解释器</label>
@@ -1466,142 +1488,260 @@ onUnmounted(() => {
   margin-bottom: 4px;
 }
 
-/* ── relay-gateways-ux-redesign：说明卡 / 三步走 / 对照表 ── */
+/* ── relay-gateways-ux-redesign：视觉体系对齐示例页（mockup.html 移植，oklch 令牌取自 theme.css） ── */
 .relay-banner {
   display: flex;
   gap: 12px;
-  background: var(--info-bg, #eef5ff);
-  border: 1px solid var(--info-border, #bcd6f7);
+  align-items: flex-start;
   border-radius: 8px;
   padding: 14px 16px;
-  margin-bottom: 16px;
+  background: var(--accent-bg);
+  border: 1px solid oklch(56% 0.16 210 / 28%);
 }
 .relay-banner .banner-icon {
-  flex: 0 0 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
-  background: var(--primary, #1677ff);
-  color: #fff;
-  font-weight: 700;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-top: 2px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--accent);
+  margin-top: 1px;
+  font-style: normal;
+}
+.relay-banner .banner-text {
+  font-size: 13px;
+  line-height: 1.65;
+  color: oklch(30% 0.06 230);
 }
 .relay-banner .banner-text b {
-  display: block;
-  margin-bottom: 4px;
+  color: oklch(30% 0.1 220);
 }
 .relay-banner .banner-text p {
-  margin: 0 0 10px;
-  color: var(--text-secondary, #555);
+  margin: 2px 0 0;
 }
-.relay-steps {
+.banner-steps {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.bstep {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  background: var(--surface);
+  border: 1px solid oklch(56% 0.16 210 / 30%);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+.bstep b {
+  color: var(--accent);
+  font-family: var(--font-mono);
+}
+.bstep i {
+  color: var(--muted);
+  font-style: normal;
+}
+.barrow {
+  color: var(--accent);
+  font-weight: 600;
+  padding: 0 2px;
+}
+
+/* 折叠对照表（install-guide 范式） */
+.relay-guide {
+  margin-top: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.relay-guide > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 11px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
-  margin-bottom: 8px;
-}
-.step-chip {
-  display: inline-flex;
-  flex-direction: column;
-  background: #fff;
-  border: 1px solid var(--border, #d9d9d9);
-  border-radius: 6px;
-  padding: 4px 10px;
-  line-height: 1.3;
-}
-.step-chip small {
-  color: var(--text-secondary, #888);
-}
-.step-arrow {
-  color: var(--text-secondary, #999);
-}
-.relay-guide {
-  margin-top: 4px;
-}
-.relay-guide summary {
-  cursor: pointer;
-  color: var(--primary, #1677ff);
   user-select: none;
 }
-.guide-body {
-  margin-top: 10px;
+.relay-guide > summary::-webkit-details-marker {
+  display: none;
 }
-.guide-table {
+.relay-guide > summary::before {
+  content: '▸';
+  transition: transform 0.15s;
+  font-size: 11px;
+}
+.relay-guide[open] > summary::before {
+  transform: rotate(90deg);
+}
+.relay-guide .guide-body {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  border-top: 1px dashed var(--border);
+  padding: 14px 16px 0;
+}
+.guide-col h4 {
+  font-size: 13px;
+  margin: 0 0 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.guide-col .when {
+  font-size: 12px;
+  color: var(--accent);
+  font-weight: 600;
+  margin: 0 0 6px;
+}
+.guide-col ul {
+  padding-left: 16px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.7;
+  margin: 0;
+}
+.guide-col ul b {
+  color: var(--fg);
+  font-weight: 500;
+}
+.guide-symptom {
+  grid-column: 1 / -1;
+  margin: 2px 0 16px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.guide-symptom h5 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.guide-symptom table {
   width: 100%;
   border-collapse: collapse;
-  background: #fff;
-}
-.guide-table th,
-.guide-table td {
-  border: 1px solid var(--border, #e5e5e5);
-  padding: 6px 10px;
-  text-align: left;
   font-size: 12px;
+}
+.guide-symptom td {
+  padding: 4px 8px 4px 0;
   vertical-align: top;
+  color: var(--muted);
 }
-.guide-table th {
-  background: #fafafa;
+.guide-symptom td:first-child {
+  color: var(--danger);
+  white-space: nowrap;
+  padding-right: 16px;
 }
-.guide-hint {
-  margin: 8px 0 0;
-  color: var(--text-secondary, #666);
-}
-.guide-hint code {
-  background: #f2f2f2;
-  padding: 0 4px;
-  border-radius: 3px;
+.guide-symptom td:last-child b {
+  color: var(--accent);
+  font-weight: 600;
 }
 
-/* ── 表格合并单元格 ── */
+/* 表格：两腿/区域/健康单元格 */
 .region-cell {
   display: flex;
   align-items: center;
   gap: 8px;
 }
+.region-cell b {
+  font-weight: 600;
+  color: var(--fg);
+  font-size: 13px;
+}
 .legs-cell {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+}
+.leg-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+}
+.leg-line + .leg-line {
+  margin-top: 3px;
+}
+.leg-label {
+  font-size: 11px;
+  color: var(--muted);
+  opacity: 0.8;
+  width: 32px;
+  flex-shrink: 0;
+}
+.direct-note {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
 }
 .health-cell {
   display: flex;
   flex-direction: column;
 }
 
-/* ── 菜单二级描述 ── */
+/* 菜单二级描述（scoped 属性随 teleport vnode 保留，样式生效） */
 .menu-item-stack {
   display: flex;
   flex-direction: column;
-  line-height: 1.35;
+  line-height: 1.4;
   padding: 2px 0;
 }
+.menu-item-stack span {
+  font-size: 13px;
+}
 .menu-item-stack small {
-  color: var(--text-secondary, #999);
+  color: var(--muted);
   font-size: 11px;
+  margin-top: 1px;
 }
 
-/* ── 弹窗：竖排标签 + 分组 + 分段选择 ── */
+/* 弹窗：分组编号圈 + 竖排表单 */
 .form-section {
-  border-top: 1px solid var(--border, #eee);
-  padding-top: 12px;
-  margin-top: 14px;
+  padding: 12px 0 4px;
 }
-.form-section:first-child {
-  border-top: none;
-  padding-top: 0;
-  margin-top: 0;
+.form-section + .form-section {
+  border-top: 1px dashed var(--border);
 }
-.section-title {
+.form-section-title {
+  font-size: 13px;
   font-weight: 600;
-  margin-bottom: 10px;
+  color: var(--fg);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 0;
 }
-.section-sub {
-  font-weight: 400;
-  color: var(--text-secondary, #999);
-  margin-left: 6px;
+.form-section-title .sec-no,
+.sec-no {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-style: normal;
+}
+.form-section-desc {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 2px 0 10px;
 }
 .form-group.label-top {
   display: flex;
@@ -1609,8 +1749,16 @@ onUnmounted(() => {
   gap: 4px;
   margin-bottom: 12px;
 }
+.form-group.label-top .form-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg);
+}
 .form-group.label-top .form-hint {
   margin-top: 0;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.55;
 }
 .segment-control {
   display: flex;
@@ -1621,32 +1769,70 @@ onUnmounted(() => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--border, #d9d9d9);
+  border: 1px solid var(--border);
   border-radius: 6px;
   padding: 8px 12px;
   cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+  font-size: 13px;
 }
 .segment-control label.active {
-  border-color: var(--primary, #1677ff);
-  background: var(--info-bg, #eef5ff);
+  border-color: var(--accent);
+  background: var(--accent-bg);
 }
 .segment-control input {
   margin-right: 6px;
 }
+.segment-control label.active small,
 .segment-control small {
-  color: var(--text-secondary, #888);
+  color: var(--muted);
 }
 .advanced-section {
   margin-top: 14px;
-  border-top: 1px solid var(--border, #eee);
-  padding-top: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
 }
-.advanced-section summary {
+.advanced-section > summary {
+  list-style: none;
   cursor: pointer;
-  color: var(--primary, #1677ff);
+  padding: 11px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  gap: 8px;
   user-select: none;
 }
+.advanced-section > summary::-webkit-details-marker {
+  display: none;
+}
+.advanced-section > summary::before {
+  content: '▸';
+  transition: transform 0.15s;
+  font-size: 11px;
+}
+.advanced-section[open] > summary::before {
+  transform: rotate(90deg);
+}
 .advanced-section .form-group:first-of-type {
-  margin-top: 12px;
+  margin-top: 4px;
+}
+.advanced-section .form-group:last-of-type {
+  padding-bottom: 8px;
+}
+
+/* 表头强化（antd 深度选择） */
+.region-table :deep(thead th) {
+  background: var(--accent-bg);
+  border-bottom: 2px solid var(--accent);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
 }
 </style>
