@@ -4094,3 +4094,26 @@ sqlite-backup-dr
 
 /brainstorming 请仔细阅读 openspec/changes/sqlite-backup-dr/ 下的需求文档和
 设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
+=======================================
+
+db-backup-source-tag
+
+/brainstorming 请仔细阅读 openspec/changes/db-backup-source-tag/ 下的需求文档和
+设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
+
+
+db-backup-multi-target
+
+/brainstorming 请仔细阅读 openspec/changes/db-backup-multi-target/ 下的需求文档和
+设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
+
+
+db-migration-standalone-page
+
+/brainstorming 请仔细阅读 openspec/changes/db-migration-standalone-page/ 下的需求文档和
+设计文档，分析其中可能存在的逻辑漏洞或未考虑的边缘情况，并与我逐一讨论确认, 讨论确认后将内容更新到 openspec 文档中
+
+=============================================================
+
+本会话两个 openspec 变更（overview-page-ux、restricted-data-scoping）实现 + 归档 + 主 specs 全部入库。
+遗留待办不变：ux_accept_tmp 临时账号处置、「受限空态全站治理」是否择期立项（均已记录在案，随时可续）。

@@ -120,7 +120,7 @@ describe('NodeList.vue', () => {
     const wrapper = mount(NodeList, { global: { stubs } })
     await flushPromises()
     expect(wrapper.find('.page-header').exists()).toBe(true)
-  })
+  }, 15_000) // 整页重型挂载实测 ~7s，5s 默认线浮动假红（#58 同款，先例：CentralList route=relay 15s）
 
   it('populates group and cluster filter dropdowns with expected options', async () => {
     const NodeList = (await import('../NodeList.vue')).default

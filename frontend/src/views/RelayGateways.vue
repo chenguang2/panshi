@@ -12,6 +12,65 @@
       </template>
     </PageHeader>
 
+    <!-- 结论式说明卡（relay-gateways-ux-redesign：证书管理 cert-banner 范式） -->
+    <div class="relay-banner">
+      <span class="banner-icon">i</span>
+      <div class="banner-text">
+        <b>哪些局需要建中继区域？—— 局内网络与平台不互通时</b>
+        <p>
+          中继区域 = 一台「跳板网关机」的登记信息。建好并挂接到集群后，该集群的发布/节点任务经它两条腿进局：
+          <b>HTTP 腿</b>（管理请求走网关机 8443 反向代理）与 <b>SSH 腿</b>（安装/初始化类任务先跳到网关机再进局内）。
+          局内网络本就互通的，不用建——不建或禁用都按直连执行。
+        </p>
+        <div class="relay-steps">
+          <span class="step-chip">① 登记区域<small>新建，填地址与账号</small></span>
+          <span class="step-arrow">→</span>
+          <span class="step-chip">② 初始化网关<small>首次装机，写入 8443 监听</small></span>
+          <span class="step-arrow">→</span>
+          <span class="step-chip">③ 下发配置<small>推送节点白名单</small></span>
+        </div>
+        <details class="relay-guide">
+          <summary>「初始化网关 / 下发配置 / 配置跳板转发」有什么区别？（点开看对照表）</summary>
+          <div class="guide-body">
+            <table class="guide-table">
+              <thead>
+                <tr>
+                  <th>动作</th>
+                  <th>何时用</th>
+                  <th>做什么</th>
+                  <th>幂等性</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>初始化网关</td>
+                  <td>首次装机、网关机重装 OpenResty 后</td>
+                  <td>在网关机写入 8443 监听 server 块 + 当前白名单，校验后 reload</td>
+                  <td>幂等，可重复执行</td>
+                </tr>
+                <tr>
+                  <td>下发配置</td>
+                  <td>日常：集群挂接区域、节点增删、节点启停之后</td>
+                  <td>只推节点白名单（全量替换），不动 8443 监听</td>
+                  <td>幂等；空名单有危险确认</td>
+                </tr>
+                <tr>
+                  <td>配置跳板转发</td>
+                  <td>仅跳板 SSH 部署，且网关 sshd 默认禁转发时</td>
+                  <td>root 写 sshd drop-in 放行 PermitOpen 并 reload sshd</td>
+                  <td>幂等；格式不兼容自动降级</td>
+                </tr>
+              </tbody>
+            </table>
+            <p class="guide-hint">
+              常见症状：HTTP 腿不可达 → 先「初始化网关」；SSH 腿报 <code>administratively prohibited</code> →
+              执行「配置跳板转发」； 状态列出现「清单缺组」→ 重新保存一次该区域（补齐 SSH 用户）即可重建清单组。
+            </p>
+          </div>
+        </details>
+      </div>
+    </div>
+
     <div class="card">
       <div class="card-header">
         <h3>区域列表</h3>
@@ -26,20 +85,18 @@
           class="region-table"
         >
           <template #bodyCell="{ column, record }">
-            <template v-if="column.key === 'code'">
-              <a-tag color="blue">{{ record.code }}</a-tag>
+            <template v-if="column.key === 'region'">
+              <div class="region-cell">
+                <b>{{ record.name }}</b>
+                <a-tag color="blue" class="mono">{{ record.code }}</a-tag>
+              </div>
             </template>
-            <template v-else-if="column.key === 'http_base_url'">
-              <span class="mono">{{ record.http_base_url || '—' }}</span>
-            </template>
-            <template v-else-if="column.key === 'ssh_jump'">
-              <span class="mono">{{ record.ssh_jump || '—' }}</span>
-            </template>
-            <template v-else-if="column.key === 'ssh_user'">
-              <span class="mono">{{ record.ssh_user || '—' }}</span>
-            </template>
-            <template v-else-if="column.key === 'openresty_prefix'">
-              <span class="mono">{{ record.openresty_prefix || '—' }}</span>
+            <template v-else-if="column.key === 'legs'">
+              <div v-if="record.http_base_url || record.ssh_jump" class="legs-cell">
+                <span class="mono">HTTP {{ record.http_base_url || '—' }}</span>
+                <span class="mono">SSH {{ record.ssh_jump || '—' }}</span>
+              </div>
+              <a-tag v-else color="info">直连 · 无网关机</a-tag>
             </template>
             <template v-else-if="column.key === 'status'">
               <div class="status-cell">
@@ -55,12 +112,14 @@
                     >清单缺组</a-tag
                   >
                 </div>
-                <div class="health-line">
-                  <span class="health-state" :class="healthCls(record)" :title="healthDetail(record)">{{
-                    healthText(record)
-                  }}</span>
-                  <span v-if="healthState[record.id]" class="health-time mono">{{ healthTime(record) }}</span>
-                </div>
+              </div>
+            </template>
+            <template v-else-if="column.key === 'health'">
+              <div class="health-cell">
+                <span class="health-state" :class="healthCls(record)" :title="healthDetail(record)">{{
+                  healthText(record)
+                }}</span>
+                <span v-if="healthState[record.id]" class="health-time mono">{{ healthTime(record) }}</span>
               </div>
             </template>
             <template v-else-if="column.key === 'updated_at'">
@@ -68,38 +127,74 @@
             </template>
             <template v-else-if="column.key === 'actions'">
               <div class="table-actions">
-                <button class="btn btn-secondary btn-sm" :disabled="rowBusy(record)" @click="openEdit(record)">
-                  编辑
-                </button>
                 <button
                   class="btn btn-secondary btn-sm"
                   :disabled="rowBusy(record) || testing"
+                  title="探测该区域两条腿，结果更新健康列；直连区域测直连可达性"
                   @click="handleTest(record)"
                 >
-                  {{ testingId === record.id ? '测试中…' : '连通性测试' }}
+                  {{ testingId === record.id ? '测试中…' : '测试' }}
                 </button>
-                <button class="btn btn-primary btn-sm" :disabled="streamBusy" @click="handlePush(record)">
+                <button
+                  class="btn btn-primary btn-sm"
+                  :disabled="streamBusy"
+                  title="把该局节点白名单推送到网关机；集群挂接、节点增删或启停后需要执行"
+                  @click="handlePush(record)"
+                >
                   {{ activeId === record.id && activeKind === 'push' ? '下发中…' : '下发配置' }}
                 </button>
                 <a-dropdown :trigger="['click']">
                   <button class="btn btn-secondary btn-sm" :disabled="rowBusy(record)">更多 ▾</button>
                   <template #overlay>
                     <a-menu>
+                      <a-menu-item key="edit" :disabled="rowBusy(record)" @click="openEdit(record)">
+                        <div class="menu-item-stack">
+                          <span>编辑</span>
+                          <small>修改地址、账号与状态</small>
+                        </div>
+                      </a-menu-item>
                       <a-menu-item key="init" :disabled="streamBusy" @click="handleInit(record)">
-                        {{ activeId === record.id && activeKind === 'init' ? '初始化中…' : '初始化网关' }}
+                        <div class="menu-item-stack">
+                          <span>{{
+                            activeId === record.id && activeKind === 'init' ? '初始化中…' : '初始化网关'
+                          }}</span>
+                          <small>首次装机必做：写入 8443 监听（幂等可重复）</small>
+                        </div>
                       </a-menu-item>
                       <a-menu-item key="sshd" :disabled="streamBusy" @click="openSshdSetup(record)">
-                        {{ activeId === record.id && activeKind === 'sshd' ? '配置中…' : '配置跳板转发' }}
+                        <div class="menu-item-stack">
+                          <span>{{
+                            activeId === record.id && activeKind === 'sshd' ? '配置中…' : '配置跳板转发'
+                          }}</span>
+                          <small>放行网关 sshd 转发（需 root，一次即可）</small>
+                        </div>
                       </a-menu-item>
                       <a-menu-item key="preview" :disabled="rowBusy(record)" @click="openConfigPreview(record)">
-                        查看配置
+                        <div class="menu-item-stack">
+                          <span>查看配置</span>
+                          <small>预览将写入网关机的文件内容</small>
+                        </div>
                       </a-menu-item>
                       <a-menu-item key="toggle" :disabled="rowBusy(record)" @click="handleToggle(record)">
-                        {{ record.status === 'enabled' ? '禁用' : '启用' }}
+                        <div class="menu-item-stack">
+                          <span>{{ record.status === 'enabled' ? '禁用' : '启用' }}</span>
+                          <small>停止/恢复经网关中转，回退直连</small>
+                        </div>
                       </a-menu-item>
                       <a-menu-divider />
-                      <a-menu-item key="delete" danger :disabled="rowBusy(record)" @click="handleDelete(record)">
-                        删除
+                      <a-menu-item
+                        key="delete"
+                        danger
+                        :disabled="rowBusy(record) || (record.attached_cluster_count || 0) > 0"
+                        @click="handleDelete(record)"
+                      >
+                        <div class="menu-item-stack">
+                          <span>删除</span>
+                          <small v-if="(record.attached_cluster_count || 0) > 0">
+                            已被 {{ record.attached_cluster_count }} 个集群挂接，先解挂再删除
+                          </small>
+                          <small v-else>未被集群挂接时可删除</small>
+                        </div>
                       </a-menu-item>
                     </a-menu>
                   </template>
@@ -123,8 +218,9 @@
           <button class="modal-close" @click="closeModal">&times;</button>
         </div>
         <div class="modal-body">
-          <div class="form-group">
-            <div class="field-inline">
+          <div class="form-section">
+            <div class="section-title">基础身份</div>
+            <div class="form-group label-top">
               <label class="form-label">区域码 <span class="required">*</span></label>
               <input
                 type="text"
@@ -132,66 +228,84 @@
                 :class="{ 'has-error': formErrors.code }"
                 v-model="form.code"
                 :disabled="modal.editing"
-                placeholder="小写字母开头，小写字母/数字/中划线，如 luju"
+                placeholder="小写字母开头，如 luju"
               />
+              <span v-if="formErrors.code" class="form-error">{{ formErrors.code }}</span>
+              <span v-else class="form-hint">
+                {{
+                  modal.editing
+                    ? '🔒 创建后不可修改；集群靠它挂接本区域'
+                    : '创建后不可修改；集群靠它挂接本区域，同时用作网关清单分组名（gateways_区域码）'
+                }}
+              </span>
             </div>
-            <span v-if="formErrors.code" class="form-error">{{ formErrors.code }}</span>
-            <span v-else class="form-hint">创建后不可修改；用于集群挂接与网关配置渲染</span>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <div class="field-inline">
-                <label class="form-label">展示名 <span class="required">*</span></label>
-                <input
-                  type="text"
-                  class="form-input"
-                  :class="{ 'has-error': formErrors.name }"
-                  v-model="form.name"
-                  placeholder="如：路局A"
-                />
-              </div>
+            <div class="form-group label-top">
+              <label class="form-label">展示名 <span class="required">*</span></label>
+              <input
+                type="text"
+                class="form-input"
+                :class="{ 'has-error': formErrors.name }"
+                v-model="form.name"
+                placeholder="如：济南局"
+              />
               <span v-if="formErrors.name" class="form-error">{{ formErrors.name }}</span>
+              <span v-else class="form-hint">显示给人看的名字：列表、弹窗与执行日志都用它，可随时改。</span>
             </div>
-            <div class="form-group">
-              <div class="field-inline">
-                <label class="form-label">状态</label>
-                <select class="form-input" v-model="form.status">
-                  <option value="enabled">启用</option>
-                  <option value="disabled">禁用（该区域回退直连）</option>
-                </select>
-              </div>
+            <div class="form-group label-top">
+              <label class="form-label">状态</label>
+              <select class="form-input" v-model="form.status">
+                <option value="enabled">启用</option>
+                <option value="disabled">禁用（该区域回退直连）</option>
+              </select>
+              <span class="form-hint">禁用只是「改走直连」：网关机上的配置原样保留，随时可再启用。</span>
             </div>
           </div>
-          <div class="form-group">
-            <div class="field-inline">
+
+          <div class="form-section">
+            <div class="section-title">网关两腿连接 <small class="section-sub">平台到该局的两条通道</small></div>
+            <div class="segment-control">
+              <label :class="{ active: connMode === 'gateway' }">
+                <input type="radio" value="gateway" v-model="connMode" @change="onConnModeChange" />
+                有网关机
+                <small>两腿都经网关中转</small>
+              </label>
+              <label :class="{ active: connMode === 'direct' }">
+                <input type="radio" value="direct" v-model="connMode" @change="onConnModeChange" />
+                直连区域（无网关机）
+                <small>两腿留空，全部操作按直连执行；适合网络本就互通的局</small>
+              </label>
+            </div>
+            <div class="form-group label-top">
               <label class="form-label">网关 HTTP 腿</label>
               <input
                 type="text"
                 class="form-input"
                 :class="{ 'has-error': formErrors.http_base_url }"
                 v-model="form.http_base_url"
-                placeholder="如 http://10.10.1.1:8443（留空 = 直连）"
+                :disabled="connMode === 'direct'"
+                placeholder="如 https://10.10.1.1:8443"
               />
+              <span v-if="formErrors.http_base_url" class="form-error">{{ formErrors.http_base_url }}</span>
+              <span v-else class="form-hint"
+                >发布、回滚等管理请求经它进入该局（网关机 8443 反向代理）；直连模式下此字段留空。</span
+              >
             </div>
-            <span v-if="formErrors.http_base_url" class="form-error">{{ formErrors.http_base_url }}</span>
-            <span v-else class="form-hint">该局网关的 HTTP 反向代理地址；留空表示该区域直连</span>
-          </div>
-          <div class="form-group">
-            <div class="field-inline">
+            <div class="form-group label-top">
               <label class="form-label">SSH 跳板</label>
               <input
                 type="text"
                 class="form-input"
                 :class="{ 'has-error': formErrors.ssh_jump }"
                 v-model="form.ssh_jump"
-                placeholder="如 tunnel@10.10.1.1:22（留空 = 直连）"
+                :disabled="connMode === 'direct'"
+                placeholder="如 tunnel@10.10.1.1:22"
               />
+              <span v-if="formErrors.ssh_jump" class="form-error">{{ formErrors.ssh_jump }}</span>
+              <span v-else class="form-hint"
+                >安装、初始化等 SSH 任务先跳到这台网关机再进局内；直连模式下此字段留空。</span
+              >
             </div>
-            <span v-if="formErrors.ssh_jump" class="form-error">{{ formErrors.ssh_jump }}</span>
-            <span v-else class="form-hint">跳板专用账号与网关地址；留空表示该区域 SSH 直连</span>
-          </div>
-          <div class="form-group">
-            <div class="field-inline">
+            <div class="form-group label-top">
               <label class="form-label">OpenResty 前缀</label>
               <input
                 type="text"
@@ -200,68 +314,70 @@
                 v-model="form.openresty_prefix"
                 placeholder="如 /work/jboss/tunnel/openresty-1.21.4.1/nginx"
               />
+              <span v-if="formErrors.openresty_prefix" class="form-error">{{ formErrors.openresty_prefix }}</span>
+              <span v-else class="form-hint"
+                >网关机上 nginx 的安装目录（含 conf/sbin/logs）；只有要用「初始化网关」时必填，可以先建区域后补。</span
+              >
             </div>
-            <span v-if="formErrors.openresty_prefix" class="form-error">{{ formErrors.openresty_prefix }}</span>
-            <span v-else class="form-hint">网关机 OpenResty 安装前缀（含 conf/sbin/logs）；「初始化网关」必填</span>
           </div>
-          <div class="form-group">
-            <div class="field-inline">
-              <label class="form-label">SSH 用户 *</label>
+
+          <div class="form-section">
+            <div class="section-title">SSH 凭据 <small class="section-sub">写入网关清单，供平台登录网关机</small></div>
+            <div class="form-group label-top">
+              <label class="form-label">SSH 用户 <span class="required">*</span></label>
               <input
                 type="text"
                 class="form-input"
                 :class="{ 'has-error': formErrors.ssh_user }"
                 v-model="form.ssh_user"
-                placeholder="网关机 SSH 账号，如 jboss / tunnel"
+                placeholder="网关机上的账号，如 jboss / tunnel"
               />
+              <span v-if="formErrors.ssh_user" class="form-error">{{ formErrors.ssh_user }}</span>
+              <span v-else class="form-hint">平台用这个账号登录网关机执行配置，会写入网关清单。</span>
             </div>
-            <span v-if="formErrors.ssh_user" class="form-error">{{ formErrors.ssh_user }}</span>
-            <span v-else class="form-hint">写入网关清单 inventory/gateways；口令不入列表，仅编辑时按需加载</span>
-          </div>
-          <div class="form-group">
-            <div class="field-inline">
+            <div class="form-group label-top">
               <label class="form-label">SSH 口令</label>
               <input
                 type="password"
                 class="form-input"
                 v-model="form.ssh_password"
-                placeholder="留空 = 密钥认证（不写入口令行）"
+                :placeholder="modal.editing ? '已从服务端加载（加载动作已记录审计）' : '留空 = 用密钥登录'"
                 autocomplete="new-password"
               />
+              <span class="form-hint"
+                >口令不出现在列表里；编辑时自动按需从服务端加载回填，单独查看会记录审计日志。</span
+              >
             </div>
-            <span class="form-hint">保存后写入网关清单；单查口令会记录审计</span>
-          </div>
-          <div class="form-group">
-            <div class="field-inline">
+            <div class="form-group label-top">
               <label class="form-label">SSH 端口</label>
               <input type="number" min="1" max="65535" class="form-input" v-model.number="form.ssh_port" />
+              <span class="form-hint">网关机的 SSH 端口，默认 22，改过才需要填。</span>
             </div>
-            <span class="form-hint">默认 22</span>
           </div>
-          <div class="form-group">
-            <div class="field-inline">
+
+          <details class="advanced-section">
+            <summary>高级参数（一般不用改）</summary>
+            <div class="form-group label-top">
               <label class="form-label">Python 解释器</label>
               <input
                 type="text"
                 class="form-input"
                 v-model="form.ansible_python_interpreter"
-                placeholder="如 /work/jboss/anaconda3/bin/python3（该机 python 需 ≥3.8 时必填）"
+                placeholder="如 /work/jboss/anaconda3/bin/python3"
               />
+              <span class="form-hint">仅当网关机系统默认 Python 低于 3.8（老机器常见）时填写。</span>
             </div>
-            <span class="form-hint">网关机 ansible_python_interpreter；留空用系统默认</span>
-          </div>
-          <div class="form-group">
-            <div class="field-inline">
+            <div class="form-group label-top">
               <label class="form-label">SSH 公共参数</label>
               <input
                 type="text"
                 class="form-input"
                 v-model="form.ssh_common_args"
-                placeholder="-o StrictHostKeyChecking=no …"
+                placeholder="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
               />
+              <span class="form-hint">追加给每条 SSH 连接的参数；默认已跳过指纹确认，一般无需修改。</span>
             </div>
-            <span class="form-hint">ansible_ssh_common_args；留空用默认（免known-hosts提示）</span>
-          </div>
+          </details>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="closeModal">取消</button>
@@ -473,15 +589,12 @@ let finalEvent: Record<string, unknown> | null = null
 let elapsedTimer: number | undefined
 
 const columns = [
-  { title: '区域码', key: 'code' },
-  { title: '展示名', dataIndex: 'name', key: 'name' },
-  { title: '网关 HTTP 腿', key: 'http_base_url' },
-  { title: 'SSH 跳板', key: 'ssh_jump' },
-  { title: 'SSH 用户', key: 'ssh_user' },
-  { title: 'OpenResty 前缀', key: 'openresty_prefix' },
+  { title: '区域', key: 'region' },
+  { title: '网关两腿', key: 'legs' },
   { title: '状态', key: 'status' },
+  { title: '健康', key: 'health', width: 170 },
   { title: '更新时间', key: 'updated_at' },
-  { title: '操作', key: 'actions', width: 240 },
+  { title: '操作', key: 'actions', width: 230 },
 ]
 
 // ── 区域健康状态（组件态：体检是只读时点探测，不落库；刷新后回落「未检测」） ──
@@ -514,6 +627,23 @@ const form = reactive({
   ansible_python_interpreter: '',
   ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null',
 })
+
+// 连接方式分段（relay-gateways-ux-redesign D2）：纯前端派生自两腿字段——
+// 任一非空即「有网关机」；直连 = 两腿全空（保存时强制置 null，schema 语义不变）
+const connMode = ref<'gateway' | 'direct'>('gateway')
+
+function deriveConnMode() {
+  connMode.value = form.http_base_url.trim() || form.ssh_jump.trim() ? 'gateway' : 'direct'
+}
+
+function onConnModeChange() {
+  if (connMode.value === 'direct') {
+    form.http_base_url = ''
+    form.ssh_jump = ''
+    formErrors.http_base_url = ''
+    formErrors.ssh_jump = ''
+  }
+}
 const formErrors = reactive({
   code: '',
   name: '',
@@ -622,6 +752,7 @@ function openCreate() {
   form.ansible_python_interpreter = ''
   form.ssh_common_args = '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
   clearFormErrors()
+  connMode.value = 'gateway' // 新建默认「有网关机」（蓝图 §5 组②）
 }
 
 function openEdit(record: RelayGateway) {
@@ -640,6 +771,7 @@ function openEdit(record: RelayGateway) {
   form.ansible_python_interpreter = record.ansible_python_interpreter || ''
   form.ssh_common_args = record.ssh_common_args || '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
   clearFormErrors()
+  deriveConnMode()
   // 口令不出列表：编辑时按需单查（单查走审计）
   fetchGatewayCredential(record.id)
     .then((r: { data: { ssh_password: string | null } }) => {
@@ -699,6 +831,14 @@ function validateForm(): boolean {
 
 async function handleSubmit() {
   if (!validateForm()) return
+  // 直连派生（relay-gateways-ux-redesign D2）：分段=直连 → 两腿强制空；分段=有网关机但两腿全空 →
+  // 等价直连，允许保存但一次性提示，避免误留空
+  if (connMode.value === 'direct') {
+    form.http_base_url = ''
+    form.ssh_jump = ''
+  } else if (!form.http_base_url.trim() && !form.ssh_jump.trim()) {
+    message.info('两腿均为空，将按直连区域保存')
+  }
   submitting.value = true
   try {
     if (modal.editing) {
@@ -1097,7 +1237,12 @@ function handleDelete(record: RelayGateway) {
         message.success('区域已删除')
         await load()
       } catch (e) {
-        message.error(getApiErrorMessage(e))
+        const msg = getApiErrorMessage(e)
+        if (msg.includes('仍被集群挂接') || msg.includes('无法删除')) {
+          message.error(`${msg}。请先到【统一管理】或【集群管理】把相关集群的所属区域改为其他区域（或清空）再删除`)
+        } else {
+          message.error(msg)
+        }
       }
     },
   })
@@ -1319,5 +1464,189 @@ onUnmounted(() => {
 }
 .config-notes li {
   margin-bottom: 4px;
+}
+
+/* ── relay-gateways-ux-redesign：说明卡 / 三步走 / 对照表 ── */
+.relay-banner {
+  display: flex;
+  gap: 12px;
+  background: var(--info-bg, #eef5ff);
+  border: 1px solid var(--info-border, #bcd6f7);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+.relay-banner .banner-icon {
+  flex: 0 0 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--primary, #1677ff);
+  color: #fff;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2px;
+}
+.relay-banner .banner-text b {
+  display: block;
+  margin-bottom: 4px;
+}
+.relay-banner .banner-text p {
+  margin: 0 0 10px;
+  color: var(--text-secondary, #555);
+}
+.relay-steps {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.step-chip {
+  display: inline-flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid var(--border, #d9d9d9);
+  border-radius: 6px;
+  padding: 4px 10px;
+  line-height: 1.3;
+}
+.step-chip small {
+  color: var(--text-secondary, #888);
+}
+.step-arrow {
+  color: var(--text-secondary, #999);
+}
+.relay-guide {
+  margin-top: 4px;
+}
+.relay-guide summary {
+  cursor: pointer;
+  color: var(--primary, #1677ff);
+  user-select: none;
+}
+.guide-body {
+  margin-top: 10px;
+}
+.guide-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+}
+.guide-table th,
+.guide-table td {
+  border: 1px solid var(--border, #e5e5e5);
+  padding: 6px 10px;
+  text-align: left;
+  font-size: 12px;
+  vertical-align: top;
+}
+.guide-table th {
+  background: #fafafa;
+}
+.guide-hint {
+  margin: 8px 0 0;
+  color: var(--text-secondary, #666);
+}
+.guide-hint code {
+  background: #f2f2f2;
+  padding: 0 4px;
+  border-radius: 3px;
+}
+
+/* ── 表格合并单元格 ── */
+.region-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.legs-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.health-cell {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── 菜单二级描述 ── */
+.menu-item-stack {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.35;
+  padding: 2px 0;
+}
+.menu-item-stack small {
+  color: var(--text-secondary, #999);
+  font-size: 11px;
+}
+
+/* ── 弹窗：竖排标签 + 分组 + 分段选择 ── */
+.form-section {
+  border-top: 1px solid var(--border, #eee);
+  padding-top: 12px;
+  margin-top: 14px;
+}
+.form-section:first-child {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0;
+}
+.section-title {
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.section-sub {
+  font-weight: 400;
+  color: var(--text-secondary, #999);
+  margin-left: 6px;
+}
+.form-group.label-top {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+.form-group.label-top .form-hint {
+  margin-top: 0;
+}
+.segment-control {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.segment-control label {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border, #d9d9d9);
+  border-radius: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+.segment-control label.active {
+  border-color: var(--primary, #1677ff);
+  background: var(--info-bg, #eef5ff);
+}
+.segment-control input {
+  margin-right: 6px;
+}
+.segment-control small {
+  color: var(--text-secondary, #888);
+}
+.advanced-section {
+  margin-top: 14px;
+  border-top: 1px solid var(--border, #eee);
+  padding-top: 10px;
+}
+.advanced-section summary {
+  cursor: pointer;
+  color: var(--primary, #1677ff);
+  user-select: none;
+}
+.advanced-section .form-group:first-of-type {
+  margin-top: 12px;
 }
 </style>

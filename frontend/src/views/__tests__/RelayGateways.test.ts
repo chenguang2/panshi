@@ -75,13 +75,11 @@ const stubs = {
       pagination: [Object, Boolean],
       size: String,
     },
+    // 动态按 columns 渲染 bodyCell（relay-gateways-ux-redesign 列结构变更后不再硬编码 key 集）
     template: `<div class="mock-table" :data-columns="JSON.stringify(columns || [])">
       <div v-for="r in dataSource" :key="r.id" class="mock-row" :data-code="r.code">
         <span class="mock-name">{{ r.name }}</span>
-        <slot name="bodyCell" :column="{ key: 'code' }" :record="r" />
-        <slot name="bodyCell" :column="{ key: 'status' }" :record="r" />
-        <slot name="bodyCell" :column="{ key: 'updated_at' }" :record="r" />
-        <slot name="bodyCell" :column="{ key: 'actions' }" :record="r" />
+        <slot v-for="c in columns || []" :key="c.key" name="bodyCell" :column="c" :record="r" />
       </div>
     </div>`,
   },
@@ -120,6 +118,9 @@ const stubs = {
 const REGIONS = [
   {
     id: 1,
+    attached_cluster_count: 1,
+    enabled_node_count: 0,
+    total_node_count: 0,
     code: 'luju',
     name: '路局A',
     http_base_url: 'http://10.10.1.1:8443',
@@ -302,6 +303,112 @@ describe('RelayGateways', () => {
     expect(errors.some((e) => e.text().includes('SSH 用户'))).toBe(true)
   })
 
+  // 弹窗必填三件套（code/name/ssh_user，输入顺序经分组重排后仍为 0/1/5）
+  async function inputs0_1_5(wrapper: ReturnType<typeof mount>) {
+    const inputs = wrapper.findAll('.modal input.form-input')
+    await inputs[0]!.setValue('tianjin')
+    await inputs[1]!.setValue('路局B')
+    await inputs[5]!.setValue('jboss')
+  }
+
+  it('说明卡：结论句 + 三步走 + 动作对照表折叠（relay-gateways-ux-redesign）', async () => {
+    const wrapper = await mountPage()
+    const text = wrapper.text()
+    expect(text).toContain('哪些局需要建中继区域')
+    expect(text).toContain('登记区域')
+    expect(text).toContain('初始化网关')
+    expect(text).toContain('下发配置')
+    // 对照表默认折叠（details 无 open 属性），但标题可见
+    const guide = wrapper.find('.relay-guide')
+    expect(guide.exists()).toBe(true)
+    expect((guide.element as HTMLDetailsElement).open).toBe(false)
+    expect(guide.text()).toContain('有什么区别')
+  })
+
+  it('连接方式分段：新建默认「有网关机」；切直连清空并禁用两腿；保存载荷两腿置 null', async () => {
+    mockPost.mockResolvedValue({ data: { id: 9, code: 'tianjin', name: '路局B', status: 'enabled' } })
+    const wrapper = await mountPage()
+    const buttons = wrapper.findAll('button')
+    await buttons.find((b) => b.text().includes('新建区域'))!.trigger('click')
+    await flushPromises()
+
+    // 默认有网关机：两腿可输入
+    const http = wrapper.findAll('.modal input.form-input').find((i) => i.attributes('placeholder')?.includes('8443'))!
+    expect(http.attributes('disabled')).toBeUndefined()
+    await http.setValue('http://10.10.1.1:8443')
+
+    // 切直连：清空 + 禁用
+    await wrapper.findAll('.segment-control input[type=radio]')[1]!.setValue('direct')
+    await flushPromises()
+    const http2 = wrapper.findAll('.modal input.form-input').find((i) => i.attributes('placeholder')?.includes('8443'))!
+    expect((http2.element as HTMLInputElement).value).toBe('')
+    expect(http2.attributes('disabled')).not.toBeUndefined()
+
+    await inputs0_1_5(wrapper)
+    await wrapper
+      .findAll('.modal button.btn-primary')
+      .find((b) => b.text().includes('保存'))!
+      .trigger('click')
+    await flushPromises()
+
+    expect(mockPost).toHaveBeenCalledWith(
+      '/relay/gateways',
+      expect.objectContaining({ code: 'tianjin', http_base_url: null, ssh_jump: null }),
+    )
+  })
+
+  it('删除保护：挂接区域删除菜单禁用并提示解挂（attached_cluster_count）', async () => {
+    // REGIONS[0] luju 注入挂接计数
+    const wrapper = await mountPage()
+    await flushPromises()
+    const row = wrapper.find('.mock-row[data-code="luju"]')
+    const del = row.findAll('.mock-menu-item').find((b) => b.text().startsWith('删除'))!
+    expect(del.classes()).toContain('mock-menu-disabled')
+    expect(del.text()).toContain('已被 1 个集群挂接')
+    // 无挂接区域（direct）保持可点
+    const del2 = wrapper
+      .find('.mock-row[data-code="direct"]')
+      .findAll('.mock-menu-item')
+      .find((b) => b.text().startsWith('删除'))!
+    expect(del2.classes()).not.toContain('mock-menu-disabled')
+  })
+
+  it('编辑两腿全空的区域：分段回显「直连区域」', async () => {
+    const wrapper = await mountPage()
+    await flushPromises()
+    // REGIONS 里 direct 区域两腿为空
+    const row = wrapper.find('.mock-row[data-code="direct"]')
+    expect(row.find('.legs-cell').exists()).toBe(false)
+    expect(row.text()).toContain('直连 · 无网关机')
+
+    const editBtn = row.findAll('.mock-menu-item').find((b) => b.text().startsWith('编辑'))!
+    await editBtn.trigger('click')
+    await flushPromises()
+    const checked = wrapper
+      .findAll('.segment-control input[type=radio]')
+      .find((r) => (r.element as HTMLInputElement).checked)!
+    expect((checked.element as HTMLInputElement).value).toBe('direct')
+  })
+
+  it('有网关机模式但两腿全空保存：一次性 info 提示（等价直连）', async () => {
+    mockPost.mockResolvedValue({ data: { id: 9, code: 'tianjin', name: '路局B', status: 'enabled' } })
+    const wrapper = await mountPage()
+    const buttons = wrapper.findAll('button')
+    await buttons.find((b) => b.text().includes('新建区域'))!.trigger('click')
+    await flushPromises()
+    await inputs0_1_5(wrapper)
+    await wrapper
+      .findAll('.modal button.btn-primary')
+      .find((b) => b.text().includes('保存'))!
+      .trigger('click')
+    await flushPromises()
+    expect(message.info).toHaveBeenCalledWith('两腿均为空，将按直连区域保存')
+    expect(mockPost).toHaveBeenCalledWith(
+      '/relay/gateways',
+      expect.objectContaining({ http_base_url: null, ssh_jump: null }),
+    )
+  })
+
   it('编辑网关：口令按需单查并回填密码框（列表不回传口令）', async () => {
     const wrapper = await mountPage()
     await flushPromises()
@@ -339,7 +446,7 @@ describe('RelayGateways', () => {
     const wrapper = await mountPage()
     await flushPromises()
 
-    const toggleBtn = wrapper.findAll('button').find((b) => b.text() === '禁用')!
+    const toggleBtn = wrapper.findAll('.mock-menu-item').find((b) => b.text().startsWith('禁用'))!
     expect(toggleBtn).toBeTruthy()
     await toggleBtn.trigger('click')
     await flushPromises()
@@ -351,7 +458,7 @@ describe('RelayGateways', () => {
   it('连通性测试调用体检端点并以结果弹窗替代 toast（#217 断言反转：原为 message 多行 toast）', async () => {
     const wrapper = await mountPage()
     await flushPromises()
-    const testBtn = wrapper.findAll('button').find((b) => b.text().includes('连通性测试'))!
+    const testBtn = wrapper.findAll('button').find((b) => b.text().trim() === '测试')!
     await testBtn.trigger('click')
     await flushPromises()
     expect(mockGet).toHaveBeenCalledWith('/relay/health-check?region=luju', { timeout: 180_000 })
@@ -385,7 +492,7 @@ describe('RelayGateways', () => {
     // period 未检测态
     expect(wrapper.find('.mock-row[data-code="luju"] .health-state.is-unknown').text()).toContain('未检测')
 
-    const testBtn = wrapper.findAll('button').find((b) => b.text().includes('连通性测试'))!
+    const testBtn = wrapper.findAll('button').find((b) => b.text().trim() === '测试')!
     await testBtn.trigger('click')
     await flushPromises()
 
@@ -466,7 +573,7 @@ describe('RelayGateways', () => {
     })
     const wrapper = await mountPage()
     await flushPromises()
-    const testBtn = wrapper.findAll('button').find((b) => b.text().includes('连通性测试'))!
+    const testBtn = wrapper.findAll('button').find((b) => b.text().trim() === '测试')!
     await testBtn.trigger('click')
     await flushPromises()
 
@@ -577,7 +684,7 @@ describe('RelayGateways', () => {
   it('禁用确认文案直述后果', async () => {
     const wrapper = await mountPage()
     await flushPromises()
-    const toggleBtn = wrapper.findAll('button').find((b) => b.text() === '禁用')!
+    const toggleBtn = wrapper.findAll('.mock-menu-item').find((b) => b.text().startsWith('禁用'))!
     await toggleBtn.trigger('click')
     await flushPromises()
     const opts = (globalThis as Record<string, unknown>).__lastOverlayOpts as { content: { children: string } }
@@ -599,19 +706,21 @@ describe('RelayGateways', () => {
     const wrapper = await mountPage()
     await flushPromises()
     const row = wrapper.find('.mock-row[data-code="luju"]')
-    const rowButtons = row.findAll('.table-actions > button')
-    const texts = rowButtons.map((b) => b.text())
-    expect(texts).toEqual(['编辑', '连通性测试', '下发配置'])
-    expect(row.find('.mock-dropdown > button:not(.mock-menu-item)').text()).toBe('更多 ▾')
+    const rowButtons = row.findAll('.table-actions button')
+    const texts = rowButtons.filter((b) => !b.classes().includes('mock-menu-item')).map((b) => b.text())
+    expect(texts).toEqual(['测试', '下发配置', '更多 ▾'])
 
     const items = row.findAll('.mock-menu-item')
-    const itemTexts = items.map((b) => b.text().trim())
-    expect(itemTexts).toContain('初始化网关')
-    expect(itemTexts).toContain('配置跳板转发')
-    expect(itemTexts).toContain('查看配置')
-    expect(itemTexts).toContain('禁用')
+    const itemTexts = items.map((b) => b.text().replace(/\s+/g, ' ').trim())
+    // 二级描述随菜单项渲染（relay-gateways-ux-redesign）
+    expect(itemTexts[0]).toContain('编辑')
+    expect(itemTexts[0]).toContain('修改地址、账号与状态')
+    expect(itemTexts.some((x) => x.startsWith('初始化网关'))).toBe(true)
+    expect(itemTexts.some((x) => x.startsWith('配置跳板转发'))).toBe(true)
+    expect(itemTexts.some((x) => x.startsWith('查看配置'))).toBe(true)
+    expect(itemTexts.some((x) => x.startsWith('禁用'))).toBe(true)
     const last = items[items.length - 1]!
-    expect(last.text().trim()).toBe('删除')
+    expect(last.text()).toContain('删除')
     expect(last.classes()).toContain('mock-menu-danger')
   })
 
@@ -649,14 +758,14 @@ describe('RelayGateways', () => {
 
     // 其他行（direct）：非流式操作可用（启用/查看配置等），流式操作禁用
     const otherMenu = otherRow.findAll('.mock-menu-item')
-    const otherBy = (t: string) => otherMenu.find((i) => i.text().trim() === t)!
+    const otherBy = (t: string) => otherMenu.find((i) => i.text().startsWith(t))!
     expect(otherBy('初始化网关').classes()).toContain('mock-menu-disabled')
     expect(otherBy('配置跳板转发').classes()).toContain('mock-menu-disabled')
     expect(otherBy('启用').classes()).not.toContain('mock-menu-disabled')
     expect(otherBy('查看配置').classes()).not.toContain('mock-menu-disabled')
   })
 
-  it('动作列宽 240 且提供更新时间列', async () => {
+  it('动作列宽 230 且提供更新时间列', async () => {
     const wrapper = await mountPage()
     const cols = JSON.parse(wrapper.find('.mock-table').attributes('data-columns') || '[]') as {
       key: string
@@ -664,7 +773,7 @@ describe('RelayGateways', () => {
     }[]
     expect(cols.some((c) => c.key === 'updated_at')).toBe(true)
     const actions = cols.find((c) => c.key === 'actions')!
-    expect(actions.width).toBe(240)
+    expect(actions.width).toBe(230)
     expect(wrapper.text()).toContain('2026/11/03')
   })
 
@@ -672,7 +781,7 @@ describe('RelayGateways', () => {
     const wrapper = await mountPage()
     await flushPromises()
 
-    const initBtn = wrapper.findAll('button').find((b) => b.text().includes('初始化网关'))!
+    const initBtn = wrapper.findAll('.mock-menu-item').find((b) => b.text().startsWith('初始化网关'))!
     await initBtn.trigger('click')
     await flushPromises()
     await confirmOverlay()
@@ -839,7 +948,7 @@ describe('RelayGateways', () => {
     const wrapper = await mountPage()
     await flushPromises()
 
-    const initBtn = wrapper.findAll('button').find((b) => b.text().includes('初始化网关'))!
+    const initBtn = wrapper.findAll('.mock-menu-item').find((b) => b.text().startsWith('初始化网关'))!
     await initBtn.trigger('click')
     await flushPromises()
     await confirmOverlay()
@@ -848,9 +957,9 @@ describe('RelayGateways', () => {
     handlers.onComplete(0, 'successful')
     await flushPromises()
 
-    const after = wrapper.findAll('button').find((b) => b.text().includes('初始化网关'))
+    const after = wrapper.findAll('.mock-menu-item').find((b) => b.text().startsWith('初始化网关'))
     expect(after).toBeTruthy()
-    expect(after!.text()).toBe('初始化网关')
+    expect(after!.text()).toContain('初始化网关')
     expect(after!.attributes('disabled')).toBeUndefined()
     expect(streamMock.forceComplete).toHaveBeenCalled()
   })
@@ -885,7 +994,7 @@ describe('RelayGateways', () => {
     const wrapper = await mountPage()
     await flushPromises()
 
-    const btn = wrapper.findAll('button').find((b) => b.text() === '查看配置')!
+    const btn = wrapper.findAll('.mock-menu-item').find((b) => b.text().startsWith('查看配置'))!
     await btn.trigger('click')
     await flushPromises()
 
@@ -933,7 +1042,7 @@ describe('RelayGateways', () => {
     const wrapper = await mountPage()
     await flushPromises()
 
-    const delBtn = wrapper.findAll('button').find((b) => b.text() === '删除')!
+    const delBtn = wrapper.findAll('.mock-menu-item').find((b) => b.text().startsWith('删除'))!
     await delBtn.trigger('click')
     await flushPromises()
     await confirmOverlay()

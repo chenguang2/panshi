@@ -188,6 +188,8 @@ class RelayGatewayOut(BaseModel):
     # 区域节点计数（列表端点聚合注入，非库列）：下发确认弹窗展示白名单规模
     enabled_node_count: int = 0
     total_node_count: int = 0
+    # 挂接集群计数（relay-gateways-ux-redesign：>0 时删除菜单禁用，先解挂再删）
+    attached_cluster_count: int = 0
     # 下发快照（relay-push-drift-preview）：last_pushed_at 来自库列；
     # push_drift 无快照为 null（区别于「一致」的空差集）
     last_pushed_at: Optional[datetime] = None

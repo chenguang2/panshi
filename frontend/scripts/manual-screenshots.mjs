@@ -233,7 +233,7 @@ const SHOTS = [
     name: '32-02-relay-more-menu',
     path: '/relay-gateways',
     viewportShot: true,
-    actions: [{ click: 'tbody tr >> nth=0 >> button:has-text("更多")' }, { waitMs: 400 }],
+    actions: [{ click: 'tr.ant-table-row >> nth=0 >> button:has-text("更多")' }, { waitMs: 400 }],
   },
   {
     // 体检为真实网络 IO，等结果组上屏（全区域探测可达数十秒）
@@ -250,7 +250,12 @@ const SHOTS = [
     name: '32-04-relay-form',
     path: '/relay-gateways',
     viewportShot: true,
-    actions: [{ click: 'tbody tr >> nth=0 >> button:has-text("编辑")' }, { waitMs: 400 }],
+    actions: [
+      { click: 'tr.ant-table-row >> nth=0 >> button:has-text("更多")' },
+      { waitMs: 400 },
+      { click: 'li[role=menuitem]:has-text("编辑")' },
+      { waitMs: 400 },
+    ],
   },
   {
     // 空名单防护（relay-push-empty-whitelist-guard）：0 启用节点区域（上海局）的危险确认；截图不点确认，无下发

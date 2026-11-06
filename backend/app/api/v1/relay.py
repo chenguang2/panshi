@@ -123,6 +123,13 @@ async def _region_node_counts(
 async def list_gateways(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(RelayGateway).order_by(RelayGateway.id))
     enabled_map, total_map, enabled_lists = await _region_node_counts(db)
+    # 区域被集群挂接计数（relay-gateways-ux-redesign：删除菜单禁用态依据）
+    attach_rows = await db.execute(
+        select(Cluster.region_code, func.count(Cluster.id))
+        .where(Cluster.region_code.isnot(None))
+        .group_by(Cluster.region_code)
+    )
+    attach_map = {code: n for code, n in attach_rows.all()}
 
     def _parse_snapshot(raw: str | None) -> list[str] | None:
         """快照 JSON 防御性解析：缺失/坏值回退 None（诚实「无快照」态）。"""
@@ -142,6 +149,7 @@ async def list_gateways(db: AsyncSession = Depends(get_db)):
         # 区域节点计数（模式同上：端点计算注入，非库列）
         row.enabled_node_count = enabled_map.get(g.code, 0)
         row.total_node_count = total_map.get(g.code, 0)
+        row.attached_cluster_count = attach_map.get(g.code, 0)
         # 下发漂移（relay-push-drift-preview）：当前启用集合相对快照的差集
         snapshot = _parse_snapshot(g.last_pushed_nodes)
         if snapshot is None:
