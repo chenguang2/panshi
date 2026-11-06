@@ -386,6 +386,70 @@ describe('RelayGateways', () => {
     expect((pwd!.element as HTMLInputElement).value).toBe('edit-fetched-pass')
   })
 
+  it('删除保护：挂接区域删除菜单禁用并提示解挂（attached_cluster_count）', async () => {
+    const wrapper = await mountPage()
+    await flushPromises()
+    const row = wrapper.find('.mock-row[data-code="luju"]')
+    const del = row.findAll('.mock-menu-item').find((b) => b.text().startsWith('删除'))!
+    expect(del.classes()).toContain('mock-menu-disabled')
+    expect(del.text()).toContain('已被 1 个集群挂接')
+    // 无挂接区域（direct）保持可点
+    const del2 = wrapper
+      .find('.mock-row[data-code="direct"]')
+      .findAll('.mock-menu-item')
+      .find((b) => b.text().startsWith('删除'))!
+    expect(del2.classes()).not.toContain('mock-menu-disabled')
+  })
+
+  it('查看凭据：菜单项打开弹窗单查口令（不出列表，可复制）', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/relay/gateways') return Promise.resolve({ data: REGIONS })
+      if (/\/relay\/gateways\/\d+\/credential$/.test(url))
+        return Promise.resolve({ data: { ssh_password: 'secret-pass' } })
+      if (url === '/relay/health-check?region=luju') {
+        return Promise.resolve({
+          data: { region: 'luju', ok: true, segments: [{ name: '网关HTTP腿', ok: true, elapsed_ms: 5 }] },
+        })
+      }
+      return Promise.reject(new Error('unknown url: ' + url))
+    })
+    const wrapper = await mountPage()
+    await flushPromises()
+    const row = wrapper.find('.mock-row[data-code="luju"]')
+    const credBtn = row.findAll('.mock-menu-item').find((b) => b.text().startsWith('查看凭据'))!
+    expect(credBtn).toBeTruthy()
+    await credBtn.trigger('click')
+    await flushPromises()
+
+    expect(mockGet).toHaveBeenCalledWith(expect.stringMatching(/\/relay\/gateways\/1\/credential$/))
+    const text = wrapper.text()
+    expect(text).toContain('查看凭据 — 路局A')
+    expect(text).toContain('secret-pass')
+    expect(text).toContain('已记录审计日志')
+  })
+
+  it('查看凭据：未设置口令显示密钥认证提示', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/relay/gateways') return Promise.resolve({ data: REGIONS })
+      if (/\/relay\/gateways\/\d+\/credential$/.test(url)) return Promise.resolve({ data: { ssh_password: null } })
+      if (url === '/relay/health-check?region=luju') {
+        return Promise.resolve({
+          data: { region: 'luju', ok: true, segments: [{ name: '网关HTTP腿', ok: true, elapsed_ms: 5 }] },
+        })
+      }
+      return Promise.reject(new Error('unknown url: ' + url))
+    })
+    const wrapper = await mountPage()
+    await flushPromises()
+    const row = wrapper.find('.mock-row[data-code="luju"]')
+    await row
+      .findAll('.mock-menu-item')
+      .find((b) => b.text().startsWith('查看凭据'))!
+      .trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('未设置口令（密钥认证）')
+  })
+
   it('新建区域非法 code 被前端拦截（不发请求）', async () => {
     const wrapper = await mountPage()
     const buttons = wrapper.findAll('button')

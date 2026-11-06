@@ -196,6 +196,12 @@
                           <small>预览将写入网关机的文件内容</small>
                         </div>
                       </a-menu-item>
+                      <a-menu-item key="cred" :disabled="rowBusy(record)" @click="openCredential(record)">
+                        <div class="menu-item-stack">
+                          <span>查看凭据</span>
+                          <small>查看网关机 SSH 口令（记录审计）</small>
+                        </div>
+                      </a-menu-item>
                       <a-menu-item key="toggle" :disabled="rowBusy(record)" @click="handleToggle(record)">
                         <div class="menu-item-stack">
                           <span>{{ record.status === 'enabled' ? '禁用' : '启用' }}</span>
@@ -380,7 +386,7 @@
           <details class="install-guide advanced-section">
             <summary>高级参数（一般不用改）</summary>
             <div class="form-grid">
-              <div class="form-group label-top span-2">
+              <div class="form-group label-top">
                 <label class="form-label">Python 解释器 <span class="optional">选填</span></label>
                 <input
                   type="text"
@@ -390,7 +396,7 @@
                 />
                 <span class="form-hint">仅当网关机系统默认 Python 低于 3.8（老机器常见）时填写。</span>
               </div>
-              <div class="form-group label-top span-2">
+              <div class="form-group label-top">
                 <label class="form-label">SSH 公共参数 <span class="optional">选填</span></label>
                 <input
                   type="text"
@@ -454,6 +460,36 @@
     </div>
 
     <!-- 配置预览（只读）：展示将写入网关机的文件内容，可复制；ansible 不可用时据此手工配置 -->
+    <!-- 查看凭据弹窗（口令单查入口；后端已记录 view_credential 审计） -->
+    <div v-if="credModal.open" class="modal-overlay" @click.self="credModal.open = false">
+      <div class="modal cred-modal">
+        <div class="modal-header">
+          <h2>查看凭据 — {{ credModal.regionName }}</h2>
+          <button class="modal-close" @click="credModal.open = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div v-if="credModal.loading" class="cred-loading">加载中…</div>
+          <template v-else>
+            <div class="cred-row">
+              <span class="cred-label">SSH 用户</span>
+              <span class="mono">{{ credModal.sshUser || '—' }}</span>
+            </div>
+            <div class="cred-row">
+              <span class="cred-label">SSH 口令</span>
+              <span class="mono cred-pass">{{ credModal.password || '未设置口令（密钥认证）' }}</span>
+              <button v-if="credModal.password" class="btn btn-secondary btn-sm" @click="copyText(credModal.password!)">
+                复制
+              </button>
+            </div>
+            <p class="form-hint">本次查看已记录审计日志（谁在何时查看了该网关的口令）；口令不出现在列表接口中。</p>
+          </template>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="credModal.open = false">关闭</button>
+        </div>
+      </div>
+    </div>
+
     <div v-if="configModal.open" class="modal-overlay" @click.self="configModal.open = false">
       <div class="modal modal-wide">
         <div class="modal-header">
@@ -668,6 +704,32 @@ const configModal = reactive({
   regionName: '',
   data: null as RelayConfigPreview | null,
 })
+
+// 查看凭据弹窗（relay-gateways-ux-redesign 迭代）：口令不出列表——仅此单查入口（后端记录 view_credential 审计）
+const credModal = reactive({
+  open: false,
+  loading: false,
+  regionName: '',
+  sshUser: '',
+  password: null as string | null,
+})
+
+async function openCredential(record: RelayGateway) {
+  credModal.open = true
+  credModal.loading = true
+  credModal.regionName = record.name
+  credModal.sshUser = record.ssh_user || ''
+  credModal.password = null
+  try {
+    const res = await fetchGatewayCredential(record.id)
+    credModal.password = res.data.ssh_password
+  } catch (e) {
+    message.error(getApiErrorMessage(e))
+    credModal.open = false
+  } finally {
+    credModal.loading = false
+  }
+}
 
 // 体检结果弹窗（单区域 / 全量共用）：探测期间即打开（loading），完成后填充并更新健康列；
 // 用户提前关闭不中断探测（resultDismissed），完成时仅补一行终态 message、不再弹回。
@@ -1768,6 +1830,30 @@ onUnmounted(() => {
   font-weight: 400;
   font-size: 11px;
   margin-left: 4px;
+}
+.cred-modal {
+  max-width: 460px;
+}
+.cred-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.cred-label {
+  width: 80px;
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.cred-pass {
+  flex: 1;
+  word-break: break-all;
+}
+.cred-loading {
+  color: var(--muted);
+  font-size: 13px;
+  padding: 8px 0;
 }
 .advanced-section {
   margin-top: 14px;
