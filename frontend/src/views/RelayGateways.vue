@@ -1602,6 +1602,8 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 6px;
+  color: var(--fg);
+  font-weight: 700;
 }
 .guide-col .when {
   font-size: 12px;
