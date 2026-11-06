@@ -321,7 +321,8 @@
                 />
                 <span v-if="formErrors.ssh_jump" class="form-error">{{ formErrors.ssh_jump }}</span>
                 <span v-else class="form-hint"
-                  >安装、初始化等 SSH 任务先跳到这台网关机再进局内；这是通道地址，登录账号在下方「SSH
+                  >安装、初始化等 SSH
+                  任务先跳到这台网关机再进局内；仅涉及网关机一台，这是通道地址，登录账号在下方「网关机 SSH
                   凭据」填写（可与跳板账号不同）。</span
                 >
               </div>
@@ -344,10 +345,11 @@
           </div>
 
           <div class="form-section">
-            <div class="form-section-title"><i class="sec-no">3</i>SSH 凭据</div>
+            <div class="form-section-title"><i class="sec-no">3</i>网关机 SSH 凭据</div>
             <div class="form-section-desc">
-              写入网关清单，供平台登录网关机执行配置。与上方「SSH
-              跳板」分工不同：跳板是进局的通道，这里是登录网关机的账号；两者用同一账号时，两处都填它即可。
+              仅用于登录<b>网关机这一台机器</b>（写入网关清单），与上方「SSH
+              跳板」分工：跳板是进局的通道，这里是登录网关机的账号。 局内<b>各业务节点</b>的账号/口令/端口在【Ansible
+              主机清单】逐台各自配置，与本组无关。
             </div>
             <div class="form-grid">
               <div class="form-group label-top span-2">
@@ -361,7 +363,8 @@
                 />
                 <span v-if="formErrors.ssh_user" class="form-error">{{ formErrors.ssh_user }}</span>
                 <span v-else class="form-hint"
-                  >平台用这个账号登录网关机执行配置（区别于上方只作通道的跳板账号），会写入网关清单。</span
+                  >平台用这个账号登录网关机执行配置（区别于上方只作通道的跳板账号），会写入网关清单；节点各自的账号在【Ansible
+                  主机清单】配置。</span
                 >
               </div>
               <div class="form-group label-top">
