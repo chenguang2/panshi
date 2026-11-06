@@ -11,6 +11,11 @@ export interface RelayGateway {
   ssh_jump: string | null
   openresty_prefix: string | null
   status: 'enabled' | 'disabled' | string
+  /** SSH 连接（relay-gateway-inventory-ui）：口令不出列表（单查端点按需取） */
+  ssh_user?: string | null
+  ssh_port?: number | null
+  ansible_python_interpreter?: string | null
+  ssh_common_args?: string | null
   /** 清单漂移标记（后端列表计算注入，非库列）：true = ansible inventory 缺该局主机组，init/push 前置会拦 */
   inventory_group_missing?: boolean | null
   /** 区域节点计数（后端列表聚合注入，非库列）：下发确认弹窗展示白名单规模 */
@@ -61,16 +66,36 @@ export function listRelayGateways() {
   return api.get<RelayGateway[]>('/relay/gateways')
 }
 
-export function createRelayGateway(data: Partial<RelayGateway>) {
+/** 网关创建/更新载荷（relay-gateway-inventory-ui）：SSH 连接凭据随注册提交 */
+export interface RelayGatewayPayload {
+  code?: string
+  name?: string
+  http_base_url?: string | null
+  ssh_jump?: string | null
+  openresty_prefix?: string | null
+  status?: string
+  ssh_user?: string
+  ssh_password?: string | null
+  ssh_port?: number
+  ansible_python_interpreter?: string | null
+  ssh_common_args?: string | null
+}
+
+export function createRelayGateway(data: RelayGatewayPayload) {
   return api.post<RelayGateway>('/relay/gateways', data)
 }
 
-export function updateRelayGateway(id: number, data: Partial<RelayGateway>) {
+export function updateRelayGateway(id: number, data: RelayGatewayPayload) {
   return api.put<RelayGateway>(`/relay/gateways/${id}`, data)
 }
 
 export function deleteRelayGateway(id: number) {
   return api.delete(`/relay/gateways/${id}`)
+}
+
+/** 按需单查网关 SSH 口令（relay-gateway-inventory-ui：列表不回传，单独留审计） */
+export function fetchGatewayCredential(id: number) {
+  return api.get<{ ssh_password: string | null }>(`/relay/gateways/${id}/credential`)
 }
 
 /** init / push 的 SSE 流地址（经 `useInstallStream.start` 消费，实时 stdout + 进度）。 */

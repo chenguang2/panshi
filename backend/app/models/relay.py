@@ -24,6 +24,14 @@ class RelayGateway(Base):
     ssh_jump = Column(String(255), nullable=True)
     openresty_prefix = Column(String(255), nullable=True)
     status = Column(String(16), nullable=False, default="enabled")
+    # SSH 连接凭据（relay-gateway-inventory-ui）：DB 为唯一权威源，
+    # inventory/gateways 文件为 CRUD 渲染派生成品（勿手改）。口令明文对齐 #10；
+    # ssh_password 空 = 密钥认证（不渲染 ansible_ssh_pass 行）。
+    ssh_user = Column(String(64), nullable=True)
+    ssh_password = Column(String(255), nullable=True)
+    ssh_port = Column(Integer, nullable=True, default=22)
+    ansible_python_interpreter = Column(String(255), nullable=True)
+    ssh_common_args = Column(String(255), nullable=True)
     # 下发快照（relay-push-drift-preview）：最后一次成功写入网关机的白名单内容
     # （JSON 数组，元素 "ip:管理端口"）；写入走终态成功回调（生成器体内，#33 合规）。
     last_pushed_nodes = Column(Text, nullable=True)

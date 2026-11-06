@@ -124,7 +124,7 @@ def _spy_refresh(monkeypatch) -> list:
 def _create_gateway(client) -> dict:
     resp = client.post(
         "/api/v1/relay/gateways",
-        json={"code": "newreg", "name": "新区域", "http_base_url": "http://10.9.9.9:8443"},
+        json={"code": "newreg", "name": "新区域", "http_base_url": "http://10.9.9.9:8443", "ssh_user": "jboss"},
     )
     assert resp.status_code in (200, 201)
     return resp.json()

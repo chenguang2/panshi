@@ -5,16 +5,18 @@
 """
 import json
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import require_permission
+from app.core.deps import get_current_user, require_permission
 from app.core.features import feature_enabled
 from app.models.cluster import Cluster, Node
 from app.models.relay import RelayGateway
+from app.services import gateways_inventory_service as gis
+from app.services.audit import log_audit
 from app.schemas.relay import (
     RelayGatewayCreate,
     RelayGatewayOut,
@@ -154,6 +156,51 @@ async def list_gateways(db: AsyncSession = Depends(get_db)):
     return out
 
 
+async def _render_inventory(db: AsyncSession, exclude_code: str | None = None) -> None:
+    """按 DB 全量重渲染 inventory/gateways（D3：CRUD 保存即整组重写）。
+
+    渲染失败不阻断保存（D3 契约）：列表 inventory_group_missing 标志会亮出，
+    重新保存即可重试。孤儿分组从现存文件原样保留（D4），但排除本次操作涉及
+    的 code——否则删除网关后其分组会被当孤儿永久保留，新建同名网关也无法收编。
+    """
+    try:
+        rows = (await db.execute(select(RelayGateway))).scalars().all()
+        orphans = await gis.collect_orphans(db)
+        if exclude_code:
+            skip = f"gateways_{exclude_code}"
+            orphans = [o for o in orphans if o[0] != skip]
+        gis.render_and_write(list(rows), orphan_groups=orphans)
+    except Exception:
+        pass
+
+
+@router.get("/gateways/inventory-status")
+async def gateways_inventory_status(db: AsyncSession = Depends(get_db)):
+    """清单健康：是否派生成品 / 孤儿分组（relay-gateway-inventory-ui）。"""
+    return await gis.inventory_status(db)
+
+
+@router.get("/gateways/{gateway_id}/credential")
+async def gateway_credential(
+    gateway_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """按需单查网关 SSH 口令（列表不回传口令；本端点单独写审计 view_credential）。"""
+    gateway = await _get_or_404(db, gateway_id)
+    log_audit(
+        db,
+        user=current_user,
+        action="view_credential",
+        resource="relay_gateway",
+        resource_id=gateway.id,
+        detail=f"查看网关口令: {gateway.code}",
+    )
+    await db.commit()
+    return {"ssh_password": gateway.ssh_password}
+
+
 @router.post("/gateways", response_model=RelayGatewayOut)
 async def create_gateway(payload: RelayGatewayCreate, db: AsyncSession = Depends(get_db)):
     existing = await db.execute(select(RelayGateway).where(RelayGateway.code == payload.code))
@@ -164,6 +211,7 @@ async def create_gateway(payload: RelayGatewayCreate, db: AsyncSession = Depends
     await db.commit()
     await db.refresh(gateway)
     await _refresh_routing()  # 注册表变更立即重载（仅 invalidate 需重启才生效）
+    await _render_inventory(db, exclude_code=payload.code)
     return RelayGatewayOut.model_validate(gateway)
 
 
@@ -180,6 +228,7 @@ async def update_gateway(
     await db.commit()
     await db.refresh(gateway)
     await _refresh_routing()
+    await _render_inventory(db, exclude_code=gateway.code)
     return RelayGatewayOut.model_validate(gateway)
 
 
@@ -206,6 +255,7 @@ async def delete_gateway(gateway_id: int, db: AsyncSession = Depends(get_db)):
     await db.delete(gateway)
     await db.commit()
     await _refresh_routing()
+    await _render_inventory(db, exclude_code=gateway.code)
     return {"ok": True}
 
 

@@ -99,6 +99,8 @@ UNAUTHENTICATED_SAMPLES = [
     ("post", "/api/v1/relay/gateways/1/push-config"),
     ("post", "/api/v1/relay/gateways/1/sshd-setup"),
     ("get", "/api/v1/relay/gateways/1/config-preview"),
+    # 网关清单界面化（relay-gateway-inventory-ui）：口令单查须鉴权（凭据敏感）
+    ("get", "/api/v1/relay/gateways/1/credential"),
     ("get", "/api/v1/relay/health-check"),
     # 漂移检测（config-drift-detection）：只读但须鉴权
     ("get", "/api/v1/clusters/1/drift"),

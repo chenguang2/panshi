@@ -35,6 +35,9 @@
             <template v-else-if="column.key === 'ssh_jump'">
               <span class="mono">{{ record.ssh_jump || '—' }}</span>
             </template>
+            <template v-else-if="column.key === 'ssh_user'">
+              <span class="mono">{{ record.ssh_user || '—' }}</span>
+            </template>
             <template v-else-if="column.key === 'openresty_prefix'">
               <span class="mono">{{ record.openresty_prefix || '—' }}</span>
             </template>
@@ -201,6 +204,64 @@
             <span v-if="formErrors.openresty_prefix" class="form-error">{{ formErrors.openresty_prefix }}</span>
             <span v-else class="form-hint">网关机 OpenResty 安装前缀（含 conf/sbin/logs）；「初始化网关」必填</span>
           </div>
+          <div class="form-group">
+            <div class="field-inline">
+              <label class="form-label">SSH 用户 *</label>
+              <input
+                type="text"
+                class="form-input"
+                :class="{ 'has-error': formErrors.ssh_user }"
+                v-model="form.ssh_user"
+                placeholder="网关机 SSH 账号，如 jboss / tunnel"
+              />
+            </div>
+            <span v-if="formErrors.ssh_user" class="form-error">{{ formErrors.ssh_user }}</span>
+            <span v-else class="form-hint">写入网关清单 inventory/gateways；口令不入列表，仅编辑时按需加载</span>
+          </div>
+          <div class="form-group">
+            <div class="field-inline">
+              <label class="form-label">SSH 口令</label>
+              <input
+                type="password"
+                class="form-input"
+                v-model="form.ssh_password"
+                placeholder="留空 = 密钥认证（不写入口令行）"
+                autocomplete="new-password"
+              />
+            </div>
+            <span class="form-hint">保存后写入网关清单；单查口令会记录审计</span>
+          </div>
+          <div class="form-group">
+            <div class="field-inline">
+              <label class="form-label">SSH 端口</label>
+              <input type="number" min="1" max="65535" class="form-input" v-model.number="form.ssh_port" />
+            </div>
+            <span class="form-hint">默认 22</span>
+          </div>
+          <div class="form-group">
+            <div class="field-inline">
+              <label class="form-label">Python 解释器</label>
+              <input
+                type="text"
+                class="form-input"
+                v-model="form.ansible_python_interpreter"
+                placeholder="如 /work/jboss/anaconda3/bin/python3（该机 python 需 ≥3.8 时必填）"
+              />
+            </div>
+            <span class="form-hint">网关机 ansible_python_interpreter；留空用系统默认</span>
+          </div>
+          <div class="form-group">
+            <div class="field-inline">
+              <label class="form-label">SSH 公共参数</label>
+              <input
+                type="text"
+                class="form-input"
+                v-model="form.ssh_common_args"
+                placeholder="-o StrictHostKeyChecking=no …"
+              />
+            </div>
+            <span class="form-hint">ansible_ssh_common_args；留空用默认（免known-hosts提示）</span>
+          </div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="closeModal">取消</button>
@@ -365,6 +426,7 @@ import {
   relayPushStreamUrl,
   relaySshdSetupStreamUrl,
   updateRelayGateway,
+  fetchGatewayCredential,
   type RelayConfigPreview,
   type RelayGateway,
   type RelayHealthResult,
@@ -415,6 +477,7 @@ const columns = [
   { title: '展示名', dataIndex: 'name', key: 'name' },
   { title: '网关 HTTP 腿', key: 'http_base_url' },
   { title: 'SSH 跳板', key: 'ssh_jump' },
+  { title: 'SSH 用户', key: 'ssh_user' },
   { title: 'OpenResty 前缀', key: 'openresty_prefix' },
   { title: '状态', key: 'status' },
   { title: '更新时间', key: 'updated_at' },
@@ -445,6 +508,11 @@ const form = reactive({
   ssh_jump: '',
   openresty_prefix: '',
   status: 'enabled',
+  ssh_user: '',
+  ssh_password: '',
+  ssh_port: 22,
+  ansible_python_interpreter: '',
+  ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null',
 })
 const formErrors = reactive({
   code: '',
@@ -452,6 +520,7 @@ const formErrors = reactive({
   http_base_url: '',
   ssh_jump: '',
   openresty_prefix: '',
+  ssh_user: '',
 })
 
 // 配置预览弹窗（只读）：内容由后端用与下发相同的渲染函数产出
@@ -547,6 +616,11 @@ function openCreate() {
   form.ssh_jump = ''
   form.openresty_prefix = ''
   form.status = 'enabled'
+  form.ssh_user = ''
+  form.ssh_password = ''
+  form.ssh_port = 22
+  form.ansible_python_interpreter = ''
+  form.ssh_common_args = '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
   clearFormErrors()
 }
 
@@ -560,7 +634,20 @@ function openEdit(record: RelayGateway) {
   form.ssh_jump = record.ssh_jump || ''
   form.openresty_prefix = record.openresty_prefix || ''
   form.status = record.status
+  form.ssh_user = record.ssh_user || ''
+  form.ssh_password = ''
+  form.ssh_port = record.ssh_port || 22
+  form.ansible_python_interpreter = record.ansible_python_interpreter || ''
+  form.ssh_common_args = record.ssh_common_args || '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
   clearFormErrors()
+  // 口令不出列表：编辑时按需单查（单查走审计）
+  fetchGatewayCredential(record.id)
+    .then((r: { data: { ssh_password: string | null } }) => {
+      form.ssh_password = r.data.ssh_password || ''
+    })
+    .catch(() => {
+      /* 拉取失败不阻断编辑，保存空口令 = 密钥认证语义 */
+    })
 }
 
 function closeModal() {
@@ -573,6 +660,7 @@ function clearFormErrors() {
   formErrors.http_base_url = ''
   formErrors.ssh_jump = ''
   formErrors.openresty_prefix = ''
+  formErrors.ssh_user = ''
 }
 
 function validateForm(): boolean {
@@ -589,6 +677,10 @@ function validateForm(): boolean {
   const http = form.http_base_url.trim()
   if (http && !HTTP_BASE_URL_PATTERN.test(http)) {
     formErrors.http_base_url = '网关 HTTP 腿格式错误：须以 http:// 或 https:// 开头，如 http://10.10.1.1:8443'
+    ok = false
+  }
+  if (!form.ssh_user.trim()) {
+    formErrors.ssh_user = '请输入 SSH 用户'
     ok = false
   }
   const jump = form.ssh_jump.trim()
@@ -616,6 +708,11 @@ async function handleSubmit() {
         ssh_jump: form.ssh_jump.trim() || null,
         openresty_prefix: form.openresty_prefix.trim() || null,
         status: form.status,
+        ssh_user: form.ssh_user.trim(),
+        ssh_password: form.ssh_password || null,
+        ssh_port: form.ssh_port || 22,
+        ansible_python_interpreter: form.ansible_python_interpreter.trim() || null,
+        ssh_common_args: form.ssh_common_args.trim() || null,
       })
       message.success('区域已更新')
     } else {
@@ -626,6 +723,11 @@ async function handleSubmit() {
         ssh_jump: form.ssh_jump.trim() || null,
         openresty_prefix: form.openresty_prefix.trim() || null,
         status: form.status,
+        ssh_user: form.ssh_user.trim(),
+        ssh_password: form.ssh_password || null,
+        ssh_port: form.ssh_port || 22,
+        ansible_python_interpreter: form.ansible_python_interpreter.trim() || null,
+        ssh_common_args: form.ssh_common_args.trim() || null,
       })
       message.success('区域已创建')
     }

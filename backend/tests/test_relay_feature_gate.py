@@ -45,6 +45,7 @@ class TestRelayFeatureGate:
     async def test_gateway_create_404_when_feature_off(self, async_authed_client, relay_feature_off):
         resp = await async_authed_client.post("/api/v1/relay/gateways", json={
             "code": "demo", "name": "演示区域", "http_base_url": "http://192.168.0.13:8443",
+            "ssh_user": "jboss",
         })
         assert resp.status_code == 404
         assert resp.json()["detail"] == RELAY_OFF_404

@@ -181,6 +181,23 @@ _pin_test_engine()
 
 
 @pytest.fixture(scope="session", autouse=True)
+def _isolated_gateways_file(tmp_path_factory):
+    """会话级：把网关清单路径重定向到临时目录（relay-gateway-inventory-ui）。
+
+    lifespan 现在会启动迁移/渲染 inventory/gateways——不隔离的话任何后端
+    API 测试都会触碰真实 backend/ansible/inventory/gateways（凭据文件）。
+    网关清单专项测试在各自用例里用 monkeypatch 覆盖 gis.GATEWAYS_PATH 即可。
+    """
+    import app.services.gateways_inventory_service as gis
+
+    p = tmp_path_factory.mktemp("relay-inv") / "gateways"
+    orig = gis.GATEWAYS_PATH
+    gis.GATEWAYS_PATH = str(p)
+    yield
+    gis.GATEWAYS_PATH = orig
+
+
+@pytest.fixture(scope="session", autouse=True)
 def _isolated_real_db_redirect():
     """会话级：建隔离库 schema + 最小种子，并清扫导入期后产生的陈旧引用。
 

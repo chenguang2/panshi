@@ -101,6 +101,7 @@ class TestRelayGatewayApi:
     # ── 创建 ────────────────────────────────────────────────
     def test_create_region(self, client):
         resp = client.post("/api/v1/relay/gateways", json={
+            "ssh_user": "jboss",
             "code": "luju", "name": "路局A",
             "http_base_url": "http://10.10.1.1:8443",
             "ssh_jump": "tunnel@10.10.1.1:22",
@@ -111,27 +112,27 @@ class TestRelayGatewayApi:
         assert body["status"] == "enabled"
 
     def test_create_duplicate_code_rejected(self, client):
-        client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "路局A"})
-        resp = client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "另一个"})
+        client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "路局A", "ssh_user": "jboss"})
+        resp = client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "另一个", "ssh_user": "jboss"})
         assert resp.status_code == 400
 
     def test_create_invalid_code_rejected(self, client):
         for bad in ("Luju_1", "1abc", "-abc", "a" * 40):
-            resp = client.post("/api/v1/relay/gateways", json={"code": bad, "name": "x"})
+            resp = client.post("/api/v1/relay/gateways", json={"code": bad, "name": "x", "ssh_user": "jboss"})
             assert resp.status_code in (400, 422), f"code={bad} 应被拒绝"
             assert CODE_PATTERN_MSG in resp.json().get("detail", "") or resp.status_code == 422
 
     # ── 列表 / 更新 ─────────────────────────────────────────
     def test_list_regions(self, client):
-        client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "路局A"})
-        client.post("/api/v1/relay/gateways", json={"code": "tianjin", "name": "路局B"})
+        client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "路局A", "ssh_user": "jboss"})
+        client.post("/api/v1/relay/gateways", json={"code": "tianjin", "name": "路局B", "ssh_user": "jboss"})
         resp = client.get("/api/v1/relay/gateways")
         assert resp.status_code == 200
         codes = {r["code"] for r in resp.json()}
         assert {"luju", "tianjin"} <= codes
 
     def test_update_code_immutable(self, client):
-        created = client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "路局A"}).json()
+        created = client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "路局A", "ssh_user": "jboss"}).json()
         rid = created["id"]
         resp = client.put(f"/api/v1/relay/gateways/{rid}", json={"code": "tianjin"})
         assert resp.status_code == 400
@@ -143,7 +144,7 @@ class TestRelayGatewayApi:
 
     # ── 删除挂接约束 ────────────────────────────────────────
     def test_delete_attached_region_rejected(self, client, test_db):
-        created = client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "路局A"}).json()
+        created = client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "路局A", "ssh_user": "jboss"}).json()
         import asyncio
 
         async def _attach():
@@ -157,13 +158,13 @@ class TestRelayGatewayApi:
         assert "seed-cluster-1" in resp.json()["detail"]
 
     def test_delete_unattached_region_ok(self, client):
-        created = client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "路局A"}).json()
+        created = client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "路局A", "ssh_user": "jboss"}).json()
         resp = client.delete(f"/api/v1/relay/gateways/{created['id']}")
         assert resp.status_code in (200, 204)
 
     # ── 集群挂接 ────────────────────────────────────────────
     def test_cluster_region_attach(self, client):
-        client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "路局A"})
+        client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "路局A", "ssh_user": "jboss"})
         resp = client.put("/api/v1/clusters/1", json={"region_code": "luju"})
         assert resp.status_code == 200
         assert resp.json()["region_code"] == "luju"
@@ -173,7 +174,7 @@ class TestRelayGatewayApi:
         assert resp.status_code == 400
 
     def test_cluster_region_clear(self, client):
-        client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "路局A"})
+        client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "路局A", "ssh_user": "jboss"})
         client.put("/api/v1/clusters/1", json={"region_code": "luju"})
         resp = client.put("/api/v1/clusters/1", json={"region_code": None})
         assert resp.status_code == 200
@@ -191,7 +192,7 @@ class TestRelayGatewayApi:
         return inv
 
     def test_init_requires_openresty_prefix(self, client):
-        created = client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "路局A"}).json()
+        created = client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "路局A", "ssh_user": "jboss"}).json()
         resp = client.post(f"/api/v1/relay/gateways/{created['id']}/init")
         assert resp.status_code == 400
         assert "openresty_prefix" in resp.json()["detail"]
@@ -209,6 +210,7 @@ class TestRelayGatewayApi:
 
         monkeypatch.setattr(relay_init, "_run_ansible_init", fake_run)
         created = client.post("/api/v1/relay/gateways", json={
+            "ssh_user": "jboss",
             "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
         resp = client.post(f"/api/v1/relay/gateways/{created['id']}/init")
         assert resp.status_code == 200, resp.text
@@ -233,6 +235,7 @@ class TestRelayGatewayApi:
 
         monkeypatch.setattr(relay_push, "_run_ansible_push", fake_run)
         created = client.post("/api/v1/relay/gateways", json={
+            "ssh_user": "jboss",
             "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
         resp = client.post(f"/api/v1/relay/gateways/{created['id']}/push-config")
         assert resp.status_code == 200, resp.text
@@ -252,6 +255,7 @@ class TestRelayGatewayApi:
         monkeypatch.setattr(relay_push, "_run_ansible_push", _no_ansible)
         _seed_region_nodes(test_db, enabled=0, disabled=4)
         created = client.post("/api/v1/relay/gateways", json={
+            "ssh_user": "jboss",
             "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
         resp = client.post(f"/api/v1/relay/gateways/{created['id']}/push-config")
         assert resp.status_code == 409
@@ -274,6 +278,7 @@ class TestRelayGatewayApi:
         monkeypatch.setattr(relay_push, "_run_ansible_push", fake_run)
         _seed_region_nodes(test_db, enabled=0, disabled=4)
         created = client.post("/api/v1/relay/gateways", json={
+            "ssh_user": "jboss",
             "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
         resp = client.post(f"/api/v1/relay/gateways/{created['id']}/push-config",
                            json={"allow_empty": True})
@@ -292,6 +297,7 @@ class TestRelayGatewayApi:
         monkeypatch.setattr(relay_push, "_run_ansible_push", fake_run)
         _seed_region_nodes(test_db, enabled=1, disabled=1)
         created = client.post("/api/v1/relay/gateways", json={
+            "ssh_user": "jboss",
             "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
         resp = client.post(f"/api/v1/relay/gateways/{created['id']}/push-config")
         assert resp.status_code == 200, resp.text
@@ -304,6 +310,7 @@ class TestRelayGatewayApi:
         monkeypatch.setattr(relay_push, "_run_ansible_push",
                             lambda **kw: (_ for _ in ()).throw(AssertionError("不得触发 ansible")))
         created = client.post("/api/v1/relay/gateways", json={
+            "ssh_user": "jboss",
             "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
         resp = client.post(f"/api/v1/relay/gateways/{created['id']}/push-config")
         assert resp.status_code == 409
@@ -321,6 +328,7 @@ class TestRelayGatewayApi:
         monkeypatch.setattr(relay_push, "_run_ansible_push", fake_run)
         _seed_region_nodes(test_db, enabled=2, disabled=1)
         created = client.post("/api/v1/relay/gateways", json={
+            "ssh_user": "jboss",
             "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
         resp = client.post(f"/api/v1/relay/gateways/{created['id']}/push-config")
         assert resp.status_code == 200, resp.text
@@ -341,6 +349,7 @@ class TestRelayGatewayApi:
         monkeypatch.setattr(relay_push, "_run_ansible_push", fake_run)
         _seed_region_nodes(test_db, enabled=1, disabled=0)
         created = client.post("/api/v1/relay/gateways", json={
+            "ssh_user": "jboss",
             "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
         resp = client.post(f"/api/v1/relay/gateways/{created['id']}/push-config")
         assert _sse_events(resp.text)[-1]["rc"] == 1
@@ -359,6 +368,7 @@ class TestRelayGatewayApi:
         monkeypatch.setattr(relay_push, "_run_ansible_push", fake_run)
         _seed_region_nodes(test_db, enabled=1, disabled=0)
         created = client.post("/api/v1/relay/gateways", json={
+            "ssh_user": "jboss",
             "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
         resp = client.post(f"/api/v1/relay/gateways/{created['id']}/push-config")
         final = _sse_events(resp.text)[-1]
@@ -377,6 +387,7 @@ class TestRelayGatewayApi:
 
         monkeypatch.setattr(relay_init, "_run_ansible_init", fake_run)
         created = client.post("/api/v1/relay/gateways", json={
+            "ssh_user": "jboss",
             "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
         resp = client.post(f"/api/v1/relay/gateways/{created['id']}/init")
         assert resp.status_code == 200, resp.text
@@ -396,6 +407,7 @@ class TestRelayGatewayApi:
         monkeypatch.setattr(relay_push, "_run_ansible_push", fake_run)
         _seed_region_nodes(test_db, enabled=0, disabled=2)
         created = client.post("/api/v1/relay/gateways", json={
+            "ssh_user": "jboss",
             "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
         resp = client.post(f"/api/v1/relay/gateways/{created['id']}/push-config",
                            json={"allow_empty": True})
@@ -421,6 +433,7 @@ class TestRelayGatewayApi:
         """从未成功下发（快照为空）→ push_drift 为 null（区别于「一致」的空差集）。"""
         _seed_region_nodes(test_db, enabled=1, disabled=0)
         created = client.post("/api/v1/relay/gateways", json={
+            "ssh_user": "jboss",
             "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
         resp = client.get("/api/v1/relay/gateways")
         item = next(x for x in resp.json() if x["id"] == created["id"])
@@ -431,6 +444,7 @@ class TestRelayGatewayApi:
         """快照与当前启用集合差集：快照有现无 → removed；现有快照无 → added。"""
         _seed_region_nodes(test_db, enabled=2, disabled=0)
         created = client.post("/api/v1/relay/gateways", json={
+            "ssh_user": "jboss",
             "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
         self._seed_snapshot(test_db, created["id"],
                             ["10.20.0.0:9180", "10.99.9.9:9999"],
@@ -445,6 +459,7 @@ class TestRelayGatewayApi:
         """快照与当前启用集合一致 → added/removed 均为空列表（非 null）。"""
         _seed_region_nodes(test_db, enabled=2, disabled=1)
         created = client.post("/api/v1/relay/gateways", json={
+            "ssh_user": "jboss",
             "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
         self._seed_snapshot(test_db, created["id"],
                             ["10.20.0.0:9180", "10.20.0.1:9180"],
@@ -474,8 +489,8 @@ class TestRelayGatewayApi:
             await test_db.commit()
 
         asyncio.run(_seed())
-        client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "路局A"})
-        client.post("/api/v1/relay/gateways", json={"code": "tianjin", "name": "路局B"})
+        client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "路局A", "ssh_user": "jboss"})
+        client.post("/api/v1/relay/gateways", json={"code": "tianjin", "name": "路局B", "ssh_user": "jboss"})
         resp = client.get("/api/v1/relay/gateways")
         assert resp.status_code == 200
         rows = {r["code"]: r for r in resp.json()}
@@ -488,6 +503,7 @@ class TestRelayGatewayApi:
         from app.api.v1 import relay
 
         created = client.post("/api/v1/relay/gateways", json={
+            "ssh_user": "jboss",
             "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
         relay._INFLIGHT.add("luju")
         try:
@@ -509,6 +525,7 @@ class TestRelayGatewayApi:
         monkeypatch.setattr(relay_init, "_run_ansible_init",
                             lambda **kw: {"rc": 0, "status": "successful"})
         created = client.post("/api/v1/relay/gateways", json={
+            "ssh_user": "jboss",
             "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
         resp = client.post(f"/api/v1/relay/gateways/{created['id']}/init")
         assert resp.status_code == 200, resp.text
@@ -536,6 +553,7 @@ class TestRelayGatewayApi:
 
         asyncio.run(_seed())
         created = client.post("/api/v1/relay/gateways", json={
+            "ssh_user": "jboss",
             "code": "luju", "name": "路局A", "openresty_prefix": "/opt/openresty"}).json()
         resp = client.get(f"/api/v1/relay/gateways/{created['id']}/config-preview")
         assert resp.status_code == 200, resp.text
@@ -552,7 +570,7 @@ class TestRelayGatewayApi:
         assert body["notes"]
 
     def test_config_preview_requires_prefix(self, client):
-        created = client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "路局A"}).json()
+        created = client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "路局A", "ssh_user": "jboss"}).json()
         resp = client.get(f"/api/v1/relay/gateways/{created['id']}/config-preview")
         assert resp.status_code == 400
         assert "openresty_prefix" in resp.json()["detail"]
@@ -618,30 +636,30 @@ class TestRelayGatewayFieldFormat:
         "http://10.10.1.1:8443/api",  # 带路径
     ])
     def test_create_http_base_url_bad_format_rejected(self, client, bad):
-        resp = client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "x", "http_base_url": bad})
+        resp = client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "x", "http_base_url": bad, "ssh_user": "jboss"})
         assert resp.status_code in (400, 422), resp.text
         assert FORMAT_MSG_HTTP in _detail_text(resp), resp.text
 
     @pytest.mark.parametrize("good", ["http://10.10.1.1:8443", "https://gw.example.com", "http://192.168.0.13"])
     def test_create_http_base_url_good_passes(self, client, good):
-        resp = client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "x", "http_base_url": good})
+        resp = client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "x", "http_base_url": good, "ssh_user": "jboss"})
         assert resp.status_code in (200, 201), resp.text
         assert resp.json()["http_base_url"] == good
 
     @pytest.mark.parametrize("bad", ["10.10.1.1:22", "tunnel@", "@10.10.1.1"])
     def test_create_ssh_jump_bad_format_rejected(self, client, bad):
-        resp = client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "x", "ssh_jump": bad})
+        resp = client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "x", "ssh_jump": bad, "ssh_user": "jboss"})
         assert resp.status_code in (400, 422), resp.text
         assert FORMAT_MSG_SSH in _detail_text(resp), resp.text
 
     def test_create_ssh_jump_without_port_passes(self, client):
-        resp = client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "x", "ssh_jump": "tunnel@10.10.1.1"})
+        resp = client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "x", "ssh_jump": "tunnel@10.10.1.1", "ssh_user": "jboss"})
         assert resp.status_code in (200, 201), resp.text
         assert resp.json()["ssh_jump"] == "tunnel@10.10.1.1"
 
     @pytest.mark.parametrize("bad", ["work/openresty", " work/openresty", "C:/openresty"])
     def test_create_openresty_prefix_not_absolute_rejected(self, client, bad):
-        resp = client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "x", "openresty_prefix": bad})
+        resp = client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "x", "openresty_prefix": bad, "ssh_user": "jboss"})
         assert resp.status_code in (400, 422), resp.text
         assert FORMAT_MSG_PREFIX in _detail_text(resp), resp.text
 
@@ -651,12 +669,12 @@ class TestRelayGatewayFieldFormat:
         ("openresty_prefix", "work/openresty"),
     ])
     def test_update_same_rules(self, client, field, bad):
-        created = client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "x"}).json()
+        created = client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "x", "ssh_user": "jboss"}).json()
         resp = client.put(f"/api/v1/relay/gateways/{created['id']}", json={field: bad})
         assert resp.status_code in (400, 422), resp.text
 
     def test_update_good_values_pass(self, client):
-        created = client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "x"}).json()
+        created = client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "x", "ssh_user": "jboss"}).json()
         resp = client.put(f"/api/v1/relay/gateways/{created['id']}", json={
             "http_base_url": "http://10.10.1.1:8443",
             "ssh_jump": "tunnel@10.10.1.1",
@@ -667,6 +685,7 @@ class TestRelayGatewayFieldFormat:
     def test_strip_runs_before_format_validation(self, client):
         """既有 strip 行为保留：带首尾空白的合法值 strip 后通过格式校验。"""
         resp = client.post("/api/v1/relay/gateways", json={
+            "ssh_user": "jboss",
             "code": "kjc", "name": "路局K",
             "http_base_url": " https://192.168.0.13:8443 ",
             "openresty_prefix": " /work/jboss/tunnel/openresty-1.21.4.1/nginx ",
@@ -719,8 +738,8 @@ class TestRelayHealthEndpoint:
         inv = tmp_path / "gateways"
         inv.write_text("gateways_luju:\n  hosts:\n    10.10.1.1: {}\n", encoding="utf-8")
         monkeypatch.setattr(relay_push, "_GATEWAYS_INVENTORY", str(inv))
-        client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "路局A"})
-        client.post("/api/v1/relay/gateways", json={"code": "tianjin", "name": "路局B"})
+        client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "路局A", "ssh_user": "jboss"})
+        client.post("/api/v1/relay/gateways", json={"code": "tianjin", "name": "路局B", "ssh_user": "jboss"})
         rows = {r["code"]: r for r in client.get("/api/v1/relay/gateways").json()}
         assert rows["luju"]["inventory_group_missing"] is False
         assert rows["tianjin"]["inventory_group_missing"] is True
@@ -732,6 +751,7 @@ class TestRelayHealthEndpoint:
             json={
                 "code": "kjc",
                 "name": "路局K",
+                "ssh_user": "jboss",
                 "openresty_prefix": " /work/jboss/tunnel/openresty-1.21.4.1/nginx ",
                 "http_base_url": " https://192.168.0.13:8443 ",
             },

@@ -169,9 +169,12 @@ describe('RelayGateways', () => {
     vi.clearAllMocks()
     streamMock.installing.value = false
     streamMock.error.value = null
-    // URL 感知 mock（约定 #43）：列表/体检走 get
+    // URL 感知 mock（约定 #43）：列表/体检/凭据单查走 get
     mockGet.mockImplementation((url: string) => {
       if (url === '/relay/gateways') return Promise.resolve({ data: REGIONS })
+      if (/\/relay\/gateways\/\d+\/credential$/.test(url)) {
+        return Promise.resolve({ data: { ssh_password: 'edit-fetched-pass' } })
+      }
       if (url === '/relay/health-check?region=luju') {
         return Promise.resolve({
           data: {
@@ -236,6 +239,7 @@ describe('RelayGateways', () => {
     const inputs = wrapper.findAll('.modal input.form-input')
     await inputs[0]!.setValue('tianjin')
     await inputs[1]!.setValue('路局B')
+    await inputs[5]!.setValue('jboss')
     await wrapper
       .findAll('.modal button.btn-primary')
       .find((b) => b.text().includes('保存'))!
@@ -246,6 +250,70 @@ describe('RelayGateways', () => {
       '/relay/gateways',
       expect.objectContaining({ code: 'tianjin', name: '路局B' }),
     )
+  })
+
+  it('创建载荷携带 SSH 连接字段（relay-gateway-inventory-ui）', async () => {
+    mockPost.mockResolvedValue({ data: { id: 3, code: 'tianjin', name: '路局B', status: 'enabled' } })
+    const wrapper = await mountPage()
+    const buttons = wrapper.findAll('button')
+    await buttons.find((b) => b.text().includes('新建区域'))!.trigger('click')
+    await flushPromises()
+
+    const inputs = wrapper.findAll('.modal input.form-input')
+    await inputs[0]!.setValue('tianjin')
+    await inputs[1]!.setValue('路局B')
+    await inputs[5]!.setValue('jboss')
+    await inputs[6]!.setValue('p@ss')
+    await wrapper
+      .findAll('.modal button.btn-primary')
+      .find((b) => b.text().includes('保存'))!
+      .trigger('click')
+    await flushPromises()
+
+    expect(mockPost).toHaveBeenCalledWith(
+      '/relay/gateways',
+      expect.objectContaining({
+        code: 'tianjin',
+        ssh_user: 'jboss',
+        ssh_password: 'p@ss',
+        ssh_port: 22,
+        ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null',
+      }),
+    )
+  })
+
+  it('SSH 用户必填：未填被前端拦截（口令不入列表，编辑按需单查）', async () => {
+    const wrapper = await mountPage()
+    const buttons = wrapper.findAll('button')
+    await buttons.find((b) => b.text().includes('新建区域'))!.trigger('click')
+    await flushPromises()
+
+    const inputs = wrapper.findAll('.modal input.form-input')
+    await inputs[0]!.setValue('tianjin')
+    await inputs[1]!.setValue('路局B')
+    await wrapper
+      .findAll('.modal button.btn-primary')
+      .find((b) => b.text().includes('保存'))!
+      .trigger('click')
+    await flushPromises()
+
+    expect(mockPost).not.toHaveBeenCalled()
+    const errors = wrapper.findAll('.modal .form-error')
+    expect(errors.some((e) => e.text().includes('SSH 用户'))).toBe(true)
+  })
+
+  it('编辑网关：口令按需单查并回填密码框（列表不回传口令）', async () => {
+    const wrapper = await mountPage()
+    await flushPromises()
+    mockGet.mockClear()
+    mockPut.mockResolvedValue({ data: { id: 1 } })
+    const buttons = wrapper.findAll('button')
+    await buttons.find((b) => b.text().includes('编辑'))!.trigger('click')
+    await flushPromises()
+
+    expect(mockGet).toHaveBeenCalledWith(expect.stringMatching(/\/relay\/gateways\/\d+\/credential$/))
+    const pwd = wrapper.findAll('.modal input.form-input').find((i) => (i.attributes('type') || '') === 'password')
+    expect((pwd!.element as HTMLInputElement).value).toBe('edit-fetched-pass')
   })
 
   it('新建区域非法 code 被前端拦截（不发请求）', async () => {
@@ -449,7 +517,8 @@ describe('RelayGateways', () => {
       const inputs = wrapper.findAll('.modal input.form-input')
       await inputs[0]!.setValue('tianjin')
       await inputs[1]!.setValue('路局B')
-      // inputs: code, name, http_base_url, ssh_jump, openresty_prefix
+      // inputs: code, name, http_base_url, ssh_jump, openresty_prefix, ssh_user, ...
+      await inputs[5]!.setValue('jboss')
       const idx = field === 'http_base_url' ? 2 : field === 'ssh_jump' ? 3 : 4
       await inputs[idx]!.setValue(badValue)
       mockPost.mockClear()
@@ -476,6 +545,7 @@ describe('RelayGateways', () => {
     await inputs[0]!.setValue('tianjin')
     await inputs[1]!.setValue('路局B')
     await inputs[3]!.setValue('tunnel@10.10.1.1')
+    await inputs[5]!.setValue('jboss')
     await wrapper
       .findAll('.modal button.btn-primary')
       .find((b) => b.text().includes('保存'))!

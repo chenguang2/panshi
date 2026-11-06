@@ -25,7 +25,7 @@ features:
   # 默认口令守卫（敏感：改变登录/拦截行为，默认关 = 不列出；显式 true 后登录
   # 检测种子默认口令并硬强制改密，热生效免重启。启用前签发的 token 不受拦截，
   # 最长 24h 过期或下次登录收敛）
-  # force_default_password_change: true
+  force_default_password_change: false
   relay_gateway: true
 enabled_plugins:
   - proxy_rewrite

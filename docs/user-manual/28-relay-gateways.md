@@ -35,10 +35,17 @@
 | 网关 HTTP 腿 | 须以 `http://` 或 `https://` 开头，如 `http://10.10.1.1:8443`；留空 = 直连 |
 | SSH 跳板 | 须为 `账号@主机[:端口]`，如 `tunnel@10.10.1.1:22`；留空 = SSH 直连 |
 | OpenResty 前缀 | 须为以 `/` 开头的绝对路径，如 `/work/jboss/tunnel/openresty-1.21.4.1/nginx` |
+| SSH 用户 * | 必填。网关机 SSH 账号（如 `jboss` / `tunnel`），写入网关清单 `inventory/gateways` |
+| SSH 口令 | 留空 = 密钥认证（清单不写口令行）。**口令不出列表**：编辑时自动按需单查回填，单查会记录审计（谁在何时查看了哪个网关的口令） |
+| SSH 端口 | 默认 22 |
+| Python 解释器 | 网关机 `ansible_python_interpreter`，如 `/work/jboss/anaconda3/bin/python3`；网关机 python < 3.8 时必填（ansible 模块载荷要求 ≥3.8） |
+| SSH 公共参数 | `ansible_ssh_common_args`；默认 `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null` |
 
 格式不符时保存会被内联提示拦截（红字标在对应字段下方），不会产生错误配置：
 
 ![表单格式校验](images/32-04-relay-form.png)
+
+> 💡 **网关清单已界面化**（relay-gateway-inventory-ui）：上表 SSH 连接字段保存后，系统自动重写 `backend/ansible/inventory/gateways`（按局分组，旧文件先备份为 `gateways.bak.<时间戳>`，保留最近 10 份）。**该文件为派生成品，请勿手工修改**——手工改动会在下次保存时被覆盖；历史手工清单已在系统升级时自动迁入数据库。若状态列出现「清单缺组」标签，说明该局主机组不在清单中，重新保存一次网关即可重建。
 
 ## 28.3 健康体检
 

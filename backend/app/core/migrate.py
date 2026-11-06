@@ -125,6 +125,11 @@ def _fix_postgresql_table(engine: Engine, table: str, bad_col: str, compound_col
 
 
 COLUMN_MIGRATIONS = [
+    ("relay_gateways", "ssh_user", "VARCHAR(64)"),
+    ("relay_gateways", "ssh_password", "VARCHAR(255)"),
+    ("relay_gateways", "ssh_port", "INTEGER"),
+    ("relay_gateways", "ansible_python_interpreter", "VARCHAR(255)"),
+    ("relay_gateways", "ssh_common_args", "VARCHAR(255)"),
     ("ps_config_version", "edge_payload", "TEXT"),
     ("ps_node", "status_detail", "TEXT"),
     ("ps_node", "openresty_path", "VARCHAR(255)"),

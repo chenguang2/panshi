@@ -55,6 +55,8 @@ ROUTE_MAP: dict[tuple[str, str], tuple[str, str, bool]] = {
     ("PUT", "/api/v1/relay/gateways/{gateway_id}"): ("relay_gateway", "update", False),
     ("PUT", "/api/v1/relay/gateways/{gateway_id}/status"): ("relay_gateway", "update", False),
     ("DELETE", "/api/v1/relay/gateways/{gateway_id}"): ("relay_gateway", "delete", False),
+    # 网关清单界面化（relay-gateway-inventory-ui）：口令单查单独留痕
+    ("GET", "/api/v1/relay/gateways/{gateway_id}/credential"): ("relay_gateway", "view_credential", False),
     ("POST", "/api/v1/relay/gateways/{gateway_id}/init"): ("relay_gateway", "init", False),
     ("POST", "/api/v1/relay/gateways/{gateway_id}/push-config"): ("relay_gateway", "push_config", False),
     ("POST", "/api/v1/relay/gateways/{gateway_id}/sshd-setup"): ("relay_gateway", "sshd_setup", False),

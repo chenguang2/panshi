@@ -112,7 +112,13 @@ async def lifespan(app: FastAPI):
     await db_backup_service.ensure_targets_migrated()
     # 中继区域注册快照预热（relay_gateway 关闭时加载也无副作用）
     from app.services import relay_registry
+    from app.services.gateways_inventory_service import migrate_gateways_file
     await relay_registry.ensure_fresh()
+    try:
+        async with AsyncSessionLocal() as s:
+            await migrate_gateways_file(s)
+    except Exception:
+        pass  # 迁移失败不阻断启动（列表标志可见，重启/重保存可重试）
     refresh_task = asyncio.create_task(_relay_refresh_loop())
     # SQLite 异地备份调度（未启用/配置不全时 tick 内部直接跳过）
     from app.services import db_backup_service

@@ -42,6 +42,14 @@ class RelayGatewayCreate(BaseModel):
     ssh_jump: Optional[str] = Field(None, max_length=255)
     openresty_prefix: Optional[str] = Field(None, max_length=255)
     status: str = "enabled"
+    ssh_user: str = Field(..., min_length=1, max_length=64)
+    ssh_password: Optional[str] = Field(None, max_length=255)
+    ssh_port: int = Field(22, ge=1, le=65535)
+    ansible_python_interpreter: Optional[str] = Field(None, max_length=255)
+    ssh_common_args: str = Field(
+        "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null",
+        max_length=255,
+    )
 
     @field_validator("code")
     @classmethod
@@ -92,6 +100,11 @@ class RelayGatewayUpdate(BaseModel):
     ssh_jump: Optional[str] = Field(None, max_length=255)
     openresty_prefix: Optional[str] = Field(None, max_length=255)
     status: Optional[str] = None
+    ssh_user: Optional[str] = Field(None, max_length=64)
+    ssh_password: Optional[str] = Field(None, max_length=255)
+    ssh_port: Optional[int] = Field(None, ge=1, le=65535)
+    ansible_python_interpreter: Optional[str] = Field(None, max_length=255)
+    ssh_common_args: Optional[str] = Field(None, max_length=255)
 
     @field_validator("code")
     @classmethod
@@ -163,6 +176,11 @@ class RelayGatewayOut(BaseModel):
     ssh_jump: Optional[str] = None
     openresty_prefix: Optional[str] = None
     status: str
+    # SSH 连接（relay-gateway-inventory-ui）：口令不出列表（单查端点 + 审计）
+    ssh_user: Optional[str] = None
+    ssh_port: Optional[int] = None
+    ansible_python_interpreter: Optional[str] = None
+    ssh_common_args: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     # 清单漂移标记（列表端点计算注入，非库列）：True = inventory/gateways 缺该局主机组
