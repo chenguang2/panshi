@@ -383,28 +383,30 @@
             </div>
           </div>
 
-          <details class="install-guide advanced-section">
-            <summary>高级参数（一般不用改）</summary>
-            <div class="form-grid">
-              <div class="form-group label-top">
-                <label class="form-label">Python 解释器 <span class="optional">选填</span></label>
-                <input
-                  type="text"
-                  class="form-input mono-input"
-                  v-model="form.ansible_python_interpreter"
-                  placeholder="如 /work/jboss/anaconda3/bin/python3"
-                />
-                <span class="form-hint">仅当网关机系统默认 Python 低于 3.8（老机器常见）时填写。</span>
-              </div>
-              <div class="form-group label-top">
-                <label class="form-label">SSH 公共参数 <span class="optional">选填</span></label>
-                <input
-                  type="text"
-                  class="form-input mono-input"
-                  v-model="form.ssh_common_args"
-                  placeholder="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-                />
-                <span class="form-hint">追加给每条 SSH 连接的参数；默认已跳过指纹确认，一般无需修改。</span>
+          <details class="advanced-section">
+            <summary>高级参数 <span class="adv-tip">（一般不用改）</span></summary>
+            <div class="adv-body">
+              <div class="form-grid">
+                <div class="form-group label-top span-2">
+                  <label class="form-label">Python 解释器 <span class="optional">选填</span></label>
+                  <input
+                    type="text"
+                    class="form-input mono-input"
+                    v-model="form.ansible_python_interpreter"
+                    placeholder="如 /work/jboss/anaconda3/bin/python3"
+                  />
+                  <span class="form-hint">仅当网关机系统默认 Python 低于 3.8（老机器常见）时填写。</span>
+                </div>
+                <div class="form-group label-top span-2">
+                  <label class="form-label">SSH 公共参数 <span class="optional">选填</span></label>
+                  <input
+                    type="text"
+                    class="form-input mono-input"
+                    v-model="form.ssh_common_args"
+                    placeholder="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+                  />
+                  <span class="form-hint">追加给每条 SSH 连接的参数；默认已跳过指纹确认，一般无需修改。</span>
+                </div>
               </div>
             </div>
           </details>
@@ -1856,22 +1858,21 @@ onUnmounted(() => {
   padding: 8px 0;
 }
 .advanced-section {
-  margin-top: 14px;
-  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
+  margin-top: 12px;
   overflow: hidden;
 }
 .advanced-section > summary {
   list-style: none;
   cursor: pointer;
-  padding: 11px 16px;
-  font-size: 13px;
+  padding: 9px 12px;
+  font-size: 12px;
   font-weight: 600;
-  color: var(--accent);
+  color: var(--muted);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   user-select: none;
 }
 .advanced-section > summary::-webkit-details-marker {
@@ -1880,16 +1881,20 @@ onUnmounted(() => {
 .advanced-section > summary::before {
   content: '▸';
   transition: transform 0.15s;
-  font-size: 11px;
+  font-size: 10px;
 }
 .advanced-section[open] > summary::before {
   transform: rotate(90deg);
 }
-.advanced-section .form-group:first-of-type {
-  margin-top: 4px;
+.advanced-section > summary .adv-tip {
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--muted);
+  opacity: 0.85;
 }
-.advanced-section .form-group:last-of-type {
-  padding-bottom: 8px;
+.advanced-section .adv-body {
+  padding: 2px 12px 12px;
+  border-top: 1px dashed var(--border);
 }
 
 /* 表头强化（antd 深度选择） */
