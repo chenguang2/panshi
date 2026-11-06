@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>中继区域管理 · UX 重设计示意（静态示例）</title>
+<!--
+  磐石 Gateway · 中继区域管理 UX 重设计静态示意页
+  配套蓝图：docs/refactoring/relay-gateways-ux-redesign-blueprint.md
+  视觉语言与现有页面一致：OKLCH 令牌（styles/theme.css）+ 白卡 + 蓝主按钮 + badge
+  纯静态：无 JS 依赖，<details> 原生折叠；直接浏览器打开预览
+-->
+<style>
+  :root {
+    --bg: oklch(97% 0.005 250);
+    --surface: oklch(100% 0 0);
+    --fg: oklch(20% 0.02 240);
+    --muted: oklch(50% 0.018 240);
+    --border: oklch(88% 0.008 240);
+    --accent: oklch(56% 0.16 210);
+    --accent-hover: oklch(50% 0.16 210);
+    --accent-bg: oklch(56% 0.16 210 / 10%);
+    --success: oklch(55% 0.15 145);
+    --success-bg: oklch(55% 0.15 145 / 12%);
+    --warning: oklch(65% 0.15 85);
+    --warning-bg: oklch(65% 0.15 85 / 12%);
+    --danger: oklch(55% 0.18 28);
+    --danger-bg: oklch(55% 0.18 28 / 10%);
+    --info: oklch(55% 0.12 240);
+    --info-bg: oklch(55% 0.12 240 / 10%);
+    --font-mono: 'JetBrains Mono', 'IBM Plex Mono', 'SF Mono', ui-monospace, Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Segoe UI', system-ui, sans-serif;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .page { max-width: 1180px; margin: 0 auto; padding: 24px 20px 80px; display: flex; flex-direction: column; gap: 16px; }
+
+  /* ───────── 页头（PageHeader 范式） ───────── */
+  .page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+  .page-header h1 { margin: 0; font-size: 20px; font-weight: 700; }
+  .page-desc { margin: 4px 0 0; color: var(--muted); font-size: 13px; max-width: 640px; }
+  .page-actions { display: flex; gap: 8px; flex-shrink: 0; padding-top: 2px; }
+
+  /* ───────── 按钮（全局 btn 体系） ───────── */
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 14px; border-radius: 6px;
+    font-size: 13px; font-weight: 500; font-family: inherit;
+    cursor: pointer; border: 1px solid transparent;
+    transition: all 0.15s; white-space: nowrap; line-height: 1.4;
+  }
+  .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+  .btn-secondary { background: var(--surface); color: var(--fg); border-color: var(--border); }
+  .btn-secondary:hover { background: var(--bg); border-color: oklch(80% 0.008 240); }
+  .btn-sm { padding: 3px 10px; font-size: 12px; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* ───────── badge / tag ───────── */
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 10px;
+    font-size: 11px; font-weight: 600; font-family: var(--font-mono); white-space: nowrap;
+  }
+  .badge-success { background: var(--success-bg); color: var(--success); }
+  .badge-neutral { background: oklch(50% 0.018 240 / 8%); color: var(--muted); }
+  .badge-danger { background: var(--danger-bg); color: var(--danger); }
+  .badge-info { background: var(--info-bg); color: var(--info); }
+  .tag {
+    display: inline-block; padding: 1px 8px; border-radius: 4px;
+    font-size: 11px; font-weight: 500; line-height: 20px; white-space: nowrap; cursor: default;
+  }
+  .tag-code { color: var(--accent); background: var(--accent-bg); border: 1px solid oklch(56% 0.16 210 / 30%); font-family: var(--font-mono); }
+  .tag-warning { color: oklch(45% 0.12 85); background: var(--warning-bg); border: 1px solid oklch(65% 0.15 85 / 40%); }
+  .mono { font-family: var(--font-mono); font-size: 12.5px; }
+
+  /* ───────── 结论式说明卡（cert-banner 范式 · info 蓝变体） ───────── */
+  .relay-banner {
+    display: flex; gap: 12px; align-items: flex-start;
+    border-radius: 8px; padding: 14px 16px;
+    background: var(--accent-bg); border: 1px solid oklch(56% 0.16 210 / 28%);
+  }
+  .banner-icon {
+    width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 700; color: #fff; background: var(--accent); margin-top: 1px;
+    font-style: normal;
+  }
+  .banner-text { font-size: 13px; line-height: 1.65; color: oklch(30% 0.06 230); }
+  .banner-text b { color: oklch(30% 0.1 220); }
+  .banner-text p { margin: 2px 0 0; }
+  .banner-steps { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .bstep {
+    display: inline-flex; align-items: baseline; gap: 6px;
+    background: var(--surface); border: 1px solid oklch(56% 0.16 210 / 30%);
+    border-radius: 6px; padding: 4px 10px; font-size: 12px;
+  }
+  .bstep b { color: var(--accent); font-family: var(--font-mono); }
+  .bstep i { color: var(--muted); font-style: normal; }
+  .barrow { color: var(--accent); font-weight: 600; padding: 0 2px; }
+
+  /* ───────── 折叠对照表（install-guide 范式） ───────── */
+  .install-guide { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .install-guide > summary {
+    list-style: none; cursor: pointer; padding: 11px 16px;
+    font-size: 13px; font-weight: 600; color: var(--accent);
+    display: flex; align-items: center; gap: 8px; user-select: none;
+  }
+  .install-guide > summary::-webkit-details-marker { display: none; }
+  .install-guide > summary::before { content: '▸'; transition: transform 0.15s; font-size: 11px; }
+  .install-guide[open] > summary::before { transform: rotate(90deg); }
+  .guide-body { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; padding: 4px 16px 16px; border-top: 1px dashed var(--border); padding-top: 14px; }
+  .guide-col h4 { font-size: 13px; margin: 0 0 2px; display: flex; align-items: center; gap: 6px; }
+  .guide-col .when { font-size: 12px; color: var(--accent); font-weight: 600; margin: 0 0 6px; }
+  .guide-col ul { padding-left: 16px; font-size: 12px; color: var(--muted); line-height: 1.7; margin: 0; }
+  .guide-col ul b { color: var(--fg); font-weight: 500; }
+  .guide-symptom { margin: 0 16px 16px; padding: 10px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; }
+  .guide-symptom h5 { margin: 0 0 6px; font-size: 12px; color: var(--muted); }
+  .guide-symptom table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .guide-symptom td { padding: 4px 8px 4px 0; vertical-align: top; color: var(--muted); }
+  .guide-symptom td:first-child { color: var(--danger); white-space: nowrap; padding-right: 16px; }
+  .guide-symptom td:last-child b { color: var(--accent); font-weight: 600; }
+
+  /* ───────── 卡片与表格 ───────── */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 1px 2px oklch(0% 0 0 / 6%); }
+  .card-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 12px; border-bottom: 1px solid var(--border); }
+  .card-header h3 { margin: 0; font-size: 14px; font-weight: 600; }
+  .card-count { color: var(--muted); font-size: 12px; }
+  table.region-table { width: 100%; border-collapse: collapse; }
+  .region-table thead th {
+    background: var(--accent-bg); border-bottom: 2px solid var(--accent);
+    color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: 0.05em;
+    padding: 10px 10px; text-align: left; white-space: nowrap;
+  }
+  .region-table tbody td { padding: 12px 10px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 13px; vertical-align: top; }
+  .region-table tbody tr:last-child td { border-bottom: none; }
+  .region-table tbody tr:hover td { background: var(--bg); }
+  .cell-name { font-weight: 600; color: var(--fg); font-size: 13px; }
+  .cell-code { margin-top: 3px; }
+  .leg-line { display: flex; align-items: baseline; gap: 6px; white-space: nowrap; }
+  .leg-line + .leg-line { margin-top: 3px; }
+  .leg-label { font-size: 11px; color: var(--muted); opacity: 0.8; width: 30px; flex-shrink: 0; }
+  .direct-note { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .status-cell { white-space: nowrap; }
+  .health-line { margin-top: 4px; display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
+  .health-ok { color: var(--success); }
+  .health-fail { color: var(--danger); }
+  .health-unknown { color: var(--muted); opacity: 0.75; }
+  .health-time { color: var(--muted); font-size: 11px; font-family: var(--font-mono); }
+  .table-actions { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+
+  /* ───────── 行内菜单展开态（示意独立呈现） ───────── */
+  .demo-strip { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .demo-strip { grid-template-columns: 1fr; } }
+  .demo-box { background: var(--surface); border: 1px dashed var(--border); border-radius: 8px; padding: 14px 16px 18px; position: relative; }
+  .demo-box-title { font-size: 12px; color: var(--muted); margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+  .demo-box-title .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  .menu-anchor { position: relative; display: inline-block; }
+  .dropdown {
+    position: absolute; top: calc(100% + 6px); left: 0; z-index: 20;
+    min-width: 300px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: 0 8px 24px oklch(0% 0 0 / 10%); padding: 6px;
+  }
+  .menu-item { border-radius: 6px; padding: 7px 10px; cursor: pointer; }
+  .menu-item:hover { background: var(--bg); }
+  .menu-item-title { font-size: 13px; color: var(--fg); line-height: 1.4; }
+  .menu-item-desc { font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .menu-item.danger .menu-item-title { color: var(--danger); }
+  .menu-item.disabled { cursor: not-allowed; opacity: 0.45; }
+  .menu-item.disabled:hover { background: transparent; }
+  .menu-divider { height: 1px; background: var(--border); margin: 6px 4px; }
+  .menu-note { font-size: 11px; color: var(--warning); background: var(--warning-bg); border-radius: 6px; padding: 6px 10px; margin: 4px; line-height: 1.5; }
+
+  /* ───────── 弹窗示意（遮罩内平铺） ───────── */
+  .modal-demo { position: relative; border-radius: 8px; overflow: hidden; border: 1px dashed var(--border); padding: 28px 16px; background: var(--bg); }
+  .modal-backdrop { position: absolute; inset: 0; background: oklch(20% 0.02 240 / 45%); }
+  .modal {
+    position: relative; z-index: 5; max-width: 640px; margin: 0 auto;
+    background: var(--surface); border-radius: 10px;
+    box-shadow: 0 8px 24px oklch(0% 0 0 / 12%);
+  }
+  .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px 0; }
+  .modal-header h2 { margin: 0; font-size: 16px; font-weight: 600; }
+  .modal-close { border: none; background: transparent; font-size: 20px; color: var(--muted); cursor: pointer; line-height: 1; padding: 2px 6px; }
+  .modal-body { padding: 12px 20px 4px; }
+  .modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px 18px; border-top: 1px solid var(--border); margin-top: 12px; }
+
+  /* ───────── 表单（标签在上 + 分组） ───────── */
+  .form-section { padding: 12px 0 4px; }
+  .form-section + .form-section { border-top: 1px dashed var(--border); }
+  .form-section-title { font-size: 13px; font-weight: 600; color: var(--fg); display: flex; align-items: center; gap: 8px; }
+  .form-section-title .sec-no {
+    width: 18px; height: 18px; border-radius: 50%; background: var(--accent-bg);
+    color: var(--accent); font-size: 11px; font-weight: 700;
+    display: inline-flex; align-items: center; justify-content: center; font-style: normal;
+  }
+  .form-section-desc { font-size: 12px; color: var(--muted); margin: 2px 0 10px; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+  .form-grid .span-2 { grid-column: span 2; }
+  @media (max-width: 640px) { .form-grid { grid-template-columns: 1fr; } .form-grid .span-2 { grid-column: span 1; } }
+  .form-group { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .form-label { font-size: 12px; font-weight: 600; color: var(--fg); }
+  .required { color: var(--danger); margin-left: 2px; }
+  .optional { color: var(--muted); font-weight: 400; font-size: 11px; margin-left: 4px; }
+  .form-input {
+    width: 100%; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px;
+    font-size: 13px; font-family: inherit; color: var(--fg); background: var(--surface);
+    outline: none; transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .form-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-bg); }
+  .form-input::placeholder { color: oklch(65% 0.01 240); }
+  .form-input:disabled { background: var(--bg); color: var(--muted); cursor: not-allowed; }
+  .form-input.mono-input { font-family: var(--font-mono); font-size: 12.5px; }
+  .form-hint { font-size: 11px; color: var(--muted); line-height: 1.55; }
+  .form-hint b { color: var(--fg); font-weight: 600; }
+  select.form-input { appearance: auto; }
+  .input-lock { position: relative; }
+  .input-lock .lock-badge {
+    position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+    font-size: 11px; color: var(--muted); pointer-events: none;
+  }
+
+  /* 连接方式分段选择（直连显性化） */
+  .segmented { display: inline-flex; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 3px; gap: 3px; }
+  .seg-item { padding: 4px 14px; border-radius: 6px; font-size: 12px; color: var(--muted); cursor: pointer; white-space: nowrap; }
+  .seg-item.seg-active { background: var(--surface); color: var(--accent); font-weight: 600; box-shadow: 0 1px 2px oklch(0% 0 0 / 8%); }
+  .seg-hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  /* 高级参数折叠 */
+  details.adv { border: 1px solid var(--border); border-radius: 8px; margin-top: 12px; overflow: hidden; }
+  details.adv > summary {
+    list-style: none; cursor: pointer; padding: 9px 12px;
+    font-size: 12px; font-weight: 600; color: var(--muted);
+    display: flex; align-items: center; gap: 6px; user-select: none;
+  }
+  details.adv > summary::-webkit-details-marker { display: none; }
+  details.adv > summary::before { content: '▸'; transition: transform 0.15s; font-size: 10px; }
+  details.adv[open] > summary::before { transform: rotate(90deg); }
+  details.adv > summary .adv-tip { font-weight: 400; font-size: 11px; color: var(--muted); opacity: 0.85; }
+  .adv-body { padding: 2px 12px 12px; border-top: 1px dashed var(--border); }
+
+  /* 页脚说明 */
+  .foot-note { color: var(--muted); font-size: 12px; text-align: center; padding-top: 8px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ═══════ 页头 ═══════ -->
+  <header class="page-header">
+    <div>
+      <h1>中继区域管理</h1>
+      <p class="page-desc">维护各局中继网关的注册信息：平台到该局的两条管理通道（发布走 HTTP 腿、安装任务走 SSH 腿）经网关机中转；未建区域的集群保持直连，不受影响。</p>
+    </div>
+    <div class="page-actions">
+      <button class="btn btn-secondary" title="探测所有区域的两条链路，结果写入健康列">全量体检</button>
+      <button class="btn btn-primary">＋ 新建区域</button>
+    </div>
+  </header>
+
+  <!-- ═══════ 结论式说明卡（cert-banner 范式） ═══════ -->
+  <div class="relay-banner">
+    <i class="banner-icon">i</i>
+    <div class="banner-text">
+      <b>哪些局需要建中继区域？—— 平台到局内网络不通、必须经网关机中转的局才需要建</b>
+      <p>
+        平台到各局 Edge 节点有两条通道：<b>发布配置走 HTTP 腿</b>（网关机 8443 反向代理），<b>安装与任务走 SSH 腿</b>（经网关机跳板转发）。
+        区域建好并挂接到集群后，两条通道自动改经该局网关；没建区域的集群保持现状直连。网络本就互通的局<b>不需要建</b>，选「直连区域」即可。
+      </p>
+      <div class="banner-steps">
+        <span class="bstep"><b>①</b> 登记区域 <i>新建区域，填网关地址与账号</i></span>
+        <span class="barrow">→</span>
+        <span class="bstep"><b>②</b> 初始化网关 <i>首次装机必做，写入 8443 监听</i></span>
+        <span class="barrow">→</span>
+        <span class="bstep"><b>③</b> 下发配置 <i>把节点白名单推送到网关机</i></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ 动作对照表（折叠，install-guide 范式） ═══════ -->
+  <details class="install-guide" open>
+    <summary>📖 「初始化网关 / 下发配置 / 配置跳板转发」何时用哪个？（点开看对照）</summary>
+    <div class="guide-body">
+      <div class="guide-col">
+        <h4>🚀 初始化网关</h4>
+        <p class="when">何时用：首次装机、网关机重装 OpenResty 之后</p>
+        <ul>
+          <li>在网关机写入 <b>8443 监听</b> server 块 + 当前节点白名单，校验后 reload</li>
+          <li><b>幂等可重复执行</b>，跑多次没有副作用</li>
+          <li>要求已填 OpenResty 前缀</li>
+        </ul>
+      </div>
+      <div class="guide-col">
+        <h4>📤 下发配置</h4>
+        <p class="when">何时用：日常 —— 集群挂接区域、节点增删、节点启停之后</p>
+        <ul>
+          <li>只推<b>节点白名单</b>（全量替换），不动 8443 监听</li>
+          <li>白名单为空时会弹危险确认（清空 = 全部 403）</li>
+          <li>该局全部网关机都成功才算成功</li>
+        </ul>
+      </div>
+      <div class="guide-col">
+        <h4>🔐 配置跳板转发</h4>
+        <p class="when">何时用：仅跳板 SSH 部署，且网关机 sshd 默认禁止转发时</p>
+        <ul>
+          <li>用 root 在网关机放行 SSH 转发（PermitOpen 白名单）并重载 sshd</li>
+          <li><b>一次配置即可</b>，不改平台配置</li>
+          <li>校验失败自动回滚，不影响正在运行的 sshd</li>
+        </ul>
+      </div>
+    </div>
+    <div class="guide-symptom">
+      <h5>常见症状 → 建议动作（体检结果里也会给出同样建议）</h5>
+      <table>
+        <tr>
+          <td>✗ HTTP 腿不可达</td>
+          <td>确认网关机 8443 服务已启动；首次装机先执行 <b>「更多 ▾ → 初始化网关」</b></td>
+        </tr>
+        <tr>
+          <td>✗ SSH 腿不可达</td>
+          <td>核对 SSH 跳板地址与账号；若报 <span class="mono">administratively prohibited</span>，执行 <b>「配置跳板转发」</b>放行</td>
+        </tr>
+        <tr>
+          <td>「清单缺组」标签</td>
+          <td>该局主机组尚未写入网关清单，执行初始化/下发会先被拦截——先完成清单登记再操作</td>
+        </tr>
+      </table>
+    </div>
+  </details>
+
+  <!-- ═══════ 区域列表 ═══════ -->
+  <div class="card">
+    <div class="card-header">
+      <h3>区域列表</h3>
+      <span class="card-count">共 3 个区域 · 其中 1 个直连区域</span>
+    </div>
+    <table class="region-table">
+      <thead>
+        <tr>
+          <th style="width: 14%">区域</th>
+          <th style="width: 26%">网关两腿</th>
+          <th style="width: 15%">状态</th>
+          <th style="width: 18%">健康</th>
+          <th style="width: 13%">更新时间</th>
+          <th style="width: 14%">操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- 行 1：正常经网关区域 -->
+        <tr>
+          <td>
+            <div class="cell-name">济南局</div>
+            <div class="cell-code"><span class="tag tag-code">luju</span></div>
+          </td>
+          <td>
+            <div class="leg-line"><span class="leg-label">HTTP</span><span class="mono">https://10.10.1.1:8443</span></div>
+            <div class="leg-line"><span class="leg-label">SSH</span><span class="mono">tunnel@10.10.1.1:22</span></div>
+          </td>
+          <td class="status-cell"><span class="badge badge-success">启用</span></td>
+          <td>
+            <div class="health-line" title="体检时间 2026-11-05 14:32&#10;HTTP 腿：✓ 可达（45ms）&#10;SSH 腿：✓ 可达（210ms）">
+              <span class="health-ok">✓ 正常</span>
+              <span class="health-time">11-05 14:32</span>
+            </div>
+          </td>
+          <td class="mono">2026-11-05 16:20</td>
+          <td>
+            <div class="table-actions">
+              <button class="btn btn-secondary btn-sm" title="探测该区域两条链路，结果更新健康列">测试</button>
+              <button class="btn btn-primary btn-sm" title="把该局节点白名单推送到网关机；集群挂接、节点增删或启停后需要执行">下发配置</button>
+              <button class="btn btn-secondary btn-sm">更多 ▾</button>
+            </div>
+          </td>
+        </tr>
+        <!-- 行 2：清单缺组 + SSH 腿异常 -->
+        <tr>
+          <td>
+            <div class="cell-name">青岛局</div>
+            <div class="cell-code"><span class="tag tag-code">qingdao</span></div>
+          </td>
+          <td>
+            <div class="leg-line"><span class="leg-label">HTTP</span><span class="mono">https://10.10.2.1:8443</span></div>
+            <div class="leg-line"><span class="leg-label">SSH</span><span class="mono">tunnel@10.10.2.1:22</span></div>
+          </td>
+          <td class="status-cell">
+            <span class="badge badge-success">启用</span>
+            <span class="tag tag-warning" style="margin-left: 4px" title="ansible 清单 inventory/gateways 缺该局主机组，初始化/下发会被前置拦截">清单缺组</span>
+          </td>
+          <td>
+            <div class="health-line" title="体检时间 2026-11-05 09:10&#10;HTTP 腿：✓ 可达（38ms）&#10;SSH 腿：✗ tunnel@10.10.2.1 Connection refused">
+              <span class="health-fail">✗ SSH 腿不可达</span>
+              <span class="health-time">11-05 09:10</span>
+            </div>
+          </td>
+          <td class="mono">2026-11-04 11:02</td>
+          <td>
+            <div class="table-actions">
+              <button class="btn btn-secondary btn-sm" title="探测该区域两条链路，结果更新健康列">测试</button>
+              <button class="btn btn-primary btn-sm" title="把该局节点白名单推送到网关机；集群挂接、节点增删或启停后需要执行">下发配置</button>
+              <button class="btn btn-secondary btn-sm">更多 ▾</button>
+            </div>
+          </td>
+        </tr>
+        <!-- 行 3：直连区域（两腿留空显性化） -->
+        <tr>
+          <td>
+            <div class="cell-name">Aoh 局</div>
+            <div class="cell-code"><span class="tag tag-code">aoh</span></div>
+          </td>
+          <td>
+            <span class="badge badge-info">直连 · 无网关机</span>
+            <div class="direct-note">两条腿均未配置，全部操作直连执行</div>
+          </td>
+          <td class="status-cell"><span class="badge badge-neutral">禁用</span></td>
+          <td>
+            <div class="health-line"><span class="health-unknown">— 未检测</span></div>
+          </td>
+          <td class="mono">2026-10-28 09:45</td>
+          <td>
+            <div class="table-actions">
+              <button class="btn btn-secondary btn-sm" title="探测该区域两条链路，结果更新健康列">测试</button>
+              <button class="btn btn-primary btn-sm" title="把该局节点白名单推送到网关机；集群挂接、节点增删或启停后需要执行">下发配置</button>
+              <button class="btn btn-secondary btn-sm">更多 ▾</button>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ═══════ 行内菜单展开态（两种状态，独立示意） ═══════ -->
+  <div class="demo-strip">
+    <div class="demo-box">
+      <div class="demo-box-title"><span class="dot"></span>示意 · 「更多 ▾」菜单展开态 —— 正常区域（luju 济南局）：每项带一行说明</div>
+      <div class="menu-anchor">
+        <button class="btn btn-secondary btn-sm">更多 ▾</button>
+        <div class="dropdown">
+          <div class="menu-item">
+            <div class="menu-item-title">编辑</div>
+            <div class="menu-item-desc">修改网关地址、SSH 账号与启用状态</div>
+          </div>
+          <div class="menu-item">
+            <div class="menu-item-title">初始化网关</div>
+            <div class="menu-item-desc">首次装机必做：写入 8443 监听（幂等可重复）</div>
+          </div>
+          <div class="menu-item">
+            <div class="menu-item-title">配置跳板转发</div>
+            <div class="menu-item-desc">放行网关机 sshd 转发（需 root，一次即可）</div>
+          </div>
+          <div class="menu-item">
+            <div class="menu-item-title">查看配置</div>
+            <div class="menu-item-desc">预览将写入网关机的文件内容，可复制</div>
+          </div>
+          <div class="menu-item">
+            <div class="menu-item-title">禁用</div>
+            <div class="menu-item-desc">停止经网关中转，该区域回退直连</div>
+          </div>
+          <div class="menu-divider"></div>
+          <div class="menu-item danger">
+            <div class="menu-item-title">删除</div>
+            <div class="menu-item-desc">该区域未被集群挂接时可删除</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="demo-box">
+      <div class="demo-box-title"><span class="dot"></span>示意 · 「更多 ▾」菜单展开态 —— 被集群挂接的区域：删除保护（409 前置显性化）</div>
+      <div class="menu-anchor">
+        <button class="btn btn-secondary btn-sm">更多 ▾</button>
+        <div class="dropdown">
+          <div class="menu-item">
+            <div class="menu-item-title">编辑</div>
+            <div class="menu-item-desc">修改网关地址、SSH 账号与启用状态</div>
+          </div>
+          <div class="menu-item">
+            <div class="menu-item-title">初始化网关</div>
+            <div class="menu-item-desc">首次装机必做：写入 8443 监听（幂等可重复）</div>
+          </div>
+          <div class="menu-item disabled">
+            <div class="menu-item-title">配置跳板转发</div>
+            <div class="menu-item-desc">需要网关机 root 密码（仅本次使用）</div>
+          </div>
+          <div class="menu-item">
+            <div class="menu-item-title">查看配置</div>
+            <div class="menu-item-desc">预览将写入网关机的文件内容，可复制</div>
+          </div>
+          <div class="menu-divider"></div>
+          <div class="menu-item danger disabled">
+            <div class="menu-item-title">删除</div>
+            <div class="menu-item-desc">已被 2 个集群挂接，先解挂再删除</div>
+          </div>
+          <div class="menu-note">ⓘ 挂接中的区域删除会被拒绝（409）。请先在「集群管理」里把对应集群的区域改掉，再回来删除。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ 新建区域弹窗（分组表单 · 遮罩内平铺示意） ═══════ -->
+  <div>
+    <div class="demo-box-title" style="margin-bottom: 0"><span class="dot"></span>示意 · 新建区域弹窗（实际为居中遮罩弹窗，此处平铺展示；编辑弹窗同结构，区域码只读、口令自动回填）</div>
+    <div class="modal-demo" style="margin-top: 10px">
+      <div class="modal-backdrop"></div>
+      <div class="modal">
+        <div class="modal-header">
+          <h2>新建区域</h2>
+          <button class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+
+          <!-- 组 ① 基础身份 -->
+          <div class="form-section">
+            <div class="form-section-title"><i class="sec-no">1</i>基础身份</div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">区域码 <span class="required">*</span></label>
+                <input class="form-input mono-input" placeholder="小写字母开头，如 luju" />
+                <span class="form-hint">创建后<b>不可修改</b>；集群靠它挂接本区域，同时用作网关清单分组名（<span class="mono">gateways_区域码</span>）。</span>
+              </div>
+              <div class="form-group">
+                <label class="form-label">展示名 <span class="required">*</span></label>
+                <input class="form-input" placeholder="如：济南局" />
+                <span class="form-hint">显示给人看的名字：列表、弹窗与执行日志都用它，可随时改。</span>
+              </div>
+              <div class="form-group span-2" style="max-width: 320px">
+                <label class="form-label">状态</label>
+                <select class="form-input">
+                  <option>启用</option>
+                  <option>禁用（该区域回退直连）</option>
+                </select>
+                <span class="form-hint">禁用只是「改走直连」：网关机上的配置原样保留，随时可再启用。</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 组 ② 网关两腿连接 -->
+          <div class="form-section">
+            <div class="form-section-title"><i class="sec-no">2</i>网关两腿连接</div>
+            <div class="form-section-desc">平台到该局的两条通道。有网关机就都填，某条不走网关就留空。</div>
+            <div class="form-group" style="margin-bottom: 10px">
+              <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+                <div class="segmented">
+                  <div class="seg-item seg-active">有网关机</div>
+                  <div class="seg-item">直连区域（无网关机）</div>
+                </div>
+                <span class="seg-hint">选「直连区域」：下面两腿自动置空，该局全部操作按直连执行，适合网络本就互通的局。</span>
+              </div>
+            </div>
+            <div class="form-grid">
+              <div class="form-group span-2">
+                <label class="form-label">网关 HTTP 腿 <span class="optional">选填 · 留空 = 直连</span></label>
+                <input class="form-input mono-input" placeholder="如 https://10.10.1.1:8443" />
+                <span class="form-hint">发布、回滚等管理请求经它进入该局（网关机 8443 反向代理）；<b>留空 = 这条腿不走网关、直接连节点</b>。</span>
+              </div>
+              <div class="form-group span-2">
+                <label class="form-label">SSH 跳板 <span class="optional">选填 · 留空 = 直连</span></label>
+                <input class="form-input mono-input" placeholder="如 tunnel@10.10.1.1:22" />
+                <span class="form-hint">安装、初始化等 SSH 任务先跳到这台网关机再进局内；<b>留空 = SSH 直连节点</b>。</span>
+              </div>
+              <div class="form-group span-2">
+                <label class="form-label">OpenResty 前缀 <span class="optional">要用「初始化网关」时必填</span></label>
+                <input class="form-input mono-input" placeholder="如 /work/jboss/tunnel/openresty-1.21.4.1/nginx" />
+                <span class="form-hint">网关机上 nginx 的安装目录（含 conf/sbin/logs）；只有要用「初始化网关」时必填，可以先建区域后补。</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 组 ③ SSH 凭据 -->
+          <div class="form-section">
+            <div class="form-section-title"><i class="sec-no">3</i>SSH 凭据</div>
+            <div class="form-grid">
+              <div class="form-group span-2">
+                <label class="form-label">SSH 用户 <span class="required">*</span></label>
+                <input class="form-input mono-input" placeholder="网关机上的账号，如 jboss / tunnel" />
+                <span class="form-hint">平台用这个账号登录网关机执行配置，会写入网关清单。</span>
+              </div>
+              <div class="form-group">
+                <label class="form-label">SSH 口令</label>
+                <input class="form-input mono-input" type="password" placeholder="留空 = 用密钥登录" autocomplete="new-password" />
+                <span class="form-hint">口令不出现在列表里；编辑时自动从服务端加载回填（加载动作记录审计日志）。</span>
+              </div>
+              <div class="form-group">
+                <label class="form-label">SSH 端口</label>
+                <input class="form-input mono-input" value="22" />
+                <span class="form-hint">网关机的 SSH 端口，默认 22，改过才需要填。</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 组 ④ 高级参数（折叠） -->
+          <details class="adv">
+            <summary>高级参数 <span class="adv-tip">（一般不用改）</span></summary>
+            <div class="adv-body">
+              <div class="form-grid" style="margin-top: 8px">
+                <div class="form-group span-2">
+                  <label class="form-label">Python 解释器 <span class="optional">选填</span></label>
+                  <input class="form-input mono-input" placeholder="如 /work/jboss/anaconda3/bin/python3" />
+                  <span class="form-hint">仅当网关机系统默认 Python 低于 3.8（老机器常见）时填写。</span>
+                </div>
+                <div class="form-group span-2">
+                  <label class="form-label">SSH 公共参数 <span class="optional">选填</span></label>
+                  <input class="form-input mono-input" placeholder="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" />
+                  <span class="form-hint">追加给每条 SSH 连接的参数；默认已跳过指纹确认，一般无需修改。</span>
+                </div>
+              </div>
+            </div>
+          </details>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary">取消</button>
+          <button class="btn btn-primary">保 存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="foot-note">中继区域管理 · UX 重设计静态示意（配套蓝图：docs/refactoring/relay-gateways-ux-redesign-blueprint.md）· 纯静态展示，无业务逻辑</p>
+</div>
+</body>
+</html>
