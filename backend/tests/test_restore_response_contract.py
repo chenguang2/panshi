@@ -6,9 +6,13 @@ key_changed / restart_recommended / schema_migration_error 等——缺失时前
 「恢复完成指引闭环」的补齐计数行与重启建议行不可达）；仅在服务层载荷之上补
 ``success`` 标志（旧前端依赖，纯新增不删减）。
 
-守卫方式（pg-dialect 冒烟同款模式）：mock 服务层返回完整 11 键载荷 →
-断言 HTTP 响应体逐键透传。CONTRACT_KEYS 独立于载荷构造硬编码——
-服务层返回 dict 缺任何一键时本测试变红（反向有效性已验证）。
+守卫方式分两段（pg-dialect 冒烟同款模式）：
+- 段 A（端点透传）：mock 服务层返回完整 11 键载荷 → 断言 HTTP 响应体逐键透传，
+  钉死「端点不裁剪/不改写」；
+- 段 B（服务层载荷形状，ast 解析 execute_restore 最终 return 字面量的键集合）：
+  钉死「服务层不丢键」。段 A 对服务层本体变异免疫（mock 隔离——FULL_PAYLOAD 是
+  手写形状，服务层删键不会传导进来），design D1 的反向验证（服务层删一键 → 红）
+  由段 B 承担，段 A 无法替代。
 """
 import pytest
 
@@ -73,3 +77,25 @@ async def test_execute_response_passes_through_all_service_keys(async_authed_cli
         assert body[key] == FULL_PAYLOAD[key], f"键 {key} 值未透传：{body[key]!r} != {FULL_PAYLOAD[key]!r}"
     # 旧前端依赖的 success 标志保留（仅新增不删减）
     assert body["success"] is True
+
+
+def test_service_layer_payload_keeps_all_contract_keys():
+    """服务层 execute_restore 完成态载荷形状守卫（段 B，design D1 反向验证承担者）。
+
+    直接解析 execute_restore 源码中最终 ``return`` 的 dict 字面量键集合（ast，
+    不受 docstring/注释干扰）：服务层删任何一个契约键 → 本用例红；段 A 的 mock
+    载荷与此独立，二者缺一即出现「实现漂移而测试全绿」的守卫盲区。
+    """
+    import ast
+    import inspect
+
+    source = inspect.getsource(rst.execute_restore)
+    returns = [
+        node
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Return) and isinstance(node.value, ast.Dict)
+    ]
+    assert returns, "execute_restore 应存在完成态 return（dict 字面量）"
+    final_keys = {k.value for k in returns[-1].value.keys if isinstance(k, ast.Constant)}
+    missing = set(CONTRACT_KEYS) - final_keys
+    assert not missing, f"服务层完成态载荷丢失契约键：{sorted(missing)}"
