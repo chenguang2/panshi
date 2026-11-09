@@ -225,6 +225,8 @@ openspec/        # 变更工件；openspec/specs/ = main specs
 
 70. **中继网关清单已界面化（relay-gateway-inventory-ui）** — `backend/ansible/inventory/gateways` 从手工维护文件改为**派生成品**：`relay_gateways` 表新增 ssh_user/ssh_password/ssh_port/ansible_python_interpreter/ssh_common_args 五列（DB 明文，对齐 #10；口令不出列表，编辑/单查走 `GET /relay/gateways/{id}/credential` 且单独写审计 view_credential）。中继区域管理 CRUD 保存即 `gateways_inventory_service.render_and_write()` 整组重写清单（原子写 + 0600 + 备份 `gateways.bak.<ts>` 保留 10 份），**勿再手工编辑该文件**——下次任何网关保存都会覆盖手改。渲染的孤儿分组保留排除本次操作 code（否则删除网关的分组会被当孤儿永久保留、新建同名无法收编——实现过一版无 exclude 的被测试翻出）。存量迁移 `migrate_gateways_file()` 在 lifespan 早期幂等执行（头标注判定，IP+用户回填，匹配不上的分组原样保留并经 `GET /relay/gateways/inventory-status` 暴露）。conftest 会话级夹具把 `gis.GATEWAYS_PATH` 重定向到 tmp（lifespan 迁移不触碰真实凭据文件），专项测试用例内 monkeypatch 覆盖。relay_sshd 临时注入机制不变：渲染只来自 DB 行、天然不含 `# panshi-injected` 临时行。测试 payload 注意：relay 域既有 POST /gateways 用例必须带 `ssh_user`（schema 必填，漏带 422）。
 
+71. **会话间隔后恢复工作，先 `git log --oneline -10` + `git status` 盘点再动手** — 本仓库多会话并行常态下，后台 subagent 派发与恢复之间可能隔数天，同名变更可能已被另一会话完整交付（2026-10-31→11-09 实测：db-backup-dr-ux-optimization 派发两 lane 后会话中断一周，另一会话已实施+E2E+手册+归档并推送，恢复的两个 lane 险些重复实现——前端 lane 自查发现撤手，后端 lane 已写 4 个测试文件才被叫停）。规则：① subagent 收到完成通知或恢复派发前，主会话先核对 HEAD 与远端（`git status -sb` 看 ahead/behind），确认任务是否已被并行交付；② subagent 开工第一步必须是盘点现场（git log/status + 读目标文件现状），发现实现已存在即停手转核验；③ 已交付时，重复劳动的清理原则：误写文件逐 diff 判定「重复→还原 / 修正→保留并说明判据」，不盲目 checkout。
+
 ## 新增功能步骤
 
 1. 在 `backend/app/schemas/` 定义 Pydantic 模型
