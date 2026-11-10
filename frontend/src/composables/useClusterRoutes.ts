@@ -515,6 +515,9 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
         } else {
           message.error('请检查表单填写是否完整')
         }
+        // 与 RouteFormModal 同款反馈：切回基础配置 tab 让内联红字可见，
+        // 否则用户停在高级匹配等 tab 时表现为「只弹提示、界面没反应」（2026-11-10）
+        routeModalActiveTab.value = 'basic'
         return
       }
       message.error(getApiErrorMessage(error))

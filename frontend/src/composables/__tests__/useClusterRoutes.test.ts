@@ -8,6 +8,10 @@ const mockApiDelete = vi.fn()
 const mockExecuteDeleteWithProgress = vi.fn()
 const mockShowDeleteConfirm = vi.fn()
 
+vi.mock('ant-design-vue', () => ({
+  message: { warning: vi.fn(), error: vi.fn(), success: vi.fn() },
+}))
+
 vi.mock('@/api', () => ({
   default: {
     get: (...args: any[]) => mockApiGet(...args),
@@ -488,5 +492,33 @@ describe('useClusterRoutes websocket submit', () => {
     await handleRouteSubmit()
     const payload = mockPut.mock.calls[0][1]
     expect(payload.enable_websocket).toBe(false)
+  })
+})
+
+describe('useClusterRoutes 校验失败反馈（与 RouteFormModal 同款：提示 + 切回基础 tab）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiGet.mockResolvedValue({ data: { total: 0, items: [] } })
+  })
+
+  it('validate 拒绝（errorFields）→ message.error 提示必填字段 + routeModalActiveTab 回 basic', async () => {
+    const cluster = makeCluster({ id: 1 })
+    const { handleRouteSubmit, routeFormRef, _currentClusterId, routeModalActiveTab } = await makeComposable(cluster)
+    const { message } = await import('ant-design-vue')
+    _currentClusterId.value = cluster.id
+    routeFormRef.value = {
+      validate: async () => Promise.reject({ errorFields: [{ name: ['name'] }] }),
+    } as any
+    // 用户停留在高级匹配 tab 时点保存：此前只弹提示、不回跳，内联红字看不到
+    routeModalActiveTab.value = 'advanced'
+
+    await handleRouteSubmit()
+
+    expect(
+      vi.mocked(message.error).mock.calls.some((a) => String(a[0]).startsWith('请填写必填字段')),
+      '全局提示必填字段（既有行为，保留）',
+    ).toBe(true)
+    expect(routeModalActiveTab.value, '应切回基础配置 tab 让内联红字可见').toBe('basic')
   })
 })
