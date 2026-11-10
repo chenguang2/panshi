@@ -271,10 +271,9 @@
           v-for="cluster in clusters"
           :key="cluster.id"
           class="cluster-card"
-          title="点击挂接 / 解挂该集群"
           @click="emitClusterClick(cluster, $event)"
         >
-          <div class="cc-head">
+          <div class="cc-head" title="点击挂接 / 解挂该集群（节点行点击看节点详情）">
             {{ cluster.display_name || cluster.name }}
             <span class="n-count">{{ cluster.nodes.length }} 节点</span>
             <i class="pencil-inline">✎</i>

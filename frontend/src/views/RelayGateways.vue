@@ -5,7 +5,7 @@
       description="维护各局中继网关注册信息：配置网关地址与 SSH 跳板后，该局节点的管理与数据通道将经由网关中转；未配置区域的集群按直连执行。"
     >
       <template #actions>
-        <button class="btn btn-secondary" :disabled="checkingAll || streamBusy" @click="handleCheckAll">
+        <button class="btn btn-secondary" :disabled="checkingAll || streamBusy" @click="handleCheckAll($event)">
           {{ checkingAll ? '体检中…' : '全量体检' }}
         </button>
         <button class="btn btn-primary" @click="openDraftCard(true)">+ 新建区域</button>
@@ -98,6 +98,8 @@
       <div class="card">
         <div class="card-header">
           <h3>区域列表</h3>
+          <span class="spacer"></span>
+          <button class="btn btn-primary btn-sm" @click="openDraftCard(true)">+ 新建区域</button>
         </div>
         <div class="card-body table-body">
           <a-table
@@ -183,6 +185,16 @@
                           <div class="menu-item-stack">
                             <span>编辑</span>
                             <small>修改地址、账号与状态</small>
+                          </div>
+                        </a-menu-item>
+                        <a-menu-item
+                          key="attach"
+                          :disabled="rowBusy(record)"
+                          @click="openAttachPopover(record, $event.currentTarget as HTMLElement)"
+                        >
+                          <div class="menu-item-stack">
+                            <span>挂接集群</span>
+                            <small>把集群挂到本区域（含从其它区域改挂）；解挂在拓扑集群卡选「不挂接」</small>
                           </div>
                         </a-menu-item>
                         <a-menu-item key="init" :disabled="streamBusy" @click="handleInit(record)">
@@ -279,57 +291,58 @@
         </span>
         <button class="btn btn-secondary btn-sm" @click="openCreate">注册该区域</button>
       </div>
-      <!-- 新建区域草稿卡（批次三 3.7）：虚线卡原地展开，Esc/取消收起；开合为视图级 ref，视图切换往返保留 -->
-      <div v-show="draftOpen" class="draft-card">
-        <div class="d-head">
-          <b>新建区域 · 必填 2 项</b>
-          <span class="d-hint">SSH 账号在登记 SSH 腿时顺带收集；口令 / 高级参数后续在「更多 ▸ 编辑」补录</span>
-        </div>
-        <div class="draft-grid two">
-          <div class="pf" :class="{ invalid: !!draftErrors.code }">
-            <label>区域码 code *</label>
-            <input
-              type="text"
-              v-model="draftForm.code"
-              placeholder="jinan2"
-              maxlength="32"
-              @input="draftErrors.code = ''"
-              @keydown.esc.stop="closeDraftCard"
-              @keydown.enter.prevent="submitDraft"
-            />
-            <div class="ferr">{{ draftErrors.code }}</div>
-          </div>
-          <div class="pf" :class="{ invalid: !!draftErrors.name }">
-            <label>区域名称 *</label>
-            <input
-              type="text"
-              class="ftext"
-              v-model="draftForm.name"
-              placeholder="济南二局"
-              maxlength="100"
-              @input="draftErrors.name = ''"
-              @keydown.esc.stop="closeDraftCard"
-              @keydown.enter.prevent="submitDraft"
-            />
-            <div class="ferr">{{ draftErrors.name }}</div>
-          </div>
-        </div>
-        <div v-if="draftServerError" class="d-error">{{ draftServerError }}</div>
-        <div class="d-actions">
-          <button class="btn btn-secondary btn-sm" @click="closeDraftCard">取消</button>
-          <button class="btn btn-primary btn-sm" :disabled="draftSubmitting" @click="submitDraft">
-            {{ draftSubmitting ? '创建中…' : '创建区域' }}
-          </button>
-        </div>
-        <div class="d-note">
-          <b>创建后</b>：原地生成本局区域卡（初始直连形态）→ 点灰色两腿 chip 登记两腿（SSH 腿登记时顺带填 SSH 账号）→
-          初始化网关 → 挂接集群 → 下发配置，全程在本图完成。区域码是集群挂接的身份标识，创建后不可就地修改。
-        </div>
-      </div>
       <!-- 新建区域虚线卡（草稿卡展开期间隐藏，照 mockup） -->
       <div v-show="!draftOpen" class="create-card" @click="openDraftCard(false)">
         <b>+ 新建区域</b>
         <div class="steps">登记区域 → 登记两腿 → 初始化网关 → 集群挂接 → 下发配置（全程在本图完成，不进弹窗）</div>
+      </div>
+    </div>
+
+    <!-- 新建区域草稿卡（批次三 3.7）：虚线卡原地展开，Esc/取消收起；开合为视图级 ref，视图切换往返保留 -->
+    <div v-show="draftOpen" class="draft-card">
+      <div class="d-head">
+        <b>新建区域 · 必填 2 项</b>
+        <span class="d-hint">SSH 账号在登记 SSH 腿时顺带收集；口令 / 高级参数后续在「更多 ▸ 编辑」补录</span>
+      </div>
+      <div class="draft-grid two">
+        <div class="pf" :class="{ invalid: !!draftErrors.code }">
+          <label>区域码 code *</label>
+          <input
+            type="text"
+            v-model="draftForm.code"
+            placeholder="jinan2"
+            maxlength="32"
+            @input="draftErrors.code = ''"
+            @keydown.esc.stop="closeDraftCard"
+            @keydown.enter.prevent="submitDraft"
+          />
+          <div class="ferr">{{ draftErrors.code }}</div>
+        </div>
+        <div class="pf" :class="{ invalid: !!draftErrors.name }">
+          <label>区域名称 *</label>
+          <input
+            type="text"
+            class="ftext"
+            v-model="draftForm.name"
+            placeholder="济南二局"
+            maxlength="100"
+            @input="draftErrors.name = ''"
+            @keydown.esc.stop="closeDraftCard"
+            @keydown.enter.prevent="submitDraft"
+          />
+          <div class="ferr">{{ draftErrors.name }}</div>
+        </div>
+      </div>
+      <div v-if="draftServerError" class="d-error">{{ draftServerError }}</div>
+      <div class="d-actions">
+        <button class="btn btn-secondary btn-sm" @click="closeDraftCard">取消</button>
+        <button class="btn btn-primary btn-sm" :disabled="draftSubmitting" @click="submitDraft">
+          {{ draftSubmitting ? '创建中…' : '创建区域' }}
+        </button>
+      </div>
+      <div class="d-note">
+        <b>创建后</b>：原地生成本局区域卡（初始直连形态）→ 点灰色两腿 chip 登记两腿（SSH 腿登记时顺带填 SSH 账号）→
+        初始化网关 → 挂接集群 → 下发配置，全程在本图完成。区域码是集群挂接的身份标识，创建后不可就地修改。
       </div>
     </div>
 
@@ -1431,12 +1444,12 @@ const draftSubmitting = ref(false)
 
 function openDraftCard(scroll: boolean) {
   draftOpen.value = true
-  if (scroll) {
-    void nextTick().then(() => {
-      const el = document.querySelector('.draft-card')
-      if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    })
-  }
+  void nextTick().then(() => {
+    const el = document.querySelector('.draft-card')
+    if (!el) return
+    if (scroll && typeof el.scrollIntoView === 'function') el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    ;(el.querySelector('input') as HTMLInputElement | null)?.focus()
+  })
 }
 
 function closeDraftCard() {
@@ -1463,10 +1476,15 @@ async function submitDraft() {
     message.success(
       `已创建「${name}」（${code}）：初始直连形态。下一步：点该卡灰色两腿 chip 登记两腿（SSH 腿登记时顺带填 SSH 账号）`,
     )
-    // 新区域卡滚动到位（拓扑明细刷新后渲染）
+    // 新区域滚动到位：拓扑滚区域卡；表格滚列表行（refreshAll 后渲染）
     await nextTick()
-    const card = document.querySelector(`.topo-card[data-code="${code}"]`)
-    if (card && typeof card.scrollIntoView === 'function') card.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    const target =
+      viewMode.value === 'topo'
+        ? document.querySelector(`.topo-card[data-code="${code}"]`)
+        : ([...document.querySelectorAll('.region-table tbody tr')].find((r) => r.textContent?.includes(code)) as
+            | HTMLElement
+            | undefined) ?? null
+    if (target && typeof target.scrollIntoView === 'function') target.scrollIntoView({ behavior: 'smooth', block: 'center' })
   } catch (e) {
     // 后端 400（查重/格式）就地红字展示，不弹 toast
     const msg = getApiErrorMessage(e)
@@ -1703,7 +1721,19 @@ async function handleTest(record: RelayGateway) {
   }
 }
 
-async function handleCheckAll() {
+function handleCheckAll(e: MouseEvent) {
+  pop.togglePopover(e.currentTarget as HTMLElement, {
+    title: '全量体检',
+    sub: '对全部区域网关机执行两腿连通性探测（HTTP + SSH 跳板）。只读探测，不改动网关配置；多区域时需要数秒',
+    fields: [],
+    primaryLabel: '开始体检',
+    onApply: async () => {
+      await runCheckAll()
+    },
+  })
+}
+
+async function runCheckAll() {
   checkingAll.value = true
   resultDismissed = false
   resultModal.open = true
@@ -2698,7 +2728,7 @@ onUnmounted(() => {
   margin-top: 10px;
 }
 .draft-grid.two {
-  grid-template-columns: 1fr 1.4fr;
+  grid-template-columns: minmax(0, 380px) minmax(0, 500px);
 }
 .draft-grid .pf label {
   display: block;

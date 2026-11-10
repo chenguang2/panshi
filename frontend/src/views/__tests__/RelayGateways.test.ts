@@ -543,6 +543,15 @@ describe('RelayGateways', () => {
     await checkAllBtn.trigger('click')
     await flushPromises()
 
+    // 先弹确认框（2026-11-10：全量体检不再静默直接执行），点「开始体检」才探测
+    // popover Teleport 到 body，须用 document.body 查找（同 popEl 助手）
+    const confirmPop = document.body.querySelector('.topo-pop')
+    expect(confirmPop, '全量体检应先弹确认框').toBeTruthy()
+    expect(confirmPop!.textContent).toContain('只读探测')
+    const primary = Array.from(confirmPop!.querySelectorAll('button')).find((b) => b.textContent!.trim() === '开始体检')!
+    primary!.click()
+    await flushPromises()
+
     expect(mockGet).toHaveBeenCalledWith('/relay/health-check', { timeout: 180_000 })
     const modal = wrapper.find('.modal-overlay')
     expect(modal.exists()).toBe(true)
@@ -569,6 +578,13 @@ describe('RelayGateways', () => {
 
     const checkAllBtn = wrapper.findAll('button').find((b) => b.text().includes('全量体检'))!
     await checkAllBtn.trigger('click')
+    await flushPromises()
+
+    // 确认框先行，点「开始体检」启动探测（popover Teleport 到 body）
+    const primary = Array.from(document.body.querySelectorAll('.topo-pop button')).find(
+      (b) => b.textContent!.trim() === '开始体检',
+    )!
+    primary.click()
     await flushPromises()
 
     // 弹窗已打开（探测进行中），用户关闭
@@ -1725,14 +1741,14 @@ describe('RelayGateways', () => {
     await pressEscape()
     expect(wrapper.find('.draft-card').isVisible()).toBe(false)
 
-    // 视图切换往返保留开合状态
+    // 视图切换往返保留开合状态（草稿卡页面级渲染：表格视图同样可见，2026-11-10 修复表格点新建无反应）
     await wrapper.find('.create-card').trigger('click')
     await flushPromises()
     await wrapper
       .findAll('.view-toggle button')
       .find((b) => b.text().includes('表格视图'))!
       .trigger('click')
-    expect(wrapper.find('.draft-card').isVisible()).toBe(false)
+    expect(wrapper.find('.draft-card').isVisible()).toBe(true)
     await wrapper
       .findAll('.view-toggle button')
       .find((b) => b.text().includes('拓扑视图'))!
