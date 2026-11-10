@@ -8,7 +8,7 @@
         <button class="btn btn-secondary" :disabled="checkingAll || streamBusy" @click="handleCheckAll($event)">
           {{ checkingAll ? '体检中…' : '全量体检' }}
         </button>
-        <button class="btn btn-primary" @click="openDraftCard(true)">+ 新建区域</button>
+        <button class="btn btn-primary" @click="openCreate()">+ 新建区域</button>
       </template>
     </PageHeader>
 
@@ -99,7 +99,7 @@
         <div class="card-header">
           <h3>区域列表</h3>
           <span class="spacer"></span>
-          <button class="btn btn-primary btn-sm" @click="openDraftCard(true)">+ 新建区域</button>
+          <button class="btn btn-primary btn-sm" @click="openCreate()">+ 新建区域</button>
         </div>
         <div class="card-body table-body">
           <a-table
@@ -291,60 +291,13 @@
         </span>
         <button class="btn btn-secondary btn-sm" @click="openCreate">注册该区域</button>
       </div>
-      <!-- 新建区域虚线卡（草稿卡展开期间隐藏，照 mockup） -->
-      <div v-show="!draftOpen" class="create-card" @click="openDraftCard(false)">
+      <!-- 新建区域虚线卡：拓扑底部新建入口（点击打开新建弹窗，两视图共用） -->
+      <div class="create-card" @click="openCreate()">
         <b>+ 新建区域</b>
         <div class="steps">登记区域 → 登记两腿 → 初始化网关 → 集群挂接 → 下发配置（全程在本图完成，不进弹窗）</div>
       </div>
     </div>
 
-    <!-- 新建区域草稿卡（批次三 3.7）：虚线卡原地展开，Esc/取消收起；开合为视图级 ref，视图切换往返保留 -->
-    <div v-show="draftOpen" class="draft-card">
-      <div class="d-head">
-        <b>新建区域 · 必填 2 项</b>
-        <span class="d-hint">SSH 账号在登记 SSH 腿时顺带收集；口令 / 高级参数后续在「更多 ▸ 编辑」补录</span>
-      </div>
-      <div class="draft-grid two">
-        <div class="pf" :class="{ invalid: !!draftErrors.code }">
-          <label>区域码 code *</label>
-          <input
-            type="text"
-            v-model="draftForm.code"
-            placeholder="jinan2"
-            maxlength="32"
-            @input="draftErrors.code = ''"
-            @keydown.esc.stop="closeDraftCard"
-            @keydown.enter.prevent="submitDraft"
-          />
-          <div class="ferr">{{ draftErrors.code }}</div>
-        </div>
-        <div class="pf" :class="{ invalid: !!draftErrors.name }">
-          <label>区域名称 *</label>
-          <input
-            type="text"
-            class="ftext"
-            v-model="draftForm.name"
-            placeholder="济南二局"
-            maxlength="100"
-            @input="draftErrors.name = ''"
-            @keydown.esc.stop="closeDraftCard"
-            @keydown.enter.prevent="submitDraft"
-          />
-          <div class="ferr">{{ draftErrors.name }}</div>
-        </div>
-      </div>
-      <div v-if="draftServerError" class="d-error">{{ draftServerError }}</div>
-      <div class="d-actions">
-        <button class="btn btn-secondary btn-sm" @click="closeDraftCard">取消</button>
-        <button class="btn btn-primary btn-sm" :disabled="draftSubmitting" @click="submitDraft">
-          {{ draftSubmitting ? '创建中…' : '创建区域' }}
-        </button>
-      </div>
-      <div class="d-note">
-        <b>创建后</b>：原地生成本局区域卡（初始直连形态）→ 点灰色两腿 chip 登记两腿（SSH 腿登记时顺带填 SSH 账号）→
-        初始化网关 → 挂接集群 → 下发配置，全程在本图完成。区域码是集群挂接的身份标识，创建后不可就地修改。
-      </div>
-    </div>
 
     <!-- 新建 / 编辑弹窗（视图级内联弹窗，约定 #25） -->
     <div v-if="modal.open" class="modal-overlay" @click.self="closeModal">
@@ -389,7 +342,7 @@
                 <span v-if="formErrors.name" class="form-error">{{ formErrors.name }}</span>
                 <span v-else class="form-hint">列表、弹窗与执行日志都显示它，可随时改。</span>
               </div>
-              <div class="form-group label-top span-2">
+              <div v-if="modal.editing" class="form-group label-top span-2">
                 <label class="form-label">状态</label>
                 <select class="form-input" v-model="form.status">
                   <option value="enabled">启用</option>
@@ -400,6 +353,7 @@
             </div>
           </div>
 
+          <template v-if="modal.editing">
           <div class="form-section">
             <div class="form-section-title"><i class="sec-no">2</i>网关两腿连接</div>
             <div class="form-section-desc">
@@ -522,6 +476,7 @@
               </div>
             </div>
           </details>
+          </template>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="closeModal">取消</button>
@@ -766,8 +721,6 @@ import RelayTopologyCard from '@/components/RelayTopologyCard.vue'
 import { showOverlayModal } from '@/composables/useOverlayModal'
 import { useInstallStream } from '@/composables/useInstallStream'
 import {
-  RELAY_CODE_ERROR_MSG,
-  RELAY_CODE_PATTERN,
   RELAY_HTTP_BASE_URL_ERROR_MSG,
   RELAY_HTTP_BASE_URL_PATTERN,
   RELAY_OPENRESTY_PREFIX_ERROR_MSG,
@@ -1436,69 +1389,6 @@ function openInitConfirm(record: RelayGateway, anchor: HTMLElement) {
 }
 
 // ── 3.7 新建区域草稿卡（design D6：必填仅 code+name；SSH 账号在登记 SSH 腿时顺带收集） ──
-const draftOpen = ref(false)
-const draftForm = reactive({ code: '', name: '' })
-const draftErrors = reactive({ code: '', name: '' })
-const draftServerError = ref('')
-const draftSubmitting = ref(false)
-
-function openDraftCard(scroll: boolean) {
-  draftOpen.value = true
-  void nextTick().then(() => {
-    const el = document.querySelector('.draft-card')
-    if (!el) return
-    if (scroll && typeof el.scrollIntoView === 'function') el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    ;(el.querySelector('input') as HTMLInputElement | null)?.focus()
-  })
-}
-
-function closeDraftCard() {
-  draftOpen.value = false
-  draftForm.code = ''
-  draftForm.name = ''
-  draftErrors.code = ''
-  draftErrors.name = ''
-  draftServerError.value = ''
-}
-
-async function submitDraft() {
-  const code = draftForm.code.trim()
-  const name = draftForm.name.trim()
-  draftErrors.code = RELAY_CODE_PATTERN.test(code) ? '' : RELAY_CODE_ERROR_MSG
-  draftErrors.name = name ? '' : '区域名称不能为空'
-  if (draftErrors.code || draftErrors.name) return
-  draftSubmitting.value = true
-  draftServerError.value = ''
-  try {
-    await createRelayGateway({ code, name })
-    closeDraftCard()
-    await refreshAll()
-    message.success(
-      `已创建「${name}」（${code}）：初始直连形态。下一步：点该卡灰色两腿 chip 登记两腿（SSH 腿登记时顺带填 SSH 账号）`,
-    )
-    // 新区域滚动到位：拓扑滚区域卡；表格滚列表行（refreshAll 后渲染）
-    await nextTick()
-    const target =
-      viewMode.value === 'topo'
-        ? document.querySelector(`.topo-card[data-code="${code}"]`)
-        : ([...document.querySelectorAll('.region-table tbody tr')].find((r) => r.textContent?.includes(code)) as
-            | HTMLElement
-            | undefined) ?? null
-    if (target && typeof target.scrollIntoView === 'function') target.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  } catch (e) {
-    // 后端 400（查重/格式）就地红字展示，不弹 toast
-    const msg = getApiErrorMessage(e)
-    if (msg.includes('code')) draftErrors.code = msg
-    else draftServerError.value = msg
-  } finally {
-    draftSubmitting.value = false
-  }
-}
-
-/** Esc 收起草稿卡（草稿输入框内 Esc 经 .stop 就地处理；此处兜底输入框外按键） */
-function onGlobalKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape' && draftOpen.value) closeDraftCard()
-}
 
 function openCreate() {
   modal.editing = false
@@ -1568,25 +1458,28 @@ function validateForm(): boolean {
     formErrors.name = '请输入展示名'
     ok = false
   }
-  const http = form.http_base_url.trim()
-  if (http && !HTTP_BASE_URL_PATTERN.test(http)) {
-    formErrors.http_base_url = '网关 HTTP 腿格式错误：须以 http:// 或 https:// 开头，如 http://10.10.1.1:8443'
-    ok = false
-  }
-  if (!form.ssh_user.trim()) {
-    formErrors.ssh_user = '请输入 SSH 用户'
-    ok = false
-  }
-  const jump = form.ssh_jump.trim()
-  if (jump && !SSH_JUMP_PATTERN.test(jump)) {
-    formErrors.ssh_jump = 'SSH 跳板格式错误：须为 账号@主机[:端口]，如 tunnel@10.10.1.1:22'
-    ok = false
-  }
-  const prefix = form.openresty_prefix.trim()
-  if (prefix && !prefix.startsWith('/')) {
-    formErrors.openresty_prefix =
-      'OpenResty 前缀格式错误：须为以 / 开头的绝对路径，如 /work/jboss/tunnel/openresty-1.21.4.1/nginx'
-    ok = false
+  // 新建模式仅 2 必填（code/name）；两腿与 SSH 字段在新建时隐藏，登记两腿时再收集
+  if (modal.editing) {
+    const http = form.http_base_url.trim()
+    if (http && !HTTP_BASE_URL_PATTERN.test(http)) {
+      formErrors.http_base_url = '网关 HTTP 腿格式错误：须以 http:// 或 https:// 开头，如 http://10.10.1.1:8443'
+      ok = false
+    }
+    if (!form.ssh_user.trim()) {
+      formErrors.ssh_user = '请输入 SSH 用户'
+      ok = false
+    }
+    const jump = form.ssh_jump.trim()
+    if (jump && !SSH_JUMP_PATTERN.test(jump)) {
+      formErrors.ssh_jump = 'SSH 跳板格式错误：须为 账号@主机[:端口]，如 tunnel@10.10.1.1:22'
+      ok = false
+    }
+    const prefix = form.openresty_prefix.trim()
+    if (prefix && !prefix.startsWith('/')) {
+      formErrors.openresty_prefix =
+        'OpenResty 前缀格式错误：须为以 / 开头的绝对路径，如 /work/jboss/tunnel/openresty-1.21.4.1/nginx'
+      ok = false
+    }
   }
   return ok
 }
@@ -1595,7 +1488,8 @@ async function handleSubmit() {
   if (!validateForm()) return
   // 直连语义（relay-gateways-ux-redesign D2 修订）：无分段选择——两腿全空即直连区域，
   // 允许保存但一次性提示，避免误留空
-  if (!form.http_base_url.trim() && !form.ssh_jump.trim()) {
+  // 直连提示仅编辑模式（新建两腿字段隐藏，成功提示已带说明）
+  if (modal.editing && !form.http_base_url.trim() && !form.ssh_jump.trim()) {
     message.info('两腿均为空，将按直连区域保存')
   }
   submitting.value = true
@@ -1628,7 +1522,7 @@ async function handleSubmit() {
         ansible_python_interpreter: form.ansible_python_interpreter.trim() || null,
         ssh_common_args: form.ssh_common_args.trim() || null,
       })
-      message.success('区域已创建')
+      message.success('区域已创建（初始直连形态）。下一步：点该区域卡灰色两腿 chip 登记两腿')
     }
     modal.open = false
     await refreshAll()
@@ -2039,14 +1933,12 @@ function handleDelete(record: RelayGateway) {
 
 onMounted(() => {
   void refreshAll()
-  document.addEventListener('keydown', onGlobalKeydown)
 })
 
 // 离开页面时停掉计时器、主动中止 SSE、移除全局监听，避免后台残留定时器/连接
 onUnmounted(() => {
   stopElapsedTimer()
   installStream.cancel()
-  document.removeEventListener('keydown', onGlobalKeydown)
 })
 </script>
 
@@ -2698,102 +2590,6 @@ onUnmounted(() => {
   margin-top: 4px;
 }
 
-/* ── 新建区域草稿卡（批次三 3.7，mockup .draft-card 移植） ── */
-.draft-card {
-  border: 2px dashed var(--accent);
-  border-radius: 10px;
-  padding: 16px 18px 14px;
-  background: var(--surface);
-}
-.draft-card .d-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-bottom: 2px;
-}
-.draft-card .d-head b {
-  font-size: 14px;
-  color: var(--fg);
-}
-.draft-card .d-head .d-hint {
-  font-size: 12px;
-  color: var(--muted);
-}
-.draft-grid {
-  display: grid;
-  grid-template-columns: 1.2fr 1.2fr 1fr 0.6fr;
-  gap: 10px 12px;
-  margin-top: 10px;
-}
-.draft-grid.two {
-  grid-template-columns: minmax(0, 380px) minmax(0, 500px);
-}
-.draft-grid .pf label {
-  display: block;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--muted);
-  margin-bottom: 3px;
-}
-.draft-grid .pf input {
-  width: 100%;
-  border: 1px solid oklch(74% 0.02 240);
-  border-radius: 6px;
-  padding: 6px 9px;
-  font-size: 13px;
-  font-family: var(--font-mono);
-  background: var(--surface);
-  color: var(--fg);
-}
-.draft-grid .pf input.ftext {
-  font-family: inherit;
-}
-.draft-grid .pf input:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-bg);
-}
-.draft-grid .pf .ferr {
-  display: none;
-  color: var(--danger);
-  font-size: 12px;
-  margin-top: 3px;
-  line-height: 1.5;
-}
-.draft-grid .pf.invalid input {
-  border-color: var(--danger);
-}
-.draft-grid .pf.invalid .ferr {
-  display: block;
-}
-.draft-card .d-error {
-  margin-top: 8px;
-  color: var(--danger);
-  font-size: 12px;
-  line-height: 1.5;
-}
-.draft-card .d-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 12px;
-}
-.draft-card .d-note {
-  margin-top: 10px;
-  font-size: 12px;
-  color: var(--muted);
-  line-height: 1.6;
-  background: var(--bg);
-  border: 1px dashed oklch(74% 0.02 240);
-  border-radius: 6px;
-  padding: 7px 9px;
-}
-.draft-card .d-note b {
-  color: var(--fg);
-  font-weight: 600;
-}
 
 /* ── 就地 popover（批次三 3.1 引擎，mockup .pop 移植；Teleport 到 body，
       scoped 属性随 vnode 保留；v-html 注记内的元素无 scope 属性，须 :deep()） ── */

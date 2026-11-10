@@ -256,7 +256,6 @@ describe('RelayGateways', () => {
     const inputs = wrapper.findAll('.modal input.form-input')
     await inputs[0]!.setValue('tianjin')
     await inputs[1]!.setValue('路局B')
-    await inputs[5]!.setValue('jboss')
     await wrapper
       .findAll('.modal button.btn-primary')
       .find((b) => b.text().includes('保存'))!
@@ -269,15 +268,14 @@ describe('RelayGateways', () => {
     )
   })
 
-  it('创建载荷携带 SSH 连接字段（relay-gateway-inventory-ui）', async () => {
+  it('创建载荷 SSH 字段留空（收集推迟到登记两腿；2026-11-10 新建弹窗化后仅 2 必填）', async () => {
     mockPost.mockResolvedValue({ data: { id: 3, code: 'tianjin', name: '路局B', status: 'enabled' } })
     const wrapper = await mountPageAndOpenLegacyModal()
 
     const inputs = wrapper.findAll('.modal input.form-input')
+    expect(inputs.length, '新建模式仅 code+name 两个输入（两腿/SSH 段隐藏）').toBe(2)
     await inputs[0]!.setValue('tianjin')
     await inputs[1]!.setValue('路局B')
-    await inputs[5]!.setValue('jboss')
-    await inputs[6]!.setValue('p@ss')
     await wrapper
       .findAll('.modal button.btn-primary')
       .find((b) => b.text().includes('保存'))!
@@ -288,38 +286,41 @@ describe('RelayGateways', () => {
       '/relay/gateways',
       expect.objectContaining({
         code: 'tianjin',
-        ssh_user: 'jboss',
-        ssh_password: 'p@ss',
+        ssh_user: '',
+        ssh_password: null,
         ssh_port: 22,
-        ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null',
       }),
     )
   })
 
-  it('SSH 用户必填：未填被前端拦截（口令不入列表，编辑按需单查）', async () => {
-    const wrapper = await mountPageAndOpenLegacyModal()
+  // 编辑模式助手：打开指定区域行的「编辑」弹窗（新建模式已无 SSH 字段，编辑语义用例走此入口）
+  async function openEditModal(wrapper: ReturnType<typeof mount>, code = 'luju') {
+    const row = wrapper.find(`.mock-row[data-code="${code}"]`)
+    const editBtn = row.findAll('.mock-menu-item').find((b) => b.text().startsWith('编辑'))!
+    await editBtn.trigger('click')
+    await flushPromises()
+  }
 
-    const inputs = wrapper.findAll('.modal input.form-input')
-    await inputs[0]!.setValue('tianjin')
-    await inputs[1]!.setValue('路局B')
+  it('SSH 用户必填：未填被前端拦截（口令不入列表，编辑按需单查；新建模式该字段隐藏）', async () => {
+    const wrapper = await mountPage()
+    await flushPromises()
+    await openEditModal(wrapper)
+    mockPut.mockClear()
+
+    const sshUser = wrapper
+      .findAll('.modal input.form-input')
+      .find((i) => (i.attributes('placeholder') || '').includes('网关机上的账号'))!
+    await sshUser.setValue('')
     await wrapper
       .findAll('.modal button.btn-primary')
       .find((b) => b.text().includes('保存'))!
       .trigger('click')
     await flushPromises()
 
-    expect(mockPost).not.toHaveBeenCalled()
+    expect(mockPut).not.toHaveBeenCalled()
     const errors = wrapper.findAll('.modal .form-error')
     expect(errors.some((e) => e.text().includes('SSH 用户'))).toBe(true)
   })
-
-  // 弹窗必填三件套（code/name/ssh_user，输入顺序经分组重排后仍为 0/1/5）
-  async function inputs0_1_5(wrapper: ReturnType<typeof mount>) {
-    const inputs = wrapper.findAll('.modal input.form-input')
-    await inputs[0]!.setValue('tianjin')
-    await inputs[1]!.setValue('路局B')
-    await inputs[5]!.setValue('jboss')
-  }
 
   it('说明卡：结论句 + 三步走 + 动作对照表折叠（relay-gateways-ux-redesign）', async () => {
     const wrapper = await mountPage()
@@ -335,11 +336,13 @@ describe('RelayGateways', () => {
     expect(guide.text()).toContain('何时用哪个')
   })
 
-  it('直连语义降级为提示：分组说明含直连文案，不再有分段选择（用户裁决：直连非主动创建场景）', async () => {
-    const wrapper = await mountPageAndOpenLegacyModal()
+  it('直连语义降级为提示：分组说明含直连文案，不再有分段选择（编辑模式断言；用户新建模式两腿段隐藏）', async () => {
+    const wrapper = await mountPage()
+    await flushPromises()
+    await openEditModal(wrapper, 'direct')
 
     expect(wrapper.find('.segment-control').exists()).toBe(false)
-    const desc = wrapper.findAll('.form-section-desc')[1]! // 组2 网关两腿连接
+    const desc = wrapper.findAll('.modal .form-section-desc')[1]! // 组2 网关两腿连接
     expect(desc.text()).toContain('两腿均留空会成为「直连区域」')
     // 两腿输入保持可用（无禁用联动）
     const http = wrapper.findAll('.modal input.form-input').find((i) => i.attributes('placeholder')?.includes('8443'))!
@@ -360,18 +363,30 @@ describe('RelayGateways', () => {
     expect(http.attributes('disabled')).toBeUndefined()
   })
 
-  it('有网关机模式但两腿全空保存：一次性 info 提示（等价直连）', async () => {
-    mockPost.mockResolvedValue({ data: { id: 9, code: 'tianjin', name: '路局B', status: 'enabled' } })
-    const wrapper = await mountPageAndOpenLegacyModal()
-    await inputs0_1_5(wrapper)
+  it('有网关机模式但两腿全空保存：一次性 info 提示（等价直连；编辑模式）', async () => {
+    const wrapper = await mountPage()
+    await flushPromises()
+    await openEditModal(wrapper, 'luju')
+    // 清空两腿
+    const http = wrapper.findAll('.modal input.form-input').find((i) => i.attributes('placeholder')?.includes('8443'))!
+    await http.setValue('')
+    const jump = wrapper
+      .findAll('.modal input.form-input')
+      .find((i) => (i.attributes('placeholder') || '').includes('tunnel@10.10.1.1:22'))!
+    await jump.setValue('')
+    // fixture 无 ssh_user：编辑校验要求必填，先补上再触发两腿全空分支
+    const sshUser = wrapper
+      .findAll('.modal input.form-input')
+      .find((i) => (i.attributes('placeholder') || '').includes('网关机上的账号'))!
+    await sshUser.setValue('jboss')
     await wrapper
       .findAll('.modal button.btn-primary')
       .find((b) => b.text().includes('保存'))!
       .trigger('click')
     await flushPromises()
     expect(message.info).toHaveBeenCalledWith('两腿均为空，将按直连区域保存')
-    expect(mockPost).toHaveBeenCalledWith(
-      '/relay/gateways',
+    expect(mockPut).toHaveBeenCalledWith(
+      expect.stringMatching(/\/relay\/gateways\/\d+$/),
       expect.objectContaining({ http_base_url: null, ssh_jump: null }),
     )
   })
@@ -649,51 +664,55 @@ describe('RelayGateways', () => {
     expect(errors.some((e) => e.text().includes('展示名'))).toBe(true)
   })
 
-  it('新建：三个路由字段 inline 格式校验拦截坏值（不发请求）', async () => {
-    const cases: [string, string, string][] = [
-      ['http_base_url', '10.10.1.1:8443', '网关 HTTP 腿'],
-      ['http_base_url', 'http://10.10.1.1:8443/api', '网关 HTTP 腿'],
-      ['ssh_jump', '10.10.1.1:22', 'SSH 跳板'],
-      ['openresty_prefix', 'work/openresty', 'OpenResty 前缀'],
+  it('编辑：三个两腿/SSH 字段 inline 格式校验拦截坏值（不发请求；新建模式字段隐藏）', async () => {
+    const cases: [RegExp, string, string][] = [
+      [/8443/, '10.10.1.1:8443', '网关 HTTP 腿'],
+      [/8443/, 'http://10.10.1.1:8443/api', '网关 HTTP 腿'],
+      [/tunnel@10\.10\.1\.1:22/, '10.10.1.1:22', 'SSH 跳板'],
+      [/openresty-1\.21\.4\.1/, 'work/openresty', 'OpenResty 前缀'],
     ]
-    for (const [field, badValue, errKeyword] of cases) {
-      const wrapper = await mountPageAndOpenLegacyModal()
+    for (const [placeholder, badValue, errKeyword] of cases) {
+      const wrapper = await mountPage()
+      await flushPromises()
+      await openEditModal(wrapper, 'luju')
+      mockPut.mockClear()
 
-      const inputs = wrapper.findAll('.modal input.form-input')
-      await inputs[0]!.setValue('tianjin')
-      await inputs[1]!.setValue('路局B')
-      // inputs: code, name, http_base_url, ssh_jump, openresty_prefix, ssh_user, ...
-      await inputs[5]!.setValue('jboss')
-      const idx = field === 'http_base_url' ? 2 : field === 'ssh_jump' ? 3 : 4
-      await inputs[idx]!.setValue(badValue)
-      mockPost.mockClear()
+      const input = wrapper
+        .findAll('.modal input.form-input')
+        .find((i) => (i.attributes('placeholder') || '').match(placeholder))!
+      await input.setValue(badValue)
       await wrapper
         .findAll('.modal button.btn-primary')
         .find((b) => b.text().includes('保存'))!
         .trigger('click')
       await flushPromises()
 
-      expect(mockPost).not.toHaveBeenCalled()
+      expect(mockPut, `${errKeyword} 坏值 ${badValue} 不应发请求`).not.toHaveBeenCalled()
       const errors = wrapper.findAll('.modal .form-error')
-      expect(errors.some((e) => e.text().includes(errKeyword))).toBe(true)
+      expect(errors.some((e) => e.text().includes(errKeyword)), `${errKeyword} 应有 inline 红字`).toBe(true)
     }
   })
 
-  it('ssh_jump 端口可省略：tunnel@10.10.1.1 通过前端校验并提交', async () => {
-    mockPost.mockResolvedValue({ data: { id: 3 } })
-    const wrapper = await mountPageAndOpenLegacyModal()
-
-    const inputs = wrapper.findAll('.modal input.form-input')
-    await inputs[0]!.setValue('tianjin')
-    await inputs[1]!.setValue('路局B')
-    await inputs[3]!.setValue('tunnel@10.10.1.1')
-    await inputs[5]!.setValue('jboss')
+  it('ssh_jump 端口可省略：tunnel@10.10.1.1 通过前端校验并提交（编辑模式）', async () => {
+    const wrapper = await mountPage()
+    await flushPromises()
+    await openEditModal(wrapper, 'luju')
+    const jump = wrapper
+      .findAll('.modal input.form-input')
+      .find((i) => (i.attributes('placeholder') || '').includes('tunnel@10.10.1.1:22'))!
+    await jump.setValue('tunnel@10.10.1.1')
+    const sshUser = wrapper
+      .findAll('.modal input.form-input')
+      .find((i) => (i.attributes('placeholder') || '').includes('网关机上的账号'))!
+    await sshUser.setValue('jboss')
     await wrapper
       .findAll('.modal button.btn-primary')
       .find((b) => b.text().includes('保存'))!
       .trigger('click')
     await flushPromises()
-    expect(mockPost).toHaveBeenCalled()
+    expect(mockPut).toHaveBeenCalled()
+    const errors = wrapper.findAll('.modal .form-error')
+    expect(errors.some((e) => e.text().includes('SSH 跳板格式错误'))).toBe(false)
   })
 
   it('页头描述精简为一句话', async () => {
@@ -1701,101 +1720,83 @@ describe('RelayGateways', () => {
     expect(mockRouterPush).toHaveBeenCalledWith({ path: '/nodes', query: { cluster_id: '11' } })
   })
 
-  it('3.7 草稿卡：展开/即时校验（区域码文案逐字）/取消收起/Esc/视图切换保留开合', async () => {
+  it('3.7 新建走弹窗：虚线卡/页头/表格工具行三入口统一 openCreate，新建模式仅 2 必填', async () => {
     const wrapper = await mountTopoPage()
-    expect(wrapper.find('.draft-card').isVisible()).toBe(false)
     await wrapper.find('.create-card').trigger('click')
     await flushPromises()
-    expect(wrapper.find('.draft-card').isVisible()).toBe(true)
-    expect(wrapper.find('.draft-card').text()).toContain('新建区域 · 必填 2 项')
-    expect(wrapper.find('.draft-card').text()).toContain(
-      'SSH 账号在登记 SSH 腿时顺带收集；口令 / 高级参数后续在「更多 ▸ 编辑」补录',
-    )
-
-    const codeInput = wrapper.find('.draft-card input[placeholder="jinan2"]')
-    const nameInput = wrapper.find('.draft-card input[placeholder="济南二局"]')
-    await codeInput.setValue('Bad_Code')
-    await nameInput.setValue('济南新局')
-    mockPost.mockClear()
-    await wrapper
-      .findAll('.draft-card button')
-      .find((b) => b.text().trim() === '创建区域')!
-      .trigger('click')
+    const modal = wrapper.find('.modal-overlay')
+    expect(modal.exists()).toBe(true)
+    expect(modal.text()).toContain('新建区域')
+    expect(modal.text()).toContain('区域码是集群挂接的钥匙；展示名给人看')
+    // 新建模式裁字段（2026-11-10 用户确认）：状态下拉 / 两腿段 / SSH 凭据段不出现
+    expect(modal.text()).not.toContain('网关两腿连接')
+    expect(modal.text()).not.toContain('网关机 SSH 凭据')
+    expect(modal.findAll('select').length).toBe(0)
+    // 取消关闭
+    await modal.findAll('button').find((b) => b.text().trim() === '取消')!.trigger('click')
     await flushPromises()
-    expect(mockPost).not.toHaveBeenCalled()
-    expect(wrapper.find('.draft-card .pf.invalid .ferr').text()).toBe(
-      '区域code格式错误: 以小写字母开头，仅含小写字母/数字/中划线，长度2-32',
-    )
+    expect(wrapper.find('.modal-overlay').exists()).toBe(false)
 
-    // 取消收起
-    await wrapper
-      .findAll('.draft-card button')
-      .find((b) => b.text().trim() === '取消')!
-      .trigger('click')
-    await flushPromises()
-    expect(wrapper.find('.draft-card').isVisible()).toBe(false)
-
-    // 再展开 → Esc 收起
-    await wrapper.find('.create-card').trigger('click')
-    await flushPromises()
-    await pressEscape()
-    expect(wrapper.find('.draft-card').isVisible()).toBe(false)
-
-    // 视图切换往返保留开合状态（草稿卡页面级渲染：表格视图同样可见，2026-11-10 修复表格点新建无反应）
-    await wrapper.find('.create-card').trigger('click')
-    await flushPromises()
+    // 表格视图工具行入口同样打开弹窗（草稿卡已移除，弹窗两视图共用）
     await wrapper
       .findAll('.view-toggle button')
       .find((b) => b.text().includes('表格视图'))!
       .trigger('click')
-    expect(wrapper.find('.draft-card').isVisible()).toBe(true)
-    await wrapper
-      .findAll('.view-toggle button')
-      .find((b) => b.text().includes('拓扑视图'))!
-      .trigger('click')
-    expect(wrapper.find('.draft-card').isVisible()).toBe(true)
+    await flushPromises()
+    await wrapper.find('.card-header button').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.modal-overlay').exists()).toBe(true)
   })
 
-  it('3.7 草稿卡创建：合法提交只带 code+name；后端查重 400 就地红字；成功后收起+刷新+toast', async () => {
+  it('3.7 弹窗创建：非法区域码不发请求；合法提交全量载荷（两腿空=null 直连形态）+ toast + 刷新', async () => {
     const wrapper = await mountTopoPage()
     await wrapper.find('.create-card').trigger('click')
     await flushPromises()
-    await wrapper.find('.draft-card input[placeholder="jinan2"]').setValue('jinan2')
-    await wrapper.find('.draft-card input[placeholder="济南二局"]').setValue('济南二局')
+    const modal = wrapper.find('.modal-overlay')
+    await modal.find('input.mono-input').setValue('Bad_Code')
+    await modal.findAll('input.form-input')[1]!.setValue('济南二局')
+    mockPost.mockClear()
+    await modal.findAll('.modal button.btn-primary').find((b) => b.text().includes('保存'))!.trigger('click')
+    await flushPromises()
+    expect(mockPost).not.toHaveBeenCalled()
+    expect(modal.text()).toContain('区域码格式错误')
 
-    // 后端查重 400 → 就地红字（不发 toast）
+    // 后端查重 400 → toast 透因
     mockPost.mockRejectedValueOnce({ response: { data: { detail: '区域code已存在' } } })
-    await wrapper
-      .findAll('.draft-card button')
-      .find((b) => b.text().trim() === '创建区域')!
-      .trigger('click')
+    await modal.find('input.mono-input').setValue('jinan2')
+    await modal.findAll('.modal button.btn-primary').find((b) => b.text().includes('保存'))!.trigger('click')
     await flushPromises()
-    expect(wrapper.find('.draft-card').isVisible()).toBe(true)
-    expect(wrapper.text()).toContain('区域code已存在')
-    expect(message.error).not.toHaveBeenCalled()
+    expect(message.error).toHaveBeenCalled()
 
-    // 修正后成功
-    await wrapper.find('.draft-card input[placeholder="jinan2"]').setValue('jinan3')
-    await wrapper
-      .findAll('.draft-card button')
-      .find((b) => b.text().trim() === '创建区域')!
-      .trigger('click')
+    // 修正后成功：载荷含全部字段（两腿空=null=直连形态，SSH 字段留空待登记两腿时收集）
+    await modal.find('input.mono-input').setValue('jinan3')
+    await modal.findAll('.modal button.btn-primary').find((b) => b.text().includes('保存'))!.trigger('click')
     await flushPromises()
-    expect(mockPost).toHaveBeenLastCalledWith('/relay/gateways', { code: 'jinan3', name: '济南二局' })
-    expect(wrapper.find('.draft-card').isVisible()).toBe(false)
-    expect(message.success).toHaveBeenCalledWith(
-      expect.stringContaining('已创建「济南二局」（jinan3）：初始直连形态。下一步：点该卡灰色两腿 chip 登记两腿'),
+    expect(mockPost).toHaveBeenLastCalledWith(
+      '/relay/gateways',
+      expect.objectContaining({
+        code: 'jinan3',
+        name: '济南二局',
+        http_base_url: null,
+        ssh_jump: null,
+        status: 'enabled',
+        ssh_user: '',
+        ssh_password: null,
+        ssh_port: 22,
+      }),
     )
+    expect(
+      vi.mocked(message.success).mock.calls.some((a) => String(a[0]).includes('区域已创建（初始直连形态）')),
+    ).toBe(true)
     expect(mockGet).toHaveBeenCalledWith('/relay/gateways')
     expect(mockGet).toHaveBeenCalledWith('/relay/topology')
   })
 
-  it('3.7 页头「+ 新建区域」改走草稿卡流程（不再打开旧弹窗）', async () => {
+  it('3.7 页头「+ 新建区域」打开新建弹窗', async () => {
     const wrapper = await mountTopoPage()
     const headerBtn = wrapper.findAll('button').find((b) => b.text().includes('新建区域'))!
     await headerBtn.trigger('click')
     await flushPromises()
-    expect(wrapper.find('.draft-card').isVisible()).toBe(true)
-    expect(wrapper.find('.modal-overlay').exists()).toBe(false)
+    expect(wrapper.find('.modal-overlay').exists()).toBe(true)
   })
 })
