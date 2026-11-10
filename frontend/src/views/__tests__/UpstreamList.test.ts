@@ -306,10 +306,20 @@ describe('UpstreamList.vue', () => {
     const UpstreamList = (await import('../UpstreamList.vue')).default
     const wrapper = mount(UpstreamList, { global: { stubs } })
     await flushPromises()
-    const items = wrapper.findAll('.mock-menuitem').map((m) => m.text())
+    // 主行文案按 menu-item-stack 主行提取（解释行是 small，不参与收敛断言）
+    const items = wrapper
+      .findAll('.mock-menuitem')
+      .map((m) => {
+        const span = m.find('.menu-item-stack span')
+        return (span.exists() ? span.text() : m.text()).trim()
+      })
     expect([...new Set(items)]).toEqual(['编辑', '版本管理', '复制', '删除'])
     expect(items).not.toContain('发布')
     expect(items).not.toContain('回滚')
+    // 分级解释落地：版本管理/删除带常驻解释
+    const explained = wrapper.findAll('.mock-menuitem .menu-item-stack small').map((s) => s.text())
+    expect(explained.some((t) => t.includes('历史版本查看与回滚'))).toBe(true)
+    expect(explained.some((t) => t.includes('删平台配置'))).toBe(true)
   })
 
   // ── 1.3 VersionManagementModal 接线（can-publish + publish-requested） ─

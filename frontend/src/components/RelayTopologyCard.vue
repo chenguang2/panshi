@@ -1008,18 +1008,4 @@ function emitNodeBoxClick(e: MouseEvent) {
 }
 
 /* 卡头菜单二级描述（与表格「更多 ▾」同款） */
-.menu-item-stack {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.4;
-  padding: 2px 0;
-}
-.menu-item-stack span {
-  font-size: 13px;
-}
-.menu-item-stack small {
-  color: var(--muted);
-  font-size: 11px;
-  margin-top: 1px;
-}
 </style>

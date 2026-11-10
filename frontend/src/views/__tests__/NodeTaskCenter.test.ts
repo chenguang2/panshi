@@ -318,7 +318,7 @@ describe('NodeTaskCenter', () => {
     const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
     await flushPromises()
 
-    const cancelItem = wrapper.findAll('.a-menu-item-stub').find((b) => b.text().trim() === '取消')
+    const cancelItem = wrapper.findAll('.a-menu-item-stub').find((b) => b.text().trim().startsWith('取消'))
     expect(cancelItem).toBeTruthy()
     await cancelItem!.trigger('click')
     await flushPromises()

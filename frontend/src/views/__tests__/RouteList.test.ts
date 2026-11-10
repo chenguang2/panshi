@@ -724,7 +724,7 @@ describe('RouteList.vue 删除确认节点清单全量拉取（route-management-
     const wrapper = mount(RouteList, { global: { stubs: deleteStubs } })
     await flushPromises()
 
-    const delItem = wrapper.findAll('.mock-menu-item').find((b) => b.text() === '删除')
+    const delItem = wrapper.findAll('.mock-menu-item').find((b) => b.text().trim().startsWith('删除'))
     expect(delItem, '行操作菜单应有删除项').toBeTruthy()
     await delItem!.trigger('click')
     await flushPromises()
@@ -1252,9 +1252,18 @@ describe('RouteList.vue 行内发布拍平（列表操作统一·方案 A）', (
     await flushPromises()
 
     const rows = wrapper.findAll('.mock-a-table tbody tr')
-    const menuItems = rows[1].findAll('.mock-menu-item').map((i) => i.text())
+    // 主行文案按 menu-item-stack 主行提取（解释行是 small，不参与收敛断言）
+    const menuItems = rows[1]
+      .findAll('.mock-menu-item')
+      .map((i) => {
+        const span = i.find('.menu-item-stack span')
+        return (span.exists() ? span.text() : i.text()).trim()
+      })
     expect(menuItems).toEqual(['编辑', '版本管理', '复制路由', '删除'])
     expect(menuItems).not.toContain('发布')
+    // 分级解释落地：版本管理/删除带常驻解释，编辑/复制保持单行
+    expect(rows[1].text()).toContain('历史版本查看与回滚')
+    expect(rows[1].text()).toContain('删平台配置，可同步删 Edge 已发布配置（弹窗可选）')
   })
 
   it('DNS 行：发布与 ⋯ 全部禁用 + tooltip 指路（7.9 模式延伸到拍平按钮）', async () => {

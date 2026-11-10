@@ -165,19 +165,31 @@
                     <a-menu-item
                       v-if="record.status === 'running' || record.status === 'pending'"
                       @click="handleCancel(record)"
-                      >取消</a-menu-item
                     >
+                      <div class="menu-item-stack">
+                        <span>取消</span>
+                        <small>终止进程链：已开始节点记已取消，未开始记跳过</small>
+                      </div>
+                    </a-menu-item>
                     <a-menu-item
                       v-if="['failed', 'partial', 'cancelled'].includes(record.status)"
                       @click="handleRetry(record)"
-                      >重试</a-menu-item
                     >
+                      <div class="menu-item-stack">
+                        <span>重试</span>
+                        <small>只重跑失败节点；上次日志归档保留</small>
+                      </div>
+                    </a-menu-item>
                     <a-menu-item
                       v-if="['success', 'failed', 'partial', 'cancelled'].includes(record.status)"
                       danger
                       @click="handleDelete(record)"
-                      >删除</a-menu-item
                     >
+                      <div class="menu-item-stack">
+                        <span>删除</span>
+                        <small>删任务记录与日志，不影响节点已执行结果</small>
+                      </div>
+                    </a-menu-item>
                   </a-menu>
                 </template>
               </a-dropdown>

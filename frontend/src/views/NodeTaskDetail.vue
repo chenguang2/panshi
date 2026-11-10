@@ -14,7 +14,12 @@
           <button type="button" class="action-trigger-btn" aria-label="更多操作">⋯</button>
           <template #overlay>
             <a-menu>
-              <a-menu-item danger @click="confirmDelete">删除任务</a-menu-item>
+              <a-menu-item danger @click="confirmDelete">
+                <div class="menu-item-stack">
+                  <span>删除任务</span>
+                  <small>删任务记录与日志，不影响节点已执行结果</small>
+                </div>
+              </a-menu-item>
             </a-menu>
           </template>
         </a-dropdown>

@@ -287,11 +287,18 @@ describe('UserList 批 2：排序与状态切换', () => {
 
   it('⋯ dropdown 只留「删除」（每行菜单构成一致，禁用/启用已迁至状态开关）', async () => {
     const wrapper = await mountPage()
-    const items = wrapper.findAll('.mock-menuitem').map((i) => i.text().trim())
+    const items = wrapper
+      .findAll('.mock-menuitem')
+      .map((i) => {
+        const span = i.find('.menu-item-stack span')
+        return (span.exists() ? span.text() : i.text()).trim()
+      })
     expect(items.length).toBeGreaterThanOrEqual(3)
     expect(items.every((t) => t === '删除')).toBe(true)
     expect(items.join('|')).not.toContain('禁用')
     expect(items.join('|')).not.toContain('启用')
+    // 分级解释落地：删除项带常驻解释
+    expect(wrapper.text()).toContain('删除账号并使其登录态失效，历史审计保留')
   })
 
   it('删除确认含级联后果说明', async () => {

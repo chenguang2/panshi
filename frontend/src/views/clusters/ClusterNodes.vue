@@ -30,26 +30,42 @@
               v-if="featuresStore.has('install_openresty')"
               @click="handleInstallOpenresty"
               :disabled="!cluster.selectedNode"
-              >安装 OpenResty</a-menu-item
             >
+              <div class="menu-item-stack">
+                <span>安装 OpenResty</span>
+                <small>选择安装包在节点上安装 OpenResty</small>
+              </div>
+            </a-menu-item>
             <a-menu-item
               v-if="featuresStore.has('install_edge')"
               @click="handleInstallEdge"
               :disabled="!cluster.selectedNode"
-              >安装 Edge</a-menu-item
             >
+              <div class="menu-item-stack">
+                <span>安装 Edge</span>
+                <small>在节点 edge_path 部署 Edge 程序</small>
+              </div>
+            </a-menu-item>
             <a-menu-item
               v-if="featuresStore.has('install_edge')"
               @click="handleAssociateNewOpenresty"
               :disabled="!cluster.selectedNode"
-              >关联新OpenResty</a-menu-item
             >
+              <div class="menu-item-stack">
+                <span>关联新OpenResty</span>
+                <small>把本机 Edge 切换关联到新装的 OpenResty</small>
+              </div>
+            </a-menu-item>
             <a-menu-item
               v-if="featuresStore.has('install_edge')"
               @click="handleEdgePackManagement"
               :disabled="!cluster.selectedNode"
-              >升级Edge小版本</a-menu-item
             >
+              <div class="menu-item-stack">
+                <span>升级Edge小版本</span>
+                <small>版本包管理与 Edge 小版本升级</small>
+              </div>
+            </a-menu-item>
           </a-menu>
         </template>
       </a-dropdown>

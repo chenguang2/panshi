@@ -126,7 +126,12 @@
               <a-button type="text" size="small" class="action-trigger-btn">⋯</a-button>
               <template #overlay>
                 <a-menu>
-                  <a-menu-item danger @click="deleteUser(record)">删除</a-menu-item>
+                  <a-menu-item danger @click="deleteUser(record)">
+                    <div class="menu-item-stack">
+                      <span>删除</span>
+                      <small>删除账号并使其登录态失效，历史审计保留</small>
+                    </div>
+                  </a-menu-item>
                 </a-menu>
               </template>
             </a-dropdown>

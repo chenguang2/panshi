@@ -84,9 +84,19 @@
                 <template #overlay>
                   <a-menu>
                     <a-menu-item @click="handleAction('edit', record)">编辑</a-menu-item>
-                    <a-menu-item @click="handleAction('version', record)">版本管理</a-menu-item>
+                    <a-menu-item @click="handleAction('version', record)">
+                      <div class="menu-item-stack">
+                        <span>版本管理</span>
+                        <small>历史版本查看与回滚</small>
+                      </div>
+                    </a-menu-item>
                     <a-menu-item @click="handleAction('copy', record)">复制</a-menu-item>
-                    <a-menu-item danger @click="handleAction('delete', record)">删除</a-menu-item>
+                    <a-menu-item danger @click="handleAction('delete', record)">
+                      <div class="menu-item-stack">
+                        <span>删除</span>
+                        <small>删平台配置，可同步删 Edge 已发布配置（弹窗可选）</small>
+                      </div>
+                    </a-menu-item>
                   </a-menu>
                 </template>
               </a-dropdown>
