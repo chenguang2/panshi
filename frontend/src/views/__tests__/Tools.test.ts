@@ -35,6 +35,28 @@ const stubs = {
     template:
       '<input class="a-input-password" type="password" :value="value" @input="$emit(\'update:value\', $event.target.value)" />',
   },
+  'a-input': {
+    props: ['value', 'placeholder'],
+    emits: ['update:value'],
+    template: '<input class="a-input" :value="value" @input="$emit(\'update:value\', $event.target.value)" />',
+  },
+  'a-input-number': {
+    props: ['value'],
+    emits: ['update:value'],
+    template:
+      '<input class="a-input-number" type="number" :value="value ?? \'\'" @input="$emit(\'update:value\', $event.target.value === \'\' ? null : Number($event.target.value))" />',
+  },
+  'a-checkbox': {
+    props: ['checked'],
+    emits: ['update:checked'],
+    template:
+      '<label class="a-checkbox"><input type="checkbox" :checked="checked" @change="$emit(\'update:checked\', $event.target.checked)" /><slot /></label>',
+  },
+  'a-collapse': { template: '<div class="a-collapse"><slot /></div>' },
+  'a-collapse-panel': {
+    props: ['header'],
+    template: '<div class="a-collapse-panel"><div class="a-collapse-panel-header">{{ header }}</div><slot /></div>',
+  },
 }
 
 function makeRouter(initial = '/tools') {
@@ -122,10 +144,10 @@ describe('Tools 批 1：剪贴板回退与复制语义', () => {
 })
 
 describe('Tools 批 2：深链 / 短密钥警告 / 清空 / 导航文字', () => {
-  it('导航栏每项同时含图标与文字标签（13 个工具）', async () => {
+  it('导航栏每项同时含图标与文字标签（14 个工具）', async () => {
     const wrapper = await mountTools()
     const items = navItems(wrapper)
-    expect(items).toHaveLength(13)
+    expect(items).toHaveLength(14)
     for (const item of items) {
       expect(item.text().trim().length, '导航项应有文字').toBeGreaterThan(0)
     }
@@ -375,5 +397,72 @@ describe('Tools 批 3：文案', () => {
     const wrapper = await mountTools(makeRouter(), '/tools?tool=sm4')
     const resetBtn = wrapper.findAll('button').find((b) => b.text() === '恢复默认')!
     expect(resetBtn.attributes('title')).toContain('Edge 通道默认')
+  })
+})
+
+describe('Tools Keepalived 配置生成（tools-keepalived-generator）', () => {
+  async function mountKa() {
+    return mountTools(makeRouter(), '/tools?tool=keepalived')
+  }
+
+  function fillSample(wrapper: ReturnType<typeof mount>, vip = '10.128.216.154'): void {
+    const inputs = wrapper.findAll('.ka-form .a-input')
+    ;(inputs[0]!.element as HTMLInputElement).value = vip
+    inputs[0]!.trigger('input')
+    ;(inputs[1]!.element as HTMLInputElement).value = 'ens7'
+    inputs[1]!.trigger('input')
+    const ta = wrapper.find('.ka-form textarea')
+    ;(ta.element as HTMLTextAreaElement).value = '10.128.216.160\n10.128.216.161\n10.128.216.162'
+    ta.trigger('input')
+  }
+
+  it('深链 ?tool=keepalived 显示工具头', async () => {
+    const wrapper = await mountKa()
+    expect(wrapper.find('.tool-header').text()).toContain('Keepalived 配置生成')
+  })
+
+  it('样例输入：生成 conf / 防火墙 / 手册（关键行断言）', async () => {
+    const wrapper = await mountKa()
+    fillSample(wrapper)
+    await flushPromises()
+    const text = wrapper.text()
+    expect(text).toContain('router_id EDGE_DNS_1')
+    expect(text).toContain('router_id EDGE_DNS_3')
+    expect(text).toContain('priority        150           # Edge-1 最高优先级')
+    expect(text).toContain('priority        130           # Edge-3 次级优先级')
+    expect(text).toContain('10.128.216.154/24 dev ens7 label ens7:vip')
+    expect(text).toContain('source address="10.128.216.161" protocol value="vrrp" accept')
+    expect(text).toContain('keepalived -t -f /etc/keepalived/keepalived.conf')
+    expect(text).toContain('ip addr show ens7:vip')
+  })
+
+  it('红字错误（非法 VIP）不生成输出', async () => {
+    const wrapper = await mountKa()
+    fillSample(wrapper, '999.1.1.1')
+    await flushPromises()
+    expect(wrapper.find('.diff-error').text()).toContain('合法 IPv4')
+    expect(wrapper.find('.ka-pre').exists()).toBe(false)
+  })
+
+  it('黄字提醒（异网段）不阻断生成', async () => {
+    const wrapper = await mountKa()
+    fillSample(wrapper, '10.128.217.154')
+    await flushPromises()
+    expect(wrapper.find('.ka-warn').text()).toContain('网段')
+    expect(wrapper.find('.ka-pre').exists()).toBe(true)
+  })
+
+  it('清空按钮重置全部输入', async () => {
+    const wrapper = await mountKa()
+    fillSample(wrapper)
+    await flushPromises()
+    const clearBtn = wrapper.findAll('button').find((b) => b.text() === '清空')!
+    await clearBtn.trigger('click')
+    await flushPromises()
+    const inputs = wrapper.findAll('.ka-form .a-input')
+    expect((inputs[0]!.element as HTMLInputElement).value).toBe('')
+    expect((inputs[1]!.element as HTMLInputElement).value).toBe('')
+    expect((wrapper.find('.ka-form textarea').element as HTMLTextAreaElement).value).toBe('')
+    expect(wrapper.find('.ka-pre').exists()).toBe(false)
   })
 })

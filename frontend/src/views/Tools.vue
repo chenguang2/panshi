@@ -515,6 +515,119 @@
           </div>
         </div>
       </div>
+
+      <!-- Keepalived 配置生成 -->
+      <div v-if="activeTool === 'keepalived'" class="tool-panel ka-panel">
+        <div class="tool-header">
+          <span>Keepalived 配置生成</span>
+          <span class="tool-hint">多节点 VRRP 高可用（单播 + VIP）全套配置与部署命令，纯前端生成</span>
+          <span class="spacer"></span>
+          <button class="btn-clear" @click="clearTool('keepalived')">清空</button>
+        </div>
+
+        <div class="ka-form">
+          <div class="ka-grid">
+            <div class="ka-row">
+              <label>VIP 地址</label>
+              <a-input v-model:value="kaVip" placeholder="10.128.216.154" />
+            </div>
+            <div class="ka-row">
+              <label>网卡名</label>
+              <a-input v-model:value="kaIface" placeholder="ens7" />
+            </div>
+          </div>
+          <div class="ka-row ka-col">
+            <label>节点 IP 列表（每行一个，2–8 个）</label>
+            <a-textarea
+              v-model:value="kaNodesText"
+              :rows="4"
+              placeholder="10.128.216.160&#10;10.128.216.161&#10;10.128.216.162"
+            />
+          </div>
+          <a-checkbox v-model:checked="kaAdvanced">高级参数</a-checkbox>
+          <div v-show="kaAdvanced" class="ka-grid ka-grid-3">
+            <div class="ka-row">
+              <label>VIP 掩码位</label>
+              <a-input-number v-model:value="kaMaskBits" :min="8" :max="32" />
+            </div>
+            <div class="ka-row">
+              <label>VRRP 组 ID</label>
+              <a-input-number v-model:value="kaVrrpId" :min="1" :max="255" />
+            </div>
+            <div class="ka-row">
+              <label>认证密码（前 8 字符生效）</label>
+              <a-input v-model:value="kaAuthPass" placeholder="12345678" />
+            </div>
+            <div class="ka-row">
+              <label>优先级起始</label>
+              <a-input-number v-model:value="kaPriorityStart" :min="1" :max="255" />
+            </div>
+            <div class="ka-row">
+              <label>优先级步长</label>
+              <a-input-number v-model:value="kaPriorityStep" :min="1" :max="50" />
+            </div>
+            <div class="ka-row">
+              <label>router_id 前缀</label>
+              <a-input v-model:value="kaRouterIdPrefix" placeholder="EDGE_DNS_" />
+            </div>
+            <div class="ka-row">
+              <label>健康检查端口</label>
+              <a-input-number v-model:value="kaCheckPort" :min="1" :max="65535" />
+            </div>
+          </div>
+        </div>
+
+        <div v-for="e in kaValidation.errors" :key="'e' + e" class="diff-error">{{ e }}</div>
+        <div v-for="w in kaValidation.warnings" :key="'w' + w" class="ka-warn">{{ w }}</div>
+
+        <template v-if="kaResult">
+          <h4 class="ka-group">共用脚本（所有节点一致，写入 /etc/keepalived/）</h4>
+          <div v-for="f in kaSharedFiles" :key="f.key" class="ka-file">
+            <div class="ka-file-head">
+              <span class="ka-fname">{{ f.filename }} · {{ f.title }}</span>
+              <span class="spacer"></span>
+              <button class="btn-clear" @click="copyToClipboard(f.content)">复制</button>
+              <button class="btn-clear" @click="downloadFile(f.filename, f.content)">下载</button>
+            </div>
+            <pre class="ka-pre">{{ f.content }}</pre>
+          </div>
+
+          <h4 class="ka-group">
+            各节点配置（{{ kaNodes.length }} 节点；conf 差异仅四处：router_id / priority / unicast_src_ip /
+            unicast_peer）
+          </h4>
+          <a-collapse>
+            <a-collapse-panel
+              v-for="n in kaNodeGroups"
+              :key="n.ip"
+              :header="`Edge-${n.index + 1} · ${n.ip}（conf + 防火墙放行）`"
+            >
+              <div v-for="f in n.files" :key="f.key" class="ka-file">
+                <div class="ka-file-head">
+                  <span class="ka-fname">{{ f.filename }}</span>
+                  <span class="spacer"></span>
+                  <button class="btn-clear" @click="copyToClipboard(f.content)">复制</button>
+                  <button class="btn-clear" @click="downloadFile(f.filename, f.content)">下载</button>
+                </div>
+                <pre class="ka-pre">{{ f.content }}</pre>
+              </div>
+            </a-collapse-panel>
+          </a-collapse>
+
+          <h4 class="ka-group">部署手册（所有节点）</h4>
+          <div class="ka-file">
+            <div class="ka-file-head">
+              <span class="ka-fname">keepalived-deploy-manual.md</span>
+              <span class="spacer"></span>
+              <button class="btn-clear" @click="copyToClipboard(kaResult.handbook)">复制</button>
+              <button class="btn-clear" @click="downloadFile('keepalived-deploy-manual.md', kaResult.handbook)">
+                下载
+              </button>
+            </div>
+            <pre class="ka-pre">{{ kaResult.handbook }}</pre>
+          </div>
+        </template>
+      </div>
     </a-layout-content>
   </a-layout>
 </template>
@@ -537,6 +650,7 @@ import {
   DiffOutlined,
   GlobalOutlined,
   SafetyCertificateOutlined,
+  ClusterOutlined,
 } from '@ant-design/icons-vue'
 import { luaToConfigString, configStringToLua } from '@/utils/tools/lua'
 import * as toolsUrl from '@/utils/tools/url'
@@ -551,6 +665,12 @@ import { yamlToJson, jsonToYaml } from '@/utils/tools/convert'
 import { parseCidr, type CidrResult } from '@/utils/tools/ip'
 import { md5, shaHex } from '@/utils/tools/hash'
 import { textLineDiff } from '@/utils/tools/textdiff'
+import {
+  KEEPALIVED_DEFAULTS,
+  generateKeepalivedConfig,
+  validateKeepalivedInput,
+  type KeepalivedGenInput,
+} from '@/utils/tools/keepalived'
 
 interface ToolItem {
   key: string
@@ -574,6 +694,7 @@ const tools: ToolItem[] = [
   { key: 'textdiff', label: '文本 Diff', shortLabel: '文本对比', icon: DiffOutlined },
   { key: 'ipcalc', label: 'IPv4/CIDR 计算器', shortLabel: 'IP/CIDR', icon: GlobalOutlined },
   { key: 'hash', label: '哈希计算', shortLabel: '哈希', icon: SafetyCertificateOutlined },
+  { key: 'keepalived', label: 'Keepalived 配置', shortLabel: 'Keepalived', icon: ClusterOutlined },
 ]
 
 const TOOL_KEYS = tools.map((t) => t.key)
@@ -703,6 +824,19 @@ function clearTool(key: string): void {
       hashInput.value = ''
       hashResults.value = null
     },
+    keepalived: () => {
+      kaVip.value = ''
+      kaIface.value = ''
+      kaNodesText.value = ''
+      kaAdvanced.value = false
+      kaMaskBits.value = KEEPALIVED_DEFAULTS.maskBits
+      kaVrrpId.value = KEEPALIVED_DEFAULTS.vrrpId
+      kaAuthPass.value = KEEPALIVED_DEFAULTS.authPass
+      kaPriorityStart.value = KEEPALIVED_DEFAULTS.priorityStart
+      kaPriorityStep.value = KEEPALIVED_DEFAULTS.priorityStep
+      kaRouterIdPrefix.value = KEEPALIVED_DEFAULTS.routerIdPrefix
+      kaCheckPort.value = KEEPALIVED_DEFAULTS.checkPort
+    },
   }
   clears[key]?.()
 }
@@ -726,6 +860,64 @@ function handleTextDiff(): void {
   }
   const result = textLineDiff(textDiffA.value, textDiffB.value)
   textDiffHtml.value = result.html
+}
+
+// ── Keepalived 配置生成（tools-keepalived-generator）：纯前端模板渲染，样例逐字回归见 utils 单测 ──
+const kaVip = ref('')
+const kaIface = ref('')
+const kaNodesText = ref('')
+const kaAdvanced = ref(false)
+const kaMaskBits = ref<number | null>(KEEPALIVED_DEFAULTS.maskBits)
+const kaVrrpId = ref<number | null>(KEEPALIVED_DEFAULTS.vrrpId)
+const kaAuthPass = ref(KEEPALIVED_DEFAULTS.authPass)
+const kaPriorityStart = ref<number | null>(KEEPALIVED_DEFAULTS.priorityStart)
+const kaPriorityStep = ref<number | null>(KEEPALIVED_DEFAULTS.priorityStep)
+const kaRouterIdPrefix = ref(KEEPALIVED_DEFAULTS.routerIdPrefix)
+const kaCheckPort = ref<number | null>(KEEPALIVED_DEFAULTS.checkPort)
+
+const kaNodes = computed(() =>
+  kaNodesText.value
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0),
+)
+
+const kaInput = computed<KeepalivedGenInput>(() => ({
+  vip: kaVip.value.trim(),
+  nodes: kaNodes.value,
+  iface: kaIface.value.trim(),
+  maskBits: kaMaskBits.value ?? KEEPALIVED_DEFAULTS.maskBits,
+  vrrpId: kaVrrpId.value ?? KEEPALIVED_DEFAULTS.vrrpId,
+  authPass: kaAuthPass.value,
+  priorityStart: kaPriorityStart.value ?? KEEPALIVED_DEFAULTS.priorityStart,
+  priorityStep: kaPriorityStep.value ?? KEEPALIVED_DEFAULTS.priorityStep,
+  routerIdPrefix: kaRouterIdPrefix.value,
+  checkPort: kaCheckPort.value ?? KEEPALIVED_DEFAULTS.checkPort,
+}))
+
+const kaValidation = computed(() => validateKeepalivedInput(kaInput.value))
+
+const kaResult = computed(() => {
+  if (kaValidation.value.errors.length > 0) return null
+  if (!kaInput.value.vip || !kaInput.value.iface || kaInput.value.nodes.length === 0) return null
+  return generateKeepalivedConfig(kaInput.value)
+})
+
+const kaSharedFiles = computed(() => kaResult.value?.files.filter((f) => f.group === 'shared') ?? [])
+const kaNodeGroups = computed(() => {
+  const r = kaResult.value
+  if (!r) return []
+  return kaInput.value.nodes.map((ip, index) => ({ ip, index, files: r.files.filter((f) => f.group === `node-${ip}`) }))
+})
+
+function downloadFile(filename: string, content: string): void {
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 // ── IPv4/CIDR 计算器：输入即算 ──
@@ -982,7 +1174,7 @@ async function pasteFromClipboard(setter: (text: string) => void, evt?: Event): 
 
 .tools-content {
   padding: 24px;
-  overflow-y: hidden;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
 }
@@ -991,6 +1183,10 @@ async function pasteFromClipboard(setter: (text: string) => void, evt?: Event): 
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+/* 长内容工具（keepalived）：面板随内容自然增高，滚动交给 .tools-content（其余工具保持 flex:1 内部滚动布局不变） */
+.tools-content .tool-panel.ka-panel {
+  flex: 0 0 auto;
 }
 .tools-content .tool-panel .dual-panel {
   flex: 1;
@@ -1115,6 +1311,92 @@ async function pasteFromClipboard(setter: (text: string) => void, evt?: Event): 
 
 .jwt-block .panel-label {
   margin-bottom: 6px;
+}
+
+/* Keepalived 配置生成 */
+.ka-form {
+  margin-bottom: 12px;
+}
+
+.ka-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+}
+
+.ka-grid-3 .ka-row {
+  width: calc((100% - 32px) / 3);
+}
+
+.ka-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 220px;
+}
+
+.ka-row label {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.ka-row.ka-col {
+  margin-top: 2px;
+}
+
+.ka-warn {
+  margin-top: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--warning);
+  background: oklch(80% 0.15 85 / 10%);
+  border: 1px solid oklch(80% 0.15 85 / 45%);
+  border-radius: 6px;
+}
+
+.ka-group {
+  margin: 18px 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--fg);
+}
+
+.ka-file {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+
+.ka-file-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.ka-fname {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg);
+  font-family: var(--mono);
+}
+
+.ka-pre {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.55;
+  font-family: var(--mono);
+  color: var(--fg);
+  background: var(--surface);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 420px;
+  overflow: auto;
 }
 
 .jwt-pre {
