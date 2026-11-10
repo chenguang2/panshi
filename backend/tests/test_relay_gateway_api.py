@@ -122,6 +122,18 @@ class TestRelayGatewayApi:
             assert resp.status_code in (400, 422), f"code={bad} 应被拒绝"
             assert CODE_PATTERN_MSG in resp.json().get("detail", "") or resp.status_code == 422
 
+    def test_create_without_ssh_user_succeeds(self, client):
+        """空账号创建成功（relay-region-topology-view D8/D6）：
+
+        新建区域最小必填仅 code+name——SSH 账号在登记 SSH 腿时收集（图内 popover），
+        创建端点不再要求 ssh_user；响应中该字段为 null。
+        """
+        resp = client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "路局A"})
+        assert resp.status_code in (200, 201), resp.text
+        body = resp.json()
+        assert body["code"] == "luju"
+        assert body["ssh_user"] is None
+
     # ── 列表 / 更新 ─────────────────────────────────────────
     def test_list_regions(self, client):
         client.post("/api/v1/relay/gateways", json={"code": "luju", "name": "路局A", "ssh_user": "jboss"})
@@ -211,7 +223,7 @@ class TestRelayGatewayApi:
         monkeypatch.setattr(relay_init, "_run_ansible_init", fake_run)
         created = client.post("/api/v1/relay/gateways", json={
             "ssh_user": "jboss",
-            "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
+            "code": "luju", "name": "路局A", "ssh_jump": "tunnel@10.10.1.1", "openresty_prefix": "/opt/nginx"}).json()
         resp = client.post(f"/api/v1/relay/gateways/{created['id']}/init")
         assert resp.status_code == 200, resp.text
         assert "text/event-stream" in resp.headers["content-type"]
@@ -236,7 +248,7 @@ class TestRelayGatewayApi:
         monkeypatch.setattr(relay_push, "_run_ansible_push", fake_run)
         created = client.post("/api/v1/relay/gateways", json={
             "ssh_user": "jboss",
-            "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
+            "code": "luju", "name": "路局A", "ssh_jump": "tunnel@10.10.1.1", "openresty_prefix": "/opt/nginx"}).json()
         resp = client.post(f"/api/v1/relay/gateways/{created['id']}/push-config")
         assert resp.status_code == 200, resp.text
         assert "text/event-stream" in resp.headers["content-type"]
@@ -256,7 +268,7 @@ class TestRelayGatewayApi:
         _seed_region_nodes(test_db, enabled=0, disabled=4)
         created = client.post("/api/v1/relay/gateways", json={
             "ssh_user": "jboss",
-            "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
+            "code": "luju", "name": "路局A", "ssh_jump": "tunnel@10.10.1.1", "openresty_prefix": "/opt/nginx"}).json()
         resp = client.post(f"/api/v1/relay/gateways/{created['id']}/push-config")
         assert resp.status_code == 409
         detail = resp.json()["detail"]
@@ -279,7 +291,7 @@ class TestRelayGatewayApi:
         _seed_region_nodes(test_db, enabled=0, disabled=4)
         created = client.post("/api/v1/relay/gateways", json={
             "ssh_user": "jboss",
-            "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
+            "code": "luju", "name": "路局A", "ssh_jump": "tunnel@10.10.1.1", "openresty_prefix": "/opt/nginx"}).json()
         resp = client.post(f"/api/v1/relay/gateways/{created['id']}/push-config",
                            json={"allow_empty": True})
         assert resp.status_code == 200, resp.text
@@ -298,7 +310,7 @@ class TestRelayGatewayApi:
         _seed_region_nodes(test_db, enabled=1, disabled=1)
         created = client.post("/api/v1/relay/gateways", json={
             "ssh_user": "jboss",
-            "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
+            "code": "luju", "name": "路局A", "ssh_jump": "tunnel@10.10.1.1", "openresty_prefix": "/opt/nginx"}).json()
         resp = client.post(f"/api/v1/relay/gateways/{created['id']}/push-config")
         assert resp.status_code == 200, resp.text
         assert _sse_events(resp.text)[-1]["rc"] == 0
@@ -311,7 +323,7 @@ class TestRelayGatewayApi:
                             lambda **kw: (_ for _ in ()).throw(AssertionError("不得触发 ansible")))
         created = client.post("/api/v1/relay/gateways", json={
             "ssh_user": "jboss",
-            "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
+            "code": "luju", "name": "路局A", "ssh_jump": "tunnel@10.10.1.1", "openresty_prefix": "/opt/nginx"}).json()
         resp = client.post(f"/api/v1/relay/gateways/{created['id']}/push-config")
         assert resp.status_code == 409
         assert "没有挂接集群或启用节点" in resp.json()["detail"]
@@ -329,7 +341,7 @@ class TestRelayGatewayApi:
         _seed_region_nodes(test_db, enabled=2, disabled=1)
         created = client.post("/api/v1/relay/gateways", json={
             "ssh_user": "jboss",
-            "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
+            "code": "luju", "name": "路局A", "ssh_jump": "tunnel@10.10.1.1", "openresty_prefix": "/opt/nginx"}).json()
         resp = client.post(f"/api/v1/relay/gateways/{created['id']}/push-config")
         assert resp.status_code == 200, resp.text
         assert _sse_events(resp.text)[-1]["rc"] == 0
@@ -350,7 +362,7 @@ class TestRelayGatewayApi:
         _seed_region_nodes(test_db, enabled=1, disabled=0)
         created = client.post("/api/v1/relay/gateways", json={
             "ssh_user": "jboss",
-            "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
+            "code": "luju", "name": "路局A", "ssh_jump": "tunnel@10.10.1.1", "openresty_prefix": "/opt/nginx"}).json()
         resp = client.post(f"/api/v1/relay/gateways/{created['id']}/push-config")
         assert _sse_events(resp.text)[-1]["rc"] == 1
         row = _gateway_row(test_db, created["id"])
@@ -369,7 +381,7 @@ class TestRelayGatewayApi:
         _seed_region_nodes(test_db, enabled=1, disabled=0)
         created = client.post("/api/v1/relay/gateways", json={
             "ssh_user": "jboss",
-            "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
+            "code": "luju", "name": "路局A", "ssh_jump": "tunnel@10.10.1.1", "openresty_prefix": "/opt/nginx"}).json()
         resp = client.post(f"/api/v1/relay/gateways/{created['id']}/push-config")
         final = _sse_events(resp.text)[-1]
         assert final["rc"] == 0 and final["status"] == "failed"
@@ -388,7 +400,7 @@ class TestRelayGatewayApi:
         monkeypatch.setattr(relay_init, "_run_ansible_init", fake_run)
         created = client.post("/api/v1/relay/gateways", json={
             "ssh_user": "jboss",
-            "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
+            "code": "luju", "name": "路局A", "ssh_jump": "tunnel@10.10.1.1", "openresty_prefix": "/opt/nginx"}).json()
         resp = client.post(f"/api/v1/relay/gateways/{created['id']}/init")
         assert resp.status_code == 200, resp.text
         assert _sse_events(resp.text)[-1]["rc"] == 0
@@ -408,7 +420,7 @@ class TestRelayGatewayApi:
         _seed_region_nodes(test_db, enabled=0, disabled=2)
         created = client.post("/api/v1/relay/gateways", json={
             "ssh_user": "jboss",
-            "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
+            "code": "luju", "name": "路局A", "ssh_jump": "tunnel@10.10.1.1", "openresty_prefix": "/opt/nginx"}).json()
         resp = client.post(f"/api/v1/relay/gateways/{created['id']}/push-config",
                            json={"allow_empty": True})
         assert resp.status_code == 200, resp.text
@@ -434,7 +446,7 @@ class TestRelayGatewayApi:
         _seed_region_nodes(test_db, enabled=1, disabled=0)
         created = client.post("/api/v1/relay/gateways", json={
             "ssh_user": "jboss",
-            "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
+            "code": "luju", "name": "路局A", "ssh_jump": "tunnel@10.10.1.1", "openresty_prefix": "/opt/nginx"}).json()
         resp = client.get("/api/v1/relay/gateways")
         item = next(x for x in resp.json() if x["id"] == created["id"])
         assert item["push_drift"] is None
@@ -445,7 +457,7 @@ class TestRelayGatewayApi:
         _seed_region_nodes(test_db, enabled=2, disabled=0)
         created = client.post("/api/v1/relay/gateways", json={
             "ssh_user": "jboss",
-            "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
+            "code": "luju", "name": "路局A", "ssh_jump": "tunnel@10.10.1.1", "openresty_prefix": "/opt/nginx"}).json()
         self._seed_snapshot(test_db, created["id"],
                             ["10.20.0.0:9180", "10.99.9.9:9999"],
                             datetime(2026, 11, 4, 1, 2, 3))
@@ -460,7 +472,7 @@ class TestRelayGatewayApi:
         _seed_region_nodes(test_db, enabled=2, disabled=1)
         created = client.post("/api/v1/relay/gateways", json={
             "ssh_user": "jboss",
-            "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
+            "code": "luju", "name": "路局A", "ssh_jump": "tunnel@10.10.1.1", "openresty_prefix": "/opt/nginx"}).json()
         self._seed_snapshot(test_db, created["id"],
                             ["10.20.0.0:9180", "10.20.0.1:9180"],
                             datetime(2026, 11, 4, 1, 2, 3))
@@ -504,7 +516,7 @@ class TestRelayGatewayApi:
 
         created = client.post("/api/v1/relay/gateways", json={
             "ssh_user": "jboss",
-            "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
+            "code": "luju", "name": "路局A", "ssh_jump": "tunnel@10.10.1.1", "openresty_prefix": "/opt/nginx"}).json()
         relay._INFLIGHT.add("luju")
         try:
             resp = client.post(f"/api/v1/relay/gateways/{created['id']}/init")
@@ -526,7 +538,7 @@ class TestRelayGatewayApi:
                             lambda **kw: {"rc": 0, "status": "successful"})
         created = client.post("/api/v1/relay/gateways", json={
             "ssh_user": "jboss",
-            "code": "luju", "name": "路局A", "openresty_prefix": "/opt/nginx"}).json()
+            "code": "luju", "name": "路局A", "ssh_jump": "tunnel@10.10.1.1", "openresty_prefix": "/opt/nginx"}).json()
         resp = client.post(f"/api/v1/relay/gateways/{created['id']}/init")
         assert resp.status_code == 200, resp.text
 
@@ -764,3 +776,103 @@ class TestRelayHealthEndpoint:
             json={"ssh_jump": " jboss@192.168.0.13 "},
         ).json()
         assert updated["ssh_jump"] == "jboss@192.168.0.13"
+
+
+class TestRelayExecutionPreconditions:
+    """执行前置守卫（relay-region-topology-view D8）：
+
+    init / push-config 校验 ssh_jump + ssh_user 已配置；sshd-setup 仅校验 ssh_jump
+    （root 直连凭据由请求传入，不消费 ssh_user）。守卫位于 openresty_prefix 守卫之后、
+    清单校验与 SSE 流之前——缺失即 400 引导回拓扑就地编辑，零执行副作用（流不启动）。
+    """
+
+    GUARD_JUMP_MSG = "区域未登记 SSH 跳板，请先编辑区域填写"
+    GUARD_USER_MSG = "区域未配置 SSH 账号，请先编辑区域填写"
+
+    @pytest.fixture
+    def client(self, test_db, test_db_factory):
+        async def override_get_db():
+            async with test_db_factory() as session:
+                yield session
+
+        app.dependency_overrides[get_db] = override_get_db
+
+        import asyncio
+
+        async def _seed():
+            if await test_db.get(User, 1) is None:
+                test_db.add(User(id=1, username="api_user", password_hash=hash_password("password123"),
+                                 role="admin", status=1))
+            if await test_db.get(Cluster, 1) is None:
+                test_db.add(Cluster(id=1, name="c1", status=1))
+            await test_db.commit()
+        asyncio.run(_seed())
+
+        with isolated_app_lifespan(), AuthedTestClient(app) as c:
+            yield c
+        app.dependency_overrides.clear()
+
+    @pytest.fixture
+    def gateway_inventory(self, monkeypatch, tmp_path):
+        """清单含 gateways_luju 组：证明 400 来自新守卫而非「清单缺组」503。"""
+        from app.services import relay_init, relay_push
+
+        inv = tmp_path / "gateways"
+        inv.write_text("gateways_luju:\n  hosts:\n    10.10.1.1: {}\n", encoding="utf-8")
+        monkeypatch.setattr(relay_init, "_GATEWAYS_INVENTORY", str(inv))
+        monkeypatch.setattr(relay_push, "_GATEWAYS_INVENTORY", str(inv))
+        return inv
+
+    @pytest.fixture
+    def no_ansible(self, monkeypatch):
+        """零副作用断言：三个腿的 ansible 执行一旦被触达即失败（守卫通过才可能触达）。"""
+        from app.services import relay_init, relay_push, relay_sshd
+
+        def _forbid(**kw):
+            raise AssertionError("前置守卫未拦截：ansible 执行流不应启动")
+
+        monkeypatch.setattr(relay_init, "_run_ansible_init", _forbid)
+        monkeypatch.setattr(relay_push, "_run_ansible_push", _forbid)
+        monkeypatch.setattr(relay_sshd, "_run_ansible_sshd", _forbid)
+
+    def _create(self, client, **extra) -> dict:
+        payload = {"code": "luju", "name": "路局A"}
+        payload.update(extra)
+        return client.post("/api/v1/relay/gateways", json=payload).json()
+
+    @staticmethod
+    def _assert_blocked(resp, detail: str) -> None:
+        assert resp.status_code == 400, resp.text
+        assert resp.json()["detail"] == detail
+        # 零副作用：守卫在流开始前抛出，响应是 JSON 400 而非 SSE
+        assert "text/event-stream" not in resp.headers.get("content-type", "")
+
+    # ── init ────────────────────────────────────────────────
+    def test_init_blocked_without_ssh_jump(self, client, gateway_inventory, no_ansible):
+        created = self._create(client, ssh_user="jboss", openresty_prefix="/opt/nginx")
+        resp = client.post(f"/api/v1/relay/gateways/{created['id']}/init")
+        self._assert_blocked(resp, self.GUARD_JUMP_MSG)
+
+    def test_init_blocked_without_ssh_user(self, client, gateway_inventory, no_ansible):
+        created = self._create(client, ssh_jump="tunnel@10.10.1.1", openresty_prefix="/opt/nginx")
+        resp = client.post(f"/api/v1/relay/gateways/{created['id']}/init")
+        self._assert_blocked(resp, self.GUARD_USER_MSG)
+
+    # ── push-config ─────────────────────────────────────────
+    def test_push_blocked_without_ssh_jump(self, client, gateway_inventory, no_ansible):
+        created = self._create(client, ssh_user="jboss", openresty_prefix="/opt/nginx")
+        resp = client.post(f"/api/v1/relay/gateways/{created['id']}/push-config")
+        self._assert_blocked(resp, self.GUARD_JUMP_MSG)
+
+    def test_push_blocked_without_ssh_user(self, client, gateway_inventory, no_ansible):
+        created = self._create(client, ssh_jump="tunnel@10.10.1.1", openresty_prefix="/opt/nginx")
+        resp = client.post(f"/api/v1/relay/gateways/{created['id']}/push-config")
+        self._assert_blocked(resp, self.GUARD_USER_MSG)
+
+    # ── sshd-setup（仅校验 ssh_jump） ────────────────────────
+    def test_sshd_setup_blocked_without_ssh_jump(self, client, gateway_inventory, no_ansible):
+        """有账号无跳板：sshd-setup 被拦（root 凭据由请求传入，ssh_user 不参与本守卫）。"""
+        created = self._create(client, ssh_user="jboss")
+        resp = client.post(f"/api/v1/relay/gateways/{created['id']}/sshd-setup",
+                           json={"root_password": "pw"})
+        self._assert_blocked(resp, self.GUARD_JUMP_MSG)

@@ -124,3 +124,57 @@ export function relayHealthCheck(region?: string) {
 export function getRelayConfigPreview(id: number) {
   return api.get<RelayConfigPreview>(`/relay/gateways/${id}/config-preview`)
 }
+
+// ── 拓扑视图（relay-region-topology-view design D4：类型逐字段对齐 backend/app/schemas/relay.py） ──
+
+/** 节点白名单同步态（服务端单点派生，design D3——前端不重复推导） */
+export type RelayWhitelistState = 'synced' | 'pending_add' | 'pending_remove' | 'off'
+
+export interface RelayTopologyNode {
+  ip: string
+  management_port: number
+  status: number
+  whitelist_state: RelayWhitelistState
+}
+
+export interface RelayTopologyCluster {
+  id: number
+  name: string
+  display_name: string | null
+  nodes: RelayTopologyNode[]
+}
+
+/** 拓扑链路卡的区域块：含两腿与 SSH 连接摘要（阶段机/连接摘要需要；口令永不回传） */
+export interface RelayTopologyRegion {
+  id: number
+  code: string
+  name: string
+  status: string
+  http_base_url: string | null
+  ssh_jump: string | null
+  ssh_user: string | null
+  ssh_port: number | null
+  openresty_prefix: string | null
+  last_pushed_at: string | null
+  clusters: RelayTopologyCluster[]
+}
+
+/** 可挂接候选轻量引用（detachable）：全部集群，前端按区域自行过滤 */
+export interface RelayTopologyClusterRef {
+  id: number
+  name: string
+  display_name: string | null
+  region_code: string | null
+}
+
+export interface RelayTopologyOut {
+  regions: RelayTopologyRegion[]
+  detachable: RelayTopologyClusterRef[]
+  /** 集群挂了但无网关注册行的区域码（悬空挂接提示卡） */
+  unregistered_bound_codes: string[]
+}
+
+/** 只读拓扑聚合：区域 → 挂接集群 → 节点明细（含 whitelist_state）+ 悬空区域码 */
+export function fetchRelayTopology() {
+  return api.get<RelayTopologyOut>('/relay/topology')
+}

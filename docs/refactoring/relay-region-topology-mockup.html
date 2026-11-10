@@ -141,6 +141,25 @@
   .edge .leg-chip.dim { opacity: 0.65; border-style: dashed; }
   .edge.clickable .leg-chip { cursor: pointer; }
   .edge.clickable .leg-chip:hover { border-color: var(--accent); color: var(--accent); }
+  /* B″（2026-11-10）：下发 = 分发边上的「待下发」动作框（初始化网关同款语言：需要时出现、完成即隐） */
+  .push-box {
+    position: relative;
+    z-index: 1;
+    background: var(--surface);
+    border: 1.5px dashed var(--warning);
+    border-radius: 10px;
+    padding: 10px 12px;
+    width: 100%;
+    text-align: center;
+  }
+  .push-box .pb-title { font-size: 12px; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
+  .push-box .pb-line { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  .push-box .pb-line b { color: var(--fg); }
+  .push-box .pb-line .c-add { color: var(--warning); font-weight: 600; }
+  .push-box .pb-line .c-rm { color: var(--orange); font-weight: 600; }
+  .push-box .btn { width: 100%; }
+  .push-box.sshd { border-color: var(--orange); }
+  .push-box.sshd .pb-line b { color: var(--fg); }
 
   /* 集群列 */
   .col-clusters { flex: 1; min-width: 330px; gap: 12px; }
@@ -181,6 +200,31 @@
   .create-card b { font-size: 14px; }
   .create-card .steps { font-size: 12px; margin-top: 4px; }
 
+  /* 草稿卡（新建区域原地展开，保存后原地生成区域卡） */
+  .draft-card { border: 2px dashed var(--accent); border-radius: 10px; padding: 16px 18px 14px; background: var(--surface); }
+  .draft-card .d-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 2px; }
+  .draft-card .d-head b { font-size: 14px; color: var(--fg); }
+  .draft-card .d-head .d-hint { font-size: 12px; color: var(--muted); }
+  .draft-grid { display: grid; grid-template-columns: 1.2fr 1.2fr 1fr 0.6fr; gap: 10px 12px; margin-top: 10px; }
+  .draft-grid .pf label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 3px; }
+  .draft-grid .pf input { width: 100%; border: 1px solid var(--border-strong); border-radius: 6px; padding: 6px 9px; font-size: 13px; font-family: var(--mono); background: var(--surface); color: var(--fg); }
+  .draft-grid .pf input.ftext { font-family: inherit; }
+  .draft-grid .pf input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-bg); }
+  .draft-grid .pf .ferr { display: none; color: var(--danger); font-size: 12px; margin-top: 3px; line-height: 1.5; }
+  .draft-grid .pf.invalid input { border-color: var(--danger); }
+  .draft-grid .pf.invalid .ferr { display: block; }
+  .draft-card .d-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+  .draft-card .d-note { margin-top: 10px; font-size: 12px; color: var(--muted); line-height: 1.6; background: var(--bg); border: 1px dashed var(--border-strong); border-radius: 6px; padding: 7px 9px; }
+  .draft-card .d-note b { color: var(--fg); font-weight: 600; }
+  .draft-grid.two { grid-template-columns: 1fr 1.4fr; }
+
+  /* 阶段机：ghost 待初始化形态 / 步骤清单 / 禁用按钮 */
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .node.ghost .btn.sm { margin-top: 8px; }
+  .th-sub .st b.ok { color: var(--success); font-weight: 700; }
+  .th-sub .st b.no { color: var(--muted); opacity: 0.55; font-weight: 400; }
+  .st-miss { color: var(--warning); }
+
   /* 表格视图（现有页面静态复刻） */
   .table-view { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
   .table-view .card-header { padding: 14px 18px 6px; font-weight: 700; font-size: 15px; }
@@ -189,8 +233,33 @@
   .table-view td { padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 13px; }
   .tr-hidden { display: none; }
 
+  /* ── 就地编辑 popover（评审演示：真实实现复用既有 PUT 与后端校验文案） ── */
+  .pop { position: fixed; z-index: 60; width: 330px; max-width: calc(100vw - 24px); background: var(--surface); border: 1px solid var(--border-strong); border-radius: 10px; box-shadow: 0 10px 34px oklch(20% 0.02 240 / 22%); padding: 12px 14px; }
+  .pop .p-title { margin: 0; font-size: 13px; font-weight: 700; }
+  .pop .p-sub { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+  .pop .pf { margin-top: 10px; }
+  .pop .pf label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 3px; }
+  .pop .pf input, .pop .pf select { width: 100%; border: 1px solid var(--border-strong); border-radius: 6px; padding: 6px 9px; font-size: 13px; font-family: var(--mono); background: var(--surface); color: var(--fg); }
+  .pop .pf select, .pop .pf input.ftext { font-family: inherit; }
+  .pop .pf input:focus, .pop .pf select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-bg); }
+  .pop .pf .ferr { display: none; color: var(--danger); font-size: 12px; margin-top: 3px; line-height: 1.5; }
+  .pop .pf.invalid input { border-color: var(--danger); }
+  .pop .pf.invalid .ferr { display: block; }
+  .pop .p-actions { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+  .pop .p-actions .only-save { border: none; background: none; color: var(--muted); cursor: pointer; font-size: 12px; padding: 0; margin-right: auto; text-decoration: underline; text-underline-offset: 2px; }
+  .pop .p-actions .only-save:hover { color: var(--fg); }
+  .pop .p-link { border: none; background: none; color: var(--accent); cursor: pointer; font-size: 12px; padding: 0; margin-right: auto; text-decoration: underline; text-underline-offset: 2px; }
+  .pop .p-note { margin-top: 10px; font-size: 12px; color: var(--muted); line-height: 1.6; background: var(--bg); border: 1px dashed var(--border-strong); border-radius: 6px; padding: 7px 9px; }
+  .pop .p-note b { color: var(--fg); font-weight: 600; }
+  .badge.clickable { cursor: pointer; }
+  .badge.clickable:hover { outline: 1.5px solid currentColor; outline-offset: 1px; }
+  .editable-name { cursor: pointer; border-bottom: 1px dashed transparent; }
+  .editable-name:hover { color: var(--accent); border-bottom-color: var(--accent); }
+  .th-left h2 .pencil-inline { margin-left: 2px; }
+  .th-left h2:hover .pencil-inline { opacity: 1; }
+
   /* 底部演示提示 */
-  #toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%) translateY(20px); background: oklch(25% 0.03 240); color: #fff; border-radius: 8px; padding: 10px 18px; font-size: 13px; opacity: 0; pointer-events: none; transition: all .2s; max-width: 720px; box-shadow: 0 6px 24px oklch(20% 0.02 240 / 35%); }
+  #toast { position: fixed; z-index: 70; left: 50%; bottom: 28px; transform: translateX(-50%) translateY(20px); background: oklch(25% 0.03 240); color: #fff; border-radius: 8px; padding: 10px 18px; font-size: 13px; opacity: 0; pointer-events: none; transition: all .2s; max-width: 720px; box-shadow: 0 6px 24px oklch(20% 0.02 240 / 35%); }
   #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
   .foot { color: var(--muted); font-size: 12px; text-align: center; margin-top: 8px; }
@@ -207,7 +276,7 @@
     </div>
     <div class="ph-actions">
       <button class="btn">全量体检</button>
-      <button class="btn primary" data-demo="打开现有「新建区域」弹窗（基础身份 / 网关两腿连接 / 网关机 SSH 凭据 / 高级参数）">+ 新建区域</button>
+      <button class="btn primary" id="headerCreate">+ 新建区域</button>
     </div>
   </header>
 
@@ -285,9 +354,9 @@
   <section class="topo-card">
     <div class="topo-head">
       <div class="th-left">
-        <h2>济南局</h2>
+        <h2><span class="editable-name" id="jn-name">济南局</span><i class="pencil-inline">✎</i></h2>
         <span class="code-tag mono">jinan</span>
-        <span class="badge ok">启用</span>
+        <span class="badge ok clickable" id="jn-badge" title="点击切换 启用 / 禁用">启用</span>
         <span class="hchip ok" title="体检时间 2026-11-06 09:12
 网关HTTP腿：✓ 可达
 SSH跳板：✓ 可达
@@ -295,11 +364,10 @@ SSH跳板：✓ 可达
       </div>
       <div class="th-actions">
         <button class="btn sm" data-demo="探测该区域两条腿（现有 GET /relay/health-check），结果更新健康徽章">测试</button>
-        <button class="btn primary sm" data-demo="现有「下发配置」流程：漂移确认弹窗 → SSE 执行抽屉（逐字复用现表格逻辑）">下发配置</button>
         <button class="btn sm" data-demo="现有「更多 ▾」菜单原样平移：编辑 / 初始化网关 / 配置跳板转发 / 查看配置 / 查看凭据 / 启用·禁用 / 删除">更多 ▾</button>
       </div>
     </div>
-    <div class="th-sub">
+    <div class="th-sub" id="jn-thsub">
       白名单 <b>3</b>/<b>5</b> 已同步<span class="sep">·</span><span class="c-add">1 个未下发</span><span class="sep">·</span><span class="c-rm">1 个待移除</span><span class="sep">·</span>上次下发 2026-11-05 18:22
     </div>
     <div class="topo-body">
@@ -312,26 +380,36 @@ SSH跳板：✓ 可达
       </div>
       <!-- 两腿 -->
       <div class="edge clickable">
-        <span class="leg-chip" data-demo="打开「编辑区域」弹窗，并滚动聚焦到「网关两腿连接」分组的「网关 HTTP 腿」输入框" title="发布、回滚等管理请求经它进入该局"><b>HTTP 腿</b> <span class="mono">10.10.1.1:8443</span> <span class="st-ok">✓</span></span>
-        <span class="leg-chip" data-demo="打开「编辑区域」弹窗，并滚动聚焦到「网关两腿连接」分组的「SSH 跳板」输入框" title="安装、初始化等 SSH 任务先跳到网关机再进局内"><b>SSH 跳板</b> <span class="mono">tunnel@10.10.1.1:22</span> <span class="st-ok">✓</span></span>
+        <span class="leg-chip" id="jn-chip-http" title="发布、回滚等管理请求经它进入该局 · 点击就地编辑"><b>HTTP 腿</b> <span class="mono">10.10.1.1:8443</span> <span class="st-ok">✓</span></span>
+        <span class="leg-chip" id="jn-chip-ssh" title="安装、初始化等 SSH 任务先跳到网关机再进局内 · 点击就地编辑"><b>SSH 跳板</b> <span class="mono">tunnel@10.10.1.1:22</span> <span class="st-ok">✓</span></span>
       </div>
       <!-- 网关机 -->
-      <div class="col">
-        <div class="node editable" data-demo="打开现有「编辑区域」弹窗（口令按需加载回填、审计不变）">
-          <i class="pencil">✎ 编辑</i>
+      <div class="col" id="jn-nodebox">
+        <div class="node editable" id="jn-node" title="点击就地编辑 SSH 账号 / 端口 / OpenResty 前缀（口令与高级参数在「更多 ▸ 编辑」弹窗）">
+          <i class="pencil">✎ 就地编辑</i>
           <div class="n-title">网关机 · 济南局 <span class="code-tag mono" style="font-size:10px">jinan</span></div>
-          <div class="n-main">jboss@10.10.1.1:22</div>
-          <div class="n-sub mono" title="/work/jboss/tunnel/openresty-1.21.4.1/nginx">/work/jboss/tunnel/openresty…/nginx</div>
+          <div class="n-main" id="jn-node-main">jboss@10.10.1.1:22</div>
+          <div class="n-sub mono" id="jn-node-prefix" title="/work/jboss/tunnel/openresty-1.21.4.1/nginx">/work/jboss/tunnel/openresty…/nginx</div>
         </div>
       </div>
       <!-- 分发边 -->
       <div class="edge">
-        <span class="leg-chip" title="初始化/下发写入网关机 nginx 的节点白名单 map（edge_targets.conf）"><b>8443 白名单</b> 3 节点</span>
-        <span class="leg-chip" title="「配置跳板转发」以 root 写入 sshd drop-in（PermitOpen）"><b>sshd PermitOpen</b></span>
+        <span class="leg-chip" title="初始化/下发写入网关机 nginx 的节点白名单 map（edge_targets.conf）；✓ = 名单已同步（与当前节点一致）；有漂移时由下方黄框报警，chip 不亮 ✓"><b>8443 白名单</b> 3 节点</span>
+        <span class="leg-chip" title="「配置跳板转发」以 root 写入 sshd drop-in（PermitOpen）；✓ = 体检证实经跳板转发可达"><b>sshd PermitOpen</b><span style="color:var(--success);font-weight:700">✓</span></span>
+        <div class="push-box" id="jn-pushbox">
+          <div class="pb-title">白名单待下发 <span class="tag warn">有漂移</span></div>
+          <div class="pb-line"><span class="c-add">1 个未下发</span><span class="sep">·</span><span class="c-rm">1 个待移除</span></div>
+          <button class="btn primary sm" id="jn-push">下发配置</button>
+        </div>
+        <div class="push-box sshd" id="jn-sshdbox">
+          <div class="pb-title">跳板转发待配置 <span class="tag warn">体检证据</span></div>
+          <div class="pb-line">网关 sshd 禁 TCP 转发（体检报 administratively prohibited）</div>
+          <button class="btn primary sm" id="jn-sshd">配置跳板转发</button>
+        </div>
       </div>
       <!-- 集群们 -->
-      <div class="col col-clusters">
-        <div class="cluster-card" data-demo="打开「挂接 / 解挂」弹窗：区域下拉（当前：济南局）/ 解挂按钮 / 打开集群链接">
+      <div class="col col-clusters" id="jn-clusters">
+        <div class="cluster-card" data-cid="jiaoji">
           <div class="cc-head">胶济干线 <span class="n-count">3 节点</span><i class="pencil-inline">✎</i><span class="goto">挂接/解挂 ›</span></div>
           <div class="nrow" data-demo="只读 popover：启用 · 白名单已同步 · 体检 ✓（网关机自身节点，走直连不适用跳板） + 「打开节点管理」链接">
             <span class="dot ok"></span>10.10.2.1:8080<span class="tag skip">自跳直连</span>
@@ -343,7 +421,7 @@ SSH跳板：✓ 可达
             <span class="dot ok"></span>10.10.2.3:8080<span class="tag pend">未下发</span>
           </div>
         </div>
-        <div class="cluster-card" data-demo="打开「挂接 / 解挂」弹窗：区域下拉（当前：济南局）/ 解挂按钮 / 打开集群链接">
+        <div class="cluster-card" data-cid="shuniu">
           <div class="cc-head">济南枢纽 <span class="n-count">2 节点</span><i class="pencil-inline">✎</i><span class="goto">挂接/解挂 ›</span></div>
           <div class="nrow" data-demo="只读 popover：启用 · 白名单已同步 + 「打开节点管理」链接">
             <span class="dot ok"></span>10.10.3.1:8080
@@ -352,7 +430,7 @@ SSH跳板：✓ 可达
             <span class="dot off"></span>10.10.3.2:8080<span class="nname">已停用</span><span class="tag rm">待移除</span>
           </div>
         </div>
-        <div class="attach-dashed" data-demo="打开「挂接集群」弹窗：下拉列出未挂接本区域的集群（含其当前区域归属）">+ 挂接集群</div>
+        <div class="attach-dashed" data-attach="jn">+ 挂接集群</div>
       </div>
     </div>
   </section>
@@ -361,19 +439,18 @@ SSH跳板：✓ 可达
   <section class="topo-card">
     <div class="topo-head">
       <div class="th-left">
-        <h2>武清本地</h2>
+        <h2><span class="editable-name" id="wq-name">武清本地</span><i class="pencil-inline">✎</i></h2>
         <span class="code-tag mono">wuqing</span>
-        <span class="badge ok">启用</span>
+        <span class="badge ok clickable" id="wq-badge" title="点击切换 启用 / 禁用">启用</span>
         <span class="badge warn">直连 · 无网关机</span>
         <span class="hchip unknown">未检测</span>
       </div>
       <div class="th-actions">
         <button class="btn sm">测试</button>
-        <button class="btn primary sm" data-demo="直连区域无白名单可推：按钮置灰并提示「未配置网关机，无下发对象」">下发配置</button>
         <button class="btn sm">更多 ▾</button>
       </div>
     </div>
-    <div class="th-sub">两腿均为空<span class="sep">·</span>该局集群按现状直连执行<span class="sep">·</span>局内互通的局无需登记网关机</div>
+    <div class="th-sub" id="wq-thsub">两腿均为空<span class="sep">·</span>该局集群按现状直连执行<span class="sep">·</span>局内互通的局无需登记网关机</div>
     <div class="topo-body">
       <div class="col">
         <div class="node platform">
@@ -382,25 +459,20 @@ SSH跳板：✓ 可达
         </div>
       </div>
       <div class="edge clickable">
-        <span class="leg-chip dim" data-demo="打开「编辑区域」弹窗并聚焦「网关两腿连接」分组">HTTP 腿 · 未配置</span>
-        <span class="leg-chip dim" data-demo="打开「编辑区域」弹窗并聚焦「网关两腿连接」分组">SSH 跳板 · 未配置</span>
+        <span class="leg-chip dim" id="wq-chip-http" title="点击登记 HTTP 腿">HTTP 腿 · 未配置</span>
+        <span class="leg-chip dim" id="wq-chip-ssh" title="点击登记 SSH 跳板">SSH 跳板 · 未配置</span>
       </div>
-      <div class="col">
-        <div class="node ghost">
-          <div class="n-title" style="color: var(--muted)">未配置网关机</div>
-          <div class="n-sub">直连路径</div>
-        </div>
-      </div>
+      <div class="col" id="wq-nodebox"></div>
       <div class="edge">
         <span class="leg-chip dim">直连</span>
       </div>
-      <div class="col col-clusters">
-        <div class="cluster-card" data-demo="打开「挂接 / 解挂」弹窗（当前区域：武清本地）">
+      <div class="col col-clusters" id="wq-clusters">
+        <div class="cluster-card" data-cid="wqhexin">
           <div class="cc-head">武清核心 <span class="n-count">2 节点</span><i class="pencil-inline">✎</i><span class="goto">挂接/解挂 ›</span></div>
           <div class="nrow"><span class="dot ok"></span>192.168.0.13:8080</div>
           <div class="nrow"><span class="dot ok"></span>192.168.0.14:8080</div>
         </div>
-        <div class="direct-guide">登记网关机两腿后可经中继进局（<button data-demo="打开「编辑区域」弹窗并聚焦「网关两腿连接」分组">去登记</button>）。当前按直连执行。</div>
+        <div class="direct-guide" id="wq-guide">登记网关机两腿后可经中继进局（<button id="wq-goto-reg">去登记</button>）。当前按直连执行。</div>
       </div>
     </div>
   </section>
@@ -412,10 +484,25 @@ SSH跳板：✓ 可达
     <button class="btn sm" data-demo="打开现有「新建区域」弹窗，区域码预填 luju">注册该区域</button>
   </section>
 
-  <!-- ══════════ 新建区域 ══════════ -->
-  <section class="create-card" data-demo="打开现有「新建区域」弹窗（与右上角按钮等价）">
+  <!-- ══════════ 新建区域（就地草稿卡：点开原地展开，保存后原地生成区域卡） ══════════ -->
+  <section class="create-card" id="createCard">
     <b>+ 新建区域</b>
-    <div class="steps">登记区域 → 初始化网关 → 集群挂接 → 下发配置</div>
+    <div class="steps">登记区域 → 登记两腿 → 初始化网关 → 集群挂接 → 下发配置（全程在本图完成，不进弹窗）</div>
+  </section>
+  <section class="draft-card tr-hidden" id="draftCard">
+    <div class="d-head">
+      <b>新建区域 · 必填 2 项</b>
+      <span class="d-hint">SSH 账号在登记 SSH 腿时顺带收集；口令 / 高级参数后续在「更多 ▸ 编辑」补录</span>
+    </div>
+    <div class="draft-grid two">
+      <div class="pf"><label>区域码 code *</label><input type="text" id="d-code" placeholder="jinan2" maxlength="32"><div class="ferr"></div></div>
+      <div class="pf"><label>区域名称 *</label><input type="text" id="d-name" class="ftext" placeholder="济南二局" maxlength="100"><div class="ferr"></div></div>
+    </div>
+    <div class="d-actions">
+      <button class="btn sm" id="d-cancel">取消</button>
+      <button class="btn sm primary" id="d-create">创建区域</button>
+    </div>
+    <div class="d-note"><b>创建后</b>：原地生成本局区域卡（初始直连形态）→ 点灰色两腿 chip 登记两腿（SSH 腿登记时顺带填 SSH 账号）→ 初始化网关 → 挂接集群 → 下发配置，全程在本图完成。区域码是集群挂接的身份标识，创建后不可就地修改。</div>
   </section>
 
   <!-- ══════════ 表格视图（现有页面静态复刻，切换查看） ══════════ -->
@@ -446,13 +533,17 @@ SSH跳板：✓ 可达
 
   <!-- 设计标注（评审用，非页面内容） -->
   <div class="legend" style="margin-top: 12px; border-style: dashed; opacity: 0.85">
-    <b style="color: var(--accent)">设计标注 · 非页面内容：</b>
-    <span class="lg"><span class="no">1</span>点网关机 → 打开现有「编辑区域」弹窗</span>
-    <span class="lg"><span class="no">2</span>点两腿标签 → 弹窗并聚焦「网关两腿连接」分组</span>
-    <span class="lg"><span class="no">3</span>点集群卡 → 挂接 / 解挂弹窗</span>
-    <span class="lg"><span class="no">4</span>点节点行 → 只读详情 + 跳节点管理</span>
-    <span class="lg"><span class="no">5</span>卡头动作区与现表格逐字一致（测试 / 下发配置 / 更多▾）</span>
-    <span class="lg"><span class="no">6</span>表格视图 = 现页面逐字不动；拓扑视图 = 仅第 3 部分（区域列表卡）换为链路卡，第 1/2 部分原样共用</span>
+    <b style="color: var(--accent)">设计标注 · 非页面内容（就地编辑可点击交互，保存为页内模拟）：</b>
+    <span class="lg"><span class="no">1</span>点两腿标签 → 就地 popover 改该腿地址（无弹窗、拓扑可见），主按钮「保存并测试」</span>
+    <span class="lg"><span class="no">2</span>点网关机 → 就地 popover 改 SSH 账号 / 端口 / OpenResty 前缀；口令与高级参数仍在「更多 ▸ 编辑」弹窗</span>
+    <span class="lg"><span class="no">3</span>点卡头名称 / 状态徽章 → 就地改名 / 启用·禁用切换（含后果确认提示）</span>
+    <span class="lg"><span class="no">4</span>点集群卡 / +挂接集群 → 就地 popover 挂接·解挂（区域下拉，解挂=选「不挂接」）</span>
+    <span class="lg"><span class="no">5</span>点节点行 → 只读 popover + 跳节点管理（维持原设计）</span>
+    <span class="lg"><span class="no">6</span>区域码 code 不可就地编辑（集群引用它，防悬空挂接）；Esc / 点空白处关闭；表格视图 = 现页面逐字不动</span>
+    <span class="lg"><span class="no">7</span>+新建区域 → 草稿卡原地展开（必填 2 项：码 / 名称；SSH 账号在登记 SSH 腿时顺带收集），保存后原地生成直连形态区域卡</span>
+    <span class="lg"><span class="no">8</span>阶段机：ghost 网关机框三形态（未配置 → 待初始化 +「初始化网关」按钮 → 实体卡）；未完成区域 th-sub 显示五步清单（区域/两腿/初始化/挂接/下发）走完即隐；初始化缺前缀时链式「保存并初始化」</span>
+    <span class="lg"><span class="no">9</span>B″（2026-11-10）：两条分发边各挂对称动作框（初始化网关同款语言：需要时出现、完成即隐）——①白名单框：steady 且有漂移 → 黄虚线框（漂移计数 + [下发配置]），确认浮层防误触，完成即隐、chip 回归纯标签，强制重下发留更多▾；②跳板转发框：<b>证据驱动</b>——SSH 跳板体检报 administratively prohibited 时橙虚线框出现，点击 → 既有 root 密码表单 + SSE 抽屉，成功后自动复检、框即隐，手动兜底留更多▾（卡头收敛为 测试 + 更多 ▾）</span>
+    <span class="lg"><span class="no">10</span>分发 chip ✓ 徽章：8443 白名单 chip = steady+已成功下发+零漂移才亮 ✓（漂移由黄框报警、从不下发不亮）；sshd PermitOpen chip = 体检「抽样节点两腿」段通过才亮 ✓（转发可用被证实）；两 chip 均无 ✗（失败证据在腿徽章/节点行/橙框，不冤枉）</span>
   </div>
 
   <div class="foot">设计示例页 · 全部数据为虚构 · 视觉/文案基准：《relay-region-topology-blueprint.md》§4 · 批准后按 openspec 流程实施</div>
@@ -463,16 +554,18 @@ SSH跳板：✓ 可达
 <script>
   // 视图切换
   var vTopo = document.getElementById('vTopo'), vTable = document.getElementById('vTable');
-  var topoCards = document.querySelectorAll('.topo-card, .orphan-card, .create-card');
   var tableView = document.getElementById('tableView');
+  function topoCards() { return document.querySelectorAll('.topo-card, .orphan-card, .create-card, .draft-card'); }
   function showTable() {
     vTable.classList.add('on'); vTopo.classList.remove('on');
-    topoCards.forEach(function (c) { c.classList.add('tr-hidden'); });
+    topoCards().forEach(function (c) { c.classList.add('tr-hidden'); });
     tableView.classList.remove('tr-hidden');
   }
   function showTopo() {
     vTopo.classList.add('on'); vTable.classList.remove('on');
-    topoCards.forEach(function (c) { c.classList.remove('tr-hidden'); });
+    topoCards().forEach(function (c) { if (c.id === 'draftCard') return; c.classList.remove('tr-hidden'); });
+    createCard.classList.toggle('tr-hidden', draftOpen);
+    draftCard.classList.toggle('tr-hidden', !draftOpen);
     tableView.classList.add('tr-hidden');
   }
   vTopo.addEventListener('click', showTopo);
@@ -489,6 +582,643 @@ SSH跳板：✓ 可达
   document.querySelectorAll('[data-demo]').forEach(function (el) {
     el.addEventListener('click', function (e) { e.stopPropagation(); toast(el.getAttribute('data-demo')); });
   });
+
+  // ═══ 就地编辑 popover（设计演示：真实实现走既有 PUT /relay/gateways/{id} 与 PUT /clusters/{id}，
+  //     校验正则与错误文案与后端 schemas/relay.py 逐字一致，零新增写路径） ═══
+  var RE_HTTP = /^https?:\/\/[A-Za-z0-9.\-]+(:\d{1,5})?$/;
+  var RE_SSH = /^[A-Za-z0-9._\-]+@[A-Za-z0-9.\-]+(:\d{1,5})?$/;
+  var MSG_HTTP = '网关 HTTP 腿格式错误: 须以 http:// 或 https:// 开头且不含路径，如 http://10.10.1.1:8443';
+  var MSG_SSH = 'SSH 跳板格式错误: 须为 账号@主机[:端口]，如 tunnel@10.10.1.1:22';
+  var MSG_PREFIX = 'OpenResty 前缀格式错误: 须为以 / 开头的绝对路径，如 /work/jboss/tunnel/openresty-1.21.4.1/nginx';
+
+  // 演示状态（真实实现来自 GET /relay/topology，保存后刷新）
+  // initialized = 初始化网关完成；pushed = 白名单已下发；wl = 白名单同步演示数据
+  var REG = {
+    jn: { name: '济南局', status: 'enabled', http: 'http://10.10.1.1:8443', ssh: 'tunnel@10.10.1.1:22', user: 'jboss', port: '22', prefix: '/work/jboss/tunnel/openresty-1.21.4.1/nginx', initialized: true, pushed: true, wl: { total: 5, sync: 3, add: 1, rm: 1, last: '2026-11-05 18:22' } },
+    wq: { name: '武清本地', status: 'enabled', http: '', ssh: '', user: '', port: '22', prefix: '', initialized: false, pushed: false }
+  };
+  var CLUSTERS = [
+    { id: 'jiaoji', name: '胶济干线', region: 'jinan', nodes: 3 },
+    { id: 'shuniu', name: '济南枢纽', region: 'jinan', nodes: 2 },
+    { id: 'wqhexin', name: '武清核心', region: 'wuqing', nodes: 2 },
+    { id: 'qingdao', name: '青岛港', region: null, nodes: 3 }
+  ];
+
+  function escAttr(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+  function httpDisp(v) { return v.replace(/^https?:\/\//, ''); }
+  function sshHost(v) { var m = v.match(/@([A-Za-z0-9.\-]+)(:\d{1,5})?$/); return m ? m[1] : '?'; }
+  function truncPrefix(p) { if (!p) return '（未填）'; return p.length > 36 ? p.slice(0, 30) + '…' + p.slice(-6) : p; }
+  function attachedCount(k) { var n = 0; CLUSTERS.forEach(function (c) { if (c.region === k) n++; }); return n; }
+  function regionOpts() {
+    var opts = [{ v: '', t: '不挂接（直连）' }];
+    Object.keys(REG).forEach(function (k) { opts.push({ v: k, t: REG[k].name + '（' + k + '）' }); });
+    return opts;
+  }
+
+  function renderRegion(k) {
+    var r = REG[k];
+    var cH = document.getElementById(k + '-chip-http'), cS = document.getElementById(k + '-chip-ssh');
+    if (r.http) { cH.className = 'leg-chip'; cH.innerHTML = '<b>HTTP 腿</b> <span class="mono"></span> <span class="st-ok">✓</span>'; cH.querySelector('.mono').textContent = httpDisp(r.http); }
+    else { cH.className = 'leg-chip dim'; cH.textContent = 'HTTP 腿 · 未配置'; }
+    if (r.ssh) { cS.className = 'leg-chip'; cS.innerHTML = '<b>SSH 跳板</b> <span class="mono"></span> <span class="st-ok">✓</span>'; cS.querySelector('.mono').textContent = r.ssh; }
+    else { cS.className = 'leg-chip dim'; cS.textContent = 'SSH 跳板 · 未配置'; }
+    document.getElementById(k + '-name').textContent = r.name;
+    var b = document.getElementById(k + '-badge');
+    b.className = 'badge clickable ' + (r.status === 'enabled' ? 'ok' : 'off');
+    b.textContent = r.status === 'enabled' ? '启用' : '禁用';
+  }
+
+  // ── 阶段机：fresh → legs-partial / init-blocked → ready-init → steady ──
+  function stageOf(r) {
+    if (r.initialized) return 'steady';
+    if (r.ssh) return r.user ? 'ready-init' : 'init-blocked';
+    if (r.http) return 'legs-partial';
+    return 'fresh';
+  }
+  function nextAction(r, attached) {
+    if (!r.http && !r.ssh) return '点灰色两腿 chip 登记两腿';
+    if (!r.ssh) return '登记 SSH 跳板（初始化必需）';
+    if (!r.user) return '点击网关机框补 SSH 账号';
+    if (!r.initialized) return '初始化网关';
+    if (!attached) return '挂接集群';
+    if (!r.pushed) return '下发配置';
+    return '已完成';
+  }
+  function renderThSub(k) {
+    var r = REG[k], el = document.getElementById(k + '-thsub');
+    if (!el) return;
+    var attached = attachedCount(k);
+    if (stageOf(r) === 'steady' && r.pushed && r.wl) {
+      el.innerHTML = '白名单 <b>' + r.wl.sync + '</b>/<b>' + r.wl.total + '</b> 已同步' +
+        (r.wl.add ? '<span class="sep">·</span><span class="c-add">' + r.wl.add + ' 个未下发</span>' : '') +
+        (r.wl.rm ? '<span class="sep">·</span><span class="c-rm">' + r.wl.rm + ' 个待移除</span>' : '') +
+        '<span class="sep">·</span>上次下发 ' + r.wl.last;
+      return;
+    }
+    function step(name, done) { return '<span class="st">' + name + ' <b class="' + (done ? 'ok">✓' : 'no">○') + '</b></span>'; }
+    el.className = 'th-sub';
+    el.innerHTML = step('区域', true) + '<span class="sep">·</span>' +
+      step('两腿', !!(r.http && r.ssh)) + '<span class="sep">·</span>' +
+      step('初始化', r.initialized) + '<span class="sep">·</span>' +
+      step('挂接', attached > 0) + '<span class="sep">·</span>' +
+      step('下发', r.pushed) +
+      '<span class="sep">·</span><span class="c-add">下一步：' + nextAction(r, attached) + '</span>';
+  }
+  function renderNodeArea(k) {
+    var r = REG[k], box = document.getElementById(k + '-nodebox');
+    if (!box) return;
+    var st = stageOf(r);
+    if (st === 'steady') {
+      box.innerHTML =
+        '<div class="node editable" id="' + k + '-node" title="点击就地编辑 SSH 账号 / 端口 / OpenResty 前缀（口令与高级参数在「更多 ▸ 编辑」弹窗）">' +
+        '<i class="pencil">✎ 就地编辑</i>' +
+        '<div class="n-title">网关机 · ' + escAttr(r.name) + ' <span class="code-tag mono" style="font-size:10px">' + escAttr(k) + '</span></div>' +
+        '<div class="n-main">' + escAttr(r.user) + '@' + sshHost(r.ssh) + ':' + escAttr(r.port) + '</div>' +
+        '<div class="n-sub mono" title="' + escAttr(r.prefix) + '">' + truncPrefix(r.prefix) + '</div>' +
+        '</div>';
+      var nd = box.querySelector('.node.editable');
+      nd.addEventListener('click', function (e) { e.stopPropagation(); toggleAt(nd, function () { openNode(k); }); });
+    } else if (st === 'ready-init') {
+      box.innerHTML =
+        '<div class="node ghost editable" id="' + k + '-nodeghost" title="点击填写 SSH 账号 / 端口 / OpenResty 前缀">' +
+        '<i class="pencil">✎ 连接信息</i>' +
+        '<div class="n-title" style="color: var(--muted)">网关机 · 待初始化 <span class="tag pend">待初始化</span></div>' +
+        '<div class="n-main">' + escAttr(r.user) + '@' + sshHost(r.ssh) + '</div>' +
+        '<div class="n-sub mono">' + (r.prefix ? truncPrefix(r.prefix) : '<span class="st-miss">OpenResty 前缀未填 · 点此填写</span>') + '</div>' +
+        '<button class="btn sm primary" id="' + k + '-init">初始化网关</button>' +
+        '</div>';
+      var g = box.querySelector('#' + k + '-nodeghost');
+      g.addEventListener('click', function (e) {
+        e.stopPropagation();
+        toggleAt(g, function () { openNode(k, { focusLast: !r.prefix }, g); });
+      });
+      box.querySelector('#' + k + '-init').addEventListener('click', function (e) {
+        e.stopPropagation(); openInitConfirm(k, g);
+      });
+    } else if (st === 'init-blocked') {
+      box.innerHTML =
+        '<div class="node ghost editable" id="' + k + '-nodeghost" title="点击补 SSH 账号 / 端口 / OpenResty 前缀">' +
+        '<i class="pencil">✎ 连接信息</i>' +
+        '<div class="n-title" style="color: var(--muted)">网关机 · 待初始化 <span class="tag err">缺 SSH 账号</span></div>' +
+        '<div class="n-main">' + sshHost(r.ssh) + '</div>' +
+        '<div class="n-sub">SSH 账号用于平台登录网关机执行初始化 / 下发</div>' +
+        '<button class="btn sm primary" id="' + k + '-fixuser">补 SSH 账号</button>' +
+        '</div>';
+      var g2 = box.querySelector('#' + k + '-nodeghost');
+      g2.addEventListener('click', function (e) {
+        e.stopPropagation();
+        toggleAt(g2, function () { openNode(k, null, g2); });
+      });
+      box.querySelector('#' + k + '-fixuser').addEventListener('click', function (e) {
+        e.stopPropagation(); openNode(k, null, g2);
+      });
+    } else if (st === 'legs-partial') {
+      box.innerHTML =
+        '<div class="node ghost">' +
+        '<div class="n-title" style="color: var(--muted)">未配置网关机</div>' +
+        '<div class="n-sub">SSH 腿未登记 · 初始化不可用</div>' +
+        '</div>';
+    } else {
+      box.innerHTML =
+        '<div class="node ghost" title="登记两腿后此处显示网关机真实形态">' +
+        '<div class="n-title" style="color: var(--muted)">未配置网关机</div>' +
+        '<div class="n-sub">直连路径</div>' +
+        '</div>';
+    }
+  }
+  function renderStage(k) {
+    var r = REG[k];
+    renderThSub(k);
+    renderNodeArea(k);
+    renderPushBox(k);
+    var guide = document.getElementById(k + '-guide');
+    if (guide) guide.classList.toggle('tr-hidden', stageOf(r) !== 'fresh');
+  }
+  /* B″：下发 = 分发边「待下发」动作框（初始化网关同款语言）。steady 且有漂移（未下发/待移除）
+     → 框出现（含真按钮）；完成/无漂移 → 框隐去、chip 回归纯标签；强制重下发走「更多 ▾」。
+     mockup 中仅 jn 静态卡有分发边，动态卡自然空转。 */
+  function renderPushBox(k) {
+    var box = document.getElementById(k + '-pushbox');
+    if (!box) return;
+    var r = REG[k];
+    var drift = stageOf(r) === 'steady' && r.wl && ((r.wl.add || 0) + (r.wl.rm || 0) > 0);
+    box.style.display = drift ? '' : 'none';
+  }
+
+  // ── 初始化网关（轻确认 → 缺前缀链式收集 → 模拟执行） ──
+  function openInitConfirm(k, anchor) {
+    var r = REG[k];
+    var preOk = !!r.prefix;
+    var html = '<p class="p-title">初始化网关 · ' + escAttr(r.name) + '</p>' +
+      '<div class="p-note" style="margin-top:8px">将向网关机写入 <b>8443 监听 server 块 + 当前白名单</b>，校验后 reload。<b>幂等可重复执行</b>。<br>前置：SSH 腿 ✓ · SSH 账号 ✓ · OpenResty 前缀 ' + (preOk ? '✓' : '<span class="st-miss">未填（下一步收集）</span>') + '</div>' +
+      '<div class="p-actions"><button class="btn sm" data-act="cancel">取消</button>' +
+      '<button class="btn sm primary" data-act="go">' + (preOk ? '确认初始化' : '填写前缀并初始化') + '</button></div>';
+    openPop(anchor, html);
+    popEl.querySelector('[data-act="cancel"]').addEventListener('click', closePop);
+    popEl.querySelector('[data-act="go"]').addEventListener('click', function () {
+      closePop();
+      if (!preOk) {
+        openNode(k, {
+          title: '初始化前置 · OpenResty 前缀 · ' + r.name,
+          primaryLabel: '保存并初始化', altSave: '仅保存', focusLast: true, requirePrefix: true,
+          note: '填完保存即自动开始初始化（写入 8443 监听并 reload）。',
+          chain: function () { simulateInit(k); return null; }
+        }, anchor);
+      } else { simulateInit(k); }
+    });
+  }
+  function simulateInit(k) {
+    var r = REG[k];
+    var btn = document.getElementById(k + '-init');
+    if (btn) { btn.textContent = '初始化中…'; btn.disabled = true; }
+    setTimeout(function () {
+      r.initialized = true;
+      renderStage(k);
+      toast('初始化完成：8443 监听已写入（演示：真实实现走 SSE 流抽屉看逐行 stdout）。下一步：挂接集群');
+    }, 1000);
+  }
+  function bindPush(k) {
+    var chip = document.getElementById(k + '-push');
+    if (!chip) return;
+    chip.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (chip.dataset.busy) return;
+      openPushConfirm(k, chip);
+    });
+  }
+  /* B′ 防误触（2026-11-10 用户反馈）：chip 点击只出确认浮层（本次规模 + 漂移预览，与真实
+     handlePush 的 overlay 确认同内容），「确认下发」才执行——与初始化轻确认同一语言。 */
+  function openPushConfirm(k, chip) {
+    var r = REG[k];
+    var add = (r.wl && r.wl.add) || 0, rm = (r.wl && r.wl.rm) || 0;
+    var n = r.wl ? r.wl.total : attachedCount(k);
+    var html = '<p class="p-title">下发配置 · ' + r.name + '</p>' +
+      '<div class="p-note" style="margin-top:8px">本次下发 <b>' + n + '</b> 个启用节点（<b>全量替换</b>，未启用节点将从白名单移除；该局全部网关机都下发成功才算成功）' +
+      (add || rm
+        ? '。漂移：将<span class="c-add">新增 ' + add + '</span> / <span class="c-rm">移除 ' + rm + '</span>'
+        : '。与上次成功下发一致') +
+      '。sshd PermitOpen 不随本次下发（由「更多 ▸ 配置跳板转发」单独配置）。</div>' +
+      '<div class="p-actions"><button class="btn sm" data-act="cancel">取消</button>' +
+      '<button class="btn sm primary" data-act="go">确认下发</button></div>';
+    openPop(chip, html);
+    popEl.querySelector('[data-act="cancel"]').addEventListener('click', closePop);
+    popEl.querySelector('[data-act="go"]').addEventListener('click', function () {
+      closePop();
+      var btn = chip.querySelector('button') || chip;
+      btn.textContent = '下发中…';
+      btn.disabled = true;
+      setTimeout(function () {
+        var attached = attachedCount(k);
+        r.pushed = true;
+        r.wl = { total: attached, sync: attached, add: 0, rm: 0, last: '刚刚（演示）' };
+        renderStage(k);
+        toast('白名单已下发：' + attached + ' 节点放行（演示：真实实现接 SSE 执行抽屉看实时日志）');
+      }, 800);
+    });
+  }
+
+  /* sshd 跳板转发动作框（B″ 对称）：真实实现为证据驱动——SSH 跳板体检段报
+     administratively prohibited 时框出现（网关 sshd 禁转发实测特征，AGENTS #29）；
+     点击打开既有 root 凭据表单弹窗（密码仅本次使用）+ SSE 流抽屉；成功后建议「测试」复检。
+     mockup 演示：确认 → 框隐去。 */
+  function bindSshd(k) {
+    var btn = document.getElementById(k + '-sshd');
+    if (!btn) return;
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var r = REG[k];
+      var html = '<p class="p-title">配置跳板转发 · ' + r.name + '</p>' +
+        '<div class="p-note" style="margin-top:8px">将以 <b>root</b> 写入网关机 sshd drop-in（AllowTcpForwarding + PermitOpen）并 reload sshd，解除「administratively prohibited」。' +
+        'root 密码仅本次使用、不保存、不进命令行；格式不兼容时自动降级为仅 AllowTcpForwarding。</div>' +
+        '<div class="p-actions"><button class="btn sm" data-act="cancel">取消</button>' +
+        '<button class="btn sm primary" data-act="go">继续（输入 root 密码）</button></div>';
+      openPop(btn, html);
+      popEl.querySelector('[data-act="cancel"]').addEventListener('click', closePop);
+      popEl.querySelector('[data-act="go"]').addEventListener('click', function () {
+        closePop();
+        btn.textContent = '配置中…';
+        btn.disabled = true;
+        setTimeout(function () {
+          var box = document.getElementById(k + '-sshdbox');
+          if (box) box.style.display = 'none';
+          toast('跳板转发已配置（演示：真实实现打开 root 密码表单 + SSE 执行抽屉，成功后建议「测试」复检）');
+        }, 800);
+      });
+    });
+  }
+
+  // ── popover 引擎 ──
+  var popEl = null, popAnchor = null;
+  function closePop() { if (popEl) { popEl.remove(); popEl = null; popAnchor = null; } }
+  function toggleAt(anchor, fn) { if (popAnchor === anchor) closePop(); else fn(); }
+  function openPop(anchor, html) {
+    closePop();
+    popEl = document.createElement('div');
+    popEl.className = 'pop';
+    popEl.innerHTML = html;
+    document.body.appendChild(popEl);
+    popAnchor = anchor;
+    popEl.addEventListener('click', function (e) { e.stopPropagation(); });
+    var r = anchor.getBoundingClientRect(), pw = popEl.offsetWidth, ph = popEl.offsetHeight;
+    var left = Math.max(12, Math.min(r.left, window.innerWidth - pw - 12));
+    var top = r.bottom + 8;
+    if (top + ph > window.innerHeight - 12) top = Math.max(12, r.top - ph - 8);
+    popEl.style.left = left + 'px';
+    popEl.style.top = top + 'px';
+  }
+
+  function fieldHtml(f) {
+    return '<div class="pf"><label>' + f.label + '</label><input type="text" class="' + (f.mono === false ? 'ftext' : '') + '" value="' + escAttr(f.value) + '" placeholder="' + escAttr(f.placeholder || '') + '"><div class="ferr"></div></div>';
+  }
+  function openFieldPop(anchor, opts) {
+    var html = '<p class="p-title">' + opts.title + '</p>' + (opts.sub ? '<p class="p-sub">' + opts.sub + '</p>' : '');
+    html += opts.fields.map(fieldHtml).join('');
+    var chained = !!opts.chain;
+    var saveAct = chained ? 'chain' : 'save';
+    html += '<div class="p-actions">' + (chained && opts.altSave ? '<button class="only-save" data-act="save">' + opts.altSave + '</button>' : '') +
+      '<button class="btn sm" data-act="cancel">取消</button>' +
+      '<button class="btn sm primary" data-act="' + saveAct + '">' + (opts.primaryLabel || '保存') + '</button></div>';
+    if (opts.note) html += '<div class="p-note">' + opts.note + '</div>';
+    openPop(anchor, html);
+    var inputs = popEl.querySelectorAll('.pf input');
+    function validateAll() {
+      var ok = true, vals = [];
+      inputs.forEach(function (inp) { vals.push(inp.value.trim()); });
+      popEl.querySelectorAll('.pf').forEach(function (pf, i) {
+        var err = opts.fields[i].validate ? opts.fields[i].validate(vals[i]) : null;
+        pf.classList.toggle('invalid', !!err);
+        pf.querySelector('.ferr').textContent = err || '';
+        if (err) ok = false;
+      });
+      return ok ? vals : null;
+    }
+    inputs.forEach(function (inp) {
+      inp.addEventListener('input', function () { inp.closest('.pf').classList.remove('invalid'); });
+      inp.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') { closePop(); }
+        if (e.key === 'Enter') { e.preventDefault(); popEl.querySelector('[data-act="' + saveAct + '"]').click(); }
+      });
+    });
+    popEl.querySelectorAll('[data-act]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var act = btn.getAttribute('data-act');
+        if (act === 'cancel') { closePop(); return; }
+        var vals = validateAll();
+        if (!vals) return;
+        opts.onApply(vals);
+        if (act === 'save') {
+          closePop();
+          toast('已保存（演示：真实实现走既有「编辑区域」同款 PUT，审计不变）');
+          return;
+        }
+        btn.textContent = '执行中…'; btn.disabled = true;
+        setTimeout(function () {
+          closePop();
+          var msg = opts.chain();
+          if (msg) toast(msg);
+        }, 600);
+      });
+    });
+    var focusTarget = (opts.focusLast ? inputs[inputs.length - 1] : inputs[0]);
+    focusTarget.focus();
+    if (!opts.focusLast) focusTarget.select();
+  }
+
+  // ── 两腿（SSH 腿登记时顺带收集 SSH 账号——A 案：账号不在新建时要求） ──
+  function openLeg(k, kind) {
+    var r = REG[k], isHttp = kind === 'http';
+    var cur = isHttp ? r.http : r.ssh;
+    var empty = !cur;
+    var fields = [{
+      label: isHttp ? '网关 HTTP 腿地址' : 'SSH 跳板',
+      value: cur,
+      placeholder: isHttp ? 'http://10.10.1.1:8443' : 'tunnel@10.10.1.1:22',
+      validate: function (v) { if (!v) return null; return (isHttp ? RE_HTTP : RE_SSH).test(v) ? null : (isHttp ? MSG_HTTP : MSG_SSH); }
+    }];
+    var needUser = !isHttp && !r.user;
+    if (needUser) fields.push({
+      label: 'SSH 账号（登录网关机，初始化 / 下发用）', value: '', placeholder: 'jboss',
+      validate: function (v) { return v ? null : 'SSH 账号不能为空'; }
+    });
+    openFieldPop(document.getElementById(k + '-chip-' + kind), {
+      title: (empty ? '登记' : '编辑') + (isHttp ? ' HTTP 腿' : ' SSH 跳板') + ' · ' + r.name,
+      sub: isHttp ? '发布、回滚等管理请求经它进入该局' : '安装、初始化等 SSH 任务先跳到网关机再进局内',
+      fields: fields,
+      primaryLabel: empty ? '保存登记' : '保存并测试',
+      altSave: empty ? null : '仅保存',
+      chain: empty ? null : function () { return '已保存并测试：✓ ' + (isHttp ? 'HTTP 腿' : 'SSH 跳板') + '可达（演示数据）'; },
+      note: empty
+        ? (isHttp
+          ? '<b>登记后动作</b>：登记 SSH 腿 → 初始化网关 → 集群挂接 → 下发配置，全程在本图完成。'
+          : '<b>登记后动作</b>：初始化网关（缺 OpenResty 前缀时会在点击初始化时收集）→ 集群挂接 → 下发配置。')
+        : (isHttp
+          ? '<b>改后需初始化网关</b>：HTTP 腿地址变更须经「更多 ▸ 初始化网关」重写 8443 监听后才对网关机生效。'
+          : '<b>改后需测试</b>：SSH 跳板变更建议立即「测试」验证；若网关 sshd 默认禁转发，还需「配置跳板转发」放行。'),
+      onApply: function (vals) {
+        if (isHttp) r.http = vals[0]; else r.ssh = vals[0];
+        if (needUser) r.user = vals[1];
+        renderRegion(k); renderStage(k);
+      }
+    });
+  }
+
+  // ── 网关机（opts2 变体：初始化前置链式收集前缀；anchorEl：待初始化/缺账号形态下框 id 不同，须显式传） ──
+  function openNode(k, opts2, anchorEl) {
+    opts2 = opts2 || {};
+    var r = REG[k];
+    openFieldPop(anchorEl || document.getElementById(k + '-node'), {
+      title: opts2.title || '编辑网关机连接 · ' + r.name,
+      sub: '口令与高级参数（Python 解释器 / SSH 参数）请用「更多 ▸ 编辑」弹窗',
+      fields: [
+        { label: 'SSH 账号', value: r.user, placeholder: 'jboss', validate: function (v) { return v ? null : 'SSH 账号不能为空'; } },
+        { label: 'SSH 端口', value: r.port, placeholder: '22', validate: function (v) { return (/^\d{1,5}$/.test(v) && +v >= 1 && +v <= 65535) ? null : '端口须为 1–65535 的整数'; } },
+        {
+          label: 'OpenResty 前缀', value: r.prefix, placeholder: '/work/jboss/tunnel/openresty-1.21.4.1/nginx',
+          validate: opts2.requirePrefix
+            ? function (v) { if (!v) return '初始化网关需要 OpenResty 前缀'; return v.charAt(0) === '/' ? null : MSG_PREFIX; }
+            : function (v) { return (!v || v.charAt(0) === '/') ? null : MSG_PREFIX; }
+        }
+      ],
+      primaryLabel: opts2.primaryLabel || '保存',
+      altSave: opts2.altSave || null,
+      focusLast: opts2.focusLast || false,
+      chain: opts2.chain || null,
+      note: opts2.note || '前缀留空时「初始化网关」会被拒绝（要求已填前缀）。',
+      onApply: function (vals) { r.user = vals[0]; r.port = vals[1]; r.prefix = vals[2]; renderRegion(k); renderStage(k); }
+    });
+  }
+
+  // ── 区域名称 / 状态 ──
+  function openName(k) {
+    var r = REG[k];
+    openFieldPop(document.getElementById(k + '-name'), {
+      title: '重命名区域 · ' + r.name,
+      fields: [{ label: '区域名称', value: r.name, mono: false, validate: function (v) { return v ? null : '区域名称不能为空'; } }],
+      onApply: function (vals) { r.name = vals[0]; renderRegion(k); }
+    });
+  }
+  function openStatus(k) {
+    var r = REG[k], disabling = r.status === 'enabled';
+    var html = '<p class="p-title">' + (disabling ? '禁用区域' : '启用区域') + ' · ' + r.name + '</p>' +
+      '<div class="p-note" style="margin-top:8px">' + (disabling
+        ? '禁用后该局<b>全部挂接集群回退直连执行</b>（两腿配置保留，随时可再启用）。'
+        : '启用后按已登记两腿经中继进局；<b>启用后建议先「测试」</b>确认两腿可达。') + '</div>' +
+      '<div class="p-actions"><button class="btn sm" data-act="cancel">取消</button>' +
+      '<button class="btn sm primary" data-act="toggle">确认' + (disabling ? '禁用' : '启用') + '</button></div>';
+    openPop(document.getElementById(k + '-badge'), html);
+    popEl.querySelector('[data-act="cancel"]').addEventListener('click', closePop);
+    popEl.querySelector('[data-act="toggle"]').addEventListener('click', function () {
+      r.status = disabling ? 'disabled' : 'enabled';
+      renderRegion(k); closePop();
+      toast(disabling ? '已禁用：该局集群回退直连（演示）' : '已启用：建议执行「测试」验证两腿（演示）');
+    });
+  }
+
+  // ── 集群挂接 / 解挂 ──
+  function clusterCardInner(c) {
+    return '<div class="cc-head">' + escAttr(c.name) + ' <span class="n-count">' + (c.nodes || 1) + ' 节点</span><i class="pencil-inline">✎</i><span class="goto">挂接/解挂 ›</span></div>' +
+      '<div class="nrow"><span class="dot ok"></span><span class="nname">节点明细见集群管理</span></div>';
+  }
+  function bindClusterCard(card) {
+    card.addEventListener('click', function (e) { e.stopPropagation(); toggleAt(card, function () { openCluster(card); }); });
+  }
+  function syncClusterCards() {
+    CLUSTERS.forEach(function (c) {
+      if (!c.region) return;
+      var col = document.getElementById(c.region + '-clusters');
+      if (!col) return;
+      if (!col.querySelector('.cluster-card[data-cid="' + c.id + '"]')) {
+        var div = document.createElement('div');
+        div.className = 'cluster-card';
+        div.setAttribute('data-cid', c.id);
+        div.innerHTML = clusterCardInner(c);
+        col.insertBefore(div, col.querySelector('.attach-dashed'));
+        bindClusterCard(div);
+      }
+    });
+    document.querySelectorAll('.cluster-card[data-cid]').forEach(function (card) {
+      var cid = card.getAttribute('data-cid');
+      var c = null;
+      CLUSTERS.forEach(function (x) { if (x.id === cid) c = x; });
+      var col = card.closest('.col-clusters');
+      var owner = c && c.region ? document.getElementById(c.region + '-clusters') : null;
+      if (!owner || owner !== col) card.remove();
+    });
+  }
+  function openCluster(card) {
+    var c = null;
+    CLUSTERS.forEach(function (x) { if (x.id === card.getAttribute('data-cid')) c = x; });
+    var html = '<p class="p-title">挂接 / 解挂 · ' + c.name + '</p>' +
+      '<p class="p-sub">选择所属中继区域；不挂接则该集群按直连执行</p>' +
+      '<div class="pf"><label>所属区域</label><select>' + regionOpts().map(function (o) {
+        return '<option value="' + o.v + '"' + (o.v === (c.region || '') ? ' selected' : '') + '>' + escAttr(o.t) + '</option>';
+      }).join('') + '</select></div>' +
+      '<div class="p-actions"><button class="p-link" data-act="open">打开集群 ›</button>' +
+      '<button class="btn sm" data-act="cancel">取消</button><button class="btn sm primary" data-act="save">保存</button></div>' +
+      '<div class="p-note">解挂 = 选择「不挂接（直连）」后保存。真实实现走 PUT /clusters/{id} 的 region_code，保存后自动刷新拓扑与网关路由。</div>';
+    openPop(card, html);
+    popEl.querySelector('[data-act="open"]').addEventListener('click', function () { toast('跳转集群详情页（演示）'); });
+    popEl.querySelector('[data-act="cancel"]').addEventListener('click', closePop);
+    popEl.querySelector('[data-act="save"]').addEventListener('click', function () {
+      c.region = popEl.querySelector('select').value || null;
+      closePop();
+      syncClusterCards();
+      Object.keys(REG).forEach(renderStage);
+      toast(c.region
+        ? '已挂接（演示：走 PUT /clusters/{id} 并刷新拓扑/路由）。下一步：该区域「下发配置」后网关才放行'
+        : '已解挂：该集群回直连（演示）');
+    });
+  }
+  function openAttach(el, k) {
+    var r = REG[k];
+    var candidates = CLUSTERS.filter(function (c) { return c.region !== k; });
+    var html = '<p class="p-title">挂接集群 · ' + escAttr(r.name) + '</p>' +
+      '<p class="p-sub">下拉列出未挂接本区域的集群（含其当前区域归属）</p>' +
+      '<div class="pf"><label>选择集群</label><select>' + candidates.map(function (c) {
+        return '<option value="' + c.id + '">' + escAttr(c.name) + '（' + (c.nodes || 1) + ' 节点 · 当前：' + (c.region ? escAttr(REG[c.region].name) : '未挂接') + '）</option>';
+      }).join('') + '</select></div>' +
+      '<div class="p-actions"><button class="btn sm" data-act="cancel">取消</button>' +
+      '<button class="btn sm primary" data-act="save">挂接</button></div>';
+    if (!candidates.length) html += '<div class="p-note">当前没有可挂接的集群。</div>';
+    openPop(el, html);
+    popEl.querySelector('[data-act="cancel"]').addEventListener('click', closePop);
+    popEl.querySelector('[data-act="save"]').addEventListener('click', function () {
+      var sel = popEl.querySelector('select');
+      if (!sel) { closePop(); return; }
+      var cid = sel.value, c = null;
+      CLUSTERS.forEach(function (x) { if (x.id === cid) c = x; });
+      c.region = k;
+      closePop();
+      syncClusterCards();
+      Object.keys(REG).forEach(renderStage);
+      toast('已挂接「' + c.name + '」至 ' + r.name + '。下一步：下发配置后网关才放行其节点');
+    });
+  }
+
+  // ── 事件接线 ──
+  function on(id, fn) { var el = document.getElementById(id); if (el) el.addEventListener('click', function (e) { e.stopPropagation(); fn(el); }); }
+  on('jn-chip-http', function (el) { toggleAt(el, function () { openLeg('jn', 'http'); }); });
+  on('jn-chip-ssh', function (el) { toggleAt(el, function () { openLeg('jn', 'ssh'); }); });
+  on('jn-name', function (el) { toggleAt(el, function () { openName('jn'); }); });
+  on('jn-badge', function (el) { toggleAt(el, function () { openStatus('jn'); }); });
+  on('wq-chip-http', function (el) { toggleAt(el, function () { openLeg('wq', 'http'); }); });
+  on('wq-chip-ssh', function (el) { toggleAt(el, function () { openLeg('wq', 'ssh'); }); });
+  on('wq-name', function (el) { toggleAt(el, function () { openName('wq'); }); });
+  on('wq-badge', function (el) { toggleAt(el, function () { openStatus('wq'); }); });
+  on('wq-goto-reg', function () { openLeg('wq', 'http'); });
+  document.querySelectorAll('.cluster-card[data-cid]').forEach(bindClusterCard);
+  document.querySelectorAll('.attach-dashed[data-attach]').forEach(function (el) {
+    el.addEventListener('click', function (e) { e.stopPropagation(); toggleAt(el, function () { openAttach(el, el.getAttribute('data-attach')); }); });
+  });
+
+  // ── 新建区域草稿卡（真实实现走 POST /relay/gateways；A 案：仅 code + name 必填，
+  //    ssh_user 在登记 SSH 腿时收集，后端随实施放宽 Create schema + 三端点前置守卫） ──
+  var RE_CODE = /^[a-z][a-z0-9-]{1,31}$/;
+  var MSG_CODE = '区域code格式错误: 以小写字母开头，仅含小写字母/数字/中划线，长度2-32';
+  var createCard = document.getElementById('createCard'), draftCard = document.getElementById('draftCard'), draftOpen = false;
+  function showDraft(show) {
+    draftOpen = show;
+    draftCard.classList.toggle('tr-hidden', !show);
+    createCard.classList.toggle('tr-hidden', show);
+    if (show) document.getElementById('d-code').focus();
+  }
+  createCard.addEventListener('click', function () { showDraft(true); });
+  document.getElementById('headerCreate').addEventListener('click', function () {
+    showDraft(true);
+    draftCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+  document.getElementById('d-cancel').addEventListener('click', function () { showDraft(false); });
+  var dInputs = ['d-code', 'd-name'].map(function (id) { return document.getElementById(id); });
+  dInputs.forEach(function (inp) {
+    inp.addEventListener('input', function () { inp.closest('.pf').classList.remove('invalid'); });
+    inp.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { e.stopPropagation(); showDraft(false); }
+      if (e.key === 'Enter') { e.preventDefault(); document.getElementById('d-create').click(); }
+    });
+  });
+  function buildRegionCard(k, name) {
+    var sec = document.createElement('section');
+    sec.className = 'topo-card';
+    sec.id = k + '-card';
+    sec.innerHTML =
+      '    <div class="topo-head">' +
+      '      <div class="th-left">' +
+      '        <h2><span class="editable-name" id="' + k + '-name"></span><i class="pencil-inline">✎</i></h2>' +
+      '        <span class="code-tag mono">' + escAttr(k) + '</span>' +
+      '        <span class="badge ok clickable" id="' + k + '-badge" title="点击切换 启用 / 禁用">启用</span>' +
+      '        <span class="badge warn">直连 · 无网关机</span>' +
+      '        <span class="hchip unknown">未检测</span>' +
+      '      </div>' +
+      '      <div class="th-actions">' +
+      '        <button class="btn sm" data-demo="探测该区域两条腿（现有 GET /relay/health-check），结果更新健康徽章">测试</button>' +
+      '        <button class="btn sm" data-demo="现有「更多 ▾」菜单原样平移：编辑 / 初始化网关 / 配置跳板转发 / 查看配置 / 查看凭据 / 启用·禁用 / 删除">更多 ▾</button>' +
+      '      </div>' +
+      '    </div>' +
+      '    <div class="th-sub" id="' + k + '-thsub"></div>' +
+      '    <div class="topo-body">' +
+      '      <div class="col"><div class="node platform"><div class="n-title">中控平台</div><div class="n-sub">发布 · 任务发起方</div></div></div>' +
+      '      <div class="edge clickable">' +
+      '        <span class="leg-chip dim" id="' + k + '-chip-http" title="点击登记 HTTP 腿">HTTP 腿 · 未配置</span>' +
+      '        <span class="leg-chip dim" id="' + k + '-chip-ssh" title="点击登记 SSH 跳板">SSH 跳板 · 未配置</span>' +
+      '      </div>' +
+      '      <div class="col" id="' + k + '-nodebox"></div>' +
+      '      <div class="edge"><span class="leg-chip dim">直连</span></div>' +
+      '      <div class="col col-clusters" id="' + k + '-clusters">' +
+      '        <div class="attach-dashed">+ 挂接集群</div>' +
+      '        <div class="direct-guide" id="' + k + '-guide">登记网关机两腿后可经中继进局（<button class="reg-link">去登记</button>）。当前按直连执行。</div>' +
+      '      </div>' +
+      '    </div>';
+    createCard.parentNode.insertBefore(sec, createCard);
+    document.querySelectorAll('#' + k + '-card [data-demo]').forEach(function (el) {
+      el.addEventListener('click', function (e) { e.stopPropagation(); toast(el.getAttribute('data-demo')); });
+    });
+    on(k + '-chip-http', function () { toggleAt(sec.querySelector('#' + k + '-chip-http'), function () { openLeg(k, 'http'); }); });
+    on(k + '-chip-ssh', function () { toggleAt(sec.querySelector('#' + k + '-chip-ssh'), function () { openLeg(k, 'ssh'); }); });
+    on(k + '-name', function () { toggleAt(sec.querySelector('#' + k + '-name'), function () { openName(k); }); });
+    on(k + '-badge', function () { toggleAt(sec.querySelector('#' + k + '-badge'), function () { openStatus(k); }); });
+    var regBtn = sec.querySelector('.reg-link');
+    regBtn.addEventListener('click', function (e) { e.stopPropagation(); openLeg(k, 'http'); });
+    var attach = sec.querySelector('.attach-dashed');
+    attach.addEventListener('click', function (e) { e.stopPropagation(); toggleAt(attach, function () { openAttach(attach, k); }); });
+    bindPush(k);
+  }
+  document.getElementById('d-create').addEventListener('click', function () {
+    var vals = dInputs.map(function (i) { return i.value.trim(); });
+    var errs = [
+      RE_CODE.test(vals[0]) ? ((vals[0] === 'jinan' || vals[0] === 'wuqing' || REG[vals[0]]) ? '区域码已存在：' + vals[0] : null) : MSG_CODE,
+      vals[1] ? null : '区域名称不能为空'
+    ];
+    var ok = true;
+    dInputs.forEach(function (inp, i) {
+      inp.closest('.pf').classList.toggle('invalid', !!errs[i]);
+      inp.closest('.pf').querySelector('.ferr').textContent = errs[i] || '';
+      if (errs[i]) ok = false;
+    });
+    if (!ok) return;
+    var k = vals[0];
+    REG[k] = { name: vals[1], status: 'enabled', http: '', ssh: '', user: '', port: '22', prefix: '', initialized: false, pushed: false };
+    buildRegionCard(k, vals[1]);
+    renderRegion(k);
+    renderStage(k);
+    dInputs.forEach(function (i) { i.value = ''; });
+    showDraft(false);
+    toast('已创建「' + vals[1] + '」（' + k + '）：初始直连形态。下一步：点该卡灰色两腿 chip 登记两腿（SSH 腿登记时顺带填 SSH 账号）');
+    document.getElementById(k + '-thsub').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+
+  document.addEventListener('click', function (e) { if (popEl && !popEl.contains(e.target)) closePop(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      closePop();
+      if (!draftCard.classList.contains('tr-hidden')) showDraft(false);
+    }
+  });
+
+  // 启动渲染
+  renderRegion('jn'); renderRegion('wq');
+  renderStage('jn'); renderStage('wq');
+  bindPush('jn'); bindPush('wq');
+  bindSshd('jn');
 </script>
 </body>
 </html>

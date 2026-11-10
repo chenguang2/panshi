@@ -302,9 +302,9 @@ def test_sshd_setup_missing_group_400(test_db, test_db_factory, gateways_inv):
     from app.api.v1 import relay
 
     _seed_region(test_db)
-    # 建一个没有网关清单组的区域
+    # 建一个没有网关清单组的区域（ssh_jump 已登记——D8 前置守卫只在本用例断言缺组分支）
     async def _add():
-        test_db.add(RelayGateway(id=2, code="nogrp", name="无组局"))
+        test_db.add(RelayGateway(id=2, code="nogrp", name="无组局", ssh_jump="jboss@10.9.9.9"))
         await test_db.commit()
 
     asyncio.run(_add())

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { ref } from 'vue'
@@ -8,6 +8,7 @@ const mockGet = vi.fn()
 const mockPost = vi.fn()
 const mockPut = vi.fn()
 const mockDelete = vi.fn()
+const mockRouterPush = vi.fn()
 
 vi.mock('@/api', () => ({
   default: {
@@ -17,6 +18,11 @@ vi.mock('@/api', () => ({
     delete: (...args: unknown[]) => mockDelete(...args),
   },
 }))
+
+vi.mock('vue-router', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('vue-router')>()
+  return { ...actual, useRouter: () => ({ push: (...args: unknown[]) => mockRouterPush(...args) }) }
+})
 
 vi.mock('ant-design-vue', async (importOriginal) => {
   const actual = await importOriginal<typeof import('ant-design-vue')>()
@@ -170,6 +176,9 @@ describe('RelayGateways', () => {
     vi.clearAllMocks()
     streamMock.installing.value = false
     streamMock.error.value = null
+    // 写操作默认成功（批次三 popover 保存链路默认路径；个别用例自行覆盖）
+    mockPut.mockResolvedValue({ data: {} })
+    mockPost.mockResolvedValue({ data: {} })
     // URL 感知 mock（约定 #43）：列表/体检/凭据单查走 get
     mockGet.mockImplementation((url: string) => {
       if (url === '/relay/gateways') return Promise.resolve({ data: REGIONS })
@@ -216,6 +225,16 @@ describe('RelayGateways', () => {
     return wrapper
   }
 
+  /** 打开既有「新建区域」弹窗：批次三后页头「+ 新建区域」改走图内草稿卡（3.7），
+   * 旧弹窗的生产入口为悬空卡「注册该区域」（openCreate），旧弹窗用例经此进入。 */
+  async function mountPageAndOpenLegacyModal() {
+    mockWithTopology()
+    const wrapper = await mountPage()
+    await wrapper.find('.orphan-card button').trigger('click')
+    await flushPromises()
+    return wrapper
+  }
+
   async function confirmOverlay() {
     const onOk = (globalThis as Record<string, unknown>).__lastOverlayOk as () => unknown
     await onOk()
@@ -232,10 +251,7 @@ describe('RelayGateways', () => {
 
   it('新建区域提交 POST /relay/gateways', async () => {
     mockPost.mockResolvedValue({ data: { id: 3, code: 'tianjin', name: '路局B', status: 'enabled' } })
-    const wrapper = await mountPage()
-    const buttons = wrapper.findAll('button')
-    await buttons.find((b) => b.text().includes('新建区域'))!.trigger('click')
-    await flushPromises()
+    const wrapper = await mountPageAndOpenLegacyModal()
 
     const inputs = wrapper.findAll('.modal input.form-input')
     await inputs[0]!.setValue('tianjin')
@@ -255,10 +271,7 @@ describe('RelayGateways', () => {
 
   it('创建载荷携带 SSH 连接字段（relay-gateway-inventory-ui）', async () => {
     mockPost.mockResolvedValue({ data: { id: 3, code: 'tianjin', name: '路局B', status: 'enabled' } })
-    const wrapper = await mountPage()
-    const buttons = wrapper.findAll('button')
-    await buttons.find((b) => b.text().includes('新建区域'))!.trigger('click')
-    await flushPromises()
+    const wrapper = await mountPageAndOpenLegacyModal()
 
     const inputs = wrapper.findAll('.modal input.form-input')
     await inputs[0]!.setValue('tianjin')
@@ -284,10 +297,7 @@ describe('RelayGateways', () => {
   })
 
   it('SSH 用户必填：未填被前端拦截（口令不入列表，编辑按需单查）', async () => {
-    const wrapper = await mountPage()
-    const buttons = wrapper.findAll('button')
-    await buttons.find((b) => b.text().includes('新建区域'))!.trigger('click')
-    await flushPromises()
+    const wrapper = await mountPageAndOpenLegacyModal()
 
     const inputs = wrapper.findAll('.modal input.form-input')
     await inputs[0]!.setValue('tianjin')
@@ -326,10 +336,7 @@ describe('RelayGateways', () => {
   })
 
   it('直连语义降级为提示：分组说明含直连文案，不再有分段选择（用户裁决：直连非主动创建场景）', async () => {
-    const wrapper = await mountPage()
-    const buttons = wrapper.findAll('button')
-    await buttons.find((b) => b.text().includes('新建区域'))!.trigger('click')
-    await flushPromises()
+    const wrapper = await mountPageAndOpenLegacyModal()
 
     expect(wrapper.find('.segment-control').exists()).toBe(false)
     const desc = wrapper.findAll('.form-section-desc')[1]! // 组2 网关两腿连接
@@ -355,10 +362,7 @@ describe('RelayGateways', () => {
 
   it('有网关机模式但两腿全空保存：一次性 info 提示（等价直连）', async () => {
     mockPost.mockResolvedValue({ data: { id: 9, code: 'tianjin', name: '路局B', status: 'enabled' } })
-    const wrapper = await mountPage()
-    const buttons = wrapper.findAll('button')
-    await buttons.find((b) => b.text().includes('新建区域'))!.trigger('click')
-    await flushPromises()
+    const wrapper = await mountPageAndOpenLegacyModal()
     await inputs0_1_5(wrapper)
     await wrapper
       .findAll('.modal button.btn-primary')
@@ -451,10 +455,7 @@ describe('RelayGateways', () => {
   })
 
   it('新建区域非法 code 被前端拦截（不发请求）', async () => {
-    const wrapper = await mountPage()
-    const buttons = wrapper.findAll('button')
-    await buttons.find((b) => b.text().includes('新建区域'))!.trigger('click')
-    await flushPromises()
+    const wrapper = await mountPageAndOpenLegacyModal()
 
     const inputs = wrapper.findAll('.modal input.form-input')
     await inputs[0]!.setValue('Bad_Code')
@@ -615,10 +616,7 @@ describe('RelayGateways', () => {
   })
 
   it('新建：展示名缺失 inline 提示而非 toast', async () => {
-    const wrapper = await mountPage()
-    const buttons = wrapper.findAll('button')
-    await buttons.find((b) => b.text().includes('新建区域'))!.trigger('click')
-    await flushPromises()
+    const wrapper = await mountPageAndOpenLegacyModal()
 
     const inputs = wrapper.findAll('.modal input.form-input')
     await inputs[0]!.setValue('tianjin')
@@ -643,10 +641,7 @@ describe('RelayGateways', () => {
       ['openresty_prefix', 'work/openresty', 'OpenResty 前缀'],
     ]
     for (const [field, badValue, errKeyword] of cases) {
-      const wrapper = await mountPage()
-      const buttons = wrapper.findAll('button')
-      await buttons.find((b) => b.text().includes('新建区域'))!.trigger('click')
-      await flushPromises()
+      const wrapper = await mountPageAndOpenLegacyModal()
 
       const inputs = wrapper.findAll('.modal input.form-input')
       await inputs[0]!.setValue('tianjin')
@@ -670,10 +665,7 @@ describe('RelayGateways', () => {
 
   it('ssh_jump 端口可省略：tunnel@10.10.1.1 通过前端校验并提交', async () => {
     mockPost.mockResolvedValue({ data: { id: 3 } })
-    const wrapper = await mountPage()
-    const buttons = wrapper.findAll('button')
-    await buttons.find((b) => b.text().includes('新建区域'))!.trigger('click')
-    await flushPromises()
+    const wrapper = await mountPageAndOpenLegacyModal()
 
     const inputs = wrapper.findAll('.modal input.form-input')
     await inputs[0]!.setValue('tianjin')
@@ -1064,6 +1056,34 @@ describe('RelayGateways', () => {
     expect((wrapper.find('.modal-overlay input[type="password"]').element as HTMLInputElement).value).toBe('')
   })
 
+  it('跳板转发配置成功后自动复检（刷新体检快照 → 跳板框完成即隐）', async () => {
+    const wrapper = await mountPage()
+    await flushPromises()
+
+    const btn = wrapper.findAll('button').find((b) => b.text().includes('配置跳板转发'))!
+    await btn.trigger('click')
+    await flushPromises()
+    const modal = wrapper.find('.modal-overlay')
+    await modal.find('input[type="password"]').setValue('s3cret')
+    await modal
+      .findAll('button')
+      .find((b) => b.text().includes('开始配置'))!
+      .trigger('click')
+    await flushPromises()
+
+    expect(streamMock.start).toHaveBeenCalledTimes(1)
+    const [, , opts] = streamMock.start.mock.calls[0] as [
+      string,
+      unknown,
+      { onComplete: (rc: number, status: string) => void },
+    ]
+    mockGet.mockClear()
+    opts.onComplete(0, 'success')
+    await flushPromises()
+
+    expect(mockGet).toHaveBeenCalledWith('/relay/health-check?region=luju', expect.anything())
+  })
+
   it('删除经确认后 DELETE /relay/gateways/:id', async () => {
     mockDelete.mockResolvedValue({ data: { ok: true } })
     const wrapper = await mountPage()
@@ -1075,5 +1095,691 @@ describe('RelayGateways', () => {
     await confirmOverlay()
 
     expect(mockDelete).toHaveBeenCalledWith('/relay/gateways/1')
+  })
+
+  // ── 视图切换共存（relay-region-topology-view 批次二 2.5：拓扑默认 + 表格保留） ──
+  const TOPOLOGY = {
+    regions: [
+      {
+        id: 1,
+        code: 'luju',
+        name: '路局A',
+        status: 'enabled',
+        http_base_url: 'http://10.10.1.1:8443',
+        ssh_jump: 'tunnel@10.10.1.1:22',
+        ssh_user: 'jboss',
+        ssh_port: 22,
+        openresty_prefix: '/work/openresty/nginx',
+        last_pushed_at: '2026-11-05T10:22:00',
+        clusters: [
+          {
+            id: 11,
+            name: '胶济干线',
+            display_name: null,
+            nodes: [
+              { ip: '10.10.2.1', management_port: 8080, status: 1, whitelist_state: 'synced' },
+              { ip: '10.10.2.2', management_port: 8080, status: 1, whitelist_state: 'pending_add' },
+            ],
+          },
+        ],
+      },
+      {
+        id: 2,
+        code: 'direct',
+        name: '武清本地',
+        status: 'enabled',
+        http_base_url: null,
+        ssh_jump: null,
+        ssh_user: null,
+        ssh_port: null,
+        openresty_prefix: null,
+        last_pushed_at: null,
+        clusters: [],
+      },
+    ],
+    detachable: [
+      { id: 99, name: '青岛港', display_name: null, region_code: null },
+      { id: 11, name: '胶济干线', display_name: null, region_code: 'luju' },
+    ],
+    unregistered_bound_codes: ['luju'],
+  }
+
+  function mockWithTopology() {
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/relay/gateways') return Promise.resolve({ data: REGIONS })
+      if (url === '/relay/topology') return Promise.resolve({ data: TOPOLOGY })
+      return Promise.reject(new Error(`unmocked get ${url}`))
+    })
+  }
+
+  it('视图切换：拓扑为默认视图（拓扑卡可见、表格隐藏），拓扑端点被请求', async () => {
+    mockWithTopology()
+    const wrapper = await mountPage()
+    expect(wrapper.find('.topo-view').isVisible()).toBe(true)
+    expect(wrapper.find('.table-view-wrap').isVisible()).toBe(false)
+    expect(mockGet).toHaveBeenCalledWith('/relay/topology')
+    // 拓扑卡渲染区域与集群节点明细（数据来自 /relay/topology）
+    const topo = wrapper.find('.topo-view')
+    expect(topo.text()).toContain('路局A')
+    expect(topo.text()).toContain('10.10.2.1:8080')
+    expect(topo.findAll('.cluster-card').length).toBe(1)
+  })
+
+  it('视图切换：切到表格后表格可见、拓扑隐藏；既有表格 DOM 零改动（#217 断言继承）', async () => {
+    mockWithTopology()
+    const wrapper = await mountPage()
+    await wrapper
+      .findAll('.view-toggle button')
+      .find((b) => b.text().includes('表格视图'))!
+      .trigger('click')
+    expect(wrapper.find('.table-view-wrap').isVisible()).toBe(true)
+    expect(wrapper.find('.topo-view').isVisible()).toBe(false)
+    expect(wrapper.find('.mock-row[data-code="luju"]').exists()).toBe(true)
+  })
+
+  it('悬空区域码提示卡：unregistered_bound_codes 非空时渲染（文案照 mockup）', async () => {
+    mockWithTopology()
+    const wrapper = await mountPage()
+    const orphan = wrapper.find('.orphan-card')
+    expect(orphan.exists()).toBe(true)
+    expect(orphan.text()).toContain('悬空挂接')
+    expect(orphan.text()).toContain('luju')
+    expect(orphan.text()).toContain('已被 1 个集群挂接')
+    expect(orphan.text()).toContain('该局实际按直连执行')
+  })
+
+  // ══ 批次三：图内编辑与新建（就地 popover 体系，relay-region-topology-view 3.1–3.9）══
+  // popover Teleport 到 body（mockup popEl 同款）——document 级查询须 attachTo + unmount（约定 #43）。
+  let attachedWrapper: { unmount(): void } | null = null
+
+  afterEach(() => {
+    if (attachedWrapper) {
+      attachedWrapper.unmount()
+      attachedWrapper = null
+    }
+  })
+
+  // mock 数据形状照真实后端响应（#43：GET /relay/topology = schemas/relay.py RelayTopologyOut）
+  const REGIONS3 = [
+    {
+      id: 1,
+      code: 'jinan',
+      name: '济南局',
+      http_base_url: 'http://10.10.1.1:8443',
+      ssh_jump: 'tunnel@10.10.1.1:22',
+      openresty_prefix: '/work/openresty/nginx',
+      status: 'enabled',
+      ssh_user: 'jboss',
+      ssh_port: 22,
+      last_pushed_at: '2026-11-05T10:22:00',
+      enabled_node_count: 1,
+      total_node_count: 1,
+      push_drift: { added: [], removed: [] },
+    },
+    {
+      id: 2,
+      code: 'tj',
+      name: '天津局',
+      http_base_url: null,
+      ssh_jump: 'tunnel@10.10.2.1:22',
+      openresty_prefix: null,
+      status: 'enabled',
+      ssh_user: 'jboss',
+      ssh_port: 22,
+      last_pushed_at: null,
+      enabled_node_count: 0,
+      total_node_count: 0,
+      push_drift: null,
+    },
+    {
+      id: 3,
+      code: 'wq',
+      name: '武清本地',
+      http_base_url: null,
+      ssh_jump: null,
+      openresty_prefix: null,
+      status: 'enabled',
+      ssh_user: null,
+      ssh_port: null,
+      last_pushed_at: null,
+      enabled_node_count: 0,
+      total_node_count: 0,
+      push_drift: null,
+    },
+  ]
+
+  function topology3(opts: { tjPrefix?: string | null; tjUser?: string | null } = {}) {
+    return {
+      regions: [
+        {
+          id: 1,
+          code: 'jinan',
+          name: '济南局',
+          status: 'enabled',
+          http_base_url: 'http://10.10.1.1:8443',
+          ssh_jump: 'tunnel@10.10.1.1:22',
+          ssh_user: 'jboss',
+          ssh_port: 22,
+          openresty_prefix: '/work/openresty/nginx',
+          last_pushed_at: '2026-11-05T10:22:00',
+          clusters: [
+            {
+              id: 11,
+              name: '胶济干线',
+              display_name: null,
+              nodes: [{ ip: '10.10.2.1', management_port: 8080, status: 1, whitelist_state: 'synced' }],
+            },
+          ],
+        },
+        {
+          id: 2,
+          code: 'tj',
+          name: '天津局',
+          status: 'enabled',
+          http_base_url: null,
+          ssh_jump: 'tunnel@10.10.2.1:22',
+          ssh_user: 'tjUser' in opts ? opts.tjUser : 'jboss',
+          ssh_port: 22,
+          openresty_prefix: opts.tjPrefix ?? null,
+          last_pushed_at: null,
+          clusters: [],
+        },
+        {
+          id: 3,
+          code: 'wq',
+          name: '武清本地',
+          status: 'enabled',
+          http_base_url: null,
+          ssh_jump: null,
+          ssh_user: null,
+          ssh_port: null,
+          openresty_prefix: null,
+          last_pushed_at: null,
+          clusters: [],
+        },
+      ],
+      detachable: [
+        { id: 99, name: '青岛港', display_name: null, region_code: null },
+        { id: 11, name: '胶济干线', display_name: null, region_code: 'jinan' },
+      ],
+      unregistered_bound_codes: [],
+    }
+  }
+
+  function mockTopology3(opts: { tjPrefix?: string | null; tjUser?: string | null } = {}) {
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/relay/gateways') return Promise.resolve({ data: REGIONS3 })
+      if (url === '/relay/topology') return Promise.resolve({ data: topology3(opts) })
+      if (/\/relay\/gateways\/\d+\/credential$/.test(url)) return Promise.resolve({ data: { ssh_password: 'pw' } })
+      if (url === '/relay/health-check?region=jinan') {
+        return Promise.resolve({
+          data: { region: 'jinan', ok: true, segments: [{ name: '网关HTTP腿', ok: true, elapsed_ms: 5 }] },
+        })
+      }
+      return Promise.reject(new Error(`unmocked get ${url}`))
+    })
+  }
+
+  async function mountTopoPage(opts: { tjPrefix?: string | null; tjUser?: string | null } = {}) {
+    mockTopology3(opts)
+    attachedWrapper = mount(RelayGateways, {
+      attachTo: document.body,
+      global: { plugins: [createPinia()], stubs },
+    })
+    await flushPromises()
+    return attachedWrapper as ReturnType<typeof mount>
+  }
+
+  function cardOf(wrapper: ReturnType<typeof mount>, code: string) {
+    return wrapper.findAll('.topo-card').find((c) => c.attributes('data-code') === code)!
+  }
+
+  function popEl(): HTMLElement | null {
+    return document.body.querySelector('.topo-pop')
+  }
+
+  function popText(): string {
+    return popEl()?.textContent || ''
+  }
+
+  function popInputs(): NodeListOf<HTMLInputElement> {
+    return popEl()!.querySelectorAll('.pf input')
+  }
+
+  async function setInputValue(input: HTMLInputElement, value: string) {
+    input.value = value
+    input.dispatchEvent(new Event('input'))
+    await flushPromises()
+  }
+
+  async function blurInput(input: HTMLInputElement) {
+    input.dispatchEvent(new Event('blur'))
+    await flushPromises()
+  }
+
+  async function clickPopButton(text: string) {
+    const btn = Array.from(popEl()!.querySelectorAll('button')).find((b) => b.textContent!.trim() === text)
+    btn!.click()
+    await flushPromises()
+  }
+
+  async function pressEscape() {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+  }
+
+  it('3.1 引擎：锚定打开/预填/Esc 关闭/同图元再点收起/点击空白关闭', async () => {
+    const wrapper = await mountTopoPage()
+    const chip = cardOf(wrapper, 'jinan')
+      .findAll('.leg-chip')
+      .find((c) => c.text().includes('HTTP 腿'))!
+    await chip.trigger('click')
+    await flushPromises()
+    expect(popEl()).not.toBeNull()
+    expect(popText()).toContain('编辑 HTTP 腿 · 济南局')
+    expect((popInputs()[0] as HTMLInputElement).value).toBe('http://10.10.1.1:8443')
+
+    // Esc 关闭
+    await pressEscape()
+    expect(popEl()).toBeNull()
+
+    // 同图元再点收起（toggle）
+    await chip.trigger('click')
+    await flushPromises()
+    expect(popEl()).not.toBeNull()
+    await chip.trigger('click')
+    await flushPromises()
+    expect(popEl()).toBeNull()
+
+    // 点击空白处关闭
+    await chip.trigger('click')
+    await flushPromises()
+    document.body.click()
+    await flushPromises()
+    expect(popEl()).toBeNull()
+  })
+
+  it('3.1/3.2 即时校验：失焦红字与后端文案逐字一致，输入清红，校验不过不提交', async () => {
+    const wrapper = await mountTopoPage()
+    await cardOf(wrapper, 'jinan')
+      .findAll('.leg-chip')
+      .find((c) => c.text().includes('HTTP 腿'))!
+      .trigger('click')
+    await flushPromises()
+    await setInputValue(popInputs()[0], '10.10.1.1:8443')
+    await blurInput(popInputs()[0])
+    expect(popEl()!.querySelector('.pf.invalid .ferr')?.textContent).toBe(
+      '网关 HTTP 腿格式错误: 须以 http:// 或 https:// 开头且不含路径，如 http://10.10.1.1:8443',
+    )
+    // 输入即清红
+    await setInputValue(popInputs()[0], 'http://10.10.1.1:8443')
+    expect(popEl()!.querySelector('.pf.invalid')).toBeNull()
+
+    // 校验不过不提交
+    await setInputValue(popInputs()[0], 'http://10.10.1.1:8443/api')
+    mockPut.mockClear()
+    await clickPopButton('保存并测试')
+    expect(mockPut).not.toHaveBeenCalled()
+    expect(popEl()).not.toBeNull()
+  })
+
+  it('3.2 HTTP 腿编辑态「仅保存」：PUT merge 回填未编辑字段且不携带 ssh_password，成功后刷新', async () => {
+    const wrapper = await mountTopoPage()
+    await cardOf(wrapper, 'jinan')
+      .findAll('.leg-chip')
+      .find((c) => c.text().includes('HTTP 腿'))!
+      .trigger('click')
+    await flushPromises()
+    await clickPopButton('仅保存')
+
+    expect(mockPut).toHaveBeenCalledTimes(1)
+    const [url, payload] = mockPut.mock.calls[0] as [string, Record<string, unknown>]
+    expect(url).toBe('/relay/gateways/1')
+    expect(payload).toEqual({
+      name: '济南局',
+      http_base_url: 'http://10.10.1.1:8443',
+      ssh_jump: 'tunnel@10.10.1.1:22',
+      openresty_prefix: '/work/openresty/nginx',
+      status: 'enabled',
+      ssh_user: 'jboss',
+      ssh_port: 22,
+      ansible_python_interpreter: null,
+      ssh_common_args: null,
+    })
+    expect('ssh_password' in payload).toBe(false)
+    // 保存成功 → refreshAll（load + loadTopology）
+    expect(mockGet).toHaveBeenCalledWith('/relay/gateways')
+    expect(mockGet).toHaveBeenCalledWith('/relay/topology')
+    expect(popEl()).toBeNull()
+  })
+
+  it('3.2 HTTP 腿编辑态「保存并测试」：保存后链式调用既有体检端点', async () => {
+    const wrapper = await mountTopoPage()
+    await cardOf(wrapper, 'jinan')
+      .findAll('.leg-chip')
+      .find((c) => c.text().includes('SSH 跳板'))!
+      .trigger('click')
+    await flushPromises()
+    expect(popText()).toContain('编辑 SSH 跳板 · 济南局')
+    await clickPopButton('保存并测试')
+
+    expect(mockPut).toHaveBeenCalledTimes(1)
+    expect(mockGet).toHaveBeenCalledWith('/relay/health-check?region=jinan', { timeout: 180_000 })
+    expect(popEl()).toBeNull()
+  })
+
+  it('3.2 提交异常就地红字展示且浮层不关闭', async () => {
+    const wrapper = await mountTopoPage()
+    mockPut.mockRejectedValueOnce({ response: { data: { detail: '保存失败测试' } } })
+    await cardOf(wrapper, 'jinan')
+      .findAll('.leg-chip')
+      .find((c) => c.text().includes('SSH 跳板'))!
+      .trigger('click')
+    await flushPromises()
+    await clickPopButton('仅保存')
+    expect(popEl()).not.toBeNull()
+    expect(popEl()!.querySelector('.p-error')?.textContent).toBe('保存失败测试')
+  })
+
+  it('3.2 SSH 腿登记（区域无 ssh_user）：双字段顺带收集 + 校验 + 保存登记', async () => {
+    const wrapper = await mountTopoPage()
+    await cardOf(wrapper, 'wq')
+      .findAll('.leg-chip.dim')
+      .find((c) => c.text().includes('SSH 跳板'))!
+      .trigger('click')
+    await flushPromises()
+    expect(popText()).toContain('登记 SSH 跳板 · 武清本地')
+    expect(popInputs().length).toBe(2)
+    expect((popInputs()[1] as HTMLInputElement).placeholder).toBe('jboss')
+    expect(popText()).toContain('SSH 账号（登录网关机，初始化 / 下发用）')
+
+    // 账号必填
+    await setInputValue(popInputs()[0], 'tunnel@10.10.3.1:22')
+    await clickPopButton('保存登记')
+    expect(mockPut).not.toHaveBeenCalled()
+    expect(popEl()!.querySelectorAll('.pf')[1]?.querySelector('.ferr')?.textContent).toBe('SSH 账号不能为空')
+
+    await setInputValue(popInputs()[1], 'jboss')
+    await clickPopButton('保存登记')
+    const [, payload] = mockPut.mock.calls[0] as [string, Record<string, unknown>]
+    expect(payload).toEqual(
+      expect.objectContaining({ ssh_jump: 'tunnel@10.10.3.1:22', ssh_user: 'jboss', http_base_url: null }),
+    )
+    expect(popEl()).toBeNull()
+  })
+
+  it('3.3 网关机节点 popover（steady 整卡可点）：三字段预填 + 端口校验 + 保存', async () => {
+    const wrapper = await mountTopoPage()
+    await cardOf(wrapper, 'jinan').find('.node.editable').trigger('click')
+    await flushPromises()
+    expect(popText()).toContain('编辑网关机连接 · 济南局')
+    expect(popText()).toContain('口令与高级参数（Python 解释器 / SSH 参数）请用「更多 ▸ 编辑」弹窗')
+    expect((popInputs()[0] as HTMLInputElement).value).toBe('jboss')
+    expect((popInputs()[1] as HTMLInputElement).value).toBe('22')
+    expect((popInputs()[2] as HTMLInputElement).value).toBe('/work/openresty/nginx')
+
+    await setInputValue(popInputs()[1], '0')
+    await blurInput(popInputs()[1])
+    expect(popEl()!.querySelectorAll('.pf')[1]?.querySelector('.ferr')?.textContent).toBe('端口须为 1–65535 的整数')
+
+    await setInputValue(popInputs()[1], '2222')
+    await clickPopButton('保存')
+    const [, payload] = mockPut.mock.calls[0] as [string, Record<string, unknown>]
+    expect(payload).toEqual(
+      expect.objectContaining({ ssh_user: 'jboss', ssh_port: 2222, openresty_prefix: '/work/openresty/nginx' }),
+    )
+    expect(popEl()).toBeNull()
+  })
+
+  it('3.3 init-blocked [补 SSH 账号] 按钮开就地 popover 并可保存账号（批次三接线）', async () => {
+    const wrapper = await mountTopoPage({ tjUser: null })
+    const btn = cardOf(wrapper, 'tj')
+      .findAll('button')
+      .find((b) => b.text().trim() === '补 SSH 账号')!
+    await btn.trigger('click')
+    await flushPromises()
+    expect(popText()).toContain('编辑网关机连接 · 天津局')
+    await setInputValue(popInputs()[0], 'tjboss')
+    await clickPopButton('保存')
+    const [, payload] = mockPut.mock.calls[0] as [string, Record<string, unknown>]
+    expect(payload).toEqual(expect.objectContaining({ ssh_user: 'tjboss' }))
+  })
+
+  it('3.8 初始化轻确认（前缀已填）：确认后走既有 init SSE 流', async () => {
+    const wrapper = await mountTopoPage({ tjPrefix: '/work/openresty/nginx' })
+    const btn = cardOf(wrapper, 'tj')
+      .findAll('button')
+      .find((b) => b.text().trim() === '初始化网关')!
+    await btn.trigger('click')
+    await flushPromises()
+    expect(popText()).toContain('初始化网关 · 天津局')
+    expect(popText()).toContain('幂等可重复执行')
+    expect(popText()).toContain('前置：SSH 腿 ✓ · SSH 账号 ✓ · OpenResty 前缀 ✓')
+    await clickPopButton('确认初始化')
+    expect(popEl()).toBeNull()
+    expect(streamMock.start).toHaveBeenCalledWith('/relay/gateways/2/init', {}, expect.any(Object))
+  })
+
+  it('3.8 缺前缀链式「填写前缀并初始化」：聚焦前缀框 → 保存并初始化 → PUT 后自动开始初始化', async () => {
+    const wrapper = await mountTopoPage()
+    const btn = cardOf(wrapper, 'tj')
+      .findAll('button')
+      .find((b) => b.text().trim() === '初始化网关')!
+    await btn.trigger('click')
+    await flushPromises()
+    expect(popText()).toContain('OpenResty 前缀')
+    expect(popText()).toContain('未填（下一步收集）')
+    await clickPopButton('填写前缀并初始化')
+
+    // 链式打开 requirePrefix 变体并聚焦前缀框
+    expect(popText()).toContain('初始化前置 · OpenResty 前缀 · 天津局')
+    expect(popText()).toContain('填完保存即自动开始初始化（写入 8443 监听并 reload）')
+    expect(document.activeElement).toBe(popInputs()[2])
+
+    // 直接保存会被 requirePrefix 拦截
+    await clickPopButton('保存并初始化')
+    expect(mockPut).not.toHaveBeenCalled()
+    expect(popEl()!.querySelectorAll('.pf')[2]?.querySelector('.ferr')?.textContent).toBe(
+      '初始化网关需要 OpenResty 前缀',
+    )
+
+    await setInputValue(popInputs()[2], '/work/nginx')
+    await clickPopButton('保存并初始化')
+    expect(mockPut).toHaveBeenCalledTimes(1)
+    const [, payload] = mockPut.mock.calls[0] as [string, Record<string, unknown>]
+    expect(payload).toEqual(expect.objectContaining({ openresty_prefix: '/work/nginx', ssh_user: 'jboss' }))
+    // 链式：PUT 成功后自动开始初始化
+    expect(streamMock.start).toHaveBeenCalledWith('/relay/gateways/2/init', {}, expect.any(Object))
+    expect(popEl()).toBeNull()
+  })
+
+  it('3.4 卡头名称就地改名：非空校验 + PUT', async () => {
+    const wrapper = await mountTopoPage()
+    await cardOf(wrapper, 'jinan').find('.editable-name').trigger('click')
+    await flushPromises()
+    expect(popText()).toContain('重命名区域 · 济南局')
+    await setInputValue(popInputs()[0], '')
+    await clickPopButton('保存')
+    expect(mockPut).not.toHaveBeenCalled()
+    expect(popEl()!.querySelector('.pf.invalid .ferr')?.textContent).toBe('区域名称不能为空')
+
+    await setInputValue(popInputs()[0], '济南局改')
+    await clickPopButton('保存')
+    const [, payload] = mockPut.mock.calls[0] as [string, Record<string, unknown>]
+    expect(payload).toEqual(expect.objectContaining({ name: '济南局改' }))
+  })
+
+  it('3.4 状态徽章切换确认 popover：禁用提示 + 确认后 PUT status', async () => {
+    const wrapper = await mountTopoPage()
+    await cardOf(wrapper, 'jinan').find('.badge.clickable').trigger('click')
+    await flushPromises()
+    expect(popText()).toContain('禁用区域 · 济南局')
+    expect(popText()).toContain('全部挂接集群回退直连执行')
+    expect(popText()).toContain('两腿配置保留，随时可再启用')
+    await clickPopButton('确认禁用')
+    expect(mockPut).toHaveBeenCalledWith('/relay/gateways/1', expect.objectContaining({ status: 'disabled' }))
+    expect(mockGet).toHaveBeenCalledWith('/relay/gateways')
+  })
+
+  it('3.5 集群挂接/解挂 popover：区域下拉 + 打开集群链接 + 空串解挂', async () => {
+    const wrapper = await mountTopoPage()
+    await cardOf(wrapper, 'jinan').find('.cluster-card').trigger('click')
+    await flushPromises()
+    expect(popText()).toContain('挂接 / 解挂 · 胶济干线')
+    expect(popText()).toContain('选择所属中继区域；不挂接则该集群按直连执行')
+    const select = popEl()!.querySelector('select') as HTMLSelectElement
+    expect(select.value).toBe('jinan')
+    const optionTexts = Array.from(select.options).map((o) => o.textContent)
+    expect(optionTexts).toContain('不挂接（直连）')
+    expect(optionTexts).toContain('济南局（jinan）')
+
+    // 打开集群链接
+    await clickPopButton('打开集群 ›')
+    expect(mockRouterPush).toHaveBeenCalledWith('/clusters')
+
+    // 解挂：选择「不挂接（直连）」后保存
+    select.value = ''
+    select.dispatchEvent(new Event('change'))
+    await flushPromises()
+    await clickPopButton('保存')
+    expect(mockPut).toHaveBeenCalledWith('/clusters/11', { region_code: '' })
+    expect(message.success).toHaveBeenCalledWith('已解挂：该集群回直连')
+  })
+
+  it('3.5 +挂接集群候选下拉（含当前区域归属）与提交', async () => {
+    const wrapper = await mountTopoPage()
+    await cardOf(wrapper, 'wq').find('.attach-dashed').trigger('click')
+    await flushPromises()
+    expect(popText()).toContain('挂接集群 · 武清本地')
+    const select = popEl()!.querySelector('select') as HTMLSelectElement
+    const optionTexts = Array.from(select.options).map((o) => o.textContent)
+    expect(optionTexts).toContain('青岛港（当前：未挂接）')
+    expect(optionTexts).toContain('胶济干线（当前：济南局）')
+
+    select.value = '11'
+    select.dispatchEvent(new Event('change'))
+    await flushPromises()
+    await clickPopButton('挂接')
+    expect(mockPut).toHaveBeenCalledWith('/clusters/11', { region_code: 'wq' })
+    expect(message.success).toHaveBeenCalledWith(expect.stringContaining('已挂接「胶济干线」至 武清本地'))
+  })
+
+  it('3.6 节点行只读详情弹窗：状态/白名单态/体检明细 + 打开节点管理', async () => {
+    const wrapper = await mountTopoPage()
+    await cardOf(wrapper, 'jinan').find('.nrow').trigger('click')
+    await flushPromises()
+    const opts = (globalThis as Record<string, unknown>).__lastOverlayOpts as {
+      title: string
+      content: unknown
+      okText: string
+    }
+    expect(opts.title).toBe('节点 10.10.2.1:8080')
+    const text = vnodeText(opts.content)
+    expect(text).toContain('启用')
+    expect(text).toContain('已同步')
+    expect(text).toContain('未检测')
+    expect(opts.okText).toBe('打开节点管理')
+
+    const onOk = (globalThis as Record<string, unknown>).__lastOverlayOk as () => unknown
+    await onOk()
+    expect(mockRouterPush).toHaveBeenCalledWith({ path: '/nodes', query: { cluster_id: '11' } })
+  })
+
+  it('3.7 草稿卡：展开/即时校验（区域码文案逐字）/取消收起/Esc/视图切换保留开合', async () => {
+    const wrapper = await mountTopoPage()
+    expect(wrapper.find('.draft-card').isVisible()).toBe(false)
+    await wrapper.find('.create-card').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.draft-card').isVisible()).toBe(true)
+    expect(wrapper.find('.draft-card').text()).toContain('新建区域 · 必填 2 项')
+    expect(wrapper.find('.draft-card').text()).toContain(
+      'SSH 账号在登记 SSH 腿时顺带收集；口令 / 高级参数后续在「更多 ▸ 编辑」补录',
+    )
+
+    const codeInput = wrapper.find('.draft-card input[placeholder="jinan2"]')
+    const nameInput = wrapper.find('.draft-card input[placeholder="济南二局"]')
+    await codeInput.setValue('Bad_Code')
+    await nameInput.setValue('济南新局')
+    mockPost.mockClear()
+    await wrapper
+      .findAll('.draft-card button')
+      .find((b) => b.text().trim() === '创建区域')!
+      .trigger('click')
+    await flushPromises()
+    expect(mockPost).not.toHaveBeenCalled()
+    expect(wrapper.find('.draft-card .pf.invalid .ferr').text()).toBe(
+      '区域code格式错误: 以小写字母开头，仅含小写字母/数字/中划线，长度2-32',
+    )
+
+    // 取消收起
+    await wrapper
+      .findAll('.draft-card button')
+      .find((b) => b.text().trim() === '取消')!
+      .trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.draft-card').isVisible()).toBe(false)
+
+    // 再展开 → Esc 收起
+    await wrapper.find('.create-card').trigger('click')
+    await flushPromises()
+    await pressEscape()
+    expect(wrapper.find('.draft-card').isVisible()).toBe(false)
+
+    // 视图切换往返保留开合状态
+    await wrapper.find('.create-card').trigger('click')
+    await flushPromises()
+    await wrapper
+      .findAll('.view-toggle button')
+      .find((b) => b.text().includes('表格视图'))!
+      .trigger('click')
+    expect(wrapper.find('.draft-card').isVisible()).toBe(false)
+    await wrapper
+      .findAll('.view-toggle button')
+      .find((b) => b.text().includes('拓扑视图'))!
+      .trigger('click')
+    expect(wrapper.find('.draft-card').isVisible()).toBe(true)
+  })
+
+  it('3.7 草稿卡创建：合法提交只带 code+name；后端查重 400 就地红字；成功后收起+刷新+toast', async () => {
+    const wrapper = await mountTopoPage()
+    await wrapper.find('.create-card').trigger('click')
+    await flushPromises()
+    await wrapper.find('.draft-card input[placeholder="jinan2"]').setValue('jinan2')
+    await wrapper.find('.draft-card input[placeholder="济南二局"]').setValue('济南二局')
+
+    // 后端查重 400 → 就地红字（不发 toast）
+    mockPost.mockRejectedValueOnce({ response: { data: { detail: '区域code已存在' } } })
+    await wrapper
+      .findAll('.draft-card button')
+      .find((b) => b.text().trim() === '创建区域')!
+      .trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.draft-card').isVisible()).toBe(true)
+    expect(wrapper.text()).toContain('区域code已存在')
+    expect(message.error).not.toHaveBeenCalled()
+
+    // 修正后成功
+    await wrapper.find('.draft-card input[placeholder="jinan2"]').setValue('jinan3')
+    await wrapper
+      .findAll('.draft-card button')
+      .find((b) => b.text().trim() === '创建区域')!
+      .trigger('click')
+    await flushPromises()
+    expect(mockPost).toHaveBeenLastCalledWith('/relay/gateways', { code: 'jinan3', name: '济南二局' })
+    expect(wrapper.find('.draft-card').isVisible()).toBe(false)
+    expect(message.success).toHaveBeenCalledWith(
+      expect.stringContaining('已创建「济南二局」（jinan3）：初始直连形态。下一步：点该卡灰色两腿 chip 登记两腿'),
+    )
+    expect(mockGet).toHaveBeenCalledWith('/relay/gateways')
+    expect(mockGet).toHaveBeenCalledWith('/relay/topology')
+  })
+
+  it('3.7 页头「+ 新建区域」改走草稿卡流程（不再打开旧弹窗）', async () => {
+    const wrapper = await mountTopoPage()
+    const headerBtn = wrapper.findAll('button').find((b) => b.text().includes('新建区域'))!
+    await headerBtn.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.draft-card').isVisible()).toBe(true)
+    expect(wrapper.find('.modal-overlay').exists()).toBe(false)
   })
 })

@@ -90,6 +90,27 @@ class TestRenderer:
         assert "ansible_ssh_pass" not in bj_block
         assert "2222" in bj_block
 
+    def test_relay_topology_empty_ssh_user_renders_blank_ansible_user(self, isolated_session):
+        """空账号渲染容忍（relay-region-topology-view D8/D6 钉桩）：
+
+        仅 code+name 创建区域后渲染写盘，`ansible_user: ` 空值行保留而非删行
+        （gateways_inventory_service._host_block 既有容忍语义）；分组照常渲染，
+        「清单缺组」判定语义不变。改为删行前须先确认建区旅程不被破坏。
+        """
+        import asyncio
+
+        async def build():
+            async with isolated_session() as s:
+                s.add(_row(code="draft", ssh_user=None, ssh_password=None))
+                await s.commit()
+                rows = await _all_gateways(s)
+                return gis.render_content(list(rows), orphan_groups=[])
+
+        text = asyncio.run(build())
+        assert "gateways_draft:" in text
+        line = next(ln for ln in text.splitlines() if ln.strip().startswith("ansible_user:"))
+        assert line == "      ansible_user: "
+
     def test_write_backup_atomic_and_0600(self, gw_path, isolated_session):
         import asyncio
         import os

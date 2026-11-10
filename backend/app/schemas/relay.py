@@ -42,7 +42,9 @@ class RelayGatewayCreate(BaseModel):
     ssh_jump: Optional[str] = Field(None, max_length=255)
     openresty_prefix: Optional[str] = Field(None, max_length=255)
     status: str = "enabled"
-    ssh_user: str = Field(..., min_length=1, max_length=64)
+    # relay-region-topology-view D8/D6：ssh_user 放宽为可空——新建区域最小必填仅
+    # code+name，SSH 账号在登记 SSH 腿时收集；执行前置由 init/push 端点守卫承接。
+    ssh_user: Optional[str] = Field(None, max_length=64)
     ssh_password: Optional[str] = Field(None, max_length=255)
     ssh_port: int = Field(22, ge=1, le=65535)
     ansible_python_interpreter: Optional[str] = Field(None, max_length=255)
@@ -232,3 +234,57 @@ class RelaySshdSetupRequest(BaseModel):
 
     root_user: str = Field(default="root", description="root 账号")
     root_password: str = Field(..., min_length=1, description="root 密码（仅本次使用，不保存）")
+
+
+# ── 拓扑数据端点（relay-region-topology-view design D4：只读聚合，无模型/列改动） ──
+
+
+class RelayTopologyNode(BaseModel):
+    """拓扑节点行：whitelist_state 为服务端单点派生（design D3），前端不重复推导。"""
+
+    ip: str
+    management_port: int
+    status: int
+    whitelist_state: str
+
+
+class RelayTopologyCluster(BaseModel):
+    """拓扑集群卡：区域内挂接的集群及其节点明细。"""
+
+    id: int
+    name: str
+    display_name: Optional[str] = None
+    nodes: list[RelayTopologyNode] = []
+
+
+class RelayTopologyRegion(BaseModel):
+    """拓扑链路卡的区域块：含两腿与 SSH 连接摘要（阶段机/连接摘要需要；口令永不回传）。"""
+
+    id: int
+    code: str
+    name: str
+    status: str
+    http_base_url: Optional[str] = None
+    ssh_jump: Optional[str] = None
+    ssh_user: Optional[str] = None
+    ssh_port: Optional[int] = None
+    openresty_prefix: Optional[str] = None
+    last_pushed_at: Optional[datetime] = None
+    clusters: list[RelayTopologyCluster] = []
+
+
+class RelayTopologyClusterRef(BaseModel):
+    """可挂接候选轻量引用（detachable）：全部集群，前端按区域自行过滤。"""
+
+    id: int
+    name: str
+    display_name: Optional[str] = None
+    region_code: Optional[str] = None
+
+
+class RelayTopologyOut(BaseModel):
+    """GET /relay/topology 响应：区域→集群→节点聚合 + 悬空区域码。"""
+
+    regions: list[RelayTopologyRegion] = []
+    detachable: list[RelayTopologyClusterRef] = []
+    unregistered_bound_codes: list[str] = []

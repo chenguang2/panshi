@@ -1,9 +1,64 @@
 """链路体检测试（openspec: add-relay-gateway / relay-health-check）。"""
+import asyncio
+
 import pytest
 
 from app.models.cluster import Cluster, Node
 from app.models.relay import RelayGateway
 from app.services import relay_health
+
+
+class _AsyncBytes:
+    def __init__(self, data: bytes):
+        self._data = data
+
+    async def read(self) -> bytes:
+        return self._data
+
+
+class _FakeJumpProc:
+    def __init__(self, rc: int, stderr: bytes = b""):
+        self.returncode = rc
+        self.stderr = _AsyncBytes(stderr)
+        self.killed = False
+
+    async def wait(self) -> int:
+        return self.returncode
+
+    def kill(self) -> None:
+        self.killed = True
+
+
+@pytest.mark.asyncio
+async def test_probe_jump_marks_ssd_forward_denial(monkeypatch):
+    """sshd 禁转发（administratively prohibited）→ 报错携带精确标记（拓扑跳板框的证据，2026-11-10）。"""
+
+    async def fake_exec(*args, **kwargs):
+        assert kwargs.get("stderr") == asyncio.subprocess.PIPE
+        return _FakeJumpProc(
+            255, stderr=b"channel 0: open failed: administratively prohibited: open request rejected by rule"
+        )
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    with pytest.raises(ConnectionError) as ei:
+        await relay_health._probe_node_ssh_via_jump("tunnel@10.10.1.1", "10.10.2.2", 22, 5)
+    assert "跳板转发建立失败" in str(ei.value)
+    assert "administratively prohibited" in str(ei.value)
+
+
+@pytest.mark.asyncio
+async def test_probe_jump_plain_failure_has_no_marker(monkeypatch):
+    """节点不可达（普通 Connection refused）→ 不携带标记（避免误导跳板框）。"""
+
+    async def fake_exec(*args, **kwargs):
+        return _FakeJumpProc(255, stderr=b"ssh: connect to host 10.10.2.2 port 22: Connection refused")
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    with pytest.raises(ConnectionError) as ei:
+        await relay_health._probe_node_ssh_via_jump("tunnel@10.10.1.1", "10.10.2.2", 22, 5)
+    msg = str(ei.value)
+    assert "跳板转发建立失败" in msg
+    assert "administratively prohibited" not in msg
 
 
 async def _seed(test_db):

@@ -27,6 +27,11 @@ from app.schemas.relay import (
     RelayGatewayUpdate,
     RelaySshdSetupRequest,
     RelayStatusUpdate,
+    RelayTopologyCluster,
+    RelayTopologyClusterRef,
+    RelayTopologyNode,
+    RelayTopologyOut,
+    RelayTopologyRegion,
 )
 from app.services import edge_sync
 from app.services import relay_init
@@ -119,6 +124,38 @@ async def _region_node_counts(
     return enabled_counts, dict(total_rows.all()), enabled_lists
 
 
+def _parse_snapshot(raw: str | None) -> list[str] | None:
+    """快照 JSON 防御性解析：缺失/坏值回退 None（诚实「无快照」态）。
+
+    原 list_gateways 内嵌函数提取至模块级（relay-region-topology-view D3）：
+    topology 端点与 push_drift 共用同一解析语义，行为零改动。
+    """
+    if raw is None:
+        return None
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        return None
+    return data if isinstance(data, list) else None
+
+
+def _whitelist_state(status: int, node_key: str, snapshot: set[str] | None) -> str:
+    """服务端单点派生 whitelist_state（relay-region-topology-view D3，前端不重复推导）。
+
+    节点键 "ip:管理端口" 与下发快照（last_pushed_nodes）对照：
+    - synced:         启用且在快照
+    - pending_add:    启用但不在快照
+    - pending_remove: 停用但仍在快照
+    - off:            停用且不在快照
+    快照 None（从未成功下发/坏 JSON）= 视为空表：enabled → pending_add，disabled → off。
+    """
+    enabled = status == 1
+    in_snapshot = snapshot is not None and node_key in snapshot
+    if enabled:
+        return "synced" if in_snapshot else "pending_add"
+    return "pending_remove" if in_snapshot else "off"
+
+
 @router.get("/gateways", response_model=list[RelayGatewayOut])
 async def list_gateways(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(RelayGateway).order_by(RelayGateway.id))
@@ -130,16 +167,6 @@ async def list_gateways(db: AsyncSession = Depends(get_db)):
         .group_by(Cluster.region_code)
     )
     attach_map = {code: n for code, n in attach_rows.all()}
-
-    def _parse_snapshot(raw: str | None) -> list[str] | None:
-        """快照 JSON 防御性解析：缺失/坏值回退 None（诚实「无快照」态）。"""
-        if raw is None:
-            return None
-        try:
-            data = json.loads(raw)
-        except ValueError:
-            return None
-        return data if isinstance(data, list) else None
 
     out: list[RelayGatewayOut] = []
     for g in result.scalars():
@@ -162,6 +189,80 @@ async def list_gateways(db: AsyncSession = Depends(get_db)):
             )
         out.append(row)
     return out
+
+
+@router.get("/topology", response_model=RelayTopologyOut)
+async def relay_topology(db: AsyncSession = Depends(get_db)):
+    """只读拓扑聚合（relay-region-topology-view design D4）：区域 → 挂接集群 → 节点明细。
+
+    whitelist_state 由服务端单点派生（D3，与 list_gateways 的 push_drift 同快照语义）；
+    detachable 回全部集群轻量引用（前端按区域自行过滤）；unregistered_bound_codes 为
+    集群挂接但无注册行的区域码（去重排序）。GET 只读，无审计；ssh_password 永不回传。
+    """
+    gateways = (await db.execute(select(RelayGateway).order_by(RelayGateway.id))).scalars().all()
+    clusters = (await db.execute(select(Cluster).order_by(Cluster.id))).scalars().all()
+    nodes = (await db.execute(select(Node).order_by(Node.id))).scalars().all()
+
+    nodes_by_cluster: dict[int, list[Node]] = {}
+    for node in nodes:
+        nodes_by_cluster.setdefault(node.cluster_id, []).append(node)
+    clusters_by_region: dict[str, list[Cluster]] = {}
+    for cluster in clusters:
+        if cluster.region_code:
+            clusters_by_region.setdefault(cluster.region_code, []).append(cluster)
+
+    registered_codes = {g.code for g in gateways}
+    unregistered = sorted({
+        c.region_code for c in clusters
+        if c.region_code and c.region_code not in registered_codes
+    })
+
+    regions: list[RelayTopologyRegion] = []
+    for g in gateways:
+        snapshot_list = _parse_snapshot(g.last_pushed_nodes)
+        snapshot = set(snapshot_list) if snapshot_list is not None else None
+        region_clusters = [
+            RelayTopologyCluster(
+                id=c.id,
+                name=c.name,
+                display_name=c.display_name,
+                nodes=[
+                    RelayTopologyNode(
+                        ip=n.ip,
+                        management_port=n.management_port,
+                        status=n.status,
+                        whitelist_state=_whitelist_state(
+                            n.status, f"{n.ip}:{n.management_port}", snapshot
+                        ),
+                    )
+                    for n in nodes_by_cluster.get(c.id, [])
+                ],
+            )
+            for c in clusters_by_region.get(g.code, [])
+        ]
+        regions.append(RelayTopologyRegion(
+            id=g.id,
+            code=g.code,
+            name=g.name,
+            status=g.status,
+            http_base_url=g.http_base_url,
+            ssh_jump=g.ssh_jump,
+            ssh_user=g.ssh_user,
+            ssh_port=g.ssh_port,
+            openresty_prefix=g.openresty_prefix,
+            last_pushed_at=g.last_pushed_at,
+            clusters=region_clusters,
+        ))
+
+    detachable = [
+        RelayTopologyClusterRef(
+            id=c.id, name=c.name, display_name=c.display_name, region_code=c.region_code
+        )
+        for c in clusters
+    ]
+    return RelayTopologyOut(
+        regions=regions, detachable=detachable, unregistered_bound_codes=unregistered
+    )
 
 
 async def _render_inventory(db: AsyncSession, exclude_code: str | None = None) -> None:
@@ -278,6 +379,11 @@ async def init_gateway(gateway_id: int, db: AsyncSession = Depends(get_db)):
     gateway = await _get_or_404(db, gateway_id)
     if not gateway.openresty_prefix:
         raise HTTPException(status_code=400, detail="区域未配置 openresty_prefix，请先编辑区域填写")
+    # relay-region-topology-view D8 执行前置守卫：SSH 腿/账号缺失即拦，引导回拓扑就地编辑
+    if not gateway.ssh_jump:
+        raise HTTPException(status_code=400, detail="区域未登记 SSH 跳板，请先编辑区域填写")
+    if not gateway.ssh_user:
+        raise HTTPException(status_code=400, detail="区域未配置 SSH 账号，请先编辑区域填写")
     try:
         relay_init.ensure_gateway_inventory(gateway.code, gateway.ssh_jump)
     except RelayInitError as e:
@@ -324,6 +430,11 @@ async def push_gateway_config(
     gateway = await _get_or_404(db, gateway_id)
     if not gateway.openresty_prefix:
         raise HTTPException(status_code=400, detail="区域未配置 openresty_prefix，请先编辑区域填写")
+    # relay-region-topology-view D8 执行前置守卫（同 init）
+    if not gateway.ssh_jump:
+        raise HTTPException(status_code=400, detail="区域未登记 SSH 跳板，请先编辑区域填写")
+    if not gateway.ssh_user:
+        raise HTTPException(status_code=400, detail="区域未配置 SSH 账号，请先编辑区域填写")
     try:
         relay_push.ensure_gateway_inventory(gateway.code, gateway.ssh_jump)
     except RelayPushError as e:
@@ -372,6 +483,9 @@ async def setup_gateway_sshd(
     跑完即还原，不落库、不进命令行（与自启动同款做法）。
     """
     gateway = await _get_or_404(db, gateway_id)
+    # relay-region-topology-view D8：root 直连凭据由请求传入、不消费 ssh_user，仅校验跳板已登记
+    if not gateway.ssh_jump:
+        raise HTTPException(status_code=400, detail="区域未登记 SSH 跳板，请先编辑区域填写")
     hosts_pattern = f"gateways_{gateway.code}"
     if not relay_sshd._gateway_hosts(hosts_pattern):
         raise HTTPException(

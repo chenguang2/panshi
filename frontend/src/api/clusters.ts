@@ -13,6 +13,12 @@ export function getClusterNodes(clusterId: number, params: { page?: number; page
   return api.get<{ total: number; items: Node[] }>(`/clusters/${clusterId}/nodes`, { params })
 }
 
+/** 集群挂接/解挂中继区域（relay-region-topology-view 3.5）：空串 = 解挂（直连）。
+ * 后端 ClusterUpdate 走 exclude_unset 部分更新，仅动 region_code 一字段。 */
+export function updateClusterRegion(clusterId: number, regionCode: string) {
+  return api.put(`/clusters/${clusterId}`, { region_code: regionCode })
+}
+
 /* ── 配置漂移检测（config-drift-detection）── */
 
 export interface DriftChangedEntry {

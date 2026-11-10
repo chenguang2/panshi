@@ -82,7 +82,7 @@ async def _probe_node_ssh_via_jump(jump: str, ip: str, ssh_port: int, timeout: f
         jump,
         stdin=asyncio.subprocess.DEVNULL,
         stdout=asyncio.subprocess.DEVNULL,
-        stderr=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.PIPE,
     )
     try:
         rc = await asyncio.wait_for(proc.wait(), timeout=timeout)
@@ -90,6 +90,13 @@ async def _probe_node_ssh_via_jump(jump: str, ip: str, ssh_port: int, timeout: f
         proc.kill()
         raise TimeoutError("探测超时")
     if rc != 0:
+        stderr = b""
+        if proc.stderr is not None:
+            stderr = await proc.stderr.read() or b""
+        # 精确标记（2026-11-10）：裸 rc=255 对「节点不可达」歧义；sshd 禁转发的 stderr
+        # 必含 administratively prohibited（实测），标记供拓扑「跳板转发待配置」框作证据
+        if b"administratively prohibited" in stderr:
+            raise ConnectionError(f"跳板转发建立失败 (rc={rc})（网关 sshd 拒绝端口转发：administratively prohibited）")
         raise ConnectionError(f"跳板转发建立失败 (rc={rc})")
 
 

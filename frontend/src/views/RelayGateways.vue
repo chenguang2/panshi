@@ -8,7 +8,7 @@
         <button class="btn btn-secondary" :disabled="checkingAll || streamBusy" @click="handleCheckAll">
           {{ checkingAll ? '体检中…' : '全量体检' }}
         </button>
-        <button class="btn btn-primary" @click="openCreate">+ 新建区域</button>
+        <button class="btn btn-primary" @click="openDraftCard(true)">+ 新建区域</button>
       </template>
     </PageHeader>
 
@@ -85,155 +85,251 @@
       </div>
     </details>
 
-    <div class="card">
-      <div class="card-header">
-        <h3>区域列表</h3>
+    <!-- 视图切换工具行（relay-region-topology-view D1：两视图共用页头/说明卡/动作对照） -->
+    <div class="viewbar">
+      <div class="view-toggle">
+        <button :class="{ on: viewMode === 'topo' }" @click="switchView('topo')">拓扑视图</button>
+        <button :class="{ on: viewMode === 'table' }" @click="switchView('table')">表格视图</button>
       </div>
-      <div class="card-body table-body">
-        <a-table
-          :columns="columns"
-          :data-source="regions"
-          :loading="loading"
-          row-key="id"
-          :pagination="false"
-          class="region-table"
-        >
-          <template #bodyCell="{ column, record }">
-            <template v-if="column.key === 'region'">
-              <div class="region-cell">
-                <b>{{ record.name }}</b>
-                <a-tag color="blue" class="mono">{{ record.code }}</a-tag>
-              </div>
-            </template>
-            <template v-else-if="column.key === 'legs'">
-              <div v-if="record.http_base_url || record.ssh_jump" class="legs-cell">
-                <span class="leg-line"
-                  ><span class="leg-label">HTTP</span><span class="mono">{{ record.http_base_url || '—' }}</span></span
-                >
-                <span class="leg-line"
-                  ><span class="leg-label">SSH</span><span class="mono">{{ record.ssh_jump || '—' }}</span></span
-                >
-              </div>
-              <template v-else>
-                <a-tag color="info">直连 · 无网关机</a-tag>
-                <div class="direct-note">两条腿均为空</div>
+    </div>
+
+    <!-- 表格视图（既有内容卡逐字不动，仅包进表格分支） -->
+    <div v-show="viewMode === 'table'" class="table-view-wrap">
+      <div class="card">
+        <div class="card-header">
+          <h3>区域列表</h3>
+        </div>
+        <div class="card-body table-body">
+          <a-table
+            :columns="columns"
+            :data-source="regions"
+            :loading="loading"
+            row-key="id"
+            :pagination="false"
+            class="region-table"
+          >
+            <template #bodyCell="{ column, record }">
+              <template v-if="column.key === 'region'">
+                <div class="region-cell">
+                  <b>{{ record.name }}</b>
+                  <a-tag color="blue" class="mono">{{ record.code }}</a-tag>
+                </div>
               </template>
-            </template>
-            <template v-else-if="column.key === 'status'">
-              <div class="status-cell">
-                <div>
-                  <span :class="record.status === 'enabled' ? 'badge badge-success' : 'badge badge-neutral'">
-                    {{ record.status === 'enabled' ? '启用' : '禁用（直连回退）' }}
-                  </span>
-                  <!-- 清单漂移：区域已注册但 ansible inventory/gateways 缺该局主机组（init/push 前置会拦并给补齐片段） -->
-                  <a-tag
-                    v-if="record.inventory_group_missing"
-                    color="warning"
-                    title="ansible 清单 inventory/gateways 缺该局主机组，初始化/下发会被前置拦截"
-                    >清单缺组</a-tag
+              <template v-else-if="column.key === 'legs'">
+                <div v-if="record.http_base_url || record.ssh_jump" class="legs-cell">
+                  <span class="leg-line"
+                    ><span class="leg-label">HTTP</span
+                    ><span class="mono">{{ record.http_base_url || '—' }}</span></span
+                  >
+                  <span class="leg-line"
+                    ><span class="leg-label">SSH</span><span class="mono">{{ record.ssh_jump || '—' }}</span></span
                   >
                 </div>
-              </div>
+                <template v-else>
+                  <a-tag color="info">直连 · 无网关机</a-tag>
+                  <div class="direct-note">两条腿均为空</div>
+                </template>
+              </template>
+              <template v-else-if="column.key === 'status'">
+                <div class="status-cell">
+                  <div>
+                    <span :class="record.status === 'enabled' ? 'badge badge-success' : 'badge badge-neutral'">
+                      {{ record.status === 'enabled' ? '启用' : '禁用（直连回退）' }}
+                    </span>
+                    <!-- 清单漂移：区域已注册但 ansible inventory/gateways 缺该局主机组（init/push 前置会拦并给补齐片段） -->
+                    <a-tag
+                      v-if="record.inventory_group_missing"
+                      color="warning"
+                      title="ansible 清单 inventory/gateways 缺该局主机组，初始化/下发会被前置拦截"
+                      >清单缺组</a-tag
+                    >
+                  </div>
+                </div>
+              </template>
+              <template v-else-if="column.key === 'health'">
+                <div class="health-cell">
+                  <span class="health-state" :class="healthCls(record)" :title="healthDetail(record)">{{
+                    healthText(record)
+                  }}</span>
+                  <span v-if="healthState[record.id]" class="health-time mono">{{ healthTime(record) }}</span>
+                </div>
+              </template>
+              <template v-else-if="column.key === 'updated_at'">
+                <span>{{ formatDateTime(record.updated_at) }}</span>
+              </template>
+              <template v-else-if="column.key === 'actions'">
+                <div class="table-actions">
+                  <button
+                    class="btn btn-secondary btn-sm"
+                    :disabled="rowBusy(record) || testing"
+                    title="探测该区域两条腿，结果更新健康列；直连区域测直连可达性"
+                    @click="handleTest(record)"
+                  >
+                    {{ testingId === record.id ? '测试中…' : '测试' }}
+                  </button>
+                  <button
+                    class="btn btn-primary btn-sm"
+                    :disabled="streamBusy"
+                    title="把该局节点白名单推送到网关机；集群挂接、节点增删或启停后需要执行"
+                    @click="handlePush(record)"
+                  >
+                    {{ activeId === record.id && activeKind === 'push' ? '下发中…' : '下发配置' }}
+                  </button>
+                  <a-dropdown :trigger="['click']">
+                    <button class="btn btn-secondary btn-sm" :disabled="rowBusy(record)">更多 ▾</button>
+                    <template #overlay>
+                      <a-menu>
+                        <a-menu-item key="edit" :disabled="rowBusy(record)" @click="openEdit(record)">
+                          <div class="menu-item-stack">
+                            <span>编辑</span>
+                            <small>修改地址、账号与状态</small>
+                          </div>
+                        </a-menu-item>
+                        <a-menu-item key="init" :disabled="streamBusy" @click="handleInit(record)">
+                          <div class="menu-item-stack">
+                            <span>{{
+                              activeId === record.id && activeKind === 'init' ? '初始化中…' : '初始化网关'
+                            }}</span>
+                            <small>首次装机必做：写入 8443 监听（幂等可重复）</small>
+                          </div>
+                        </a-menu-item>
+                        <a-menu-item key="sshd" :disabled="streamBusy" @click="openSshdSetup(record)">
+                          <div class="menu-item-stack">
+                            <span>{{
+                              activeId === record.id && activeKind === 'sshd' ? '配置中…' : '配置跳板转发'
+                            }}</span>
+                            <small>放行网关 sshd 转发（需 root，一次即可）</small>
+                          </div>
+                        </a-menu-item>
+                        <a-menu-item key="preview" :disabled="rowBusy(record)" @click="openConfigPreview(record)">
+                          <div class="menu-item-stack">
+                            <span>查看配置</span>
+                            <small>预览将写入网关机的文件内容</small>
+                          </div>
+                        </a-menu-item>
+                        <a-menu-item key="cred" :disabled="rowBusy(record)" @click="openCredential(record)">
+                          <div class="menu-item-stack">
+                            <span>查看凭据</span>
+                            <small>查看网关机 SSH 口令（记录审计）</small>
+                          </div>
+                        </a-menu-item>
+                        <a-menu-item key="toggle" :disabled="rowBusy(record)" @click="handleToggle(record)">
+                          <div class="menu-item-stack">
+                            <span>{{ record.status === 'enabled' ? '禁用' : '启用' }}</span>
+                            <small>停止/恢复经网关中转，回退直连</small>
+                          </div>
+                        </a-menu-item>
+                        <a-menu-divider />
+                        <a-menu-item
+                          key="delete"
+                          danger
+                          :disabled="rowBusy(record) || (record.attached_cluster_count || 0) > 0"
+                          @click="handleDelete(record)"
+                        >
+                          <div class="menu-item-stack">
+                            <span>删除</span>
+                            <small v-if="(record.attached_cluster_count || 0) > 0">
+                              已被 {{ record.attached_cluster_count }} 个集群挂接，先解挂再删除
+                            </small>
+                            <small v-else>未被集群挂接时可删除</small>
+                          </div>
+                        </a-menu-item>
+                      </a-menu>
+                    </template>
+                  </a-dropdown>
+                </div>
+              </template>
             </template>
-            <template v-else-if="column.key === 'health'">
-              <div class="health-cell">
-                <span class="health-state" :class="healthCls(record)" :title="healthDetail(record)">{{
-                  healthText(record)
-                }}</span>
-                <span v-if="healthState[record.id]" class="health-time mono">{{ healthTime(record) }}</span>
-              </div>
-            </template>
-            <template v-else-if="column.key === 'updated_at'">
-              <span>{{ formatDateTime(record.updated_at) }}</span>
-            </template>
-            <template v-else-if="column.key === 'actions'">
-              <div class="table-actions">
-                <button
-                  class="btn btn-secondary btn-sm"
-                  :disabled="rowBusy(record) || testing"
-                  title="探测该区域两条腿，结果更新健康列；直连区域测直连可达性"
-                  @click="handleTest(record)"
-                >
-                  {{ testingId === record.id ? '测试中…' : '测试' }}
-                </button>
-                <button
-                  class="btn btn-primary btn-sm"
-                  :disabled="streamBusy"
-                  title="把该局节点白名单推送到网关机；集群挂接、节点增删或启停后需要执行"
-                  @click="handlePush(record)"
-                >
-                  {{ activeId === record.id && activeKind === 'push' ? '下发中…' : '下发配置' }}
-                </button>
-                <a-dropdown :trigger="['click']">
-                  <button class="btn btn-secondary btn-sm" :disabled="rowBusy(record)">更多 ▾</button>
-                  <template #overlay>
-                    <a-menu>
-                      <a-menu-item key="edit" :disabled="rowBusy(record)" @click="openEdit(record)">
-                        <div class="menu-item-stack">
-                          <span>编辑</span>
-                          <small>修改地址、账号与状态</small>
-                        </div>
-                      </a-menu-item>
-                      <a-menu-item key="init" :disabled="streamBusy" @click="handleInit(record)">
-                        <div class="menu-item-stack">
-                          <span>{{
-                            activeId === record.id && activeKind === 'init' ? '初始化中…' : '初始化网关'
-                          }}</span>
-                          <small>首次装机必做：写入 8443 监听（幂等可重复）</small>
-                        </div>
-                      </a-menu-item>
-                      <a-menu-item key="sshd" :disabled="streamBusy" @click="openSshdSetup(record)">
-                        <div class="menu-item-stack">
-                          <span>{{
-                            activeId === record.id && activeKind === 'sshd' ? '配置中…' : '配置跳板转发'
-                          }}</span>
-                          <small>放行网关 sshd 转发（需 root，一次即可）</small>
-                        </div>
-                      </a-menu-item>
-                      <a-menu-item key="preview" :disabled="rowBusy(record)" @click="openConfigPreview(record)">
-                        <div class="menu-item-stack">
-                          <span>查看配置</span>
-                          <small>预览将写入网关机的文件内容</small>
-                        </div>
-                      </a-menu-item>
-                      <a-menu-item key="cred" :disabled="rowBusy(record)" @click="openCredential(record)">
-                        <div class="menu-item-stack">
-                          <span>查看凭据</span>
-                          <small>查看网关机 SSH 口令（记录审计）</small>
-                        </div>
-                      </a-menu-item>
-                      <a-menu-item key="toggle" :disabled="rowBusy(record)" @click="handleToggle(record)">
-                        <div class="menu-item-stack">
-                          <span>{{ record.status === 'enabled' ? '禁用' : '启用' }}</span>
-                          <small>停止/恢复经网关中转，回退直连</small>
-                        </div>
-                      </a-menu-item>
-                      <a-menu-divider />
-                      <a-menu-item
-                        key="delete"
-                        danger
-                        :disabled="rowBusy(record) || (record.attached_cluster_count || 0) > 0"
-                        @click="handleDelete(record)"
-                      >
-                        <div class="menu-item-stack">
-                          <span>删除</span>
-                          <small v-if="(record.attached_cluster_count || 0) > 0">
-                            已被 {{ record.attached_cluster_count }} 个集群挂接，先解挂再删除
-                          </small>
-                          <small v-else>未被集群挂接时可删除</small>
-                        </div>
-                      </a-menu-item>
-                    </a-menu>
-                  </template>
-                </a-dropdown>
-              </div>
-            </template>
-          </template>
-        </a-table>
-        <div v-if="!loading && regions.length === 0" class="empty-hint">
-          暂无区域。未配置任何区域时，全部集群按现状直连执行。点击右上角「新建区域」开始；首次装机流程：新建区域 →
-          初始化网关 → 集群挂接区域 → 下发配置。
+          </a-table>
+          <div v-if="!loading && regions.length === 0" class="empty-hint">
+            暂无区域。未配置任何区域时，全部集群按现状直连执行。点击右上角「新建区域」开始；首次装机流程：新建区域 →
+            初始化网关 → 集群挂接区域 → 下发配置。
+          </div>
         </div>
+      </div>
+    </div>
+
+    <!-- 拓扑视图（批次三：卡上就地 popover 编辑 + 图内新建草稿卡） -->
+    <div v-show="viewMode === 'topo'" class="topo-view">
+      <RelayTopologyCard
+        v-for="row in regions"
+        :key="row.id"
+        :gateway="row"
+        :topo="topoByCode[row.code] || null"
+        :health="healthState[row.id] || null"
+        @test="handleTest(row)"
+        @push="handlePush(row)"
+        @sshd="openSshdSetup(row)"
+        @init="(el) => openInitConfirm(row, el)"
+        @menu-action="(item) => handleCardMenuAction(row, item)"
+        @node-click="(node, cluster) => openNodeDetailModal(row, node, cluster)"
+        @cluster-click="(cluster, el) => openClusterPopover(cluster, el)"
+        @attach-click="(el) => openAttachPopover(row, el)"
+        @leg-click="(kind, el) => openLegPopover(row, kind, el)"
+        @name-click="(el) => openNamePopover(row, el)"
+        @badge-click="(el) => openStatusPopover(row, el)"
+        @node-box-click="(el) => openNodePopover(row, el, {}, true)"
+      />
+      <!-- 悬空区域码提示卡：集群挂了 region_code 但无注册行（防静默丢失） -->
+      <div v-for="code in topology?.unregistered_bound_codes ?? []" :key="'orphan-' + code" class="orphan-card">
+        <span class="tag warn">悬空挂接</span>
+        <span>
+          区域码 <span class="code-tag mono">{{ code }}</span> 已被
+          {{ orphanClusterCount(code) }} 个集群挂接，但区域表中无注册记录 —— 该局实际按直连执行。请核对集群所属区域，或
+        </span>
+        <button class="btn btn-secondary btn-sm" @click="openCreate">注册该区域</button>
+      </div>
+      <!-- 新建区域草稿卡（批次三 3.7）：虚线卡原地展开，Esc/取消收起；开合为视图级 ref，视图切换往返保留 -->
+      <div v-show="draftOpen" class="draft-card">
+        <div class="d-head">
+          <b>新建区域 · 必填 2 项</b>
+          <span class="d-hint">SSH 账号在登记 SSH 腿时顺带收集；口令 / 高级参数后续在「更多 ▸ 编辑」补录</span>
+        </div>
+        <div class="draft-grid two">
+          <div class="pf" :class="{ invalid: !!draftErrors.code }">
+            <label>区域码 code *</label>
+            <input
+              type="text"
+              v-model="draftForm.code"
+              placeholder="jinan2"
+              maxlength="32"
+              @input="draftErrors.code = ''"
+              @keydown.esc.stop="closeDraftCard"
+              @keydown.enter.prevent="submitDraft"
+            />
+            <div class="ferr">{{ draftErrors.code }}</div>
+          </div>
+          <div class="pf" :class="{ invalid: !!draftErrors.name }">
+            <label>区域名称 *</label>
+            <input
+              type="text"
+              class="ftext"
+              v-model="draftForm.name"
+              placeholder="济南二局"
+              maxlength="100"
+              @input="draftErrors.name = ''"
+              @keydown.esc.stop="closeDraftCard"
+              @keydown.enter.prevent="submitDraft"
+            />
+            <div class="ferr">{{ draftErrors.name }}</div>
+          </div>
+        </div>
+        <div v-if="draftServerError" class="d-error">{{ draftServerError }}</div>
+        <div class="d-actions">
+          <button class="btn btn-secondary btn-sm" @click="closeDraftCard">取消</button>
+          <button class="btn btn-primary btn-sm" :disabled="draftSubmitting" @click="submitDraft">
+            {{ draftSubmitting ? '创建中…' : '创建区域' }}
+          </button>
+        </div>
+        <div class="d-note">
+          <b>创建后</b>：原地生成本局区域卡（初始直连形态）→ 点灰色两腿 chip 登记两腿（SSH 腿登记时顺带填 SSH 账号）→
+          初始化网关 → 挂接集群 → 下发配置，全程在本图完成。区域码是集群挂接的身份标识，创建后不可就地修改。
+        </div>
+      </div>
+      <!-- 新建区域虚线卡（草稿卡展开期间隐藏，照 mockup） -->
+      <div v-show="!draftOpen" class="create-card" @click="openDraftCard(false)">
+        <b>+ 新建区域</b>
+        <div class="steps">登记区域 → 登记两腿 → 初始化网关 → 集群挂接 → 下发配置（全程在本图完成，不进弹窗）</div>
       </div>
     </div>
 
@@ -587,19 +683,92 @@
       :stream-status="execStreamStatus"
       @cancel="cancelExec"
     />
+
+    <!-- 就地 popover（批次三 3.1 引擎；Teleport 到 body：fixed 定位锚定图元，视口边缘避让） -->
+    <Teleport to="body">
+      <div
+        v-if="pop.open"
+        :ref="pop.setPopEl"
+        class="topo-pop"
+        :style="{ left: pop.pos.left, top: pop.pos.top }"
+        @click.stop
+      >
+        <template v-if="pop.config">
+          <p class="p-title">{{ pop.config.title }}</p>
+          <p v-if="pop.config.sub" class="p-sub">{{ pop.config.sub }}</p>
+          <div v-for="f in pop.config.fields" :key="f.key" class="pf" :class="{ invalid: !!pop.fieldErrors[f.key] }">
+            <label>{{ f.label }}</label>
+            <select v-if="f.options" v-model="pop.values[f.key]">
+              <option v-for="o in f.options" :key="o.value" :value="o.value">{{ o.label }}</option>
+            </select>
+            <input
+              v-else
+              type="text"
+              :class="{ ftext: !f.mono }"
+              v-model="pop.values[f.key]"
+              :placeholder="f.placeholder"
+              @blur="pop.validateField(f)"
+              @input="pop.clearFieldError(f.key)"
+              @keydown.enter.prevent="submitPopover"
+            />
+            <div class="ferr">{{ pop.fieldErrors[f.key] }}</div>
+          </div>
+          <div v-if="pop.submitError" class="p-error">{{ pop.submitError }}</div>
+          <div class="p-actions">
+            <button v-if="pop.config.link" class="p-link" @click="pop.config.link.onClick()">
+              {{ pop.config.link.label }}
+            </button>
+            <button
+              v-if="pop.config.chain && pop.config.altSave"
+              class="only-save"
+              :disabled="pop.busy"
+              @click="applySave"
+            >
+              {{ pop.config.altSave }}
+            </button>
+            <button class="btn btn-secondary btn-sm" :disabled="pop.busy" @click="pop.close()">取消</button>
+            <button
+              class="btn btn-primary btn-sm"
+              :disabled="pop.busy || pop.config.primaryDisabled"
+              @click="applyPrimary"
+            >
+              {{ pop.busy ? '处理中…' : pop.config.primaryLabel || '保存' }}
+            </button>
+          </div>
+          <!-- 注记文案为本仓库常量（mockup 同款加粗强调），非用户输入 -->
+          <div v-if="pop.config.note" class="p-note" v-html="pop.config.note"></div>
+        </template>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, h, onMounted, onUnmounted, reactive, ref, type VNode } from 'vue'
+import { computed, h, nextTick, onMounted, onUnmounted, reactive, ref, type VNode } from 'vue'
+import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import NodeExecutionResultDrawer from '@/components/NodeExecutionResultDrawer.vue'
+import RelayTopologyCard from '@/components/RelayTopologyCard.vue'
 import { showOverlayModal } from '@/composables/useOverlayModal'
 import { useInstallStream } from '@/composables/useInstallStream'
 import {
+  RELAY_CODE_ERROR_MSG,
+  RELAY_CODE_PATTERN,
+  RELAY_HTTP_BASE_URL_ERROR_MSG,
+  RELAY_HTTP_BASE_URL_PATTERN,
+  RELAY_OPENRESTY_PREFIX_ERROR_MSG,
+  RELAY_SSH_JUMP_ERROR_MSG,
+  RELAY_SSH_JUMP_PATTERN,
+  useTopologyPopover,
+  type TopoPopoverConfig,
+  type TopoPopoverField,
+} from '@/composables/useTopologyPopover'
+import { updateClusterRegion } from '@/api/clusters'
+import {
   createRelayGateway,
   deleteRelayGateway,
+  fetchRelayTopology,
   getRelayConfigPreview,
   listRelayGateways,
   relayHealthCheck,
@@ -610,7 +779,12 @@ import {
   fetchGatewayCredential,
   type RelayConfigPreview,
   type RelayGateway,
+  type RelayGatewayPayload,
   type RelayHealthResult,
+  type RelayTopologyCluster,
+  type RelayTopologyNode,
+  type RelayTopologyOut,
+  type RelayTopologyRegion,
 } from '@/api/relay'
 import { getApiErrorMessage } from '@/utils/error'
 import { formatDateTime } from '@/utils/format'
@@ -811,6 +985,503 @@ async function load() {
   }
 }
 
+// ── 视图切换（relay-region-topology-view D1：拓扑为默认，表格保留；local ref 不持久化） ──
+const viewMode = ref<'topo' | 'table'>('topo')
+
+function switchView(mode: 'topo' | 'table') {
+  viewMode.value = mode
+}
+
+// 拓扑明细（GET /relay/topology）：与列表行同源；按区域码索引供链路卡消费
+const topology = ref<RelayTopologyOut | null>(null)
+
+const topoByCode = computed<Record<string, RelayTopologyRegion>>(() => {
+  const map: Record<string, RelayTopologyRegion> = {}
+  for (const region of topology.value?.regions ?? []) map[region.code] = region
+  return map
+})
+
+/** 拓扑加载失败静默降级：链路卡退化为仅列表行数据渲染（列表 load() 已有错误提示，不重复弹）。 */
+async function loadTopology() {
+  try {
+    const res = await fetchRelayTopology()
+    topology.value = res.data
+  } catch {
+    topology.value = null
+  }
+}
+
+/** 两视图同源刷新：任何写操作/执行完成后统一走本函数（约定 #51：改一处不够时先找齐消费点）。 */
+async function refreshAll() {
+  await Promise.all([load(), loadTopology()])
+}
+
+/** 悬空区域码的挂接集群数（detachable 为全部集群轻量引用） */
+function orphanClusterCount(code: string): number {
+  return (topology.value?.detachable ?? []).filter((c) => c.region_code === code).length
+}
+
+/** 拓扑卡「更多 ▾」动作分发：复用表格视图的既有 handlers（同一实现，不复制逻辑）。
+ * 批次三注：case 'init'（重新初始化，重操作）保持既有确认弹窗；框上「初始化网关」按钮走轻确认 popover（openInitConfirm），
+ * case 'edit' 保持旧弹窗（口令与高级参数编辑在弹窗内）。 */
+function handleCardMenuAction(record: RelayGateway, item: string) {
+  switch (item) {
+    case 'edit':
+      openEdit(record)
+      break
+    case 'init':
+      handleInit(record)
+      break
+    case 'sshd':
+      openSshdSetup(record)
+      break
+    case 'preview':
+      openConfigPreview(record)
+      break
+    case 'cred':
+      openCredential(record)
+      break
+    case 'toggle':
+      handleToggle(record)
+      break
+    case 'delete':
+      handleDelete(record)
+      break
+  }
+}
+
+// ══ 批次三：图内编辑与新建（就地 popover 体系，design D5/D6/D7）══
+
+const router = useRouter()
+
+/** 就地 popover 引擎实例（锚定定位 / Esc·点空白关闭 / 同点收起 / 即时校验 / 链式主按钮） */
+const pop = useTopologyPopover()
+
+function applyPrimary() {
+  void pop.apply('primary')
+}
+
+function applySave() {
+  void pop.apply('save')
+}
+
+/** 输入框 Enter 等价主按钮（mockup 语义：有链式走链式，否则普通保存） */
+function submitPopover() {
+  void pop.apply(pop.config?.chain ? 'primary' : 'save')
+}
+
+/** 阶段机输入源：拓扑明细优先，缺失回退列表行（与链路卡 stageSource 同源） */
+function regionSource(record: RelayGateway): RelayTopologyRegion | RelayGateway {
+  return topoByCode.value[record.code] ?? record
+}
+
+/**
+ * D5 保存语义（防覆盖并发写）：把 popover 中编辑的字段 + 最新行其余字段合并回填，
+ * 走既有 PUT /relay/gateways/{id}（后端 exclude_unset 部分更新）。ssh_password 有意不携带——
+ * 口令永不出列表，缺省即后端不动口令（与编辑弹窗「按需单查回填」不同源但更安全）。
+ */
+async function saveRelayFields(record: RelayGateway, edited: Partial<RelayGatewayPayload>) {
+  const row = regions.value.find((r) => r.id === record.id) || record
+  await updateRelayGateway(row.id, {
+    name: edited.name ?? row.name,
+    http_base_url: edited.http_base_url !== undefined ? edited.http_base_url || null : row.http_base_url || null,
+    ssh_jump: edited.ssh_jump !== undefined ? edited.ssh_jump || null : row.ssh_jump || null,
+    openresty_prefix:
+      edited.openresty_prefix !== undefined ? edited.openresty_prefix || null : row.openresty_prefix || null,
+    status: row.status,
+    ssh_user: edited.ssh_user !== undefined ? edited.ssh_user : row.ssh_user || '',
+    ssh_port: edited.ssh_port !== undefined ? edited.ssh_port : row.ssh_port || 22,
+    ansible_python_interpreter: row.ansible_python_interpreter || null,
+    ssh_common_args: row.ssh_common_args || null,
+  })
+  await refreshAll()
+}
+
+/** 统一保存 + 刷新 + 无链式时的「已保存」toast（链式主按钮由接续动作自带反馈） */
+async function applyRelaySave(
+  record: RelayGateway,
+  edited: Partial<RelayGatewayPayload>,
+  opts: { chained?: boolean } = {},
+) {
+  await saveRelayFields(record, edited)
+  if (!opts.chained) message.success('已保存')
+}
+
+// ── 3.2 两腿 chip popover：编辑态「保存并测试」+「仅保存」；登记态「保存登记」（SSH 腿顺带收集账号） ──
+function openLegPopover(record: RelayGateway, kind: 'http' | 'ssh', anchor: HTMLElement) {
+  const isHttp = kind === 'http'
+  const src = regionSource(record)
+  const current = String((isHttp ? src.http_base_url : src.ssh_jump) || '')
+  const empty = !current
+  const fieldKey = isHttp ? 'http_base_url' : 'ssh_jump'
+  const fields: TopoPopoverField[] = [
+    {
+      key: fieldKey,
+      label: isHttp ? '网关 HTTP 腿地址' : 'SSH 跳板',
+      value: current,
+      placeholder: isHttp ? 'http://10.10.1.1:8443' : 'tunnel@10.10.1.1:22',
+      validate: (v) => {
+        if (!v) return null
+        return isHttp
+          ? RELAY_HTTP_BASE_URL_PATTERN.test(v)
+            ? null
+            : RELAY_HTTP_BASE_URL_ERROR_MSG
+          : RELAY_SSH_JUMP_PATTERN.test(v)
+            ? null
+            : RELAY_SSH_JUMP_ERROR_MSG
+      },
+    },
+  ]
+  const needUser = !isHttp && !src.ssh_user
+  if (needUser) {
+    fields.push({
+      key: 'ssh_user',
+      label: 'SSH 账号（登录网关机，初始化 / 下发用）',
+      value: '',
+      placeholder: 'jboss',
+      mono: false,
+      validate: (v) => (v ? null : 'SSH 账号不能为空'),
+    })
+  }
+  const chained = !empty
+  const chain = chained
+    ? () => {
+        const latest = regions.value.find((r) => r.id === record.id)
+        void handleTest(latest || record)
+      }
+    : undefined
+  pop.togglePopover(anchor, {
+    title: `${empty ? '登记' : '编辑'}${isHttp ? ' HTTP 腿' : ' SSH 跳板'} · ${record.name}`,
+    sub: isHttp ? '发布、回滚等管理请求经它进入该局' : '安装、初始化等 SSH 任务先跳到网关机再进局内',
+    fields,
+    primaryLabel: empty ? '保存登记' : '保存并测试',
+    altSave: chained ? '仅保存' : undefined,
+    chain,
+    note: empty
+      ? isHttp
+        ? '<b>登记后动作</b>：登记 SSH 腿 → 初始化网关 → 集群挂接 → 下发配置，全程在本图完成。'
+        : '<b>登记后动作</b>：初始化网关（缺 OpenResty 前缀时会在点击初始化时收集）→ 集群挂接 → 下发配置。'
+      : isHttp
+        ? '<b>改后需初始化网关</b>：HTTP 腿地址变更须经「初始化网关」重写 8443 监听后才对网关机生效。'
+        : '<b>改后需测试</b>：SSH 跳板变更建议立即「测试」验证；若网关 sshd 默认禁转发，还需「配置跳板转发」放行。',
+    onApply: async (vals) => {
+      const edited: Partial<RelayGatewayPayload> = { [fieldKey]: vals[fieldKey].trim() || null }
+      if (needUser) edited.ssh_user = vals.ssh_user.trim()
+      await applyRelaySave(record, edited, { chained })
+    },
+  })
+}
+
+// ── 3.3 网关机节点 popover（SSH 账号 / 端口 / OpenResty 前缀三字段；前缀直接编辑可空、初始化链内必填） ──
+interface NodePopoverOpts {
+  requirePrefix?: boolean
+  focusPrefix?: boolean
+  title?: string
+  primaryLabel?: string
+  note?: string
+  chain?: () => void
+}
+
+function openNodePopover(record: RelayGateway, anchor: HTMLElement, opts: NodePopoverOpts = {}, toggle = false) {
+  const src = regionSource(record)
+  const cfg: TopoPopoverConfig = {
+    title: opts.title || `编辑网关机连接 · ${record.name}`,
+    sub: '口令与高级参数（Python 解释器 / SSH 参数）请用「更多 ▸ 编辑」弹窗',
+    fields: [
+      {
+        key: 'ssh_user',
+        label: 'SSH 账号',
+        value: String(src.ssh_user ?? ''),
+        placeholder: 'jboss',
+        mono: false,
+        validate: (v) => (v ? null : 'SSH 账号不能为空'),
+      },
+      {
+        key: 'ssh_port',
+        label: 'SSH 端口',
+        value: String(src.ssh_port ?? 22),
+        placeholder: '22',
+        validate: (v) =>
+          /^\d{1,5}$/.test(v) && Number(v) >= 1 && Number(v) <= 65535 ? null : '端口须为 1–65535 的整数',
+      },
+      {
+        key: 'openresty_prefix',
+        label: 'OpenResty 前缀',
+        value: String(src.openresty_prefix ?? ''),
+        placeholder: '/work/jboss/tunnel/openresty-1.21.4.1/nginx',
+        validate: opts.requirePrefix
+          ? (v) => {
+              if (!v) return '初始化网关需要 OpenResty 前缀'
+              return v.startsWith('/') ? null : RELAY_OPENRESTY_PREFIX_ERROR_MSG
+            }
+          : (v) => (!v || v.startsWith('/') ? null : RELAY_OPENRESTY_PREFIX_ERROR_MSG),
+      },
+    ],
+    primaryLabel: opts.primaryLabel || '保存',
+    altSave: opts.chain ? '仅保存' : undefined,
+    focusLast: opts.focusPrefix,
+    chain: opts.chain,
+    note: opts.note || '前缀留空时「初始化网关」会被拒绝（要求已填前缀）。',
+    onApply: async (vals) => {
+      await applyRelaySave(
+        record,
+        {
+          ssh_user: vals.ssh_user.trim(),
+          ssh_port: Number(vals.ssh_port),
+          openresty_prefix: vals.openresty_prefix.trim() || null,
+        },
+        { chained: !!opts.chain },
+      )
+    },
+  }
+  if (toggle) pop.togglePopover(anchor, cfg)
+  else pop.openPopover(anchor, cfg)
+}
+
+// ── 3.4 卡头名称就地改名 + 状态徽章切换确认 ──
+function openNamePopover(record: RelayGateway, anchor: HTMLElement) {
+  pop.togglePopover(anchor, {
+    title: `重命名区域 · ${record.name}`,
+    fields: [
+      {
+        key: 'name',
+        label: '区域名称',
+        value: record.name,
+        mono: false,
+        validate: (v) => (v ? null : '区域名称不能为空'),
+      },
+    ],
+    onApply: async (vals) => {
+      await applyRelaySave(record, { name: vals.name.trim() })
+    },
+  })
+}
+
+/** 启用/禁用共享实现：表格「更多」菜单与拓扑状态徽章 popover 同走此函数（PUT + 两视图刷新） */
+async function toggleRegionStatus(record: RelayGateway, next: 'enabled' | 'disabled') {
+  await updateRelayGateway(record.id, { status: next })
+  await refreshAll()
+}
+
+function openStatusPopover(record: RelayGateway, anchor: HTMLElement) {
+  const disabling = record.status === 'enabled'
+  pop.togglePopover(anchor, {
+    title: `${disabling ? '禁用区域' : '启用区域'} · ${record.name}`,
+    fields: [],
+    primaryLabel: disabling ? '确认禁用' : '确认启用',
+    note: disabling
+      ? '禁用后该局<b>全部挂接集群回退直连执行</b>（两腿配置保留，随时可再启用）。'
+      : '启用后按已登记两腿经中继进局；<b>启用后建议先「测试」</b>确认两腿可达。',
+    onApply: async () => {
+      try {
+        await toggleRegionStatus(record, disabling ? 'disabled' : 'enabled')
+        message.success(disabling ? '已禁用：该局集群回退直连' : '已启用：建议执行「测试」验证两腿')
+      } catch (e) {
+        message.error(getApiErrorMessage(e))
+      }
+    },
+  })
+}
+
+// ── 3.5 集群挂接 / 解挂（PUT /clusters/{id} 的 region_code，空串 = 解挂） ──
+function regionLabelByCode(code: string | null | undefined): string {
+  if (!code) return '未挂接'
+  const row = regions.value.find((r) => r.code === code)
+  return row ? row.name : code
+}
+
+function openClusterPopover(cluster: RelayTopologyCluster, anchor: HTMLElement) {
+  const current = topology.value?.detachable.find((c) => c.id === cluster.id)?.region_code ?? ''
+  pop.togglePopover(anchor, {
+    title: `挂接 / 解挂 · ${cluster.display_name || cluster.name}`,
+    sub: '选择所属中继区域；不挂接则该集群按直连执行',
+    fields: [
+      {
+        key: 'region_code',
+        label: '所属区域',
+        value: current,
+        options: [
+          { value: '', label: '不挂接（直连）' },
+          ...regions.value.map((r) => ({ value: r.code, label: `${r.name}（${r.code}）` })),
+        ],
+      },
+    ],
+    primaryLabel: '保存',
+    link: { label: '打开集群 ›', onClick: () => void router.push('/clusters') },
+    note: '解挂 = 选择「不挂接（直连）」后保存；保存后自动刷新拓扑与网关路由。',
+    onApply: async (vals) => {
+      await updateClusterRegion(cluster.id, vals.region_code)
+      await refreshAll()
+      message.success(vals.region_code ? '已挂接。下一步：该区域「下发配置」后网关才放行' : '已解挂：该集群回直连')
+    },
+  })
+}
+
+function openAttachPopover(record: RelayGateway, anchor: HTMLElement) {
+  const candidates = (topology.value?.detachable ?? []).filter((c) => c.region_code !== record.code)
+  pop.togglePopover(anchor, {
+    title: `挂接集群 · ${record.name}`,
+    sub: '下拉列出未挂接本区域的集群（含其当前区域归属）',
+    fields: [
+      {
+        key: 'cluster_id',
+        label: '选择集群',
+        value: String(candidates[0]?.id ?? ''),
+        options: candidates.map((c) => ({
+          value: String(c.id),
+          label: `${c.display_name || c.name}（当前：${regionLabelByCode(c.region_code)}）`,
+        })),
+      },
+    ],
+    primaryLabel: '挂接',
+    primaryDisabled: candidates.length === 0,
+    note: candidates.length ? '' : '当前没有可挂接的集群。',
+    onApply: async (vals) => {
+      const clusterId = Number(vals.cluster_id)
+      const cluster = candidates.find((c) => c.id === clusterId)
+      await updateClusterRegion(clusterId, record.code)
+      await refreshAll()
+      message.success(
+        `已挂接「${cluster?.display_name || cluster?.name || vals.cluster_id}」至 ${record.name}。下一步：下发配置后网关才放行其节点`,
+      )
+    },
+  })
+}
+
+// ── 3.6 节点行只读详情（信息弹窗：状态 / 白名单同步态 / 体检明细 / 打开节点管理） ──
+const WL_STATE_TEXT: Record<string, string> = {
+  synced: '已同步',
+  pending_add: '未下发',
+  pending_remove: '待移除',
+  off: '已停用',
+}
+
+function openNodeDetailModal(record: RelayGateway, node: RelayTopologyNode, cluster: RelayTopologyCluster) {
+  const health = healthState[record.id] || null
+  const entry = health?.result.segments?.[2]?.nodes?.find((n) => n.node === node.ip)
+  const healthLine = !health
+    ? '未检测'
+    : !entry
+      ? '未检测'
+      : entry.ok
+        ? entry.note || '体检正常'
+        : [entry.error, entry.note].filter(Boolean).join('；')
+  const detailRow = (label: string, value: string) =>
+    h('div', { class: 'cred-row' }, [h('span', { class: 'cred-label' }, label), h('span', { class: 'mono' }, value)])
+  showOverlayModal({
+    title: `节点 ${node.ip}:${node.management_port}`,
+    content: h('div', null, [
+      detailRow('状态', node.status === 1 ? '启用' : '停用'),
+      detailRow('白名单同步', WL_STATE_TEXT[node.whitelist_state] || node.whitelist_state),
+      detailRow('体检', healthLine),
+      h('p', { class: 'form-hint', style: 'margin-top:10px' }, '节点增删与启停请到集群节点列表操作。'),
+    ]),
+    okText: '打开节点管理',
+    cancelText: '关闭',
+    onOk: () => {
+      void router.push({ path: '/nodes', query: { cluster_id: String(cluster.id) } })
+    },
+  })
+}
+
+// ── 3.8 初始化轻确认 + 链式「保存并初始化」 ──
+
+/** 链式收尾：拿刷新后的最新行走既有 SSE 初始化流（轻确认已由 popover 承担，一气呵成不再二次确认） */
+function startExecLatest(record: RelayGateway) {
+  const latest = regions.value.find((r) => r.id === record.id) || record
+  startExec(latest, 'init')
+}
+
+function openInitConfirm(record: RelayGateway, anchor: HTMLElement) {
+  const src = regionSource(record)
+  const preOk = !!src.openresty_prefix
+  const hasUser = !!src.ssh_user
+  pop.openPopover(anchor, {
+    title: `初始化网关 · ${record.name}`,
+    fields: [],
+    primaryLabel: preOk ? '确认初始化' : '填写前缀并初始化',
+    note:
+      '将向网关机写入 <b>8443 监听 server 块 + 当前白名单</b>，校验后 reload。<b>幂等可重复执行</b>。<br>' +
+      `前置：SSH 腿 ✓ · SSH 账号 ${hasUser ? '✓' : '<span class="st-miss">缺失（先补账号）</span>'} · OpenResty 前缀 ${
+        preOk ? '✓' : '<span class="st-miss">未填（下一步收集）</span>'
+      }`,
+    onApply: () => {
+      if (preOk) {
+        startExecLatest(record)
+        return
+      }
+      openNodePopover(record, anchor, {
+        title: `初始化前置 · OpenResty 前缀 · ${record.name}`,
+        primaryLabel: '保存并初始化',
+        focusPrefix: true,
+        requirePrefix: true,
+        note: '填完保存即自动开始初始化（写入 8443 监听并 reload）。',
+        chain: () => startExecLatest(record),
+      })
+    },
+  })
+}
+
+// ── 3.7 新建区域草稿卡（design D6：必填仅 code+name；SSH 账号在登记 SSH 腿时顺带收集） ──
+const draftOpen = ref(false)
+const draftForm = reactive({ code: '', name: '' })
+const draftErrors = reactive({ code: '', name: '' })
+const draftServerError = ref('')
+const draftSubmitting = ref(false)
+
+function openDraftCard(scroll: boolean) {
+  draftOpen.value = true
+  if (scroll) {
+    void nextTick().then(() => {
+      const el = document.querySelector('.draft-card')
+      if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+  }
+}
+
+function closeDraftCard() {
+  draftOpen.value = false
+  draftForm.code = ''
+  draftForm.name = ''
+  draftErrors.code = ''
+  draftErrors.name = ''
+  draftServerError.value = ''
+}
+
+async function submitDraft() {
+  const code = draftForm.code.trim()
+  const name = draftForm.name.trim()
+  draftErrors.code = RELAY_CODE_PATTERN.test(code) ? '' : RELAY_CODE_ERROR_MSG
+  draftErrors.name = name ? '' : '区域名称不能为空'
+  if (draftErrors.code || draftErrors.name) return
+  draftSubmitting.value = true
+  draftServerError.value = ''
+  try {
+    await createRelayGateway({ code, name })
+    closeDraftCard()
+    await refreshAll()
+    message.success(
+      `已创建「${name}」（${code}）：初始直连形态。下一步：点该卡灰色两腿 chip 登记两腿（SSH 腿登记时顺带填 SSH 账号）`,
+    )
+    // 新区域卡滚动到位（拓扑明细刷新后渲染）
+    await nextTick()
+    const card = document.querySelector(`.topo-card[data-code="${code}"]`)
+    if (card && typeof card.scrollIntoView === 'function') card.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  } catch (e) {
+    // 后端 400（查重/格式）就地红字展示，不弹 toast
+    const msg = getApiErrorMessage(e)
+    if (msg.includes('code')) draftErrors.code = msg
+    else draftServerError.value = msg
+  } finally {
+    draftSubmitting.value = false
+  }
+}
+
+/** Esc 收起草稿卡（草稿输入框内 Esc 经 .stop 就地处理；此处兜底输入框外按键） */
+function onGlobalKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && draftOpen.value) closeDraftCard()
+}
+
 function openCreate() {
   modal.editing = false
   modal.open = true
@@ -942,7 +1613,7 @@ async function handleSubmit() {
       message.success('区域已创建')
     }
     modal.open = false
-    await load()
+    await refreshAll()
   } catch (e) {
     message.error(getApiErrorMessage(e))
   } finally {
@@ -964,9 +1635,8 @@ function handleToggle(record: RelayGateway) {
     okText: '确认',
     onOk: async () => {
       try {
-        await updateRelayGateway(record.id, { status: next })
+        await toggleRegionStatus(record, next)
         message.success(next === 'disabled' ? '区域已禁用' : '区域已启用')
-        await load()
       } catch (e) {
         message.error(getApiErrorMessage(e))
       }
@@ -1141,11 +1811,19 @@ function startExec(record: RelayGateway, kind: 'init' | 'push' | 'sshd', body: R
               : [`sshd 跳板转发配置完成：${hosts}`]
           : [`执行失败（rc=${rc}，${status}）`]
       if (rc === 0) {
-        message.success(isInit ? `初始化完成（${hosts}，监听 ${port}）` : `配置已下发（${hosts}）`)
+        message.success(
+          kind === 'init'
+            ? `初始化完成（${hosts}，监听 ${port}）`
+            : kind === 'sshd'
+              ? `跳板转发配置完成（${hosts}），正在自动复检…`
+              : `配置已下发（${hosts}）`,
+        )
       } else {
         message.error(`${isInit ? '初始化' : '下发'}失败（rc=${rc}），详见执行日志`)
       }
-      load()
+      refreshAll()
+      // B″ 跳板框完成即隐：配置成功后自动复检，刷新体检快照（证据清零 → 橙框消失）
+      if (kind === 'sshd' && rc === 0) void recheckAfterSshd(record)
     },
     onError: (err: string) => {
       stopElapsedTimer()
@@ -1163,6 +1841,17 @@ function cancelExec() {
   stopElapsedTimer()
   resetActiveState()
   execProgress.status = 'exception'
+}
+
+/** 跳板转发配置成功后自动复检：刷新体检快照（applyHealthResult 原地更新），
+ * 让「跳板转发待配置」框完成即隐；复检异常不打扰（框保留旧证据，可手动「测试」）。 */
+async function recheckAfterSshd(record: RelayGateway) {
+  try {
+    const res = await relayHealthCheck(record.code)
+    applyHealthResult(res.data as RelayHealthResult, new Date().toISOString())
+  } catch {
+    // 静默：保持既有体检快照
+  }
 }
 
 function handleInit(record: RelayGateway) {
@@ -1305,7 +1994,7 @@ function handleDelete(record: RelayGateway) {
       try {
         await deleteRelayGateway(record.id)
         message.success('区域已删除')
-        await load()
+        await refreshAll()
       } catch (e) {
         const msg = getApiErrorMessage(e)
         if (msg.includes('仍被集群挂接') || msg.includes('无法删除')) {
@@ -1318,12 +2007,16 @@ function handleDelete(record: RelayGateway) {
   })
 }
 
-onMounted(load)
+onMounted(() => {
+  void refreshAll()
+  document.addEventListener('keydown', onGlobalKeydown)
+})
 
-// 离开页面时停掉计时器并主动中止 SSE，避免后台残留定时器/连接
+// 离开页面时停掉计时器、主动中止 SSE、移除全局监听，避免后台残留定时器/连接
 onUnmounted(() => {
   stopElapsedTimer()
   installStream.cancel()
+  document.removeEventListener('keydown', onGlobalKeydown)
 })
 </script>
 
@@ -1908,5 +2601,304 @@ onUnmounted(() => {
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.05em;
+}
+
+/* ── 视图切换工具行（relay-region-topology-view D1，mockup 移植） ── */
+.viewbar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
+.view-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.view-toggle button {
+  border: none;
+  background: transparent;
+  padding: 7px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--muted);
+}
+.view-toggle button.on {
+  background: var(--accent);
+  color: #fff;
+}
+.topo-view {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* 悬空区域码提示卡（mockup orphan-card 移植） */
+.topo-view .code-tag {
+  background: var(--accent-bg);
+  color: var(--accent);
+  border-radius: 4px;
+  padding: 1px 7px;
+  font-weight: 600;
+}
+.orphan-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid oklch(80% 0.15 85 / 55%);
+  background: oklch(80% 0.15 85 / 10%);
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: 13px;
+}
+.orphan-card .tag.warn {
+  background: oklch(80% 0.15 85 / 22%);
+  border-radius: 4px;
+  padding: 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* 新建区域虚线卡（点击展开草稿卡，批次三接线） */
+.create-card {
+  border: 2px dashed oklch(74% 0.02 240);
+  border-radius: 10px;
+  padding: 22px;
+  text-align: center;
+  color: var(--muted);
+  background: transparent;
+  transition: border-color 0.15s;
+  cursor: pointer;
+}
+.create-card:hover {
+  border-color: var(--accent);
+}
+.create-card b {
+  font-size: 14px;
+}
+.create-card .steps {
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+/* ── 新建区域草稿卡（批次三 3.7，mockup .draft-card 移植） ── */
+.draft-card {
+  border: 2px dashed var(--accent);
+  border-radius: 10px;
+  padding: 16px 18px 14px;
+  background: var(--surface);
+}
+.draft-card .d-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 2px;
+}
+.draft-card .d-head b {
+  font-size: 14px;
+  color: var(--fg);
+}
+.draft-card .d-head .d-hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+.draft-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1.2fr 1fr 0.6fr;
+  gap: 10px 12px;
+  margin-top: 10px;
+}
+.draft-grid.two {
+  grid-template-columns: 1fr 1.4fr;
+}
+.draft-grid .pf label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 3px;
+}
+.draft-grid .pf input {
+  width: 100%;
+  border: 1px solid oklch(74% 0.02 240);
+  border-radius: 6px;
+  padding: 6px 9px;
+  font-size: 13px;
+  font-family: var(--font-mono);
+  background: var(--surface);
+  color: var(--fg);
+}
+.draft-grid .pf input.ftext {
+  font-family: inherit;
+}
+.draft-grid .pf input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-bg);
+}
+.draft-grid .pf .ferr {
+  display: none;
+  color: var(--danger);
+  font-size: 12px;
+  margin-top: 3px;
+  line-height: 1.5;
+}
+.draft-grid .pf.invalid input {
+  border-color: var(--danger);
+}
+.draft-grid .pf.invalid .ferr {
+  display: block;
+}
+.draft-card .d-error {
+  margin-top: 8px;
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.draft-card .d-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+.draft-card .d-note {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.6;
+  background: var(--bg);
+  border: 1px dashed oklch(74% 0.02 240);
+  border-radius: 6px;
+  padding: 7px 9px;
+}
+.draft-card .d-note b {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+/* ── 就地 popover（批次三 3.1 引擎，mockup .pop 移植；Teleport 到 body，
+      scoped 属性随 vnode 保留；v-html 注记内的元素无 scope 属性，须 :deep()） ── */
+.topo-pop {
+  position: fixed;
+  z-index: 60;
+  width: 330px;
+  max-width: calc(100vw - 24px);
+  background: var(--surface);
+  border: 1px solid oklch(74% 0.02 240);
+  border-radius: 10px;
+  box-shadow: 0 10px 34px oklch(20% 0.02 240 / 22%);
+  padding: 12px 14px;
+}
+.topo-pop .p-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+}
+.topo-pop .p-sub {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.topo-pop .pf {
+  margin-top: 10px;
+}
+.topo-pop .pf label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 3px;
+}
+.topo-pop .pf input,
+.topo-pop .pf select {
+  width: 100%;
+  border: 1px solid oklch(74% 0.02 240);
+  border-radius: 6px;
+  padding: 6px 9px;
+  font-size: 13px;
+  font-family: var(--font-mono);
+  background: var(--surface);
+  color: var(--fg);
+}
+.topo-pop .pf select,
+.topo-pop .pf input.ftext {
+  font-family: inherit;
+}
+.topo-pop .pf input:focus,
+.topo-pop .pf select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-bg);
+}
+.topo-pop .pf .ferr {
+  display: none;
+  color: var(--danger);
+  font-size: 12px;
+  margin-top: 3px;
+  line-height: 1.5;
+}
+.topo-pop .pf.invalid input {
+  border-color: var(--danger);
+}
+.topo-pop .pf.invalid .ferr {
+  display: block;
+}
+.topo-pop .p-error {
+  margin: 10px 0 0;
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.topo-pop .p-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+.topo-pop .p-actions .only-save {
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0;
+  margin-right: auto;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.topo-pop .p-actions .only-save:hover {
+  color: var(--fg);
+}
+.topo-pop .p-actions .p-link {
+  border: none;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0;
+  margin-right: auto;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.topo-pop .p-note {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.6;
+  background: var(--bg);
+  border: 1px dashed oklch(74% 0.02 240);
+  border-radius: 6px;
+  padding: 7px 9px;
+}
+.topo-pop .p-note :deep(b) {
+  color: var(--fg);
+  font-weight: 600;
+}
+.topo-pop .p-note :deep(.st-miss) {
+  color: var(--warning);
 }
 </style>
