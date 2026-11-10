@@ -531,17 +531,13 @@
               <label>VIP 地址</label>
               <a-input v-model:value="kaVip" placeholder="10.128.216.154" />
             </div>
-            <div class="ka-row">
-              <label>网卡名</label>
-              <a-input v-model:value="kaIface" placeholder="ens7" />
-            </div>
           </div>
           <div class="ka-row ka-col">
-            <label>节点 IP 列表（每行一个，2–8 个）</label>
+            <label>节点 IP 列表（每行一条：节点IP 网卡名，空格分隔，2–8 个）</label>
             <a-textarea
               v-model:value="kaNodesText"
               :rows="4"
-              placeholder="10.128.216.160&#10;10.128.216.161&#10;10.128.216.162"
+              placeholder="10.128.216.160 ens7&#10;10.128.216.161 eth1&#10;10.128.216.162 bond0"
             />
           </div>
           <a-checkbox v-model:checked="kaAdvanced">高级参数</a-checkbox>
@@ -593,8 +589,8 @@
           </div>
 
           <h4 class="ka-group">
-            各节点配置（{{ kaNodes.length }} 节点；conf 差异仅四处：router_id / priority / unicast_src_ip /
-            unicast_peer）
+            各节点配置（{{ kaNodes.length }} 节点；conf 差异仅五处：router_id / priority / unicast_src_ip /
+            unicast_peer / 网卡名）
           </h4>
           <a-collapse>
             <a-collapse-panel
@@ -668,6 +664,7 @@ import { textLineDiff } from '@/utils/tools/textdiff'
 import {
   KEEPALIVED_DEFAULTS,
   generateKeepalivedConfig,
+  parseKeepalivedNodesText,
   validateKeepalivedInput,
   type KeepalivedGenInput,
 } from '@/utils/tools/keepalived'
@@ -826,7 +823,6 @@ function clearTool(key: string): void {
     },
     keepalived: () => {
       kaVip.value = ''
-      kaIface.value = ''
       kaNodesText.value = ''
       kaAdvanced.value = false
       kaMaskBits.value = KEEPALIVED_DEFAULTS.maskBits
@@ -864,7 +860,6 @@ function handleTextDiff(): void {
 
 // ── Keepalived 配置生成（tools-keepalived-generator）：纯前端模板渲染，样例逐字回归见 utils 单测 ──
 const kaVip = ref('')
-const kaIface = ref('')
 const kaNodesText = ref('')
 const kaAdvanced = ref(false)
 const kaMaskBits = ref<number | null>(KEEPALIVED_DEFAULTS.maskBits)
@@ -875,17 +870,14 @@ const kaPriorityStep = ref<number | null>(KEEPALIVED_DEFAULTS.priorityStep)
 const kaRouterIdPrefix = ref(KEEPALIVED_DEFAULTS.routerIdPrefix)
 const kaCheckPort = ref<number | null>(KEEPALIVED_DEFAULTS.checkPort)
 
-const kaNodes = computed(() =>
-  kaNodesText.value
-    .split('\n')
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0),
-)
+const kaNodes = computed(() => kaParsedNodes.value.nodes)
+
+// 行解析：每行「节点IP 网卡名」，行级红字（缺网卡名/多余列/非法字符）带行号
+const kaParsedNodes = computed(() => parseKeepalivedNodesText(kaNodesText.value))
 
 const kaInput = computed<KeepalivedGenInput>(() => ({
   vip: kaVip.value.trim(),
-  nodes: kaNodes.value,
-  iface: kaIface.value.trim(),
+  nodes: kaParsedNodes.value.nodes,
   maskBits: kaMaskBits.value ?? KEEPALIVED_DEFAULTS.maskBits,
   vrrpId: kaVrrpId.value ?? KEEPALIVED_DEFAULTS.vrrpId,
   authPass: kaAuthPass.value,
@@ -895,11 +887,14 @@ const kaInput = computed<KeepalivedGenInput>(() => ({
   checkPort: kaCheckPort.value ?? KEEPALIVED_DEFAULTS.checkPort,
 }))
 
-const kaValidation = computed(() => validateKeepalivedInput(kaInput.value))
+const kaValidation = computed(() => {
+  const v = validateKeepalivedInput(kaInput.value)
+  return { errors: [...kaParsedNodes.value.errors, ...v.errors], warnings: v.warnings }
+})
 
 const kaResult = computed(() => {
   if (kaValidation.value.errors.length > 0) return null
-  if (!kaInput.value.vip || !kaInput.value.iface || kaInput.value.nodes.length === 0) return null
+  if (!kaInput.value.vip || kaInput.value.nodes.length === 0) return null
   return generateKeepalivedConfig(kaInput.value)
 })
 
@@ -907,7 +902,7 @@ const kaSharedFiles = computed(() => kaResult.value?.files.filter((f) => f.group
 const kaNodeGroups = computed(() => {
   const r = kaResult.value
   if (!r) return []
-  return kaInput.value.nodes.map((ip, index) => ({ ip, index, files: r.files.filter((f) => f.group === `node-${ip}`) }))
+  return kaInput.value.nodes.map((n, index) => ({ ip: n.ip, index, files: r.files.filter((f) => f.group === `node-${n.ip}`) }))
 })
 
 function downloadFile(filename: string, content: string): void {

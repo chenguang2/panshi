@@ -409,10 +409,9 @@ describe('Tools Keepalived 配置生成（tools-keepalived-generator）', () => 
     const inputs = wrapper.findAll('.ka-form .a-input')
     ;(inputs[0]!.element as HTMLInputElement).value = vip
     inputs[0]!.trigger('input')
-    ;(inputs[1]!.element as HTMLInputElement).value = 'ens7'
-    inputs[1]!.trigger('input')
     const ta = wrapper.find('.ka-form textarea')
-    ;(ta.element as HTMLTextAreaElement).value = '10.128.216.160\n10.128.216.161\n10.128.216.162'
+    ;(ta.element as HTMLTextAreaElement).value =
+      '10.128.216.160 ens7\n10.128.216.161 ens7\n10.128.216.162 ens7'
     ta.trigger('input')
   }
 
@@ -461,7 +460,6 @@ describe('Tools Keepalived 配置生成（tools-keepalived-generator）', () => 
     await flushPromises()
     const inputs = wrapper.findAll('.ka-form .a-input')
     expect((inputs[0]!.element as HTMLInputElement).value).toBe('')
-    expect((inputs[1]!.element as HTMLInputElement).value).toBe('')
     expect((wrapper.find('.ka-form textarea').element as HTMLTextAreaElement).value).toBe('')
     expect(wrapper.find('.ka-pre').exists()).toBe(false)
   })

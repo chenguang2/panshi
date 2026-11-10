@@ -2,14 +2,18 @@ import { describe, expect, it } from 'vitest'
 import {
   KEEPALIVED_DEFAULTS,
   generateKeepalivedConfig,
+  parseKeepalivedNodesText,
   validateKeepalivedInput,
   type KeepalivedGenInput,
 } from '../keepalived'
 
 const SAMPLE: KeepalivedGenInput = {
   vip: '10.128.216.154',
-  nodes: ['10.128.216.160', '10.128.216.161', '10.128.216.162'],
-  iface: 'ens7',
+  nodes: [
+    { ip: '10.128.216.160', iface: 'ens7' },
+    { ip: '10.128.216.161', iface: 'ens7' },
+    { ip: '10.128.216.162', iface: 'ens7' },
+  ],
   ...KEEPALIVED_DEFAULTS,
 }
 
@@ -153,11 +157,91 @@ describe('generateKeepalivedConfig 样例逐字回归', () => {
   })
 })
 
+describe('各节点网卡不同（逐节点 interface / VIP dev/label / 防火墙 / 手册）', () => {
+  const MULTI: KeepalivedGenInput = {
+    vip: '10.128.216.154',
+    nodes: [
+      { ip: '10.128.216.160', iface: 'ens7' },
+      { ip: '10.128.216.161', iface: 'eth1' },
+      { ip: '10.128.216.162', iface: 'bond0' },
+    ],
+    ...KEEPALIVED_DEFAULTS,
+  }
+  const r = generateKeepalivedConfig(MULTI)
+  const confOf = (ip: string) => r.files.find((f) => f.group === `node-${ip}` && f.filename.startsWith('keepalived_'))!
+
+  it('每节点 interface 与 VIP dev/label 用本机行内网卡', () => {
+    const c1 = confOf('10.128.216.160').content
+    const c2 = confOf('10.128.216.161').content
+    const c3 = confOf('10.128.216.162').content
+    expect(c1).toContain('interface       ens7')
+    expect(c1).toContain('10.128.216.154/24 dev ens7 label ens7:vip')
+    expect(c2).toContain('interface       eth1')
+    expect(c2).toContain('10.128.216.154/24 dev eth1 label eth1:vip')
+    expect(c2).not.toContain('interface       ens7')
+    expect(c3).toContain('interface       bond0')
+    expect(c3).toContain('10.128.216.154/24 dev bond0 label bond0:vip')
+    // 跨网卡比对差异行：router_id / priority / interface（连带 VIP dev/label 行）/
+    // unicast_src_ip / 对端 IP 行——「五处属性」落到行为 6 行（interface 占 2 行）
+    const diffLines = c1.split('\n').filter((line, i) => line !== c2.split('\n')[i])
+    expect(diffLines).toHaveLength(6)
+    expect(diffLines.some((l) => l.trimStart().startsWith('interface'))).toBe(true)
+  })
+
+  it('防火墙 tcpdump 用本机网卡', () => {
+    const fw1 = r.files.find((f) => f.group === 'node-10.128.216.160' && f.filename.startsWith('firewall'))!
+    const fw2 = r.files.find((f) => f.group === 'node-10.128.216.161' && f.filename.startsWith('firewall'))!
+    expect(fw1.content).toContain('tcpdump -i ens7 -nn proto 112')
+    expect(fw2.content).toContain('tcpdump -i eth1 -nn proto 112')
+    expect(fw2.content).not.toContain('tcpdump -i ens7')
+  })
+
+  it('部署手册按唯一网卡集合列举并注明节点', () => {
+    expect(r.handbook).toContain('@ ens7/eth1/bond0')
+    expect(r.handbook).toContain('ip addr show ens7 | grep 10.128.216.154')
+    expect(r.handbook).toContain('ip addr show eth1 | grep 10.128.216.154')
+    expect(r.handbook).toContain('ip addr show bond0 | grep 10.128.216.154')
+    expect(r.handbook).toContain('tcpdump -i eth1 -nn proto 112')
+    expect(r.handbook).toContain('Edge-2')
+  })
+})
+
+describe('parseKeepalivedNodesText 行解析', () => {
+  it('每行「IP 网卡名」→ 结构化节点（空行跳过、两侧空白容忍）', () => {
+    const p = parseKeepalivedNodesText('10.128.216.160 ens7\n\n  10.128.216.161 eth1  \n')
+    expect(p.errors).toHaveLength(0)
+    expect(p.nodes).toEqual([
+      { ip: '10.128.216.160', iface: 'ens7' },
+      { ip: '10.128.216.161', iface: 'eth1' },
+    ])
+  })
+
+  it('缺网卡名 → 行号红字', () => {
+    const p = parseKeepalivedNodesText('10.128.216.160 ens7\n10.128.216.161\n')
+    expect(p.errors).toHaveLength(1)
+    expect(p.errors[0]).toContain('第 2 行缺少网卡名')
+    expect(p.errors[0]).toContain('10.128.216.161')
+    expect(p.errors[0]).toContain('节点IP 网卡名')
+  })
+
+  it('多余列 → 行号红字', () => {
+    const p = parseKeepalivedNodesText('10.128.216.160 ens7 extra\n')
+    expect(p.errors).toHaveLength(1)
+    expect(p.errors[0]).toContain('第 1 行')
+  })
+
+  it('网卡名非法字符 → 行号红字', () => {
+    const p = parseKeepalivedNodesText('10.128.216.160 ens7;rm\n')
+    expect(p.errors).toHaveLength(1)
+    expect(p.errors[0]).toContain('第 1 行网卡名包含非法字符')
+  })
+})
+
 describe('validateKeepalivedInput 校验', () => {
   it('非法 IPv4 / 节点不足 / VIP 与节点重复 → 红字错误', () => {
-    const badIp = validateKeepalivedInput({ ...SAMPLE, nodes: ['10.128.216.160', 'abc'] })
+    const badIp = validateKeepalivedInput({ ...SAMPLE, nodes: [SAMPLE.nodes[0]!, { ip: 'abc', iface: 'ens7' }] })
     expect(badIp.errors.some((e) => e.includes('abc'))).toBe(true)
-    const tooFew = validateKeepalivedInput({ ...SAMPLE, nodes: ['10.128.216.160'] })
+    const tooFew = validateKeepalivedInput({ ...SAMPLE, nodes: [SAMPLE.nodes[0]!] })
     expect(tooFew.errors.some((e) => e.includes('少于 2'))).toBe(true)
     const dup = validateKeepalivedInput({ ...SAMPLE, vip: '10.128.216.160' })
     expect(dup.errors.some((e) => e.includes('VIP') && e.includes('重复'))).toBe(true)
