@@ -243,6 +243,24 @@ describe('RouteFormModal.vue（组件级提交载荷）', () => {
     expect(Object.prototype.hasOwnProperty.call(body, 'vars')).toBe(true)
     expect(body.vars).toEqual([])
   })
+
+  it('F: 非 basic tab 校验失败 → 全局提示必填字段并切回基础 tab（不再静默无反应）', async () => {
+    const { message } = await import('ant-design-vue')
+    const w = await mountModal()
+    const vm: any = w.vm
+    // 用户停留在高级匹配 tab（表单未填必填项），点存盘此前毫无反应
+    vm.activeTab = 'advanced'
+    await flushPromises()
+    await submit(w)
+
+    const called = vi
+      .mocked(message.error)
+      .mock.calls.some((args) => String(args[0]).startsWith('请填写必填字段'))
+    expect(called, '校验失败必须有全局可见提示').toBe(true)
+    expect(vm.activeTab, '应切回基础 tab 让内联红字可见').toBe('basic')
+    expect(mockApiPost).not.toHaveBeenCalled()
+    expect(mockApiPut).not.toHaveBeenCalled()
+  })
 })
 
 describe('RouteFormModal.vue — 插件组 Tab 空态与未发布标注（M2/M3）', () => {

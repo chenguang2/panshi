@@ -408,8 +408,25 @@ function validateForm(): boolean {
   return true
 }
 
+// 校验失败的全局反馈文案映射（与统一管理 useClusterRoutes.getFieldName 同款口径）
+const FIELD_LABELS: Record<string, string> = {
+  name: '名称',
+  uri: 'URI',
+  cluster_id: '所属集群',
+  upstream_id: '上游',
+  methods: '请求方法',
+  priority: '优先级',
+}
+
 async function handleSubmit() {
-  if (!validateForm()) return
+  if (!validateForm()) {
+    // 校验失败必须给全局可见反馈（参照统一管理侧）：内联红字全在基础 tab，
+    // 用户停留在其他 tab 时静默 return 会表现为「存盘无反应」（2026-11-10 实测）
+    const firstKey = Object.keys(FIELD_LABELS).find((k) => formErrors[k])
+    message.error(firstKey ? `请填写必填字段: ${FIELD_LABELS[firstKey]}` : '请检查表单填写是否完整')
+    activeTab.value = 'basic'
+    return
+  }
   submitting.value = true
   try {
     const data: Record<string, any> = {
