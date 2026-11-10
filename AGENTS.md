@@ -227,6 +227,8 @@ openspec/        # 变更工件；openspec/specs/ = main specs
 
 71. **会话间隔后恢复工作，先 `git log --oneline -10` + `git status` 盘点再动手** — 本仓库多会话并行常态下，后台 subagent 派发与恢复之间可能隔数天，同名变更可能已被另一会话完整交付（2026-10-31→11-09 实测：db-backup-dr-ux-optimization 派发两 lane 后会话中断一周，另一会话已实施+E2E+手册+归档并推送，恢复的两个 lane 险些重复实现——前端 lane 自查发现撤手，后端 lane 已写 4 个测试文件才被叫停）。规则：① subagent 收到完成通知或恢复派发前，主会话先核对 HEAD 与远端（`git status -sb` 看 ahead/behind），确认任务是否已被并行交付；② subagent 开工第一步必须是盘点现场（git log/status + 读目标文件现状），发现实现已存在即停手转核验；③ 已交付时，重复劳动的清理原则：误写文件逐 diff 判定「重复→还原 / 修正→保留并说明判据」，不盲目 checkout。
 
+72. **`exclude_unset` 部分更新端点的前端载荷：字段缺席 = 保留旧值，条件拼接必留残值** — 后端 PUT 更新（如 `cluster_routes.py::update_route` 的 `model_dump(exclude_unset=True)`）只更新请求体里**显式出现**的字段；前端表单按开关条件拼载荷（`if (enabled) data.vars = ...`）会把「关闭」误表达成「未变更」，旧值残留库中，再经回填逻辑（如「vars 存在即视为开启」）把开关复活（2026-11-10 实测：路由管理 RouteFormModal 取消高级匹配后旧条件残留，统一管理侧 useClusterRoutes 因恒带 `vars` 而幸免）。规则：直发 PUT 的表单，布尔/列表字段一律**无条件进载荷**，「关闭即清空」语义在载荷层表达（关闭时 `[]`/`false`）；守卫用例见 `RouteFormModal.test.ts` B2（enable_websocket 同型历史 bug）与 E（高级匹配）。
+
 ## 新增功能步骤
 
 1. 在 `backend/app/schemas/` 定义 Pydantic 模型

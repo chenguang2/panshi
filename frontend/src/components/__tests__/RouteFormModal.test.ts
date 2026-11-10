@@ -218,6 +218,31 @@ describe('RouteFormModal.vue（组件级提交载荷）', () => {
     expect(body.vars).toEqual([['arg_version', 'in', ['a', 'b']]])
     expect(mockApiPut).toHaveBeenCalledWith('/clusters/1/routes/5/plugins', { plugins: [] })
   })
+
+  it('E: 编辑时取消高级匹配 → PUT body 必须显式带 vars=[]（后端 exclude_unset 部分更新，缺字段=保留旧值）', async () => {
+    const w = await mountModal({ editingRoute: makeEditingRoute() })
+    const vm: any = w.vm
+    expect(vm.form.advancedEnabled).toBe(true)
+
+    // 开关切换在生产代码里挂 100ms isUserModifying 定时器：同用例 A 的 fake timers 处理
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      await setCheckbox(w, '开启高级匹配', false)
+      await vi.advanceTimersByTimeAsync(150)
+    } finally {
+      vi.useRealTimers()
+    }
+    await flushPromises()
+
+    await submit(w)
+    expect(mockApiPut.mock.calls[0][0]).toBe('/clusters/1/routes/5')
+    const body = mockApiPut.mock.calls[0][1]
+    expect(body.advanced_match_enabled).toBe(false)
+    // 关键断言：vars 缺字段会被后端 exclude_unset 视为「未变更」，
+    // 旧条件原样保留，下次进入编辑被「vars 存在即视为开启」复活（本 bug 根因）
+    expect(Object.prototype.hasOwnProperty.call(body, 'vars')).toBe(true)
+    expect(body.vars).toEqual([])
+  })
 })
 
 describe('RouteFormModal.vue — 插件组 Tab 空态与未发布标注（M2/M3）', () => {

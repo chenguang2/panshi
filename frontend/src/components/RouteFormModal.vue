@@ -422,7 +422,10 @@ async function handleSubmit() {
       upstream_id: form.upstream_id,
       advanced_match_enabled: form.advancedEnabled,
     }
-    if (form.advancedEnabled) data.vars = form.advancedMatch.vars
+    // 关闭时也必须显式带 vars=[]：后端 update_route 是 model_dump(exclude_unset=True)
+    // 部分更新语义，缺字段=保留旧值，旧条件会在下次进入编辑时经「vars 存在即视为
+    // 开启」的回填逻辑复活开关（统一管理侧 useClusterRoutes.ts 同款模式已显式清空）
+    data.vars = form.advancedEnabled ? form.advancedMatch.vars : []
     data.plugin_config_ids = pluginConfigIds.value
     data.enable_websocket = form.enableWebsocket
     const cid = form.cluster_id
