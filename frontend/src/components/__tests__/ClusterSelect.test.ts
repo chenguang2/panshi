@@ -46,7 +46,8 @@ describe('ClusterSelect.vue', () => {
     const select = wrapper.findComponent(aSelectComps.ASelect)
     expect(select.props('placeholder')).toBe('请选择集群')
     expect(select.props('showSearch')).toBe(true)
-    expect(select.props('value')).toBe('')
+    // 必选模式：'' 规范化为 undefined，触发 antd placeholder 显示
+    expect(select.props('value')).toBeUndefined()
   })
 
   it('筛选模式（allow-all）：「全部集群」为首选项且 value 为空串，位于分组之前', () => {
@@ -55,8 +56,8 @@ describe('ClusterSelect.vue', () => {
     const selectStub = wrapper.find('.a-select-stub')
     const allOpt = wrapper.findAll('.a-opt').find((o) => o.text() === '全部集群')!
     expect(allOpt).toBeDefined()
-    const allOptComp = wrapper.findComponent(aSelectComps.ASelectOption)
-    void allOptComp
+    // allowAll 模式 '' 原样透传（命中「全部集群」选项标签，不显示 placeholder）
+    expect(wrapper.findComponent(aSelectComps.ASelect).props('value')).toBe('')
     // 「全部集群」渲染在所有分组之前
     const html = selectStub.html()
     expect(html.indexOf('全部集群')).toBeLessThan(html.indexOf('生产组'))
@@ -104,6 +105,13 @@ describe('ClusterSelect.vue', () => {
     expect(wrapper.text()).not.toContain('网关-C')
     await wrapper.setProps({ clusters: CLUSTERS })
     expect(wrapper.text()).toContain('网关-C')
+  })
+
+  it('blur 事件透传（表单向导 @blur 校验依赖）', async () => {
+    const wrapper = mountSelect()
+    const select = wrapper.findComponent(aSelectComps.ASelect)
+    await select.vm.$emit('blur')
+    expect(wrapper.emitted('blur')).toHaveLength(1)
   })
 
   it('placeholder 可覆盖', () => {

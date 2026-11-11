@@ -1,6 +1,6 @@
 <template>
   <div class="modal-overlay" :style="{ display: visible ? 'flex' : 'none' }">
-    <div class="modal" style="max-width:520px;">
+    <div class="modal" style="max-width: 520px">
       <div class="modal-header">
         <h2>创建 CA 根证书</h2>
         <button class="modal-close" @click="handleClose">&times;</button>
@@ -10,37 +10,54 @@
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">证书算法 <span class="required">*</span></label>
-            <a-select v-model:value="form.algorithm" style="width:100%;" :disabled="creating">
+            <a-select v-model:value="form.algorithm" style="width: 100%" :disabled="creating">
               <a-select-option value="rsa">
-                <div style="font-weight:600;font-size:13px;">RSA 2048</div>
-                <div style="font-size:11px;color:var(--muted);line-height:1.4;">Chrome/Firefox/Safari 兼容</div>
+                <div style="font-weight: 600; font-size: 13px">RSA 2048</div>
+                <div style="font-size: 11px; color: var(--muted); line-height: 1.4">Chrome/Firefox/Safari 兼容</div>
               </a-select-option>
               <a-select-option value="ecc">
-                <div style="font-weight:600;font-size:13px;">ECC P-256</div>
-                <div style="font-size:11px;color:var(--muted);line-height:1.4;">Chrome/Firefox/Safari 兼容，密钥更小</div>
+                <div style="font-weight: 600; font-size: 13px">ECC P-256</div>
+                <div style="font-size: 11px; color: var(--muted); line-height: 1.4">
+                  Chrome/Firefox/Safari 兼容，密钥更小
+                </div>
               </a-select-option>
               <a-select-option value="sm2">
-                <div style="font-weight:600;font-size:13px;">SM2 国密</div>
-                <div style="font-size:11px;color:var(--muted);line-height:1.4;">国密浏览器（360/密信/红莲花）</div>
+                <div style="font-weight: 600; font-size: 13px">SM2 国密</div>
+                <div style="font-size: 11px; color: var(--muted); line-height: 1.4">国密浏览器（360/密信/红莲花）</div>
               </a-select-option>
             </a-select>
           </div>
           <div class="form-group">
             <label class="form-label">所属集群 <span class="required">*</span></label>
-            <a-select v-model:value="form.cluster_id" style="width:100%;" :disabled="creating" placeholder="请选择集群">
-              <a-select-option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</a-select-option>
-            </a-select>
+            <ClusterSelect
+              :model-value="form.cluster_id"
+              :clusters="clusters"
+              :disabled="creating"
+              @update:model-value="onClusterFieldChange"
+            />
           </div>
         </div>
 
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">证书名称 <span class="required">*</span></label>
-            <input v-model="form.name" type="text" class="form-input" placeholder="例如：生产环境 CA" :disabled="creating">
+            <input
+              v-model="form.name"
+              type="text"
+              class="form-input"
+              placeholder="例如：生产环境 CA"
+              :disabled="creating"
+            />
           </div>
           <div class="form-group">
             <label class="form-label">通用名称 CN</label>
-            <input v-model="form.common_name" type="text" class="form-input" placeholder="默认取证书名称" :disabled="creating">
+            <input
+              v-model="form.common_name"
+              type="text"
+              class="form-input"
+              placeholder="默认取证书名称"
+              :disabled="creating"
+            />
             <div class="form-hint">可选，默认使用证书名称</div>
           </div>
         </div>
@@ -48,19 +65,38 @@
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">组织 (O)</label>
-            <input v-model="form.organization" type="text" class="form-input" placeholder="默认 EMBRACE" :disabled="creating">
+            <input
+              v-model="form.organization"
+              type="text"
+              class="form-input"
+              placeholder="默认 EMBRACE"
+              :disabled="creating"
+            />
             <div class="form-hint">机构/公司名称，显示在证书的"颁发对象"中</div>
           </div>
           <div class="form-group">
             <label class="form-label">组织单位 (OU)</label>
-            <input v-model="form.organizational_unit" type="text" class="form-input" placeholder="默认 EDGE" :disabled="creating">
+            <input
+              v-model="form.organizational_unit"
+              type="text"
+              class="form-input"
+              placeholder="默认 EDGE"
+              :disabled="creating"
+            />
             <div class="form-hint">部门名称，显示在证书的"颁发对象"中</div>
           </div>
         </div>
 
         <div class="form-group">
           <label class="form-label">有效期</label>
-          <input v-model.number="form.validity_days" type="number" class="form-input" min="1" max="36500" :disabled="creating">
+          <input
+            v-model.number="form.validity_days"
+            type="number"
+            class="form-input"
+            min="1"
+            max="36500"
+            :disabled="creating"
+          />
           <div class="form-hint">天，默认 3650（10 年）</div>
         </div>
 
@@ -72,7 +108,11 @@
 
       <div class="modal-footer">
         <button class="btn btn-ghost" @click="handleClose" :disabled="creating">取消</button>
-        <button class="btn btn-primary" @click="handleCreate" :disabled="creating || !form.cluster_id || !form.name.trim()">
+        <button
+          class="btn btn-primary"
+          @click="handleCreate"
+          :disabled="creating || !form.cluster_id || !form.name.trim()"
+        >
           {{ creating ? '创建中...' : '创建 CA' }}
         </button>
       </div>
@@ -82,6 +122,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, watch } from 'vue'
+import ClusterSelect from '@/components/ClusterSelect.vue'
 import { message } from 'ant-design-vue'
 
 const props = defineProps<{
@@ -106,6 +147,11 @@ const form = reactive({
 
 const creating = ref(false)
 const errorMsg = ref('')
+
+/** ClusterSelect emit number|string → 表单 number|null（null=未选，antd placeholder 语义） */
+function onClusterFieldChange(value: number | string) {
+  form.cluster_id = value === '' ? null : Number(value)
+}
 
 async function handleCreate() {
   if (!form.cluster_id || !form.name.trim()) return
@@ -137,23 +183,32 @@ function handleClose() {
   emit('close')
 }
 
-watch(() => props.visible, (v) => {
-  if (v) {
-    form.cluster_id = null
-    form.name = ''
-    form.common_name = ''
-    form.organization = ''
-    form.organizational_unit = ''
-    form.validity_days = 3650
-    form.algorithm = 'rsa'
-    errorMsg.value = ''
-  }
-})
+watch(
+  () => props.visible,
+  (v) => {
+    if (v) {
+      form.cluster_id = null
+      form.name = ''
+      form.common_name = ''
+      form.organization = ''
+      form.organizational_unit = ''
+      form.validity_days = 3650
+      form.algorithm = 'rsa'
+      errorMsg.value = ''
+    }
+  },
+)
 </script>
 
 <style scoped>
-.form-row { display: flex; gap: 16px; margin-bottom: 0; }
-.form-row .form-group { flex: 1; }
+.form-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 0;
+}
+.form-row .form-group {
+  flex: 1;
+}
 .error-detail-box {
   margin-top: 12px;
   padding: 12px;

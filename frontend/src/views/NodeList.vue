@@ -211,15 +211,12 @@
           <div class="form-row">
             <div class="form-group">
               <label class="form-label">所属集群 <span class="required">*</span></label>
-              <select
+              <ClusterSelect
                 v-model="formData.cluster_id"
-                class="form-input"
-                :class="{ 'has-error': formErrors.cluster_id }"
+                :clusters="clusters"
                 :disabled="!!editingNode"
-              >
-                <option value="">请选择集群</option>
-                <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
-              </select>
+                :class="{ 'has-error': formErrors.cluster_id }"
+              />
               <span class="form-error" v-if="formErrors.cluster_id">{{ formErrors.cluster_id }}</span>
             </div>
             <div class="form-group">
@@ -445,11 +442,8 @@
         <div class="modal-body">
           <div class="form-group">
             <label class="form-label">所属集群</label>
-            <!-- #204：占位 option value="" ↔ 模型初值/重置 importClusterId='' 精确匹配 -->
-            <select v-model="importClusterId" class="form-input">
-              <option value="">请选择集群</option>
-              <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
-            </select>
+            <!-- #204 迁移：a-select placeholder 语义（必选模式，modelValue '' ↔ placeholder 显示） -->
+            <ClusterSelect v-model="importClusterId" :clusters="clusters" />
           </div>
           <div class="import-toolbar">
             <button

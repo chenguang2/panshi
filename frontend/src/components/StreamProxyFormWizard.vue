@@ -29,17 +29,14 @@
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label">所属集群 <span class="required">*</span></label>
-                <select
+                <ClusterSelect
                   v-model="form.cluster_id"
-                  class="form-input"
-                  :class="{ 'input-error': formErrors.cluster_id }"
+                  :clusters="clusters"
                   :disabled="!!editingProxy"
+                  :class="{ 'input-error': formErrors.cluster_id }"
                   @change="onClusterChange"
                   @blur="formErrors.cluster_id = form.cluster_id ? '' : '请选择集群'"
-                >
-                  <option value="">请选择集群</option>
-                  <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
-                </select>
+                />
                 <span v-if="formErrors.cluster_id" class="form-error">{{ formErrors.cluster_id }}</span>
               </div>
               <div class="form-group">
@@ -622,6 +619,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch, nextTick } from 'vue'
+import ClusterSelect from '@/components/ClusterSelect.vue'
 import { message } from 'ant-design-vue'
 import type { Cluster, PortItem, StreamProxy } from '@/types'
 import * as streamProxyApi from '@/api/streamProxy'

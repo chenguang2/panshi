@@ -158,10 +158,12 @@ describe('PluginMetadataList.vue', () => {
     await wrapper.vm.$nextTick()
     const overlay = wrapper.findAll('.modal-overlay').find((o) => o.text().includes('添加插件元数据'))!
     const selects = overlay.findAll('select')
-    expect(selects.length).toBe(2)
-    const pluginSelect = selects[1]
+    // 集群字段已换装 ClusterSelect（a-select 族，非原生 select）——原生 select 仅剩插件下拉
+    expect(selects.length).toBe(1)
+    const pluginSelect = selects[0]
     expect(pluginSelect.element.selectedIndex).toBe(0)
     expect((pluginSelect.element.selectedOptions[0]?.textContent || '').trim()).toBe('请选择插件')
+    expect(overlay.find('.cluster-select').exists()).toBe(true)
   })
 
   // ── Group Filter Tests ──

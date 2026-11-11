@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import ClusterSelect from '@/components/ClusterSelect.vue'
+
+/** 集群字段已换装 ClusterSelect：经组件契约填值（v-model 更新 form.cluster_id） */
+async function fillCluster(w: any) {
+  await w.findComponent(ClusterSelect).vm.$emit('update:modelValue', 1)
+  await w.vm.$nextTick()
+}
 
 const mockApiGet = vi.fn()
 const mockApiPost = vi.fn()
@@ -98,7 +105,7 @@ describe('DnsQueryFormModal · dns-proxy-http-ux-review-fixes 批 1', () => {
     expect(vm.activeTab).toBe('basic')
     // 补全基础字段后再次保存 → 自动切到域名 Tab
     await w.findAll('input.form-input')[0].setValue('测试规则')
-    await w.find('select.form-input').setValue(1)
+    await fillCluster(w)
     await btn(w, '保存').trigger('click')
     await w.vm.$nextTick()
     expect(vm.activeTab).toBe('domains')
@@ -112,7 +119,7 @@ describe('DnsQueryFormModal · dns-proxy-http-ux-review-fixes 批 1', () => {
     const vm = w.vm as any
     // 填基础 + 域名 + 上游
     await w.findAll('input.form-input')[0].setValue('测试规则')
-    await w.find('select.form-input').setValue(1)
+    await fillCluster(w)
     vm.form.domains[0].domain = 'qcg.com'
     vm.form.domains[0].nodes[0].ip = '1.2.3.4'
     vm.form.domains[0].nodes[0].port = 16610
@@ -154,7 +161,7 @@ describe('DnsQueryFormModal · dns-proxy-http-ux-review-fixes 批 1', () => {
     const w = await openModal()
     const vm = w.vm as any
     await w.findAll('input.form-input')[0].setValue('测试规则')
-    await w.find('select.form-input').setValue(1)
+    await fillCluster(w)
     vm.form.domains[0].domain = 'qcg.com'
     vm.form.domains[0].nodes[0].ip = '1.2.3.4'
     vm.form.domains[0].nodes[0].port = 16610

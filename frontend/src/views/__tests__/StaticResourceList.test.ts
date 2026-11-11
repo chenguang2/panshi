@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
 import { itGroupFilterSuite } from './helpers/groupFilterSuite'
+import ClusterSelect from '@/components/ClusterSelect.vue'
 
 const mockApiGet = vi.fn()
 const mockApiPost = vi.fn()
@@ -366,13 +367,16 @@ describe('StaticResourceList.vue 添加弹窗 · #204 路由下拉占位守卫',
       .trigger('click')
     await wrapper.vm.$nextTick()
     const overlay = wrapper.findAll('.modal-overlay').find((o) => o.text().includes('所属集群'))!
+    // 集群字段已换装 ClusterSelect（a-select 族，非原生 select）——原生 select 仅剩路由下拉
     const selects = overlay.findAll('select')
-    expect(selects.length).toBe(2)
-    const routeSelect = selects[1]
+    expect(selects.length).toBe(1)
+    const routeSelect = selects[0]
     expect(routeSelect.element.selectedIndex).toBe(0)
     expect((routeSelect.element.selectedOptions[0]?.textContent || '').trim()).toBe('请选择路由')
-    // 重置点守卫：选完集群后路由下拉仍回落到占位（watch 重置 route_id=''）
-    await selects[0].setValue(1)
+    // 重置点守卫：选完集群（ClusterSelect 契约填值）后路由下拉仍回落到占位（watch 重置 route_id=''）
+    const clusterComp = overlay.findComponent(ClusterSelect)
+    expect(clusterComp.exists()).toBe(true)
+    await clusterComp.vm.$emit('update:modelValue', 1)
     await flushPromises()
     await wrapper.vm.$nextTick()
     expect(routeSelect.element.selectedIndex).toBe(0)

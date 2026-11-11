@@ -1287,17 +1287,18 @@ describe('NodeList.vue batch3 批量导入', () => {
     return wrapper
   }
 
-  it('工具栏含「批量导入」按钮，弹窗集群下拉占位与模型空串精确匹配（#204）', async () => {
+  it('工具栏含「批量导入」按钮，弹窗集群下拉占位与模型空串精确匹配（#204 → a-select placeholder 语义）', async () => {
     const wrapper = await openImport()
     const vm = wrapper.vm as any
     expect(vm.importModalVisible).toBe(true)
     expect(vm.importClusterId).toBe('')
-    const select = wrapper.findAll('select').find((s) => s.text().includes('请选择集群'))
-    expect(select).toBeDefined()
-    const firstOption = select!.findAll('option')[0]
-    expect(firstOption.element.getAttribute('value')).toBe('')
-    expect((select!.element as HTMLSelectElement).value).toBe('')
-    expect(select!.element.selectedIndex).toBe(0)
+    // 集群字段已换装 ClusterSelect：必选模式（无「全部集群」项），'' 经组件规范化触发 placeholder
+    // （圈定导入弹窗 overlay，避免命中页首筛选条的 allow-all 控件）
+    const overlay = wrapper.findAll('.modal-overlay').find((o) => o.text().includes('批量导入节点'))!
+    const clusterSelect = overlay.find('.cluster-select')
+    expect(clusterSelect.exists()).toBe(true)
+    expect(clusterSelect.attributes('placeholder')).toBe('请选择集群')
+    expect(clusterSelect.text()).not.toContain('全部集群')
     wrapper.unmount()
   })
 

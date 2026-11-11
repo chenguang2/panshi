@@ -39,16 +39,13 @@
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">所属集群 <span class="required">*</span></label>
-            <select
+            <ClusterSelect
               v-model="form.cluster_id"
-              class="form-input"
-              :class="{ 'has-error': errors.cluster_id }"
+              :clusters="clusters"
               :disabled="generating"
+              :class="{ 'has-error': errors.cluster_id }"
               @change="onClusterChange"
-            >
-              <option value="">请选择集群</option>
-              <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
-            </select>
+            />
             <div v-if="errors.cluster_id" class="form-error">{{ errors.cluster_id }}</div>
           </div>
         </div>
@@ -381,6 +378,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch } from 'vue'
+import ClusterSelect from '@/components/ClusterSelect.vue'
 import { message } from 'ant-design-vue'
 import { generateSslCertificate } from '@/api/ssl'
 import { buildCertZip, downloadBlob } from '@/utils/download'
@@ -405,7 +403,7 @@ const ipInputRef = ref<HTMLInputElement | null>(null)
 
 const form = reactive({
   algorithm: 'rsa' as 'sm2' | 'rsa' | 'ecc',
-  cluster_id: '',
+  cluster_id: '' as number | string,
   name: '',
   common_name: '',
   organization: '',

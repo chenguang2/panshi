@@ -14,10 +14,12 @@
           </p>
           <div v-if="!cluster" class="form-group">
             <label class="form-label">选择集群</label>
-            <select v-model="selectedClusterId" class="form-input">
-              <option :value="null" disabled>请选择要备份的集群</option>
-              <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
-            </select>
+            <ClusterSelect
+              :model-value="selectedClusterId"
+              :clusters="clusters"
+              placeholder="请选择要备份的集群"
+              @update:model-value="onClusterFieldChange"
+            />
           </div>
           <div v-if="downloadSummary" class="backup-summary">
             <span class="backup-summary-label">将导出：</span>
@@ -141,6 +143,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import ClusterSelect from '@/components/ClusterSelect.vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { useClusterBackup } from '@/composables/useClusterBackup'
@@ -180,6 +183,11 @@ const downloadWarnings = ref<string[]>([])
 
 /** topbar 入口（cluster=null）时经下拉选定的目标集群 */
 const selectedClusterId = ref<number | null>(null)
+
+/** ClusterSelect emit number|string → 内部 number|null（null=未选） */
+function onClusterFieldChange(value: number | string) {
+  selectedClusterId.value = value === '' ? null : Number(value)
+}
 const effectiveCluster = computed(() => {
   if (props.cluster) return props.cluster
   const id = selectedClusterId.value

@@ -16,10 +16,10 @@
 
 ## 3. 批 2：EdgeEnv 必选模式 + 表单/内联弹窗
 
-- [ ] 3.1 EdgeEnv 换装 ClusterSelect（`allowAll=false`），行为等价迁移：分组展示/搜索/深链 `?cluster_id=` 回显/切组确认流不变；删除页内 `clusterGroups`/`filterClusterOption` 内联实现。验证：EdgeEnv.test.ts 更新绿 + 手动访问 `/edge-env?cluster_id=<id>` 回显正确。
-- [ ] 3.2 表单弹窗换装（必选模式）：RouteFormModal、UpstreamFormModal、DnsQueryFormModal、PluginEntityFormModal、SslFormDrawer、SslGenerateDialog、CaCreateDialog、StreamProxyFormWizard、ClusterBackupDialog。验证：各弹窗既有测试更新绿（含 #56 占位匹配类用例按 a-select placeholder 语义反转）。
-- [ ] 3.3 内联弹窗换装：PluginMetadataList 添加插件弹窗、NodeList 添加/编辑节点弹窗与批量导入弹窗。验证：对应测试绿。
-- [ ] 3.4 批 2 全量收口：`npx vitest run --no-file-parallelism` 全绿；git 提交。
+- [x] 3.1 EdgeEnv 换装 ClusterSelect（`allowAll=false`），行为等价迁移：分组展示/搜索/深链 `?cluster_id=` 回显/切组确认流不变；删除页内 `clusterGroups`/`filterClusterOption` 内联实现。验证：EdgeEnv.test.ts 更新绿 + 手动访问 `/edge-env?cluster_id=<id>` 回显正确。
+- [x] 3.2 表单弹窗换装（必选模式）：RouteFormModal、UpstreamFormModal、DnsQueryFormModal、PluginEntityFormModal、SslFormDrawer、SslGenerateDialog、CaCreateDialog、StreamProxyFormWizard、ClusterBackupDialog。验证：各弹窗既有测试更新绿（含 #56 占位匹配类用例按 a-select placeholder 语义反转）。
+- [x] 3.3 内联弹窗换装：PluginMetadataList 添加插件弹窗、NodeList 添加/编辑节点弹窗与批量导入弹窗。验证：对应测试绿。
+- [x] 3.4 批 2 全量收口：`npx vitest run --no-file-parallelism` 全绿；git 提交。（2026-11-11 终轮 2653/2654，唯一失败 CentralList.test.ts 隔离复跑 21/21 绿 → #58/#208 波动家族，判定通过；DnsQueryFormModal 4 例已按组件契约反转（fillCluster helper）。）
 
 ## 4. 批 3：扁平筛选页
 

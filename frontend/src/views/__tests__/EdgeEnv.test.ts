@@ -946,13 +946,16 @@ describe('EdgeEnv.vue 工具栏收纳与空态指引', () => {
     wrapper.unmount()
   })
 
-  it('集群下拉支持按名称与标识搜索（filterOption）', async () => {
+  it('集群下拉为共享 ClusterSelect（搜索逻辑移入组件，页面注入 clusters）', async () => {
     const EdgeEnv = (await import('../EdgeEnv.vue')).default
+    const ClusterSelect = (await import('@/components/ClusterSelect.vue')).default
     const wrapper = mount(EdgeEnv, mountGlobal)
     await flushPromises()
-    const vm = wrapper.vm as any
-    expect(vm.filterClusterOption('生产', { value: 1 })).toBe(true)
-    expect(vm.filterClusterOption('zzz', { value: 1 })).toBe(false)
+    const clusterSelect = wrapper.findComponent(ClusterSelect)
+    expect(clusterSelect.exists()).toBe(true)
+    // 注入全量集群（页负责加载，组件负责展示与搜索——搜索匹配逻辑由 ClusterSelect.test.ts 钉死）
+    expect(clusterSelect.props('clusters').length).toBeGreaterThan(0)
+    expect(clusterSelect.props('allowAll')).toBe(false)
     wrapper.unmount()
   })
 })

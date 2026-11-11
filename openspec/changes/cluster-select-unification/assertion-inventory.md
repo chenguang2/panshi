@@ -20,14 +20,16 @@
 
 ## 批 2：EdgeEnv + 表单/内联弹窗
 
-| # | 文件:行 | 现断言 | 反转后断言 |
-|---|---|---|---|
-| 9 | EdgeEnv.test.ts:62+ | `ASelectOptGroup` stub + 分组断言（线上/预发 + 未分组兜底） | EdgeEnv 换装后分组逻辑移入 ClusterSelect；页面级断言改为「ClusterSelect 注入 clusters」+ 深链回显 vm 状态；分组结构断言由 ClusterSelect.test.ts 承担 |
-| 10 | StaticResourceList.test.ts:369-375 | 添加静态资源 overlay 内 `selects[0].setValue(1)` + 路由下拉重置守卫（selectedIndex=0、占位「请选择路由」） | overlay 集群控件改 emit `'1'`；路由重置守卫断言原样保留 |
-| 11 | PluginMetadataList.test.ts:160 | overlay `findAll('select')`（添加插件弹窗集群下拉，含 #56 占位 selectedIndex===0 用例） | 改 a-select placeholder 语义：vm 空串 + placeholder「请选择集群」+ allowAll=false |
-| 12 | NodeList.test.ts:1290（批量导入弹窗 #204 守卫） | 占位 option `value=''` + `selectedIndex===0` + `vm.importClusterId===''` | a-select 等价守卫：`vm.importClusterId===''` + placeholder 文案 + 无「全部集群」项 |
-| 13 | NodeList 添加/编辑节点弹窗「所属集群」（~L211-219） | 批 2 实施时逐条补录 | 同 #12 模式 |
-| 14 | 表单弹窗组件测试 9 个（RouteFormModal/UpstreamFormModal/DnsQueryFormModal/PluginEntityFormModal/SslFormDrawer/SslGenerateDialog/CaCreateDialog/StreamProxyFormWizard/ClusterBackupDialog） | 批 2 实施时逐个 grep `select` 补录 | 同 #12 模式（必选模式） |
+> **实施注记（2026-11-11）**：组件能力扩展——`disabled` 透传（表单编辑态）、`blur` 透传（向导 @blur 校验）、`modelValue` 接受 null（CaCreateDialog/ClusterBackupDialog 的 number|null 内部态经 handler 收敛）、`clusters` 放宽为最小结构 `ClusterOption`（id/name/display_name/group_name，消费方轻量 prop 结构直接可用）、必选模式 ''→undefined 规范化（antd placeholder 显示契约）。CaCreateDialog/ClusterBackupDialog 用 handler 模式（number|string → number|null）。DnsQueryFormModal 测试 4 例以 `fillCluster` helper（findComponent(ClusterSelect) emit 契约）反转。
+
+| # | 文件 | 现断言 | 反转后断言 | 状态 |
+|---|---|---|---|---|
+| 9 | EdgeEnv.test.ts:954+（filterOption 直测）+ 内联 clusterGroups 断言 | `vm.filterClusterOption(...)`；页面分组渲染文本 | findComponent(ClusterSelect)：clusters 注入 + allowAll=false；搜索逻辑由 ClusterSelect.test.ts 承担；分组/工具栏断言原样保留（未解析标签文本渲染不变） | ✅ 已反转 |
+| 10 | StaticResourceList.test.ts:369-375 | overlay 内 selects[0].setValue(1) + 路由重置守卫 | 添加静态资源弹窗集群字段补换装（批 2 收尾补点，initially 漏列）：原生 select 仅剩路由下拉（length=1）；集群填值改 findComponent(ClusterSelect) emit 契约；路由重置守卫断言原样保留 | ✅ 已反转 |
+| 11 | PluginMetadataList.test.ts:160（添加插件弹窗） | overlay selects.length=2 + 插件占位 selectedIndex=0 | selects.length=1（原生仅剩插件下拉）+ `.cluster-select` 存在；#56 守卫语义保留（插件下拉仍原生） | ✅ 已反转 |
+| 12 | NodeList.test.ts:1290（批量导入 #204 守卫） | 占位 option value='' + selectedIndex=0 | overlay 圈定 `.cluster-select`：placeholder 属性='请选择集群' + 无「全部集群」+ vm.importClusterId==='' | ✅ 已反转 |
+| 13 | NodeList 添加/编辑节点弹窗 | 无直接下拉断言（vm 层校验） | 模板换装即可，测试零改动即绿 | ✅ 核验 |
+| 14 | 表单弹窗组件测试 9 个 | 见 DnsQueryFormModal 4 例（fillCluster）；其余 8 个弹窗测试对集群字段无 select 级断言，换装后零改动即绿 | — | ✅ 核验 |
 
 ## 批 3：扁平筛选页
 

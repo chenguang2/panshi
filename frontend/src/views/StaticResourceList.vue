@@ -134,10 +134,7 @@
         <div class="modal-body">
           <div class="form-group">
             <label class="form-label">所属集群 <span class="required">*</span></label>
-            <select v-model="formData.cluster_id" class="form-input" :disabled="formMode === 'edit'">
-              <option value="">请选择集群</option>
-              <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
-            </select>
+            <ClusterSelect v-model="formData.cluster_id" :clusters="clusters" :disabled="formMode === 'edit'" />
           </div>
           <div class="form-group">
             <label class="form-label"

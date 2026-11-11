@@ -27,10 +27,12 @@
             </div>
             <div class="form-group">
               <label class="form-label">所属集群 <span class="required">*</span></label>
-              <select v-model="form.cluster_id" class="form-input" :disabled="!!editingRoute">
-                <option value="">请选择集群</option>
-                <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
-              </select>
+              <ClusterSelect
+                v-model="form.cluster_id"
+                :clusters="clusters"
+                :disabled="!!editingRoute"
+                :class="{ 'has-error': formErrors.cluster_id }"
+              />
               <div v-if="formErrors.cluster_id" class="form-error">{{ formErrors.cluster_id }}</div>
             </div>
           </div>
@@ -266,6 +268,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch } from 'vue'
+import ClusterSelect from '@/components/ClusterSelect.vue'
 import { message } from 'ant-design-vue'
 import api from '@/api'
 

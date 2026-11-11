@@ -78,10 +78,7 @@
         <div class="modal-body">
           <div class="form-group">
             <label class="form-label">所属集群 <span class="required">*</span></label>
-            <select v-model="createClusterId" class="form-input" @change="onCreateClusterChange">
-              <option value="">请选择集群</option>
-              <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
-            </select>
+            <ClusterSelect v-model="createClusterId" :clusters="clusters" @change="onCreateClusterChange" />
           </div>
           <div class="form-group">
             <label class="form-label">插件名称 <span class="required">*</span></label>

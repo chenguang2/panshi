@@ -17,20 +17,12 @@
     </PageHeader>
 
     <div class="ee-toolbar">
-      <a-select
-        :value="selectedClusterId === '' ? undefined : selectedClusterId"
-        show-search
-        placeholder="请选择集群"
+      <ClusterSelect
+        v-model="selectedClusterId"
+        :clusters="clusters"
         style="width: 260px"
-        :filter-option="filterClusterOption"
         @change="onASelectClusterChange"
-      >
-        <a-select-opt-group v-for="g in clusterGroups" :key="g.label" :label="g.label">
-          <a-select-option v-for="c in g.clusters" :key="c.id" :value="c.id">
-            {{ c.display_name || c.name }}
-          </a-select-option>
-        </a-select-opt-group>
-      </a-select>
+      />
       <select
         :value="selectedNodeId"
         class="form-input"
@@ -300,6 +292,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import ClusterSelect from '@/components/ClusterSelect.vue'
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import { message } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'
@@ -325,35 +318,8 @@ const allNodes = ref<any[]>([])
 const selectedClusterId = ref<number | string>('')
 const selectedNodeId = ref<number | string>('')
 
-/** 集群下拉分组（Q4：分组作 optgroup 展示，具名分组按名称排序、未分组兜底在末尾） */
-const clusterGroups = computed(() => {
-  const named = new Map<string, Cluster[]>()
-  const ungrouped: Cluster[] = []
-  for (const c of clusters.value) {
-    if (c.group_name) {
-      if (!named.has(c.group_name)) named.set(c.group_name, [])
-      named.get(c.group_name)!.push(c)
-    } else {
-      ungrouped.push(c)
-    }
-  }
-  const groups = Array.from(named.entries())
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([label, cs]) => ({ label, clusters: cs }))
-  if (ungrouped.length) groups.push({ label: '未分组', clusters: ungrouped })
-  return groups
-})
-
 function onASelectClusterChange(val: unknown) {
   void applyClusterChange(val === undefined || val === null || val === '' ? '' : Number(val))
-}
-
-/** a-select show-search 过滤：命中 display_name 或集群标识（name） */
-function filterClusterOption(input: string, option: any) {
-  const c = clusters.value.find((cl) => cl.id === Number(option?.value))
-  if (!c) return false
-  const q = input.toLowerCase()
-  return [c.display_name, c.name].some((s) => (s || '').toLowerCase().includes(q))
 }
 
 const editorContent = ref('')
