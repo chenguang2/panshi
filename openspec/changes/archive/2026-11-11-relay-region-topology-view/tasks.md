@@ -34,5 +34,5 @@
 
 - [x] 4.1 后端域回归：`uv run pytest -k "relay"`（249 passed）；安全守卫回归（#19，topology GET 只读无需补采样，测试钉住 401/403）
 - [x] 4.2 前端串行全量（#208 `npx vitest run --no-file-parallelism`，2614 passed）+ `npx vue-tsc -b`（0）
-- [ ] 4.3 真链路验收（#51② 用户实际页面）：三旅程走查——①新建全旅程（草稿卡→登记两腿→初始化→挂接→下发）②武清直连登记 ③济南稳态就地编辑与「保存并测试」（orchestrator 已完成 Playwright 渲染冒烟：4 卡四形态/清单条/白名单条/禁用态/零 console 错误，2026-11-10 截图 /tmp/opencode/topology-smoke.png）
+- [x] 4.3 真链路验收（#51② 用户实际页面）：三旅程走查——①新建全旅程（草稿卡→登记两腿→初始化→挂接→下发）②武清直连登记 ③济南稳态就地编辑与「保存并测试」（orchestrator 已完成 Playwright 渲染冒烟：4 卡四形态/清单条/白名单条/禁用态/零 console 错误，2026-11-10 截图 /tmp/opencode/topology-smoke.png）
 - [x] 4.4 openspec validate --all 收口（#53，203 passed / 0 failed）
