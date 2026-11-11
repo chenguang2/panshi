@@ -16,10 +16,13 @@
         <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
         <option value="__ung__">未分组</option>
       </select>
-      <select v-model="clusterFilter" class="form-input" style="width: 160px" @change="onFilterChange">
-        <option value="">全部集群</option>
-        <option v-for="c in filteredClusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
-      </select>
+      <ClusterSelect
+        v-model="clusterFilter"
+        :clusters="filteredClusters"
+        allow-all
+        style="width: 160px"
+        @change="onFilterChange"
+      />
       <select v-model="lbFilter" class="form-input" style="width: 140px" @change="onFilterChange">
         <option value="">全部算法</option>
         <option value="weighted_roundrobin">加权轮询</option>
@@ -156,6 +159,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
 import { message, Modal } from 'ant-design-vue'
+import ClusterSelect from '@/components/ClusterSelect.vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
 import { listUpstreams } from '@/api/upstreams'
 import { listClusters, getClusterNodes } from '@/api/clusters'
@@ -178,7 +182,7 @@ const totalCount = ref(0)
 const page = ref(1)
 const pageSize = ref(PAGE_SIZE_TABLE)
 const { searchText, onSearch: onDebouncedSearch, cancelSearch } = useDebouncedSearch()
-const clusterFilter = ref('')
+const clusterFilter = ref<string | number>('')
 const groupFilter = ref('__all__')
 const lbFilter = ref('')
 

@@ -24,10 +24,13 @@
         <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
         <option value="__ung__">未分组</option>
       </select>
-      <select v-model="clusterFilter" class="form-input" style="width: 160px; flex-shrink: 0" @change="loadRules">
-        <option value="">全部集群</option>
-        <option v-for="c in filteredClusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
-      </select>
+      <ClusterSelect
+        v-model="clusterFilter"
+        :clusters="filteredClusters"
+        allow-all
+        style="width: 160px; flex-shrink: 0"
+        @change="loadRules"
+      />
       <!-- 2.5：未发布/待发布由列表数据本地统计（D9），超 500 截断时基于已加载数据 -->
       <span class="text-sm text-muted"
         >共 {{ totalCount }} 个 · 未发布 {{ unpublishedCount }} · 待发布 {{ pendingCount }}</span
@@ -132,6 +135,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
 import { useRoute } from 'vue-router'
+import ClusterSelect from '@/components/ClusterSelect.vue'
 
 const route = useRoute()
 import { message } from 'ant-design-vue'
@@ -155,7 +159,7 @@ const clusters = ref<any[]>([])
 const totalCount = ref(0)
 const loading = ref(false)
 const { searchText, onSearch: onDebouncedSearch, cancelSearch } = useDebouncedSearch()
-const clusterFilter = ref('')
+const clusterFilter = ref<string | number>('')
 const groupFilter = ref('__all__')
 
 const groupOptions = computed(() => {

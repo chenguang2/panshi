@@ -25,10 +25,13 @@
         <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
         <option value="__ung__">未分组</option>
       </select>
-      <select v-model="clusterFilter" class="form-input" style="width: 160px; flex-shrink: 0" @change="loadRoutes">
-        <option value="">全部集群</option>
-        <option v-for="c in filteredClusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
-      </select>
+      <ClusterSelect
+        v-model="clusterFilter"
+        :clusters="filteredClusters"
+        allow-all
+        style="width: 160px; flex-shrink: 0"
+        @change="loadRoutes"
+      />
       <span class="text-sm text-muted">共 {{ totalCount }} 条 DNS 代理路由</span>
     </div>
 
@@ -215,6 +218,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
+import ClusterSelect from '@/components/ClusterSelect.vue'
 import api from '@/api'
 import { PAGE_SIZE_CARD_GRID } from '@/constants'
 import PageHeader from '@/components/PageHeader.vue'

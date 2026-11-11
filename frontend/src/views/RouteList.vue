@@ -34,10 +34,13 @@
         <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
         <option value="__ung__">未分组</option>
       </select>
-      <select v-model="clusterFilter" class="form-input" style="width: 160px" @change="onClusterChange">
-        <option value="">全部集群</option>
-        <option v-for="c in filteredClusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
-      </select>
+      <ClusterSelect
+        v-model="clusterFilter"
+        :clusters="filteredClusters"
+        allow-all
+        style="width: 160px"
+        @change="onClusterChange"
+      />
       <select
         v-model="upstreamFilter"
         class="form-input"
@@ -233,6 +236,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
 import { formatDateOnly as formatDate } from '@/utils/format'
+import ClusterSelect from '@/components/ClusterSelect.vue'
 import { message } from 'ant-design-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
 import api from '@/api'
@@ -260,7 +264,7 @@ const totalCount = ref(0)
 const page = ref(1)
 const pageSize = ref(PAGE_SIZE_TABLE)
 const { searchText, onSearch: onDebouncedSearch, cancelSearch } = useDebouncedSearch()
-const clusterFilter = ref('')
+const clusterFilter = ref<string | number>('')
 const groupFilter = ref('__all__')
 const upstreamFilter = ref('')
 

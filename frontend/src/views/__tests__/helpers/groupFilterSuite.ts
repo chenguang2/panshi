@@ -28,14 +28,15 @@ export function itGroupFilterSuite(opts: GroupFilterSuiteOptions): void {
   it('renders group filter select before cluster filter', async () => {
     const wrapper = await mountPage()
     const selects = wrapper.findAll('select')
-    // 集群筛选以下拉默认选项「全部集群」精确判定（分组下拉的「全部集群分组」含该子串，子串匹配会撞车）
-    const isClusterFilter = (s: { findAll: (sel: string) => { text: () => string }[] }) =>
-      s.findAll('option').some((o) => o.text() === '全部集群')
     const groupIdx = selects.findIndex((s) => s.text().includes(allLabel))
-    const clusterIdx = selects.findIndex(isClusterFilter)
+    // 集群筛选已统一为 ClusterSelect 控件（cluster-select-unification），按其根类定位
+    const clusterSelect = wrapper.find('.cluster-select')
     expect(groupIdx).toBeGreaterThanOrEqual(0)
-    expect(clusterIdx).toBeGreaterThanOrEqual(0)
-    expect(groupIdx).toBeLessThan(clusterIdx)
+    expect(clusterSelect.exists()).toBe(true)
+    // 组下拉（原生 select）位于集群选择控件之前
+    expect(
+      selects[groupIdx]!.element.compareDocumentPosition(clusterSelect.element) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
   })
 
   it('populates group filter options from cluster group_names', async () => {

@@ -131,11 +131,13 @@ describe('NodeList.vue', () => {
     const optionTexts = groupSelect!.findAll('option').map((o) => o.text())
     // 组件结构：全部分组 + groupOptions（去重排序：线上 < 预发）+ 未分组 = 4 项
     expect(optionTexts).toEqual(['全部分组', '线上', '预发', '未分组'])
-    // 集群筛选下拉：全部集群 + 3 个集群选项
-    const clusterSelect = wrapper.findAll('select').find((s) => s.text().includes('全部集群'))
-    expect(clusterSelect).toBeDefined()
-    const clusterOptionTexts = clusterSelect!.findAll('option').map((o) => o.text())
-    expect(clusterOptionTexts).toEqual(['全部集群', '生产集群', '预发集群', '开发集群'])
+    // 集群筛选（ClusterSelect 控件）：全部集群 + 3 个集群选项（分组展示细节由 ClusterSelect.test.ts 钉死）
+    const clusterSelect = wrapper.find('.cluster-select')
+    expect(clusterSelect.exists()).toBe(true)
+    const clusterText = clusterSelect.text()
+    for (const label of ['全部集群', '生产集群', '预发集群', '开发集群']) {
+      expect(clusterText).toContain(label)
+    }
   })
 
   it('renders node table with data', async () => {
@@ -191,12 +193,15 @@ describe('NodeList.vue', () => {
     const NodeList = (await import('../NodeList.vue')).default
     const wrapper = mount(NodeList, { global: { stubs } })
     await flushPromises()
-    const selects = wrapper.findAll('select')
-    const groupIdx = selects.findIndex((s) => s.text().includes('全部分组'))
-    const clusterIdx = selects.findIndex((s) => s.text().includes('全部集群'))
-    expect(groupIdx).toBeGreaterThanOrEqual(0)
-    expect(clusterIdx).toBeGreaterThanOrEqual(0)
-    expect(groupIdx).toBeLessThan(clusterIdx)
+    const groupSelect = wrapper.findAll('select').find((s) => s.text().includes('全部分组'))
+    expect(groupSelect).toBeDefined()
+    // 集群筛选为 ClusterSelect 控件（cluster-select-unification），按其根类定位
+    const clusterSelect = wrapper.find('.cluster-select')
+    expect(clusterSelect.exists()).toBe(true)
+    // 组下拉（原生 select）位于集群选择控件之前
+    expect(
+      groupSelect!.element.compareDocumentPosition(clusterSelect.element) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
   })
 
   it('always passes group_name in API request', async () => {

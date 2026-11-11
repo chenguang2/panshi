@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>集群选择统一 · ClusterSelect 控件样例（cluster-select-unification）</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --surface: #fff; --border: #e5e7eb; --muted: #8a919c;
+    --text: #23272e; --primary: #0e7a8d; --primary-bg: rgba(14,122,141,.08);
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { font: 13px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); padding: 24px 32px; }
+  .note { background: #fffbe6; border: 1px solid #f5e6a8; border-radius: 6px; padding: 8px 14px; margin-bottom: 20px; color: #8a6d1a; font-size: 12px; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  h2 { font-size: 15px; margin: 28px 0 4px; }
+  .desc { color: var(--muted); margin-bottom: 14px; }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 18px; margin-bottom: 8px; }
+  /* 筛选条（沿用现页面 .form-input 观感） */
+  .filter-bar { display: flex; gap: 10px; align-items: center; }
+  .input, select.form-input { border: 1px solid var(--border); background: var(--surface); border-radius: 6px; padding: 5px 10px; font-size: 13px; height: 32px; }
+  /* a-select 观感（antd 默认：32px 高、6px 圆角、hover 主色描边） */
+  .a-select { position: relative; display: inline-block; }
+  .a-select .a-select__selector { border: 1px solid #d9d9d9; border-radius: 6px; background: var(--surface); height: 32px; display: flex; align-items: center; justify-content: space-between; padding: 0 11px; min-width: 200px; cursor: pointer; }
+  .a-select .a-select__selector:hover { border-color: var(--primary); }
+  .a-select .arrow { color: #bfbfbf; font-size: 11px; }
+  /* 展开的下拉面板（静态示意） */
+  .a-dropdown { position: absolute; top: 38px; left: 0; width: 280px; background: var(--surface); border-radius: 8px; box-shadow: 0 6px 16px rgba(0,0,0,.12); z-index: 10; overflow: hidden; font-size: 13px; }
+  .a-dropdown .search { border-bottom: 1px solid var(--border); padding: 8px; }
+  .a-dropdown .search input { width: 100%; border: 1px solid #d9d9d9; border-radius: 4px; height: 28px; padding: 0 8px; font-size: 13px; }
+  .a-dropdown .opt { padding: 5px 12px; cursor: pointer; }
+  .a-dropdown .opt:hover { background: #f5f5f5; }
+  .a-dropdown .opt.selected { background: var(--primary-bg); color: var(--primary); font-weight: 600; }
+  .a-dropdown .group-title { color: var(--muted); font-size: 12px; padding: 8px 12px 2px; }
+  .a-dropdown .empty { color: var(--muted); text-align: center; padding: 16px 0; font-size: 12px; }
+  .tag-demo { display: inline-block; background: var(--primary-bg); color: var(--primary); border-radius: 4px; font-size: 12px; padding: 1px 8px; margin-left: 10px; }
+  .k { color: var(--muted); font-size: 12px; }
+  code { background: #f0f1f3; border-radius: 3px; padding: 0 5px; font-size: 12px; }
+</style>
+</head>
+<body>
+  <div class="note">静态样例 · 仅展示统一后 ClusterSelect 的形态与文案，非可运行页面（openspec: cluster-select-unification）。样例数据：生产组（网关-A / 网关-B）、测试组（网关-C）、未分组（网关-D）。</div>
+
+  <h1>集群选择统一（cluster-select-unification）</h1>
+  <div class="desc">共享组件 ClusterSelect = a-select + 分组 optGroup + 搜索 + 可选「全部集群」首选项；必选模式无全部项、不可清空。</div>
+
+  <h2>① 资源页筛选条（12 页统一形态 · 以节点管理为例）</h2>
+  <div class="desc">组筛选下拉保留原生形态（本变更不动），集群下拉换为 ClusterSelect（筛选模式：带「全部集群」首选项 + 搜索）。</div>
+  <div class="panel">
+    <div class="filter-bar">
+      <input class="input" style="width:200px" placeholder="搜索 IP...">
+      <select class="form-input" style="width:130px"><option>全部分组</option><option>生产组</option><option>测试组</option><option>未分组</option></select>
+      <span class="a-select">
+        <span class="a-select__selector"><span>网关-A</span><span class="arrow">▾</span></span>
+      </span>
+      <select class="form-input" style="width:120px"><option>全部状态</option></select>
+    </div>
+    <div style="margin-top:16px" class="k">▼ ClusterSelect 展开态（静态示意）——首项「全部集群」；分组标题仅展示不可选：</div>
+    <div class="filter-bar" style="margin-top:36px">
+      <span class="a-select">
+        <span class="a-select__selector" style="border-color: var(--primary)"><span>网关-A</span><span class="arrow">▴</span></span>
+        <span class="a-dropdown">
+          <div class="search"><input placeholder="搜索集群名..."></div>
+          <div class="opt selected">全部集群</div>
+          <div class="group-title">生产组</div>
+          <div class="opt">网关-A</div>
+          <div class="opt">网关-B</div>
+          <div class="group-title">测试组</div>
+          <div class="opt">网关-C</div>
+          <div class="group-title">未分组</div>
+          <div class="opt">网关-D</div>
+        </span>
+      </span>
+      <span class="k">搜索命中空时显示「No data」空态；选中集群后列表按该集群过滤，切组仍清空集群选择。</span>
+    </div>
+  </div>
+
+  <h2>② edge.env 配置页（必选模式）</h2>
+  <div class="desc">无「全部集群」项、不可清空；分组展示与搜索与筛选模式一致；未选时 placeholder「请选择集群」。</div>
+  <div class="panel">
+    <div class="filter-bar">
+      <span class="a-select">
+        <span class="a-select__selector"><span class="k">请选择集群</span><span class="arrow">▾</span></span>
+      </span>
+      <select class="form-input" style="width:180px"><option>参考节点</option></select>
+      <button class="input" style="background:var(--primary);color:#fff;border-color:var(--primary)">读取节点配置</button>
+      <span class="tag-demo">?cluster_id= 深链回显行为不变</span>
+    </div>
+  </div>
+
+  <h2>③ 表单弹窗字段（必选模式）</h2>
+  <div class="desc">「所属集群」为必填字段：无全部项、placeholder 同文案；选中后不可清空（保持与现原生 select disabled 占位等价的锁定语义）。</div>
+  <div class="panel" style="max-width:480px">
+    <div style="margin-bottom:6px">所属集群 <span style="color:#c2483c">*</span></div>
+    <span class="a-select" style="width:100%">
+      <span class="a-select__selector" style="width:100%"><span>网关-C（测试组）</span><span class="arrow">▾</span></span>
+    </span>
+  </div>
+
+  <h2>④ 文案与值契约速查</h2>
+  <div class="panel k">
+    筛选模式：首选项 <code>全部集群</code>（value <code>''</code>，即现契约「未选具体集群=跨集群展示」）· placeholder 不参与显示 · 搜索匹配 <code>display_name || name</code>，大小写不敏感。<br>
+    必选模式：无全部项 · placeholder <code>请选择集群</code> · 不可清空。<br>
+    通用：具名分组按名称排序 · 未分组 header 兜底末尾 · 组内按 display name 排序 · 组件不发请求，clusters 由页面注入。
+  </div>
+</body>
+</html>

@@ -31,10 +31,13 @@
         <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
         <option value="__ung__">未分组</option>
       </select>
-      <select v-model="clusterFilter" class="form-input" style="width: 160px; flex-shrink: 0" @change="loadCerts">
-        <option value="">全部集群</option>
-        <option v-for="c in filteredClusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
-      </select>
+      <ClusterSelect
+        v-model="clusterFilter"
+        :clusters="filteredClusters"
+        allow-all
+        style="width: 160px; flex-shrink: 0"
+        @change="loadCerts"
+      />
       <span class="text-sm text-muted">共 {{ totalCount }} 个服务器证书</span>
     </div>
 
@@ -71,7 +74,7 @@
       :visible="formVisible"
       :clusters="clusters"
       :editing-cert="editingCert"
-      :initial-cluster-id="clusterFilter"
+      :initial-cluster-id="String(clusterFilter)"
       @close="closeForm"
     />
 
@@ -81,7 +84,7 @@
       ref="generateRef"
       :visible="generateVisible"
       :clusters="clusters"
-      :initial-cluster-id="clusterFilter"
+      :initial-cluster-id="String(clusterFilter)"
       @close="generateVisible = false"
       @success="onGenerateSuccess"
       @open-ca-create="openCaCreateDialog"
@@ -127,6 +130,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
+import ClusterSelect from '@/components/ClusterSelect.vue'
 import { PAGE_SIZE_CARD_GRID } from '@/constants'
 import api from '@/api'
 import PageHeader from '@/components/PageHeader.vue'
@@ -151,7 +155,7 @@ const totalCount = ref(0)
 const loading = ref(false)
 const searchText = ref('')
 const groupFilter = ref('__all__')
-const clusterFilter = ref('')
+const clusterFilter = ref<string | number>('')
 
 const groupOptions = computed(() => {
   const names = new Set(clusters.value.map((c: any) => c.group_name || ''))

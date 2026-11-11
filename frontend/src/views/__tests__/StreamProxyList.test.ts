@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
 import { itGroupFilterSuite } from './helpers/groupFilterSuite'
+import ClusterSelect from '@/components/ClusterSelect.vue'
 
 const mockApiGet = vi.fn()
 const mockApiPost = vi.fn()
@@ -185,13 +186,11 @@ describe('StreamProxyList.vue', () => {
     const wrapper = mount(StreamProxyList, { global: { stubs } })
     await flushPromises()
     await wrapper.vm.$nextTick()
-    // Simulate selecting a cluster
-    const selects = wrapper.findAll('select')
-    const clusterSelect = selects.find((s) => s.text().includes('全部集群'))
-    expect(clusterSelect).toBeDefined()
-    const selectEl = clusterSelect!.element as HTMLSelectElement
-    selectEl.value = '1'
-    selectEl.dispatchEvent(new Event('change'))
+    // Simulate selecting a cluster（ClusterSelect 契约模拟：值事件先于 change → v-model 更新后再触发 loadProxies）
+    const clusterSelectComp = wrapper.findComponent(ClusterSelect)
+    expect(clusterSelectComp.exists()).toBe(true)
+    await clusterSelectComp.vm.$emit('update:modelValue', '1')
+    await clusterSelectComp.vm.$emit('change', '1')
     await flushPromises()
     await wrapper.vm.$nextTick()
     // All calls should go to /stream-proxies (global) with cluster_id param

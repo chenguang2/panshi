@@ -17,10 +17,13 @@
         <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
         <option value="__ung__">未分组</option>
       </select>
-      <select v-model="clusterFilter" class="form-input" style="width: 160px; flex-shrink: 0" @change="loadResources">
-        <option value="">全部集群</option>
-        <option v-for="c in filteredClusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
-      </select>
+      <ClusterSelect
+        v-model="clusterFilter"
+        :clusters="filteredClusters"
+        allow-all
+        style="width: 160px; flex-shrink: 0"
+        @change="loadResources"
+      />
       <!-- 4.7：过滤激活时并行无过滤 count 请求取 Y；无过滤保持「共 X 个静态资源」 -->
       <span class="text-sm text-muted">
         <template v-if="filterActive">匹配 {{ totalCount }} / 共 {{ unfilteredTotal }} 个静态资源</template>
@@ -266,6 +269,7 @@
 import { ref, computed, reactive, watch, onMounted, onUnmounted, type Ref } from 'vue'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
 import { formatFileSize, formatDate, formatDateTime } from '@/utils/format'
+import ClusterSelect from '@/components/ClusterSelect.vue'
 import {
   staticResourceRouteEligibility,
   routeEligibilitySuffix,
@@ -309,7 +313,7 @@ const filterActive = computed(
     Boolean(clusterFilter.value) ||
     (Boolean(groupFilter.value) && groupFilter.value !== '__all__'),
 )
-const clusterFilter = ref('')
+const clusterFilter = ref<string | number>('')
 const groupFilter = ref('__all__')
 
 const groupOptions = computed(() => {

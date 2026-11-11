@@ -32,10 +32,13 @@
         <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
         <option value="__ung__">未分组</option>
       </select>
-      <select v-model="clusterFilter" class="form-input" style="width: 160px; flex-shrink: 0" @change="loadProxies">
-        <option value="">全部集群</option>
-        <option v-for="c in filteredClusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
-      </select>
+      <ClusterSelect
+        v-model="clusterFilter"
+        :clusters="filteredClusters"
+        allow-all
+        style="width: 160px; flex-shrink: 0"
+        @change="loadProxies"
+      />
       <span class="text-sm text-muted">共 {{ totalCount }} 个 DNS 代理</span>
       <template v-if="batchMode">
         <button v-if="showGroupSelectAll" class="link-btn" @click="toggleSelectAllGroup">
@@ -195,6 +198,7 @@
 import { ref, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import type { StreamProxy } from '@/types'
+import ClusterSelect from '@/components/ClusterSelect.vue'
 import api from '@/api'
 import PageHeader from '@/components/PageHeader.vue'
 import StreamProxyFormWizard from '@/components/StreamProxyFormWizard.vue'

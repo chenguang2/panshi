@@ -16,10 +16,13 @@
         <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
         <option value="__ung__">未分组</option>
       </select>
-      <select v-model="clusterFilter" class="form-input" style="width: 160px" @change="onFilterChange">
-        <option value="">全部集群</option>
-        <option v-for="c in filteredClusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
-      </select>
+      <ClusterSelect
+        v-model="clusterFilter"
+        :clusters="filteredClusters"
+        allow-all
+        style="width: 160px"
+        @change="onFilterChange"
+      />
       <select v-model="statusFilter" class="form-input" style="width: 130px" @change="onFilterChange">
         <option value="">全部状态</option>
         <option value="running">运行中</option>
@@ -522,6 +525,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
 import { formatDateTime as formatDate, formatRelativeTime } from '@/utils/format'
+import ClusterSelect from '@/components/ClusterSelect.vue'
 import { message } from 'ant-design-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
 import api from '@/api'
@@ -580,7 +584,7 @@ const totalCount = ref(0)
 const page = ref(1)
 const pageSize = ref(PAGE_SIZE_TABLE)
 const { searchText, onSearch: onDebouncedSearch, cancelSearch } = useDebouncedSearch()
-const clusterFilter = ref<string>('')
+const clusterFilter = ref<string | number>('')
 const groupFilter = ref('__all__')
 const statusFilter = ref('')
 

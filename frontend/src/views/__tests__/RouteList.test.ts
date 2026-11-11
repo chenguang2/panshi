@@ -4,6 +4,7 @@ import { mount } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
 import { itGroupFilterSuite } from './helpers/groupFilterSuite'
 import { aTableStub } from '../../components/__tests__/helpers/aTableStub'
+import ClusterSelect from '@/components/ClusterSelect.vue'
 import { executePublish } from '@/composables/useClusterUtils'
 
 const mockApiGet = vi.fn()
@@ -337,9 +338,12 @@ describe('RouteList.vue 100 条大数据量 / 分页 / 筛选清空', () => {
     await flushPromises()
 
     // 选择集群 1：onClusterChange 重置 page=1，并携带 cluster_id + 拉取上游选项
-    const clusterSelect = wrapper.findAll('select').find((s) => s.text().includes('全部集群'))
-    expect(clusterSelect).toBeDefined()
-    await clusterSelect!.setValue('1')
+    // ClusterSelect 契约模拟：值事件先于 change（v-model 更新后再触发 onClusterChange）；
+    // 真实组件 emit 集群 id（number），此处对齐
+    const clusterSelectComp = wrapper.findComponent(ClusterSelect)
+    expect(clusterSelectComp.exists()).toBe(true)
+    await clusterSelectComp.vm.$emit('update:modelValue', 1)
+    await clusterSelectComp.vm.$emit('change', 1)
     await flushPromises()
     let calls = mockApiGet.mock.calls.filter((c: unknown[]) => c[0] === '/routes')
     let params = (calls[calls.length - 1][1] as { params: Record<string, unknown> }).params
@@ -348,7 +352,8 @@ describe('RouteList.vue 100 条大数据量 / 分页 / 筛选清空', () => {
     expect(mockApiGet.mock.calls.some((c: unknown[]) => c[0] === '/clusters/1/upstreams')).toBe(true)
 
     // 清空集群选择（选回「全部集群」）：page 保持 1，cluster_id 不再携带
-    await clusterSelect!.setValue('')
+    await clusterSelectComp.vm.$emit('update:modelValue', '')
+    await clusterSelectComp.vm.$emit('change', '')
     await flushPromises()
     calls = mockApiGet.mock.calls.filter((c: unknown[]) => c[0] === '/routes')
     params = (calls[calls.length - 1][1] as { params: Record<string, unknown> }).params
@@ -772,11 +777,15 @@ describe('RouteList.vue 集群下拉随授权收敛（batch1 组6 6.2）', () =>
     const wrapper = mount(RouteList, { global: { stubs } })
     await flushPromises()
 
-    const clusterSelect = wrapper.findAll('select').find((s) => s.text().includes('全部集群'))
-    expect(clusterSelect).toBeDefined()
-    const options = clusterSelect!.findAll('option')
-    expect(options.map((o) => o.text().trim())).toEqual(['全部集群', '授权集群甲', '授权集群乙'])
-    expect(options.map((o) => (o.element as HTMLOptionElement).value)).toEqual(['', '5', '9'])
+    // 集群下拉选项集 == 授权集群集（ClusterSelect 不做二次过滤；不多不少）
+    const clusterSelectEl = wrapper.find('.cluster-select')
+    expect(clusterSelectEl.exists()).toBe(true)
+    // 选项集 == 注入集群集（ClusterSelect 不做二次过滤；不多不少），value 契约：全部集群=''、集群项=集群 id
+    // （未解析的自定义标签以原生元素落在 DOM，直接用原生查询断言）
+    const optionEls = Array.from(clusterSelectEl.element.querySelectorAll('a-select-option'))
+    // 排序跟随默认 locale collation（en-US/ICU 下「乙」先于「甲」），与 ClusterSelect 排序契约一致
+    expect(optionEls.map((el) => el.textContent?.trim())).toEqual(['全部集群', '授权集群乙', '授权集群甲'])
+    expect(optionEls.map((el) => el.getAttribute('value'))).toEqual(['', '9', '5'])
     wrapper.unmount()
   })
 })
@@ -1253,12 +1262,10 @@ describe('RouteList.vue 行内发布拍平（列表操作统一·方案 A）', (
 
     const rows = wrapper.findAll('.mock-a-table tbody tr')
     // 主行文案按 menu-item-stack 主行提取（解释行是 small，不参与收敛断言）
-    const menuItems = rows[1]
-      .findAll('.mock-menu-item')
-      .map((i) => {
-        const span = i.find('.menu-item-stack span')
-        return (span.exists() ? span.text() : i.text()).trim()
-      })
+    const menuItems = rows[1].findAll('.mock-menu-item').map((i) => {
+      const span = i.find('.menu-item-stack span')
+      return (span.exists() ? span.text() : i.text()).trim()
+    })
     expect(menuItems).toEqual(['编辑', '版本管理', '复制路由', '删除'])
     expect(menuItems).not.toContain('发布')
     // 分级解释落地：版本管理/删除带常驻解释，编辑/复制保持单行
