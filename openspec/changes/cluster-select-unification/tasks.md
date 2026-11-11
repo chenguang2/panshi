@@ -29,7 +29,7 @@
 
 ## 5. 收口
 
-- [ ] 5.1 `openspec validate --all` 0 error；如需改侧边栏/权限外文档同步（本变更预期无）。
+- [x] 5.1 `openspec validate --all` 0 error；如需改侧边栏/权限外文档同步（本变更预期无）。（205 passed / 0 failed）
 - [ ] 5.2 交付用户界面验收：按 acceptance-notes.md 清单逐页演示（12 页筛选条、EdgeEnv、代表弹窗 1 个、NodeTaskCenter）。
 
 ## Workflow follow-up

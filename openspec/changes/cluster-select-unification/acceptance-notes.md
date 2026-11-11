@@ -16,6 +16,17 @@
 - **真实 antd 下 `value=''` 回显「全部集群」**：筛选页 dropdown 首选项渲染与测试断言一致；必选模式 ''→undefined 规范化后 placeholder 正常显示（截图确认）。风险关闭。
 - **jsdom 桩 select 不收录嵌套 option（未解析 opt-group 包裹）**：仅影响测试桩 DOM 驱动，生产 rc-select 不受影响；相关测试已统一改为组件 emit 契约（NodeTaskCenter 13 处、EdgeImport 3 处、DnsQueryFormModal 3 处）。
 
+## 全量复跑记录（批 3 提交前后）
+
+| 轮次 | 结果 | 唯一失败 | 处置 |
+|---|---|---|---|
+| 16:33（提交前，串行） | 2653/2654 | ClusterPluginConfigs.publishState「失败态重试」 | 隔离复跑 8/8 绿，mock 调用数 0 为时序假象 |
+| 16:38（提交后，串行，与前台单测并发） | 2653/2654 | SslFormDrawer「client_depth=0」 | 隔离复跑 29/29 绿 |
+| 16:42（清场串行） | 2653/2654 | UserList.pagination「搜索后回第 1 页」 | 隔离复跑 8/8 绿 |
+| 16:45（清场，`--maxWorkers=4`） | 2652/2654 | RelayGateways 3.7 + DbBackupCard.dr 清理历史 | 两文件联跑首轮复现 1 例、次轮 92/92 绿 |
+
+四轮全量各留 1～2 例、失败文件轮换、隔离/重跑即绿（ClusterPluginConfigs / SslFormDrawer / UserList.pagination / RelayGateways / DbBackupCard.dr 跨全域，均非本变更触及文件），与 #58 波动家族一致，判定**环境波动、非本变更回归**。两点经验：① 全量期间并发跑其他 vitest 进程会显著抬高波动率，判定前先清场；② 本机当前波动率高于 #208 记载的「串行全绿」，`--maxWorkers=4` 与串行表现相当，两者都不能保证零波动。
+
 ## e2e
 
 - edge-client.spec.ts 集群交互改 antd 下拉点击（点开下拉 → 按选项文本点选），节点 select 位置 2→1：`npx playwright test edge-client.spec.ts` 10 passed。
