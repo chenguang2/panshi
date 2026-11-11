@@ -18,16 +18,14 @@
           placeholder="搜索任务号 / 节点 IP / 命令"
           @keyup.enter="applyFilters"
         />
-        <select
+        <ClusterSelect
           v-model="filterClusterId"
-          class="form-input"
-          data-test="filter-cluster"
+          :clusters="clusters"
+          allow-all
           style="width: 150px"
+          data-test="filter-cluster"
           @change="onFilterChange"
-        >
-          <option value="">全部集群</option>
-          <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
-        </select>
+        />
         <select
           v-model="filterStatus"
           class="form-input"
@@ -459,18 +457,16 @@
           <div class="modal-body" style="max-height: 80vh; overflow-y: auto">
             <div class="ntc-field">
               <label class="ntc-label" for="ntc-cluster">集群 <span class="ntc-req">*</span></label>
-              <select
+              <ClusterSelect
                 id="ntc-cluster"
-                v-model="createClusterId"
-                class="form-input"
+                :model-value="createClusterId || ''"
+                :clusters="clusters"
                 :class="{ 'is-error': showCreateError('cluster') }"
                 data-test="create-cluster"
+                @update:model-value="onCreateClusterFieldChange"
                 @change="onCreateClusterChange"
                 @blur="touchCreateField('cluster')"
-              >
-                <option :value="0" disabled>请选择集群</option>
-                <option v-for="c in clusters" :key="c.id" :value="c.id">{{ c.display_name || c.name }}</option>
-              </select>
+              />
               <p v-if="showCreateError('cluster')" class="ntc-error">{{ showCreateError('cluster') }}</p>
             </div>
             <div class="ntc-field">
@@ -1013,6 +1009,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount, h, render } from 'vue'
+import ClusterSelect from '@/components/ClusterSelect.vue'
 import { message } from 'ant-design-vue'
 import { useRoute, useRouter } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
@@ -1055,7 +1052,7 @@ const loading = ref(false)
 /** 筛选条草稿与已生效值分开：搜索框回车才生效（避免每个字符触发一次请求） */
 const filterKeyword = ref('')
 const appliedKeyword = ref('')
-const filterClusterId = ref<number | ''>('')
+const filterClusterId = ref<number | string>('')
 const filterStatus = ref('')
 const filterType = ref('')
 /** 时间范围快捷项：'' 全部 / 24h / 7d / 30d（映射为 created_from） */
@@ -2171,6 +2168,11 @@ function onCreateClusterChange() {
   touchCreateField('cluster')
   nodeSearch.value = ''
   void loadCreateNodes()
+}
+
+/** ClusterSelect emit number|string → 内部 number（0=未选；#56 占位语义迁移为 a-select placeholder） */
+function onCreateClusterFieldChange(value: number | string) {
+  createClusterId.value = value === '' ? 0 : Number(value)
 }
 
 function onCreateTaskTypeChange() {

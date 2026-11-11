@@ -17,12 +17,13 @@
       </select>
 
       <template v-if="inputMode === 'cluster'">
-        <select v-model="selectedClusterId" class="form-input" style="width: 200px" @change="onClusterChange">
-          <option value="">选择集群</option>
-          <option v-for="cluster in clusters" :key="cluster.id" :value="cluster.id">
-            {{ cluster.display_name || cluster.name }}
-          </option>
-        </select>
+        <ClusterSelect
+          v-model="selectedClusterId"
+          :clusters="clusters"
+          placeholder="选择集群"
+          style="width: 200px"
+          @change="onClusterChange"
+        />
         <select
           v-model="selectedNode"
           class="form-input"
@@ -995,6 +996,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, watch, onUnmounted, computed } from 'vue'
+import ClusterSelect from '@/components/ClusterSelect.vue'
 import { message } from 'ant-design-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
 import { showOverlayModal } from '@/composables/useOverlayModal'
@@ -1033,7 +1035,7 @@ import {
 
 const inputMode = ref<'cluster' | 'manual'>('cluster')
 const clusters = ref<any[]>([])
-const selectedClusterId = ref<string>('')
+const selectedClusterId = ref<number | string>('')
 const clusterNodes = ref<any[]>([])
 const selectedNode = ref<string>('')
 const manualNode = ref('')

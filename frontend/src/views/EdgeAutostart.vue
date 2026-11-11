@@ -15,17 +15,7 @@
     </PageHeader>
 
     <div class="toolbar">
-      <a-select
-        v-model:value="clusterFilter"
-        style="width: 200px"
-        placeholder="全部集群"
-        allow-clear
-        @change="loadNodes"
-      >
-        <a-select-option v-for="c in clusters" :key="c.id" :value="c.id">{{
-          c.display_name || c.name
-        }}</a-select-option>
-      </a-select>
+      <ClusterSelect v-model="clusterFilter" :clusters="clusters" allow-all style="width: 200px" @change="loadNodes" />
       <a-input-search
         v-model:value="ipSearch"
         style="width: 200px"
@@ -448,7 +438,7 @@ const canViewAudit = computed(() => authStore.hasPermission('audit_logs'))
 const clusters = ref<any[]>([])
 const nodes = ref<any[]>([])
 const loading = ref(false)
-const clusterFilter = ref<number | undefined>(undefined)
+const clusterFilter = ref<number | string>('')
 const ipSearch = ref('')
 const statusFilter = ref<string | undefined>(undefined)
 // 表格分页状态（#59：跨页序号公式 (page-1)*pageSize+index+1 依赖 page/pageSize）
@@ -657,7 +647,7 @@ async function loadNodes() {
   try {
     const res = await listNodes({
       pageSize: 500,
-      ...(clusterFilter.value ? { clusterId: clusterFilter.value } : {}),
+      ...(clusterFilter.value ? { clusterId: Number(clusterFilter.value) } : {}),
     })
     const items = res.data?.items || []
     const clusterMap = new Map(clusters.value.map((c: any) => [c.id, c]))

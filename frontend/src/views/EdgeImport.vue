@@ -12,16 +12,13 @@
       <a-card title="选择源节点">
         <a-form layout="vertical">
           <a-form-item label="所属集群" required>
-            <a-select
-              v-model:value="selectedClusterId"
+            <ClusterSelect
+              :model-value="selectedClusterId"
+              :clusters="clusters"
               placeholder="请选择集群..."
-              style="width: 400px"
+              @update:model-value="onClusterFieldChange"
               @change="onClusterChange"
-            >
-              <a-select-option v-for="cluster in clusters" :key="cluster.id" :value="cluster.id">
-                {{ cluster.display_name || cluster.name }}
-              </a-select-option>
-            </a-select>
+            />
           </a-form-item>
 
           <a-form-item label="目标节点" required>
@@ -301,6 +298,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, h } from 'vue'
+import ClusterSelect from '@/components/ClusterSelect.vue'
 import { message } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
 import {
@@ -323,6 +321,11 @@ const router = useRouter()
 const currentStep = ref(0)
 const clusters = ref<any[]>([])
 const selectedClusterId = ref<number | null>(null)
+
+/** ClusterSelect emit number|string → 内部 number|null（null=未选） */
+function onClusterFieldChange(value: number | string) {
+  selectedClusterId.value = value === '' ? null : Number(value)
+}
 const loadingClusters = ref(false)
 
 const selectedNodeId = ref<number | null>(null)

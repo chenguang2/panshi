@@ -6,6 +6,15 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import ClusterSelect from '@/components/ClusterSelect.vue'
+
+/** 集群字段已换装 ClusterSelect：经组件契约填值（update 先于 change）；DOM setValue 因未解析 opt-group 包裹不生效 */
+async function pickCluster(wrapper: any, id: number) {
+  const comp = wrapper.findComponent(ClusterSelect)
+  await comp.vm.$emit('update:modelValue', id)
+  await comp.vm.$emit('change', id)
+  await flushPromises()
+}
 import { createRouter, createWebHistory } from 'vue-router'
 
 const mockMessage = { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() }
@@ -191,10 +200,8 @@ describe('EdgeImport 批 1：连接测试反馈', () => {
 
   it('测试连接 loading 期间显示过程提示（非静默）', async () => {
     const wrapper = await mountPage()
-    // 手动触发集群选择（select stub 走 change 事件）
-    const select = wrapper.find('.a-select')
-    await select.setValue('4')
-    await flushPromises()
+    // 手动触发集群选择（ClusterSelect 组件契约填值）
+    await pickCluster(wrapper, 4)
     const nodeSelect = wrapper.findAll('.a-select')[1]
     await nodeSelect.setValue('2')
     await flushPromises()
@@ -229,9 +236,7 @@ describe('EdgeImport 批 1：连接测试反馈', () => {
 
 async function reachStep2() {
   const wrapper = await mountPage()
-  const select = wrapper.find('.a-select')
-  await select.setValue('4')
-  await flushPromises()
+  await pickCluster(wrapper, 4)
   const nodeSelect = wrapper.findAll('.a-select')[1]
   await nodeSelect.setValue('2')
   await flushPromises()
@@ -299,9 +304,8 @@ describe('EdgeImport 批 2：导入确认与明细', () => {
     const backBtn2 = buttons(wrapper).find((b) => b.text() === '上一步')!
     await backBtn2.trigger('click') // → step0
     await flushPromises()
-    // 集群仍选中（select stub value=4）
-    const select = wrapper.find('.a-select')
-    expect(select.element.value).toBe('4')
+    // 集群仍选中（ClusterSelect modelValue=4；内层桩 select 因未解析 opt-group 包裹不回显 DOM value）
+    expect(wrapper.findComponent(ClusterSelect).props('modelValue')).toBe(4)
     // 节点已重置 → 节点下拉禁用（未选集群态不存在——集群在，节点下拉应启用且列表保留）
     expect(wrapper.find('.a-select:nth-of-type(1)').exists()).toBe(true)
   })

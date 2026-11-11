@@ -12,14 +12,15 @@ test.describe('Edge Client Debug Page', () => {
 
   /** 选择集群+节点并触发查询；无节点数据时返回 false */
   async function queryFirstNode(page: Page): Promise<boolean> {
-    // 页面含隐藏弹窗的 select（共 5+ 个），按位置取：0=模式 1=集群 2=节点
-    const clusterSelect = page.locator('select').nth(1)
-    // 集群选项异步加载，等待出现非占位符选项
+    // 集群为 ClusterSelect（antd 下拉；页内原生 select 剩 0=模式 1=节点）：点开下拉按选项文本点选
+    const clusterSelect = page.locator('.cluster-select')
+    await clusterSelect.locator('.ant-select-selector').click()
+    // 集群选项异步加载，等待下拉出现非占位符选项
     try {
       await expect
         .poll(
           async () => {
-            const opts = await clusterSelect.locator('option').allTextContents()
+            const opts = await page.locator('.ant-select-dropdown .ant-select-item-option').allTextContents()
             return opts.filter((t) => t.trim() && !t.includes('选择集群'))
           },
           { timeout: 10000 },
@@ -28,13 +29,13 @@ test.describe('Edge Client Debug Page', () => {
     } catch {
       return false
     }
-    const clusterOpts = await clusterSelect.locator('option').allTextContents()
+    const clusterOpts = await page.locator('.ant-select-dropdown .ant-select-item-option').allTextContents()
     const clusterLabel = clusterOpts.find((t) => t.trim() && !t.includes('选择集群'))
     if (!clusterLabel) return false
-    await clusterSelect.selectOption({ label: clusterLabel })
+    await page.locator('.ant-select-dropdown .ant-select-item-option').filter({ hasText: clusterLabel }).first().click()
 
-    // 节点选项随集群选择异步加载（onClusterChange/watch 拉取节点列表），poll 等非占位符选项
-    const nodeSelect = page.locator('select').nth(2)
+    // 节点选项随集群选择异步加载（onClusterChange/watch 拉取节点列表，原生 select 位置 1），poll 等非占位符选项
+    const nodeSelect = page.locator('select').nth(1)
     try {
       await expect
         .poll(

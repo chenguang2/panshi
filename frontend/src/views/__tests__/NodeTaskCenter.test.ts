@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import ClusterSelect from '@/components/ClusterSelect.vue'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
@@ -140,6 +141,14 @@ const globalStubs = {
       },
     },
   },
+}
+
+/** 集群字段已换装 ClusterSelect：经组件实例 emit 契约填值（update 先于 change，对齐组件行为） */
+function pickCreateClusterEl(id: number | string = 1) {
+  const el = document.querySelector('[data-test="create-cluster"]') as any
+  const comp = el?.__vueParentComponent?.proxy
+  comp?.$emit('update:modelValue', id)
+  comp?.$emit('change', id)
 }
 
 describe('NodeTaskCenter', () => {
@@ -550,9 +559,7 @@ describe('NodeTaskCenter create-task flow', () => {
 
     // select cluster in the modal (Teleport -> body) to trigger node loading
     const bodySelects = Array.from(document.querySelectorAll('select'))
-    const clusterSel = bodySelects.find((s) => s.getAttribute('data-test') === 'create-cluster')
-    clusterSel!.value = '1'
-    clusterSel!.dispatchEvent(new Event('change', { bubbles: true }))
+    pickCreateClusterEl(1)
     await flushPromises()
 
     expect(api.get).toHaveBeenCalledWith('/clusters/1/nodes', expect.any(Object))
@@ -591,9 +598,7 @@ describe('NodeTaskCenter create-task flow', () => {
 
     // select cluster (Teleport -> body)
     const bodySelects = Array.from(document.querySelectorAll('select'))
-    const clusterSel = bodySelects.find((s) => s.getAttribute('data-test') === 'create-cluster')
-    clusterSel!.value = '1'
-    clusterSel!.dispatchEvent(new Event('change', { bubbles: true }))
+    pickCreateClusterEl(1)
     await flushPromises()
     // select task type
     const typeSel = bodySelects.find((s) => s.getAttribute('data-test') === 'task-type')
@@ -659,10 +664,7 @@ describe('NodeTaskCenter create-task flow', () => {
 
     // select cluster
     const bodySelects = Array.from(document.querySelectorAll('select'))
-    const clusterSel = bodySelects.find((s) => s.getAttribute('data-test') === 'create-cluster')
-    clusterSel!.value = '1'
-    clusterSel!.dispatchEvent(new Event('change', { bubbles: true }))
-    clusterSel!.dispatchEvent(new Event('input', { bubbles: true }))
+    pickCreateClusterEl(1)
     await flushPromises()
     // select install_openresty task type -> should fetch openresty-files
     const typeSel = bodySelects.find((s) => s.getAttribute('data-test') === 'task-type')
@@ -731,9 +733,7 @@ describe('NodeTaskCenter create-task flow', () => {
     await flushPromises()
 
     const bodySelects = Array.from(document.querySelectorAll('select'))
-    const clusterSel = bodySelects.find((s) => s.getAttribute('data-test') === 'create-cluster')
-    clusterSel!.value = '1'
-    clusterSel!.dispatchEvent(new Event('change', { bubbles: true }))
+    pickCreateClusterEl(1)
     await flushPromises()
 
     const typeSel = bodySelects.find((s) => s.getAttribute('data-test') === 'task-type')
@@ -798,9 +798,7 @@ describe('NodeTaskCenter create-task flow', () => {
     await flushPromises()
 
     const bodySelects = Array.from(document.querySelectorAll('select'))
-    const clusterSel = bodySelects.find((s) => s.getAttribute('data-test') === 'create-cluster')
-    clusterSel!.value = '1'
-    clusterSel!.dispatchEvent(new Event('change', { bubbles: true }))
+    pickCreateClusterEl(1)
     await flushPromises()
 
     const typeSel = bodySelects.find((s) => s.getAttribute('data-test') === 'task-type')
@@ -869,9 +867,7 @@ describe('NodeTaskCenter create-task flow', () => {
     await flushPromises()
 
     const bodySelects = Array.from(document.querySelectorAll('select'))
-    const clusterSel = bodySelects.find((s) => s.getAttribute('data-test') === 'create-cluster')
-    clusterSel!.value = '1'
-    clusterSel!.dispatchEvent(new Event('change', { bubbles: true }))
+    pickCreateClusterEl(1)
     await flushPromises()
 
     const typeSel = bodySelects.find((s) => s.getAttribute('data-test') === 'task-type')
@@ -935,9 +931,7 @@ describe('NodeTaskCenter create-task flow', () => {
     await flushPromises()
 
     const bodySelects = Array.from(document.querySelectorAll('select'))
-    const clusterSel = bodySelects.find((s) => s.getAttribute('data-test') === 'create-cluster')
-    clusterSel!.value = '1'
-    clusterSel!.dispatchEvent(new Event('change', { bubbles: true }))
+    pickCreateClusterEl(1)
     await flushPromises()
 
     // 必须先切到 edge_pack_rebase：watch(createNodeIds) 只在该任务类型下触发版本加载
@@ -1001,13 +995,10 @@ describe('NodeTaskCenter create-task flow', () => {
     await flushPromises()
 
     const selectCluster = async (value: string) => {
-      // 弹窗经 Teleport 挂到 body，集群下拉是弹窗内唯一无 data-test 的 select
-      const sel = Array.from(document.querySelectorAll('select')).find(
-        (s) => s.getAttribute('data-test') === 'create-cluster',
-      )
+      // 集群字段已换装 ClusterSelect（非原生 select），按 data-test 定位
+      const sel = document.querySelector('[data-test="create-cluster"]')
       expect(sel).toBeTruthy()
-      sel!.value = value
-      sel!.dispatchEvent(new Event('change', { bubbles: true }))
+      pickCreateClusterEl(value)
       await flushPromises()
     }
 
@@ -1060,13 +1051,6 @@ describe('NodeTaskCenter create-task flow', () => {
       .trigger('click')
     await flushPromises()
 
-    const clusterSel = Array.from(document.querySelectorAll('select')).find(
-      (s) => s.getAttribute('data-test') === 'create-cluster',
-    )
-    clusterSel!.value = '1'
-    clusterSel!.dispatchEvent(new Event('change', { bubbles: true }))
-    await flushPromises()
-
     const typeSel = Array.from(document.querySelectorAll('select')).find(
       (s) => s.getAttribute('data-test') === 'task-type',
     )
@@ -1074,8 +1058,7 @@ describe('NodeTaskCenter create-task flow', () => {
     typeSel!.dispatchEvent(new Event('change', { bubbles: true }))
     await flushPromises()
 
-    clusterSel!.value = '2'
-    clusterSel!.dispatchEvent(new Event('change', { bubbles: true }))
+    pickCreateClusterEl(2)
     await flushPromises()
 
     const dependentCalls = vi
@@ -1112,8 +1095,7 @@ describe('NodeTaskCenter create-task flow', () => {
     const clusterSel = Array.from(document.querySelectorAll('select')).find(
       (s) => s.getAttribute('data-test') === 'create-cluster',
     )
-    clusterSel!.value = '1'
-    clusterSel!.dispatchEvent(new Event('change', { bubbles: true }))
+    pickCreateClusterEl(1)
     await flushPromises()
 
     const typeSel = Array.from(document.querySelectorAll('select')).find(
@@ -1168,9 +1150,7 @@ describe('NodeTaskCenter create-task node selection', () => {
     await flushPromises()
     // 选集群
     const bodySelects = Array.from(document.querySelectorAll('select'))
-    const clusterSel = bodySelects.find((s) => s.getAttribute('data-test') === 'create-cluster')
-    clusterSel!.value = '1'
-    clusterSel!.dispatchEvent(new Event('change', { bubbles: true }))
+    pickCreateClusterEl(1)
     await flushPromises()
     return wrapper
   }
@@ -1232,9 +1212,7 @@ describe('NodeTaskCenter software_check flow', () => {
     await flushPromises()
 
     const bodySelects = Array.from(document.querySelectorAll('select'))
-    const clusterSel = bodySelects.find((s) => s.getAttribute('data-test') === 'create-cluster')
-    clusterSel!.value = '1'
-    clusterSel!.dispatchEvent(new Event('change', { bubbles: true }))
+    pickCreateClusterEl(1)
     await flushPromises()
 
     const typeSel = Array.from(document.querySelectorAll('select')).find(
@@ -1279,9 +1257,7 @@ describe('NodeTaskCenter cmd_exec flow', () => {
 
   async function selectClusterAndType(wrapper: any, taskType: string) {
     const bodySelects = Array.from(document.querySelectorAll('select'))
-    const clusterSel = bodySelects.find((s) => s.getAttribute('data-test') === 'create-cluster')
-    clusterSel!.value = '1'
-    clusterSel!.dispatchEvent(new Event('change', { bubbles: true }))
+    pickCreateClusterEl(1)
     await flushPromises()
     const typeSel = Array.from(document.querySelectorAll('select')).find(
       (s) => s.getAttribute('data-test') === 'task-type',
@@ -1742,8 +1718,12 @@ describe('NodeTaskCenter 列表信息架构（node-task-ux-optimization 6.1/6.2�
     const wrapper = await mountWith({ data: { total: 0, items: [] } })
 
     const clusterSel = wrapper.find('[data-test="filter-cluster"]')
-    expect(clusterSel.findAll('option').map((o) => o.text())).toEqual(['全部集群', '生产集群', '预发集群'])
-    await clusterSel.setValue('4')
+    // 集群筛选已换装 ClusterSelect：选项集经未解析标签断言；选择经组件 emit（值先于 change）
+    const optionEls = Array.from(clusterSel.element.querySelectorAll('a-select-option'))
+    expect(optionEls.map((el) => el.textContent?.trim())).toEqual(['全部集群', '生产集群', '预发集群'])
+    const clusterComp = wrapper.findComponent(ClusterSelect)
+    await clusterComp.vm.$emit('update:modelValue', 4)
+    await clusterComp.vm.$emit('change', 4)
     await flushPromises()
     expect(lastListParams().cluster_id).toBe(4)
 
@@ -2021,10 +2001,8 @@ describe('NodeTaskCenter 创建任务弹窗可用性（node-task-ux-optimization
     return document.querySelector('.modal-overlay[style*="flex"] .modal-body') as HTMLElement
   }
 
-  function pickCluster(id = '1') {
-    const sel = document.querySelector('[data-test="create-cluster"]') as HTMLSelectElement
-    sel.value = id
-    sel.dispatchEvent(new Event('change', { bubbles: true }))
+  function pickCluster(id: number | string = 1) {
+    pickCreateClusterEl(id)
   }
 
   function pickType(value: string) {

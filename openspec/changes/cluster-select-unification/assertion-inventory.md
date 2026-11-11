@@ -33,12 +33,14 @@
 
 ## 批 3：扁平筛选页
 
-| # | 文件:行 | 现断言 | 反转后断言 |
-|---|---|---|---|
-| 15 | NodeTaskCenter.test.ts:1745 | clusterSel options `['全部集群','生产集群','预发集群']` | 同 #1 模式 |
-| 16 | NodeTaskCenter.test.ts:2068/2073 | 「请选择集群」错误文案 | 页面校验文案（非控件），预计无需反转；实施时确认 |
-| 17 | e2e/edge-client.spec.ts:34 | `clusterSelect.selectOption({label})` | antd 下拉交互（点开 → 点选项）；nodeSelect（L54）不动 |
-| 18 | EdgeImport.test.ts / EdgeAutostart*.test.ts | 批 3 实施时逐个 grep 补录 | 届时按 #1/#12 模式 |
+> **实施注记（2026-11-11）**：NodeTaskCenter 13 处测试点统一 `pickCreateClusterEl` helper（document 定位 data-test 根元素 → `__vueParentComponent.proxy` emit 契约）；EdgeImport 3 处改 `pickCluster` helper（findComponent emit）。**jsdom 陷阱记录**：ClusterSelect 内层 a-select 桩的 DOM `setValue` 不生效——未解析 `a-select-opt-group` 包裹的 option 不进 `select.options` 列表（生产 rc-select 无此问题）；凡经桩 select DOM 驱动集群选择的用例一律改组件 emit。EdgeClient e2e 改 antd 下拉点击交互、节点 select 位置 2→1。
+
+| # | 文件:行 | 现断言 | 反转后断言 | 状态 |
+|---|---|---|---|---|
+| 15 | NodeTaskCenter.test.ts:1745 | clusterSel options `['全部集群','生产集群','预发集群']` | 原生查询 `a-select-option` 标签列表（等价集合）；选择改 findComponent(ClusterSelect) emit 4 | ✅ 已反转 |
+| 16 | NodeTaskCenter.test.ts:2068/2073 | 「请选择集群」错误文案 | 页面校验文案（非控件），无需反转；隔离复跑核验绿 | ✅ 核验 |
+| 17 | e2e/edge-client.spec.ts:34 | `clusterSelect.selectOption({label})` | antd 下拉交互（点 .ant-select-selector 开启 → 按 `.ant-select-item-option` 文本点选）；nodeSelect 位置 2→1 | ✅ 已反转 |
+| 18 | EdgeImport.test.ts / EdgeAutostart*.test.ts | EdgeImport 3 处 `.a-select` DOM 驱动 | `pickCluster` helper（findComponent emit）；EdgeAutostart 测试无集群下拉直引，换装后零改动即绿 | ✅ 已反转/核验 |
 
 ## 范围外（本变更不动）
 

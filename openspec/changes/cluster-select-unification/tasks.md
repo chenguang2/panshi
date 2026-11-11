@@ -23,9 +23,9 @@
 
 ## 4. 批 3：扁平筛选页
 
-- [ ] 4.1 NodeTaskCenter：筛选条集群下拉与创建任务弹窗集群选择换装（弹窗从原生 disabled 占位迁移为 a-select placeholder 语义）。验证：对应测试绿；筛选条选中后任务过滤正常。
-- [ ] 4.2 EdgeClient、EdgeImport、EdgeAutostart 集群下拉换装（必选/筛选模式按各页现状语义）。验证：对应测试绿。
-- [ ] 4.3 批 3 全量收口 + 手动链路抽查（复用常驻服务，不自行启停；#8）：连 `http://localhost:12345` 抽查节点管理、四层代理、edge.env 三页——组级联、搜索、「全部集群」、切组清空各一遍。验证：抽查记录写入本变更目录 acceptance-notes.md；vitest 全量绿；git 提交。
+- [x] 4.1 NodeTaskCenter：筛选条集群下拉与创建任务弹窗集群选择换装（弹窗从原生 disabled 占位迁移为 a-select placeholder 语义）。验证：对应测试绿；筛选条选中后任务过滤正常。（筛选条 allow-all、弹窗必选；0=未选在字段层表达，`onCreateClusterFieldChange` 收 emit 后转 number/null）
+- [x] 4.2 EdgeClient、EdgeImport、EdgeAutostart 集群下拉换装（必选/筛选模式按各页现状语义）。验证：对应测试绿。（三页均必选/带「全部集群」筛选语义迁移完成；EdgeAutostart 测试无集群下拉直引，换装后零改动即绿）
+- [x] 4.3 批 3 全量收口 + 手动链路抽查（复用常驻服务，不自行启停；#8）：连 `http://localhost:12345` 抽查节点管理、四层代理、edge.env 三页——组级联、搜索、「全部集群」、切组清空各一遍。验证：抽查记录写入本变更目录 acceptance-notes.md；vitest 全量绿；git 提交。（抽查记录见 acceptance-notes.md；全量 2653/2654，唯一失败 RelayGateways.test.ts 隔离复跑 63/63 绿 → #58/#208 波动）
 
 ## 5. 收口
 
