@@ -5,20 +5,20 @@
         <button
           class="btn btn-secondary"
           @click="startReadTemplate"
-          :disabled="!selectedClusterId || !selectedNodeId || readStreaming"
+          :disabled="!activeClusterId || !selectedNodeId || readStreaming"
         >
           {{ readStreaming ? '读取中...' : '读取节点配置' }}
         </button>
-        <button class="btn btn-primary" @click="onPublishClick" :disabled="!selectedClusterId || !allNodes.length">
+        <button class="btn btn-primary" @click="onPublishClick" :disabled="!activeClusterId || !allNodes.length">
           发布
         </button>
-        <button class="btn btn-ghost" @click="showVersionManagement" :disabled="!selectedClusterId">版本管理</button>
+        <button class="btn btn-ghost" @click="showVersionManagement" :disabled="!activeClusterId">版本管理</button>
       </template>
     </PageHeader>
 
     <div class="ee-toolbar">
       <ClusterSelect
-        v-model="selectedClusterId"
+        :value="activeClusterId"
         :clusters="clusters"
         style="width: 260px"
         @change="onASelectClusterChange"
@@ -37,7 +37,7 @@
       </select>
     </div>
 
-    <div v-if="!selectedClusterId" class="ee-empty">
+    <div v-if="!activeClusterId" class="ee-empty">
       <div class="ee-empty-text">请先选择一个集群</div>
     </div>
     <div v-else-if="noActiveNodes" class="ee-empty">
@@ -282,8 +282,8 @@
     <VersionManagementModal
       v-model:open="versionModalVisible"
       resource-type="edge_env"
-      :resource-id="Number(selectedClusterId)"
-      :cluster-id="Number(selectedClusterId)"
+      :resource-id="Number(activeClusterId)"
+      :cluster-id="Number(activeClusterId)"
       :resource-name="selectedClusterName"
       @republish="onVersionLoadToEditor"
     />
@@ -315,28 +315,21 @@ const router = useRouter()
 const clusters = ref<Cluster[]>([])
 const nodes = ref<any[]>([])
 const allNodes = ref<any[]>([])
-const selectedClusterId = ref<number | string>('')
-/** 当前编辑器内容归属（已加载完成）的集群：切换去重基准 + 取消切换时 v-model 回弹目标 */
+/** 当前已加载/显示的集群：ClusterSelect 的 :value 受控显示值（取消切换=不动它，结构性回滚） */
 const activeClusterId = ref<number | ''>('')
 const selectedNodeId = ref<number | string>('')
 
 async function onASelectClusterChange(val: unknown) {
   const next = val === undefined || val === null || val === '' ? '' : Number(val)
-  if (next === activeClusterId.value) return
   if (isDirty.value) {
     const ok = await showConfirm({
       title: '确认切换集群',
       content: '当前编辑内容尚未发布，切换集群将丢弃编辑内容，是否继续？',
       okText: '确认切换',
     })
-    if (!ok) {
-      // ClusterSelect 契约「值先于事件」（AGENTS #109-111）：change 到达时 v-model 已更新为新值，
-      // 取消切换必须显式回弹到已加载集群，否则下拉显示与编辑器内容错位
-      selectedClusterId.value = activeClusterId.value
-      return
-    }
+    if (!ok) return
   }
-  selectedClusterId.value = next
+  activeClusterId.value = next
   await onClusterChange()
 }
 
@@ -484,7 +477,7 @@ onUnmounted(() => {
 })
 
 const noActiveNodes = computed(() => {
-  if (!selectedClusterId.value) return false
+  if (!activeClusterId.value) return false
   return nodes.value.length === 0
 })
 
@@ -493,7 +486,7 @@ onMounted(async () => {
   await loadClusters()
   const clusterId = route.query.cluster_id
   if (clusterId) {
-    selectedClusterId.value = Number(clusterId)
+    activeClusterId.value = Number(clusterId)
     await onClusterChange()
   }
 })
@@ -508,9 +501,9 @@ async function loadClusters() {
 }
 
 async function loadNodes() {
-  if (!selectedClusterId.value) return
+  if (!activeClusterId.value) return
   try {
-    const res = await api.get(`/clusters/${selectedClusterId.value}/nodes`, {
+    const res = await api.get(`/clusters/${activeClusterId.value}/nodes`, {
       params: { page: 1, page_size: PAGE_SIZE_DROPDOWN },
     })
     allNodes.value = res.data.items || []
@@ -526,15 +519,13 @@ async function onClusterChange() {
   errorMsg.value = ''
   selectedNodeId.value = ''
   contentSource.value = null
-  const cluster = clusters.value.find((c) => c.id === Number(selectedClusterId.value))
-  selectedClusterName.value = cluster?.display_name || cluster?.name || String(selectedClusterId.value)
+  const cluster = clusters.value.find((c) => c.id === Number(activeClusterId.value))
+  selectedClusterName.value = cluster?.display_name || cluster?.name || String(activeClusterId.value)
   await loadNodes()
   if (nodes.value.length > 0) {
     selectedNodeId.value = nodes.value[0].id
   }
-  // 数据已归属该集群：作为切换去重基准与取消回弹目标（onASelectClusterChange）
-  activeClusterId.value = selectedClusterId.value === '' ? '' : Number(selectedClusterId.value)
-  router.replace({ query: { ...route.query, cluster_id: String(selectedClusterId.value) } })
+  router.replace({ query: { ...route.query, cluster_id: String(activeClusterId.value) } })
 }
 
 /** 受控切换节点：同款确认守卫（onNodeChange 仅剩确认后清空职责） */
@@ -564,7 +555,7 @@ async function applyNodeChange(newId: number | '') {
 // ── Read template ──
 
 async function startReadTemplate() {
-  if (!selectedClusterId.value || !selectedNodeId.value) return
+  if (!activeClusterId.value || !selectedNodeId.value) return
 
   // Confirm discard if editor has content
   if (editorContent.value) {
@@ -584,7 +575,7 @@ async function startReadTemplate() {
   readNode.value = { ip: target?.ip || String(selectedNodeId.value), status: 'reading' }
 
   readAbort = edgeEnvApi.readEdgeEnvStream(
-    Number(selectedClusterId.value),
+    Number(activeClusterId.value),
     Number(selectedNodeId.value),
     (data) => {
       if (data.line) readLogs.value.push(data.line)
@@ -669,7 +660,7 @@ function computeDiff() {
 }
 
 function onPublishClick() {
-  if (!selectedClusterId.value) return
+  if (!activeClusterId.value) return
   if (!allNodes.value.length) {
     showAlert('提示', '该集群下没有节点')
     return
@@ -729,7 +720,7 @@ function readStatusText(status: ReadNodeState['status']): string {
 }
 
 async function executePublish() {
-  if (!selectedClusterId.value) return
+  if (!activeClusterId.value) return
   if (selectedPublishNodeIds.value.length === 0) {
     zeroNodeTried.value = true
     return
@@ -740,7 +731,7 @@ async function executePublish() {
   publishLogs.value = []
   publishResult.value = null
 
-  const url = `/clusters/${selectedClusterId.value}/edge-env/deploy`
+  const url = `/clusters/${activeClusterId.value}/edge-env/deploy`
   const body = { content: editorContent.value, node_ids: selectedPublishNodeIds.value }
 
   await installStream.start(url, body, {

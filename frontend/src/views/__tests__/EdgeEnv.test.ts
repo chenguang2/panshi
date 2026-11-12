@@ -138,7 +138,7 @@ describe('EdgeEnv.vue publish node selection', () => {
     await flushPromises()
     // 选中集群1
     const vm = wrapper.vm as any
-    vm.selectedClusterId = 1
+    vm.activeClusterId = 1
     await vm.onClusterChange()
     await flushPromises()
     return wrapper
@@ -241,7 +241,7 @@ describe('EdgeEnv.vue 部署进度 · 经中继 / 直连 标注', () => {
     const wrapper = mount(EdgeEnv, mountGlobal)
     await flushPromises()
     const vm = wrapper.vm as any
-    vm.selectedClusterId = 1
+    vm.activeClusterId = 1
     vm.selectedPublishNodeIds = [10, 11]
     void vm.executePublish()
     await flushPromises()
@@ -307,7 +307,7 @@ describe('EdgeEnv.vue 读取结果 · 经中继 / 直连 标注', () => {
     const wrapper = mount(EdgeEnv, mountGlobal)
     await flushPromises()
     const vm = wrapper.vm as any
-    vm.selectedClusterId = 1
+    vm.activeClusterId = 1
     await vm.onClusterChange()
     await flushPromises()
     vm.editorContent = ''
@@ -393,7 +393,7 @@ describe('EdgeEnv.vue 入口守卫 · 未选集群/节点不发起 SSE', () => {
     await vm.executePublish()
     expect(mockInstallStart).not.toHaveBeenCalled()
     // 集群已选但节点选择为空
-    vm.selectedClusterId = 1
+    vm.activeClusterId = 1
     vm.selectedPublishNodeIds = []
     await vm.executePublish()
     expect(mockInstallStart).not.toHaveBeenCalled()
@@ -409,7 +409,7 @@ describe('EdgeEnv.vue 入口守卫 · 未选集群/节点不发起 SSE', () => {
     expect(vm.publishDiffVisible).toBe(false)
     expect(mockInstallStart).not.toHaveBeenCalled()
     // 选了集群但编辑器为空：提示告警，不弹 diff
-    vm.selectedClusterId = 1
+    vm.activeClusterId = 1
     vm.editorContent = ''
     vm.onPublishClick()
     await wrapper.vm.$nextTick()
@@ -422,7 +422,7 @@ describe('EdgeEnv.vue 入口守卫 · 未选集群/节点不发起 SSE', () => {
   it('onPublishClick：listen 端口越界时不进入发布流程且提示端口非法（edge-env-port-validation）', async () => {
     const wrapper = await mountPage()
     const vm = wrapper.vm as any
-    vm.selectedClusterId = 1
+    vm.activeClusterId = 1
     vm.allNodes = [{ id: 10, ip: '10.0.0.1', management_port: 9180, status: 1 }]
     vm.editorContent = [
       'deploy:',
@@ -481,7 +481,7 @@ describe('EdgeEnv.vue 发布 diff（LCS 引擎 + 摘要 + 基线说明）', () =
     const wrapper = mount(EdgeEnv, mountGlobal)
     await flushPromises()
     const vm = wrapper.vm as any
-    vm.selectedClusterId = 1
+    vm.activeClusterId = 1
     await vm.onClusterChange()
     await flushPromises()
     vm.selectedNodeId = 10
@@ -558,7 +558,7 @@ describe('EdgeEnv.vue 发布反馈与状态语义', () => {
     const wrapper = mount(EdgeEnv, mountGlobal)
     await flushPromises()
     const vm = wrapper.vm as any
-    vm.selectedClusterId = 1
+    vm.activeClusterId = 1
     await vm.onClusterChange()
     await flushPromises()
     vm.savedContent = 'old-baseline'
@@ -739,7 +739,7 @@ describe('EdgeEnv.vue 发布反馈与状态语义', () => {
     const wrapper = mount(EdgeEnv, mountGlobal)
     await flushPromises()
     const vm = wrapper.vm as any
-    vm.selectedClusterId = 2
+    vm.activeClusterId = 2
     await vm.onClusterChange()
     await flushPromises()
     const publishBtn = wrapper.findAll('button').find((b) => b.text() === '发布')
@@ -778,7 +778,7 @@ describe('EdgeEnv.vue 未发布内容保护与 URL 同步', () => {
     const wrapper = mount(EdgeEnv, mountGlobal)
     await flushPromises()
     const vm = wrapper.vm as any
-    vm.selectedClusterId = 1
+    vm.activeClusterId = 1
     await vm.onClusterChange()
     await flushPromises()
     vm.savedContent = 'base'
@@ -793,7 +793,7 @@ describe('EdgeEnv.vue 未发布内容保护与 URL 同步', () => {
     expect(vm.confirmVisible).toBe(true)
     vm.onConfirmCancel()
     await flushPromises()
-    expect(vm.selectedClusterId).toBe(1)
+    expect(vm.activeClusterId).toBe(1)
     expect(vm.editorContent).toBe('changed')
     wrapper.unmount()
   })
@@ -804,7 +804,7 @@ describe('EdgeEnv.vue 未发布内容保护与 URL 同步', () => {
     await wrapper.vm.$nextTick()
     vm.onConfirmOk()
     await flushPromises()
-    expect(vm.selectedClusterId).toBe(2)
+    expect(vm.activeClusterId).toBe(2)
     expect(vm.editorContent).toBe('')
     expect(mockRouterReplace).toHaveBeenCalledWith({
       query: expect.objectContaining({ cluster_id: '2' }),
@@ -818,7 +818,7 @@ describe('EdgeEnv.vue 未发布内容保护与 URL 同步', () => {
     void vm.onASelectClusterChange(2)
     await flushPromises()
     expect(vm.confirmVisible).toBe(false)
-    expect(vm.selectedClusterId).toBe(2)
+    expect(vm.activeClusterId).toBe(2)
     wrapper.unmount()
   })
 
@@ -919,7 +919,7 @@ describe('EdgeEnv.vue 工具栏收纳与空态指引', () => {
     const wrapper = mount(EdgeEnv, mountGlobal)
     await flushPromises()
     const vm = wrapper.vm as any
-    vm.selectedClusterId = 1
+    vm.activeClusterId = 1
     await vm.onClusterChange()
     await flushPromises()
     expect(wrapper.find('.ee-empty-card').exists()).toBe(true)
@@ -939,7 +939,7 @@ describe('EdgeEnv.vue 工具栏收纳与空态指引', () => {
     const wrapper = mount(EdgeEnv, mountGlobal)
     await flushPromises()
     const vm = wrapper.vm as any
-    vm.selectedClusterId = 2
+    vm.activeClusterId = 2
     await vm.onClusterChange()
     await flushPromises()
     expect(wrapper.text()).toContain('请先在集群管理中为该集群添加节点')
@@ -983,7 +983,7 @@ describe('EdgeEnv.vue 读取自动关与状态条', () => {
     const wrapper = mount(EdgeEnv, mountGlobal)
     await flushPromises()
     const vm = wrapper.vm as any
-    vm.selectedClusterId = 1
+    vm.activeClusterId = 1
     await vm.onClusterChange()
     await flushPromises()
     vm.editorContent = ''
@@ -1113,7 +1113,7 @@ describe('EdgeEnv 集群切换接线（bug fix 2026-11-12：值先于事件契�
     expect((wrapper.vm as any).confirmVisible).toBe(true)
     ;(wrapper.vm as any).onConfirmCancel()
     await flushPromises()
-    expect((wrapper.vm as any).selectedClusterId).toBe(1)
+    expect((wrapper.vm as any).activeClusterId).toBe(1)
     expect((wrapper.vm as any).nodes[0].id).toBe(10)
     expect(nodesCalls().filter(([u]) => String(u).includes('/clusters/2/nodes')).length).toBe(0)
     wrapper.unmount()
@@ -1127,8 +1127,29 @@ describe('EdgeEnv 集群切换接线（bug fix 2026-11-12：值先于事件契�
     expect((wrapper.vm as any).confirmVisible).toBe(true)
     ;(wrapper.vm as any).onConfirmOk()
     await flushPromises()
-    expect((wrapper.vm as any).selectedClusterId).toBe(2)
+    expect((wrapper.vm as any).activeClusterId).toBe(2)
     expect((wrapper.vm as any).nodes[0].id).toBe(20)
     wrapper.unmount()
+  })
+})
+
+describe('EdgeEnv 集群切换模式统一（源码守卫：与全站直接重载同构，防 #76 模式回潮）', () => {
+  it('ClusterSelect 必须为 :value 受控（显示值=已加载集群），禁止 v-model + 去重守卫', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { resolve } = await import('node:path')
+    const source = readFileSync(resolve(process.cwd(), 'src/views/EdgeEnv.vue'), 'utf-8')
+    const tagStart = source.indexOf('<ClusterSelect')
+    const tagEnd = source.indexOf('/>', tagStart)
+    const tag = source.slice(tagStart, tagEnd)
+    // 值先于事件契约（AGENTS #76）：v-model 会让 @change 读到已更新值，去重守卫恒真吞掉加载
+    expect(tag, 'EdgeEnv 的 ClusterSelect 禁止 v-model 绑定（回滚靠 :value 受控显示）').not.toContain('v-model')
+    expect(tag, '显示值必须绑 activeClusterId（已加载归属集群）').toContain(':value="activeClusterId"')
+    expect(tag).toContain('@change="onASelectClusterChange"')
+    // 处理器内禁止对 picked 值做去重早退（antd change 只在值真变时发出，与全站直接重载同构）
+    const fn = source.slice(
+      source.indexOf('async function onASelectClusterChange'),
+      source.indexOf('const editorContent'),
+    )
+    expect(fn, '禁止对 picked 值做去重早退（与全站直接重载同构）').not.toMatch(/if \(next === .+?\) return/)
   })
 })
