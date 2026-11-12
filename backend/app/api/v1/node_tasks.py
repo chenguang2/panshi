@@ -588,6 +588,7 @@ def _task_list_stmt(
     q: str | None = None,
     created_from: datetime | None = None,
     created_to: datetime | None = None,
+    group_name: str | None = None,
 ):
     """列表查询：一次 LEFT JOIN 取集群名与发起人名（禁止逐行补查，D7）。
 
@@ -602,6 +603,11 @@ def _task_list_stmt(
     )
     if cluster_id is not None:
         stmt = stmt.where(NodeTask.cluster_id == cluster_id)
+    # Group filter（node-group-filter-alignment；语义镜像 nodes.py，stmt 已 LEFT JOIN Cluster）
+    if group_name == "__ung__":
+        stmt = stmt.where(Cluster.group_name.is_(None) | (Cluster.group_name == ""))
+    elif group_name and group_name != "__all__":
+        stmt = stmt.where(Cluster.group_name == group_name)
     if status:
         stmt = stmt.where(NodeTask.status == status)
     if task_type:
@@ -797,6 +803,7 @@ async def list_all_tasks(
     task_type: Optional[str] = Query(default=None),
     q: Optional[str] = Query(default=None, description="关键字：任务号 / 节点 IP / 命令等 params 原文"),
     cluster_id: Optional[int] = Query(default=None, description="按所属集群过滤"),
+    group_name: Optional[str] = Query(default=None, description="按集群分组过滤（__ung__=无分组集群，__all__=全部）"),
     created_from: Optional[str] = Query(default=None, description="起始时间（YYYY-MM-DD 或 ISO 日期时间，含当日 00:00）"),
     created_to: Optional[str] = Query(default=None, description="结束时间（YYYY-MM-DD 或 ISO 日期时间，日期型含当日 23:59:59）"),
     page: int = Query(default=1, ge=1),
@@ -810,6 +817,7 @@ async def list_all_tasks(
         q=q,
         created_from=_parse_created_bound(created_from, upper=False),
         created_to=_parse_created_bound(created_to, upper=True),
+        group_name=group_name,
     )
     return await _list_task_page(db, stmt, page, page_size)
 

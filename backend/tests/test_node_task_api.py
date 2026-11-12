@@ -316,3 +316,85 @@ class TestRetrySessionThreading:
                 await e1.dispose()
                 await e2.dispose()
             asyncio.run(_dispose())
+
+
+class TestNodeTaskListGroupFilter:
+    """GET /node-tasks group_name 过滤（node-group-filter-alignment）。
+
+    范式镜像 test_node_list_api.py::test_list_nodes_group_filter*：
+    种 2 个分组集群 + 1 个未分组集群、各 1 任务，精确断言防「空转假绿」。
+    """
+
+    GROUP_A = "机电-武清"
+    GROUP_B = "机电-路局-成都局"
+
+    async def _login(self, client):
+        resp = await client.post(
+            "/api/v1/auth/login", json={"username": "admin", "password": "panshi123"}
+        )
+        assert resp.status_code == 200
+        return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+    async def _seed_tasks(self, isolated_session) -> dict:
+        """种 2 个分组集群 + 1 个未分组集群，各 1 任务。
+
+        返回 {"tasks": {集群别名: 任务id}, "groups": {别名: 分组名}}。
+        """
+        from app.models.cluster import Cluster
+        from app.models.node_task import NodeTask
+
+        async with isolated_session() as s:
+            clusters = [
+                Cluster(name="wuqing-cluster", display_name="武清集群", group_name=self.GROUP_A),
+                Cluster(name="chengdu-cluster", display_name="成都集群", group_name=self.GROUP_B),
+                Cluster(name="bare-cluster", display_name="无组集群", group_name=""),
+            ]
+            s.add_all(clusters)
+            await s.flush()
+            tasks = {}
+            for alias, c in (("wuqing", clusters[0]), ("chengdu", clusters[1]), ("bare", clusters[2])):
+                t = NodeTask(cluster_id=c.id, task_type="start", status="succeeded", total_nodes=1)
+                t.set_params({"prefix": "/data/openresty"})
+                s.add(t)
+                tasks[alias] = t
+            await s.commit()
+            return {
+                "tasks": {k: v.id for k, v in tasks.items()},
+                "groups": {"wuqing": self.GROUP_A, "chengdu": self.GROUP_B, "bare": ""},
+            }
+
+    async def test_list_tasks_group_filter(self, async_isolated_client, isolated_session):
+        """group_name=<具名分组> 只返回该分组集群的任务（有种子防空转假绿）。"""
+        headers = await self._login(async_isolated_client)
+        await self._seed_tasks(isolated_session)
+        resp = await async_isolated_client.get(
+            "/api/v1/node-tasks", headers=headers,
+            params={"group_name": self.GROUP_B, "page_size": 200},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 1
+        assert [it["cluster_name"] for it in data["items"]] == ["成都集群"]
+
+    async def test_list_tasks_group_filter_ungrouped(self, async_isolated_client, isolated_session):
+        """group_name=__ung__ 只返回无分组集群的任务。"""
+        headers = await self._login(async_isolated_client)
+        await self._seed_tasks(isolated_session)
+        resp = await async_isolated_client.get(
+            "/api/v1/node-tasks", headers=headers, params={"group_name": "__ung__", "page_size": 200}
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 1
+        assert [it["cluster_name"] for it in data["items"]] == ["无组集群"]
+
+    async def test_list_tasks_group_filter_default_all(self, async_isolated_client, isolated_session):
+        """缺省与 __all__ 均不做分组过滤（返回全部 3 条）。"""
+        headers = await self._login(async_isolated_client)
+        await self._seed_tasks(isolated_session)
+        for params in ({}, {"group_name": "__all__"}):
+            resp = await async_isolated_client.get(
+                "/api/v1/node-tasks", headers=headers, params={"page_size": 200, **params}
+            )
+            assert resp.status_code == 200
+            assert resp.json()["total"] == 3

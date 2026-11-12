@@ -2175,3 +2175,117 @@ describe('NodeTaskCenter 创建任务弹窗可用性（node-task-ux-optimization
     wrapper.unmount()
   })
 })
+
+describe('NodeTaskCenter 组筛选数据级过滤（node-group-filter-alignment）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    apiGetRegistry.clear()
+    document.body.innerHTML = ''
+    routeState.query = {}
+  })
+
+  /** 注册带分组的集群清单 + 空任务列表（隔离环境零种子，精确断言防假绿） */
+  function apiGetOkGrouped(total = 0) {
+    apiGetOk(
+      {
+        data: {
+          items: [
+            { id: 1, name: 'wuqing', display_name: '武清集群', group_name: '机电-武清' },
+            { id: 2, name: 'chengdu', display_name: '成都集群', group_name: '机电-路局-成都局' },
+            { id: 3, name: 'bare', display_name: '无组集群', group_name: '' },
+          ],
+        },
+      },
+      '/clusters',
+    )
+    apiGetOk({ data: { total, items: [] } })
+  }
+
+  const nodeTasksCalls = () => vi.mocked(api.get).mock.calls.filter(([u]) => u === '/node-tasks')
+  const lastParams = () => {
+    const calls = nodeTasksCalls()
+    expect(calls.length).toBeGreaterThan(0)
+    return calls[calls.length - 1][1].params as Record<string, unknown>
+  }
+
+  async function mountGrouped() {
+    const NodeTaskCenter = (await import('../NodeTaskCenter.vue')).default
+    const wrapper = mount(NodeTaskCenter, { global: { stubs: globalStubs } })
+    await flushPromises()
+    return wrapper
+  }
+
+  it('初始加载 listParams 显式带 group_name=__all__', async () => {
+    apiGetOkGrouped()
+    const wrapper = await mountGrouped()
+    expect(lastParams().group_name).toBe('__all__')
+    wrapper.unmount()
+  })
+
+  it('选具名分组 → 立即带 group_name 重载（级联清集群筛选）', async () => {
+    apiGetOkGrouped()
+    const wrapper = await mountGrouped()
+    vi.mocked(api.get).mock.calls.length = 0
+    await wrapper.find('[data-test="filter-group"]').setValue('机电-武清')
+    await flushPromises()
+    expect(lastParams().group_name).toBe('机电-武清')
+    expect(lastParams().cluster_id).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('选未分组 → group_name=__ung__', async () => {
+    apiGetOkGrouped()
+    const wrapper = await mountGrouped()
+    vi.mocked(api.get).mock.calls.length = 0
+    await wrapper.find('[data-test="filter-group"]').setValue('__ung__')
+    await flushPromises()
+    expect(lastParams().group_name).toBe('__ung__')
+    wrapper.unmount()
+  })
+
+  it('分组计入「有生效筛选」：选组后空态显示「没有符合条件的任务」', async () => {
+    apiGetOkGrouped(0)
+    const wrapper = await mountGrouped()
+    expect(wrapper.text()).toContain('还没有节点任务')
+    await wrapper.find('[data-test="filter-group"]').setValue('机电-武清')
+    await flushPromises()
+    expect(wrapper.text()).toContain('没有符合条件的任务')
+    wrapper.unmount()
+  })
+
+  it('深链回填：query.group 恢复分组筛选', async () => {
+    routeState.query = { group: '机电-路局-成都局' }
+    apiGetOkGrouped()
+    const wrapper = await mountGrouped()
+    expect(lastParams().group_name).toBe('机电-路局-成都局')
+    wrapper.unmount()
+  })
+
+  it('详情跳转 query 携带当前分组', async () => {
+    apiGetOk({ data: { total: 1, items: [makeTask({ id: 9, status: 'failed' })] } })
+    apiGetOk(
+      {
+        data: {
+          items: [
+            { id: 1, name: 'wuqing', display_name: '武清集群', group_name: '机电-武清' },
+            { id: 2, name: 'chengdu', display_name: '成都集群', group_name: '机电-路局-成都局' },
+            { id: 3, name: 'bare', display_name: '无组集群', group_name: '' },
+          ],
+        },
+      },
+      '/clusters',
+    )
+    const wrapper = await mountGrouped()
+    await wrapper.find('[data-test="filter-group"]').setValue('机电-武清')
+    await flushPromises()
+    const detailBtn = wrapper.findAll('button').find((b) => b.text().includes('详情'))
+    await detailBtn!.trigger('click')
+    await flushPromises()
+    expect(routerPush).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: expect.objectContaining({ group: '机电-武清' }),
+      }),
+    )
+    wrapper.unmount()
+  })
+})

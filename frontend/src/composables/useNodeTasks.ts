@@ -8,6 +8,8 @@ interface NodeTaskListParams {
   q?: string
   /** 仅看某个集群的任务（跨集群列表的集群筛选） */
   cluster_id?: number
+  /** 按集群分组过滤（__ung__=无分组集群，__all__/缺省=全部；后端 GET /node-tasks 同名参数） */
+  group_name?: string
   /** 创建时间下界（naive UTC 的 ISO 时间串，如 2026-10-25T09:00:00） */
   created_from?: string
   created_to?: string

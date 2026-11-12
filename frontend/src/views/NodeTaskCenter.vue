@@ -1752,6 +1752,7 @@ function listParams(): Parameters<typeof listNodeTasks>[0] {
     status: filterStatus.value || undefined,
     task_type: filterType.value || undefined,
     cluster_id: filterClusterId.value === '' ? undefined : Number(filterClusterId.value),
+    group_name: filterGroup.value,
     q: appliedKeyword.value.trim() || undefined,
     created_from: rangeStartIso(filterRange.value),
     page: page.value,
@@ -1764,6 +1765,7 @@ const hasActiveFilters = computed(
   () =>
     !!appliedKeyword.value.trim() ||
     filterClusterId.value !== '' ||
+    filterGroup.value !== '__all__' ||
     !!filterStatus.value ||
     !!filterType.value ||
     !!filterRange.value,
@@ -1894,6 +1896,7 @@ function currentListQuery(): Record<string, string> {
   if (pageSize.value !== 20) query.size = String(pageSize.value)
   if (appliedKeyword.value.trim()) query.q = appliedKeyword.value.trim()
   if (filterClusterId.value !== '') query.cluster = String(filterClusterId.value)
+  if (filterGroup.value !== '__all__') query.group = filterGroup.value
   if (filterStatus.value) query.status = filterStatus.value
   if (filterType.value) query.type = filterType.value
   if (filterRange.value) query.range = filterRange.value
@@ -1911,6 +1914,7 @@ function restoreFiltersFromQuery() {
   appliedKeyword.value = str(q.q)
   filterKeyword.value = appliedKeyword.value
   filterClusterId.value = str(q.cluster) ? Number(str(q.cluster)) : ''
+  filterGroup.value = str(q.group) || '__all__'
   filterStatus.value = str(q.status)
   filterType.value = str(q.type)
   filterRange.value = str(q.range)

@@ -671,6 +671,7 @@ async function loadNodes() {
   try {
     const res = await listNodes({
       pageSize: 500,
+      groupName: groupFilter.value,
       ...(clusterFilter.value ? { clusterId: Number(clusterFilter.value) } : {}),
     })
     const items = res.data?.items || []
