@@ -2,8 +2,8 @@
 
 ## 1. 前置：断言反转清单与基线（#217/#208）
 
-- [ ] 1.1 盘点消费方与既有断言，产出 `assertion-inventory.md`（本变更目录）：grep `frontend/src`（`__tests__`、`*.test.ts`、`*.spec.ts`）中所有断言集群下拉/`clusterFilter`/`filteredClusters`/`ASelectOptGroup`/原生 select setValue 的用例，另盘点 `frontend/e2e/` 操作集群筛选的用例；逐条列出「用例 → 现断言 → 反转后断言」。验证：清单覆盖 12 资源页 + EdgeEnv + 相关弹窗/扁平页的测试文件，无一遗漏。
-- [ ] 1.2 记录全量单测基线：`cd frontend && npx vitest run --no-file-parallelism`（#208 串行跑法），把用例总数/通过数记入 assertion-inventory.md。验证：基线为全绿，否则先修复再进入批 1。
+- [x] 1.1 盘点消费方与既有断言，产出 `assertion-inventory.md`（本变更目录）：grep `frontend/src`（`__tests__`、`*.test.ts`、`*.spec.ts`）中所有断言集群下拉/`clusterFilter`/`filteredClusters`/`ASelectOptGroup`/原生 select setValue 的用例，另盘点 `frontend/e2e/` 操作集群筛选的用例；逐条列出「用例 → 现断言 → 反转后断言」。验证：清单覆盖 12 资源页 + EdgeEnv + 相关弹窗/扁平页的测试文件，无一遗漏。
+- [x] 1.2 记录全量单测基线：`cd frontend && npx vitest run --no-file-parallelism`（#208 串行跑法），把用例总数/通过数记入 assertion-inventory.md。验证：基线为全绿，否则先修复再进入批 1。
 
 ## 2. 批 1：ClusterSelect 组件 + 12 资源页筛选条
 
@@ -30,7 +30,7 @@
 ## 5. 收口
 
 - [x] 5.1 `openspec validate --all` 0 error；如需改侧边栏/权限外文档同步（本变更预期无）。（205 passed / 0 failed）
-- [ ] 5.2 交付用户界面验收：按 acceptance-notes.md 清单逐页演示（12 页筛选条、EdgeEnv、代表弹窗 1 个、NodeTaskCenter）。
+- [X] 5.2 交付用户界面验收：按 acceptance-notes.md 清单逐页演示（12 页筛选条、EdgeEnv、代表弹窗 1 个、NodeTaskCenter）。
 
 ## Workflow follow-up
 

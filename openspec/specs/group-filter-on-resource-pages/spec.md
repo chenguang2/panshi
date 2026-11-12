@@ -122,3 +122,22 @@ The system SHALL implement group filtering by passing the selected `group_name` 
 - **THEN** 表格页面默认值 SHALL 使用 `PAGE_SIZE_TABLE = 20`
 - **AND** 卡片网格加载 SHALL 使用 `PAGE_SIZE_CARD_GRID = 500`
 - **AND** 下拉选择框 SHALL 使用 `PAGE_SIZE_DROPDOWN = 500`
+
+### Requirement: Resource page cluster filter is the shared cluster select control
+The cluster filter on resource list pages SHALL be rendered by the shared cluster select control per the `cluster-select-component` capability: keyword search over the current scope, grouped option presentation with 「未分组」 at the end, and an explicit 「全部集群」 first option. The group filter dropdown, its option values (`__all__` / group name / `__ung__`), and the cascade behavior SHALL remain unchanged.
+
+#### Scenario: Cluster filter supports keyword search
+- **WHEN** user types a keyword into the cluster filter on any resource list page
+- **THEN** options SHALL narrow to clusters whose display name or name contains the keyword (case-insensitive) within the current group-filtered scope
+- **AND** a keyword matching no cluster SHALL show an empty result state
+
+#### Scenario: Cluster filter presents grouped options
+- **WHEN** the cluster filter dropdown opens with 「全部分组」 selected
+- **THEN** clusters SHALL be presented under 分组 opt-group headers sorted by name
+- **AND** ungrouped clusters SHALL appear under a 「未分组」 header at the end
+
+#### Scenario: Cluster filter offers 全部集群
+- **WHEN** the cluster filter dropdown opens
+- **THEN** the first option SHALL be 「全部集群」 representing "no specific cluster selected"
+- **AND** selecting it SHALL keep the current group filter in effect and show resources across all clusters in scope
+
