@@ -1142,8 +1142,10 @@ describe('EdgeEnv 集群切换模式统一（源码守卫：与全站直接重�
     const tagEnd = source.indexOf('/>', tagStart)
     const tag = source.slice(tagStart, tagEnd)
     // 值先于事件契约（AGENTS #76）：v-model 会让 @change 读到已更新值，去重守卫恒真吞掉加载
-    expect(tag, 'EdgeEnv 的 ClusterSelect 禁止 v-model 绑定（回滚靠 :value 受控显示）').not.toContain('v-model')
-    expect(tag, '显示值必须绑 activeClusterId（已加载归属集群）').toContain(':value="activeClusterId"')
+    expect(tag, 'EdgeEnv 的 ClusterSelect 禁止 v-model 绑定（回滚靠 :model-value 受控显示）').not.toContain('v-model')
+    expect(tag, '显示值必须经声明 prop 绑 activeClusterId（:value 会落 attrs 透传、占位符消失）').toContain(
+      ':model-value="activeClusterId"',
+    )
     expect(tag).toContain('@change="onASelectClusterChange"')
     // 处理器内禁止对 picked 值做去重早退（antd change 只在值真变时发出，与全站直接重载同构）
     const fn = source.slice(
@@ -1151,5 +1153,29 @@ describe('EdgeEnv 集群切换模式统一（源码守卫：与全站直接重�
       source.indexOf('const editorContent'),
     )
     expect(fn, '禁止对 picked 值做去重早退（与全站直接重载同构）').not.toMatch(/if \(next === .+?\) return/)
+  })
+})
+
+describe('EdgeEnv 集群下拉占位（bug fix 2026-11-12）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/clusters') return Promise.resolve({ data: MOCK_CLUSTERS })
+      return Promise.reject(new Error('unknown url: ' + url))
+    })
+  })
+
+  it('初始态 modelValue 必须走声明 prop（:model-value）：内部 a-select value=undefined 才显示「请选择集群」占位', async () => {
+    // :value 绑定的是未声明 prop → 落 attrs 透传给内部 a-select 的 value='' → 空选中项、占位符消失
+    const EdgeEnv = (await import('../EdgeEnv.vue')).default
+    const wrapper = mount(EdgeEnv, mountGlobal)
+    await flushPromises()
+    const cs = wrapper.findComponent({ name: 'ClusterSelect' })
+    expect(cs.exists()).toBe(true)
+    const innerSelect = cs.findComponent(aSelectComps.ASelect)
+    expect(innerSelect.props('value'), 'value 必须是 undefined（占位语义），而非空串透传').toBeUndefined()
+    expect(innerSelect.props('placeholder')).toBe('请选择集群')
+    wrapper.unmount()
   })
 })

@@ -18,7 +18,7 @@
 
     <div class="ee-toolbar">
       <ClusterSelect
-        :value="activeClusterId"
+        :model-value="activeClusterId"
         :clusters="clusters"
         style="width: 260px"
         @change="onASelectClusterChange"
