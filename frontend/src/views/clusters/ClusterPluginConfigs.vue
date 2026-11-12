@@ -83,7 +83,11 @@
                 </a-form>
               </a-tab-pane>
               <a-tab-pane key="plugins" tab="插件配置">
-                <PluginSelector v-model="pluginConfigFormData.selectedPlugins" :plugins="availablePlugins" />
+                <PluginSelector
+                  v-model="pluginConfigFormData.selectedPlugins"
+                  :plugins="availablePlugins"
+                  :upstreams="pluginUpstreamOptions"
+                />
               </a-tab-pane>
             </a-tabs>
           </div>
@@ -116,9 +120,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { EyeOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons-vue'
 import api from '@/api'
+import { PAGE_SIZE_DROPDOWN } from '@/constants'
+import { toUpstreamSelectOptions } from '@/utils/upstreamOptions'
 import type { Cluster, Plugin } from '@/types'
 import PluginSelector from '@/components/PluginSelector.vue'
 import PluginConfigViewDrawer from '@/components/PluginConfigViewDrawer.vue'
@@ -140,6 +146,25 @@ const props = defineProps<{
 const emit = defineEmits<{
   refresh: []
 }>()
+
+// ── traffic_split 上游分发目标选项：按所属集群拉取上游（value 优先 edge_uuid） ──
+const pluginUpstreams = ref<any[]>([])
+const pluginUpstreamOptions = computed(() => toUpstreamSelectOptions(pluginUpstreams.value))
+async function loadPluginUpstreams(cid: number) {
+  try {
+    const res = await api.get(`/clusters/${cid}/upstreams`, { params: { page_size: PAGE_SIZE_DROPDOWN } })
+    pluginUpstreams.value = res.data.items || []
+  } catch {
+    pluginUpstreams.value = []
+  }
+}
+watch(
+  () => props.cluster.id,
+  (cid) => {
+    if (cid) void loadPluginUpstreams(Number(cid))
+  },
+  { immediate: true },
+)
 
 // Version modal state
 const versionModalVisible = ref(false)

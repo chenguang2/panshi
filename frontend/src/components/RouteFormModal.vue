@@ -149,7 +149,7 @@
 
         <!-- ── 插件管理 ── -->
         <div v-show="activeTab === 'plugins'">
-          <PluginSelector v-model="form.plugins" :plugins="availablePlugins" />
+          <PluginSelector v-model="form.plugins" :plugins="availablePlugins" :upstreams="pluginUpstreamOptions" />
         </div>
 
         <!-- ── 插件组 ── -->
@@ -206,6 +206,7 @@ import { message } from 'ant-design-vue'
 import api from '@/api'
 import { PAGE_SIZE_DROPDOWN } from '@/constants'
 import { getApiErrorMessage } from '@/utils/error'
+import { toUpstreamSelectOptions } from '@/utils/upstreamOptions'
 import RouteAdvancedMatch from '@/components/RouteAdvancedMatch.vue'
 import PluginSelector from '@/components/PluginSelector.vue'
 import type { RouteVarRule } from '@/types'
@@ -227,6 +228,8 @@ const activeTab = ref('basic')
 const submitting = ref(false)
 const formErrors = reactive<Record<string, string>>({})
 const upstreams = ref<any[]>([])
+/** traffic_split 上游分发目标选项（value 优先 edge_uuid，与统一管理侧 ClusterRoutes 同语义） */
+const pluginUpstreamOptions = computed(() => toUpstreamSelectOptions(upstreams.value))
 const availablePlugins = ref<any[]>([])
 const clusterPluginGroups = ref<any[]>([])
 const pluginConfigIds = ref<string[]>([])

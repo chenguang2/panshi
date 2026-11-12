@@ -324,6 +324,7 @@ import RouteAdvancedMatch from '@/components/RouteAdvancedMatch.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PluginMetadata from '@/components/PluginMetadata.vue'
 import PluginSelector from '@/components/PluginSelector.vue'
+import { toUpstreamSelectOptions } from '@/utils/upstreamOptions'
 import ColumnConfigPopover from '@/components/ColumnConfigPopover.vue'
 import SearchInput from '@/components/SearchInput.vue'
 
@@ -407,10 +408,7 @@ const {
 })
 
 // ── Upstream options for traffic_split plugin dropdown ────────────
-const upstreamOptions = computed(() => {
-  const upstreams = getClusterUpstreams()
-  return upstreams.map((u) => ({ label: u.name, value: u.edge_uuid || String(u.id) }))
-})
+const upstreamOptions = computed(() => toUpstreamSelectOptions(getClusterUpstreams()))
 
 // ── batch delete selection state ───────────────────────────────────
 const batchCount = computed(() => (props.cluster.selectedRouteKeys || []).length)

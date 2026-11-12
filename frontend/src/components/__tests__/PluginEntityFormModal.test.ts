@@ -26,7 +26,7 @@ const stubs = {
   // 输出 plugins 数量：8.5 清单过滤断言依赖（可见集 = 目录 ∩ global_rule_plugins 清单）
   PluginSelector: {
     template: '<div class="plugin-selector-stub">{{ plugins.length }}</div>',
-    props: ['modelValue', 'plugins'],
+    props: ['modelValue', 'plugins', 'upstreams'],
   },
 }
 
@@ -317,5 +317,36 @@ describe('PluginEntityFormModal.vue — 8.3/8.5 global_rule 插件清单过滤�
     const w = await mountModal({ resourceType: 'global_rule', clusters: [MOCK_CLUSTERS[0]] })
     await gotoPluginsTab(w)
     expect(w.find('.plugin-selector-stub').text()).toBe('1')
+  })
+})
+
+describe('PluginEntityFormModal traffic_split 上游分发目标选项（bug fix 2026-11-12）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    setActivePinia(createPinia())
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/plugins/builtin') return Promise.resolve({ data: { plugins: [] } })
+      if (url === '/system/features') return Promise.resolve({ data: { features: {}, enabled_plugins: [] } })
+      if (url === '/clusters/1/upstreams')
+        return Promise.resolve({ data: { items: [{ id: 7, name: 'up-1', edge_uuid: 'eu-9' }] } })
+      return Promise.reject(new Error('unexpected GET: ' + url))
+    })
+    mockApiPost.mockResolvedValue({ data: { id: 9 } })
+    mockApiPut.mockResolvedValue({ data: {} })
+  })
+
+  it('编辑插件组打开后 PluginSelector 收到所属集群上游选项（value 优先 edge_uuid）', async () => {
+    const w = await mountModal({ editingConfig: MOCK_EDITING })
+    const selector = w.findComponent(stubs.PluginSelector)
+    expect(selector.exists()).toBe(true)
+    expect(selector.props('upstreams')).toEqual([{ label: 'up-1', value: 'eu-9' }])
+    w.unmount()
+  })
+
+  it('无集群上下文（新建未选集群）时 upstreams 为空数组而非 undefined', async () => {
+    const w = await mountModal({ editingConfig: null })
+    const selector = w.findComponent(stubs.PluginSelector)
+    expect(selector.props('upstreams')).toEqual([])
+    w.unmount()
   })
 })

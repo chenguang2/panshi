@@ -21,7 +21,10 @@ vi.mock('ant-design-vue', () => ({
 
 const stubs = {
   // 插件选择器内嵌 monaco/json-editor 链路，非本测试主题，整体 stub
-  PluginSelector: { template: '<div class="plugin-selector-stub" />' },
+  PluginSelector: {
+    template: '<div class="plugin-selector-stub" />',
+    props: ['modelValue', 'plugins', 'upstreams'],
+  },
   // RouteAdvancedMatch 真实挂载（序列化逻辑在被测链路上），仅 stub 其 antd 原子组件
   ASelect: { template: '<div><slot /></div>' },
   ASelectOption: { template: '<div><slot /></div>' },
@@ -253,9 +256,7 @@ describe('RouteFormModal.vue（组件级提交载荷）', () => {
     await flushPromises()
     await submit(w)
 
-    const called = vi
-      .mocked(message.error)
-      .mock.calls.some((args) => String(args[0]).startsWith('请填写必填字段'))
+    const called = vi.mocked(message.error).mock.calls.some((args) => String(args[0]).startsWith('请填写必填字段'))
     expect(called, '校验失败必须有全局可见提示').toBe(true)
     expect(vm.activeTab, '应切回基础 tab 让内联红字可见').toBe('basic')
     expect(mockApiPost).not.toHaveBeenCalled()
@@ -368,5 +369,41 @@ describe('RouteFormModal.vue 优先级提示与深链预选（batch1 7.5/7.6）'
     await withoutDefault.setProps({ visible: true })
     await flushPromises()
     expect((withoutDefault.vm as any).form.cluster_id).toBe('')
+  })
+})
+
+describe('RouteFormModal traffic_split 上游分发目标选项（bug fix 2026-11-12）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/plugins/builtin') return Promise.resolve({ data: { plugins: [] } })
+      if (url.includes('/upstreams'))
+        return Promise.resolve({ data: { items: [{ id: 7, name: 'up-1', edge_uuid: 'eu-abc-123' }] } })
+      if (url.includes('/plugin_configs')) return Promise.resolve({ data: { items: [] } })
+      if (url.endsWith('/plugins')) return Promise.resolve({ data: { plugins: [] } })
+      return Promise.reject(new Error('unexpected GET: ' + url))
+    })
+    mockApiPut.mockImplementation((url: string) => {
+      if (/^\/clusters\/1\/routes\/\d+(\/plugins)?$/.test(url)) return Promise.resolve({ data: {} })
+      return Promise.reject(new Error('unexpected PUT: ' + url))
+    })
+    mockApiPost.mockImplementation((url: string) => {
+      if (url === '/clusters/1/routes') return Promise.resolve({ data: { id: 99 } })
+      return Promise.reject(new Error('unexpected POST: ' + url))
+    })
+  })
+
+  it('编辑路由打开后 PluginSelector 收到上游选项（value 优先 edge_uuid，与统一管理侧同语义）', async () => {
+    const RouteFormModal = (await import('../RouteFormModal.vue')).default
+    const wrapper = mount(RouteFormModal, {
+      props: { visible: false, editingRoute: makeEditingRoute(), clusters: [{ id: 1, name: 'c1' }] },
+      global: { stubs },
+    })
+    await wrapper.setProps({ visible: true })
+    await flushPromises()
+    const selector = wrapper.findComponent(stubs.PluginSelector)
+    expect(selector.exists()).toBe(true)
+    expect(selector.props('upstreams')).toEqual([{ label: 'up-1', value: 'eu-abc-123' }])
+    wrapper.unmount()
   })
 })

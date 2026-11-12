@@ -46,7 +46,7 @@
         </div>
 
         <div v-show="activeTab === 'plugins'">
-          <PluginSelector v-model="form.selectedPlugins" :plugins="catalogPlugins" />
+          <PluginSelector v-model="form.selectedPlugins" :plugins="catalogPlugins" :upstreams="pluginUpstreamOptions" />
         </div>
       </div>
 
@@ -65,6 +65,8 @@ import { ref, reactive, watch, nextTick, computed } from 'vue'
 import ClusterSelect from '@/components/ClusterSelect.vue'
 import { message } from 'ant-design-vue'
 import api from '@/api'
+import { PAGE_SIZE_DROPDOWN } from '@/constants'
+import { toUpstreamSelectOptions } from '@/utils/upstreamOptions'
 import PluginSelector from '@/components/PluginSelector.vue'
 import { showOverlayModal } from '@/composables/useOverlayModal'
 import { getApiErrorMessage } from '@/utils/error'
@@ -108,6 +110,25 @@ const form = reactive({
   description: '',
   selectedPlugins: [] as { plugin_name: string; config: string }[],
 })
+
+// ── traffic_split 上游分发目标选项：跟随所选集群加载上游（value 优先 edge_uuid） ──
+const pluginUpstreams = ref<any[]>([])
+const pluginUpstreamOptions = computed(() => toUpstreamSelectOptions(pluginUpstreams.value))
+async function loadPluginUpstreams(cid: number) {
+  try {
+    const res = await api.get(`/clusters/${cid}/upstreams`, { params: { page_size: PAGE_SIZE_DROPDOWN } })
+    pluginUpstreams.value = res.data.items || []
+  } catch {
+    pluginUpstreams.value = []
+  }
+}
+watch(
+  () => form.cluster_id,
+  (cid) => {
+    if (cid) void loadPluginUpstreams(Number(cid))
+    else pluginUpstreams.value = []
+  },
+)
 
 // ── 误关保护（对齐 UpstreamFormModal 先例）：字段变更置 dirty；回填/保存成功清除 ──
 const isDirty = ref(false)
