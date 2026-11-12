@@ -233,6 +233,8 @@ openspec/        # 变更工件；openspec/specs/ = main specs
 
 74. **模板里写了 `<ClusterSelect>` 就必须 import** — 漏 import 时 Vue 把未解析组件渲染成空自定义元素：控件**静默消失**、其 `style="width:…"` 变成隐形占位把整行推右（视觉上的「整行居中」假象），而 `vue-tsc -b` 与组件单测**都抓不到**（2026-11-11 实测：`EdgeAutostart.vue` 换装漏 import，用户报「分组和集群下拉框没了」）。守卫 `components/__tests__/ClusterSelect.consumers.source.test.ts`（扫描全部 .vue 模板区）。同类「用了未 import 的共享组件」一律补源码守卫，别指望类型检查。
 
+75. **原生控件换装 a-select 族必须核对宽度语义** — antd 的 `.ant-select` 是 `inline-block` + `width:auto`，宽度跟随已选文本：选短名（如 jd）后控件收缩、弹出层默认同宽（`dropdownMatchSelectWidth` 默认 true）→ 不可读；而原生 `<select class="form-input">` 自带 `width:100%`，换装丢类即丢宽度（2026-11-12 实测：集群选择统一换装后添加上游弹窗集群下拉缩成内容宽、长名+分组缩进截断）。规则：共享选择控件自带布局默认值（`ClusterSelect.vue` 的 `.cluster-select{width:100%}` + `:dropdown-match-select-width="false"`，守卫 `ClusterSelect.test.ts` 源码钉住）；antd-vue 4.x 只有 `dropdownMatchSelectWidth`（无 antd 5 的 `popupMatchSelectWidth` 改名）；jsdom 不注入 SFC 样式，宽度行为断言走源码守卫范式。
+
 ## 新增功能步骤
 
 1. 在 `backend/app/schemas/` 定义 Pydantic 模型

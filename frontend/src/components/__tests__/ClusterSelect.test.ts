@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { mount } from '@vue/test-utils'
 import ClusterSelect from '../ClusterSelect.vue'
 
@@ -6,7 +8,7 @@ import ClusterSelect from '../ClusterSelect.vue'
 const aSelectComps = {
   ASelect: {
     template: '<span class="a-select-stub"><slot /></span>',
-    props: ['value', 'placeholder', 'showSearch', 'disabled', 'filterOption'],
+    props: ['value', 'placeholder', 'showSearch', 'disabled', 'filterOption', 'dropdownMatchSelectWidth'],
   },
   ASelectOptGroup: { template: '<span class="a-opt-group">{{ label }}<slot /></span>', props: ['label'] },
   ASelectOption: { template: '<span class="a-opt"><slot /></span>', props: ['value'] },
@@ -117,5 +119,23 @@ describe('ClusterSelect.vue', () => {
   it('placeholder 可覆盖', () => {
     const wrapper = mountSelect({ placeholder: '所属集群' })
     expect(wrapper.findComponent(aSelectComps.ASelect).props('placeholder')).toBe('所属集群')
+  })
+
+  it('弹出层不与控件同宽（dropdownMatchSelectWidth=false）：分组缩进的长集群名完整展开', () => {
+    // 2026-11-12 用户实测：下拉加分组后选项缩进，弹出层若同宽则长名截断；选短名（如 jd）后控件收窄，弹出层更窄到不可用
+    const wrapper = mountSelect()
+    expect(wrapper.findComponent(aSelectComps.ASelect).props('dropdownMatchSelectWidth')).toBe(false)
+  })
+
+  it('宽度守卫（源码）：控件默认 width:100%（表单弹窗恢复 form-input 填满语义；筛选条内联宽度不受影响）', () => {
+    // jsdom 不注入 SFC 样式，行为断言不可行 → 按仓库 .source.test.ts 守卫范式钉住组件样式
+    const source = readFileSync(resolve(process.cwd(), 'src/components/ClusterSelect.vue'), 'utf-8')
+    const styleBlock = source.slice(source.indexOf('<style'))
+    expect(styleBlock, 'ClusterSelect.vue 缺少 <style> 块（width:100% 默认样式丢失，表单弹窗会缩成内容宽）').toContain(
+      '<style',
+    )
+    expect(styleBlock, '缺少 .cluster-select { width: 100% } 默认样式').toMatch(
+      /\.cluster-select\s*\{[^}]*width:\s*100%[^}]*\}/,
+    )
   })
 })

@@ -6,6 +6,7 @@
     :disabled="disabled"
     :show-search="true"
     :filter-option="filterClusterOption"
+    :dropdown-match-select-width="false"
     @change="onChange"
     @blur="onBlur"
   >
@@ -115,3 +116,12 @@ function onBlur(): void {
   emit('blur')
 }
 </script>
+
+<style scoped>
+/* 控件默认填满容器（.form-group 网格单元），恢复换装前 form-input 的 width:100% 语义——
+   否则 .ant-select 为 inline-block width:auto，宽度跟随已选文本（选短名后控件缩到不可用）。
+   筛选条消费方带内联 style="width:…" 时内联优先，不受影响。 */
+.cluster-select {
+  width: 100%;
+}
+</style>
