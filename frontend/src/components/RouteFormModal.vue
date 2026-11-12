@@ -209,6 +209,7 @@ import { getApiErrorMessage } from '@/utils/error'
 import { toUpstreamSelectOptions } from '@/utils/upstreamOptions'
 import RouteAdvancedMatch from '@/components/RouteAdvancedMatch.vue'
 import PluginSelector from '@/components/PluginSelector.vue'
+import { showOverlayModal } from '@/composables/useOverlayModal'
 import type { RouteVarRule } from '@/types'
 
 const props = defineProps<{
@@ -220,7 +221,14 @@ const props = defineProps<{
   defaultClusterId?: number | null
 }>()
 
-const emit = defineEmits<{ close: []; saved: [] }>()
+const emit = defineEmits<{
+  close: []
+  saved: []
+  /** route-save-publish-guidance 1.3：引导「立即发布」交回调方打开既有 PublishConfirmModal，不自动发布 */
+  'publish-requested': [
+    payload: { clusterId: number; routeId: number | null; name: string; currentVersion: number | null },
+  ]
+}>()
 
 const ALL_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS', 'CONNECT', 'TRACE']
 
@@ -424,6 +432,47 @@ const FIELD_LABELS: Record<string, string> = {
   priority: '优先级',
 }
 
+// ── 保存后发布引导（route-save-publish-guidance 1.2/1.4） ───────────────────
+// 先关表单再弹引导（useOverlayModal 挂 body、z-index 2000，不叠遮罩）；
+// 「立即发布」经 emit 交回调方（RouteList）打开既有 PublishConfirmModal，系统不自动发布。
+// DNS 查询路由的发布在「DNS 代理」页执行（列表侧行内发布本已禁用），引导不给发布出口，
+// 否则保存引导会成为绕过该禁用的第二条路径。
+function isDnsRouteForm(): boolean {
+  return (form.plugins || []).some((p: any) => p?.plugin_name === 'dns_upstream')
+}
+
+/** 复制产物是新路由（无版本），只有真编辑才带 current_version 供发布弹窗提示「将创建 v(N+1)」 */
+function currentVersionForPublish(): number | null {
+  if (!props.editingRoute || props.copyingRoute) return null
+  return props.editingRoute.current_version ?? null
+}
+
+function announceUnpublished(clusterId: number | string, routeId: number | null) {
+  if (isDnsRouteForm()) {
+    showOverlayModal({
+      title: '保存成功',
+      content: '配置尚未发布。DNS 路由请在「DNS 代理」页管理，发布后才会推送到 Edge 节点生效。',
+      okText: '知道了',
+      showCancel: false,
+    })
+    return
+  }
+  showOverlayModal({
+    title: '保存成功',
+    content: '配置尚未发布，发布后才会推送到 Edge 节点生效。',
+    okText: '立即发布',
+    cancelText: '稍后',
+    onOk: () => {
+      emit('publish-requested', {
+        clusterId: Number(clusterId),
+        routeId,
+        name: form.name,
+        currentVersion: currentVersionForPublish(),
+      })
+    },
+  })
+}
+
 async function handleSubmit() {
   if (!validateForm()) {
     // 校验失败必须给全局可见反馈（参照统一管理侧）：内联红字全在基础 tab，
@@ -456,20 +505,23 @@ async function handleSubmit() {
     if (props.editingRoute && !props.copyingRoute) {
       await api.put(`/clusters/${cid}/routes/${props.editingRoute.id}`, data)
       routeId = props.editingRoute.id
-      message.success('路由已更新')
     } else {
       if (props.copyingRoute) data.name = form.name
       const res = await api.post(`/clusters/${cid}/routes`, data)
       routeId = res.data.id
-      message.success(props.copyingRoute ? '路由已复制' : '路由已创建')
     }
     if (routeId) {
       await api.put(`/clusters/${cid}/routes/${routeId}/plugins`, {
         plugins: form.plugins.map((p: any) => ({ plugin_name: p.plugin_name, config: p.config })),
       })
     }
+    // route-save-publish-guidance 1.1：三处保存入口（新建/编辑/复制）统一文案——保存 ≠ 生效。
+    // 文案与上游域（UpstreamFormModal 3.1）同一句式；不再用「路由已更新/已创建/已复制」，
+    // 且放在插件组写入之后：任何一步写库失败都不冒「已保存」
+    message.success('已保存。配置尚未发布，需发布后才会在 Edge 节点生效')
     emit('saved')
     emit('close')
+    announceUnpublished(cid, routeId)
   } catch (error) {
     // 保存失败透因（batch1 组5 5.2）：经 getApiErrorMessage 透出后端 detail（重名冲突等）
     message.error(getApiErrorMessage(error))

@@ -487,24 +487,30 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
       if (editingRoute.value) {
         await api.put(`/clusters/${currentClusterId.value}/routes/${editingRoute.value.id}`, payload)
         routeId = editingRoute.value.id
-        message.success('路由已更新')
       } else {
         const res = await api.post(`/clusters/${currentClusterId.value}/routes`, payload)
         routeId = res.data.id
-        message.success('路由已添加')
       }
 
       await api.put(`/clusters/${currentClusterId.value}/routes/${routeId}/plugins`, {
         plugins: routeForm.plugins,
       })
 
+      // route-save-publish-guidance 2.1：保存 ≠ 生效——文案与独立页 / 上游域同一句式，
+      // 放在插件写入之后（任何一步写库失败都不冒「已保存」）
+      message.success('已保存。配置尚未发布，需发布后才会在 Edge 节点生效')
+
       routeModalVisible.value = false
       const c = clusters.value.find((c) => c.id === currentClusterId.value)
+      let savedRecord: Route | null = editingRoute.value ?? null
       if (c) {
         const res = await api.get(`/clusters/${c.id}/routes`)
         c.routes = res.data.items
         c.route_count = c.routes!.length
+        // 刷新后的行记录才是权威（含 plugins / current_version），发布上下文优先用它
+        savedRecord = c.routes?.find((r) => r.id === routeId) ?? savedRecord
       }
+      showSavePublishGuide(c ?? null, routeId, routeForm.name, savedRecord)
     } catch (error: unknown) {
       const err = error as Record<string, unknown>
       if (err.errorFields) {
@@ -522,6 +528,35 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
       }
       message.error(getApiErrorMessage(error))
     }
+  }
+
+  // ── 保存后发布引导（route-save-publish-guidance 2.2/2.3） ────────────
+  // 与独立页同款语义：先关表单再弹引导（useOverlayModal 挂 body），「立即发布」复用集群内
+  // 既有 publishByRecord（openPublishModal 选节点 → executePublish），系统不自动发布。
+  // DNS 查询路由在 Tab 内本已只读（按钮禁用 + tooltip），引导绝不能成为第二条发布路径。
+  function showSavePublishGuide(cluster: Cluster | null, routeId: number, name: string, record: Route | null) {
+    if (!cluster) return
+    const dns =
+      (record ? isDnsRoute(record) : false) ||
+      (routeForm.plugins || []).some((p: any) => p?.plugin_name === 'dns_upstream')
+    if (dns) {
+      showOverlayModal({
+        title: '保存成功',
+        content: '配置尚未发布。DNS 路由请在「DNS 代理」页管理，发布后才会推送到 Edge 节点生效。',
+        okText: '知道了',
+        showCancel: false,
+      })
+      return
+    }
+    showOverlayModal({
+      title: '保存成功',
+      content: '配置尚未发布，发布后才会推送到 Edge 节点生效。',
+      okText: '立即发布',
+      cancelText: '稍后',
+      onOk: () => {
+        void publishRouteByRecord(cluster, record ?? ({ id: routeId, name } as Route))
+      },
+    })
   }
 
   // ── delete ─────────────────────────────────────────────────────────

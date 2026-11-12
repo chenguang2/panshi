@@ -200,6 +200,7 @@
       :default-cluster-id="defaultClusterId"
       @close="closeFormModal"
       @saved="onSaved"
+      @publish-requested="onFormPublishRequested"
     />
     <VersionManagementModal
       v-model:open="vmVisible"
@@ -526,6 +527,27 @@ async function onPublish(nodeIds: number[]) {
     refreshFn: publishRefreshFn.value,
   })
   publishRefreshFn.value = loadRoutes
+}
+
+// route-save-publish-guidance 1.7：表单保存后的「立即发布」出口 → 复用行内发布同一套链路
+// （PublishConfirmModal 选节点 → executePublish），保证节点选择/进度/失败汇总与行内发布完全一致；
+// 只在用户点「立即发布」后才走到这里，不自动发布。
+function onFormPublishRequested(payload: {
+  clusterId: number
+  routeId: number | null
+  name: string
+  currentVersion: number | null
+}) {
+  if (payload.routeId == null) return
+  publishingRecord.value = {
+    id: payload.routeId,
+    cluster_id: payload.clusterId,
+    name: payload.name,
+    current_version: payload.currentVersion ?? undefined,
+  }
+  publishClusterId.value = payload.clusterId
+  publishRefreshFn.value = loadRoutes
+  publishVisible.value = true
 }
 
 // 组3 3.1：版本恢复出口条 → 以版本弹窗上下文资源复用既有发布链路（PublishConfirmModal → executePublish）；

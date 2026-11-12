@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { ref, computed } from 'vue'
+import { flushPromises } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
 import type { Cluster, Route } from '@/types'
 
@@ -69,14 +70,14 @@ function makeCluster(overrides: Partial<Cluster> = {}): Cluster {
   } as Cluster
 }
 
-async function makeComposable(cluster: Cluster) {
+async function makeComposable(cluster: Cluster, publishNodeIds: number[] = []) {
   const { useClusterRoutes } = await import('../useClusterRoutes')
   const clusters = ref<Cluster[]>([cluster])
   const currentClusterId = ref<number | null>(null)
   const result = useClusterRoutes({
     clusters: computed(() => clusters.value),
     currentClusterId,
-    openPublishModal: async () => [],
+    openPublishModal: async () => publishNodeIds,
     showDeleteConfirm: (opts: any) => mockShowDeleteConfirm(opts),
     loadPluginConfigs: async () => {},
     availablePlugins: ref([]),
@@ -520,5 +521,118 @@ describe('useClusterRoutes 校验失败反馈（与 RouteFormModal 同款：提�
       '全局提示必填字段（既有行为，保留）',
     ).toBe(true)
     expect(routeModalActiveTab.value, '应切回基础配置 tab 让内联红字可见').toBe('basic')
+  })
+})
+
+// ── route-save-publish-guidance 2.x：集群路由 Tab 保存 ≠ 生效 ──────────────────
+// 与独立页（RouteFormModal/RouteList）同款语义：toast 显式未发布 + 保存后「稍后/立即发布」引导，
+// 「立即发布」走集群内既有 publishByRecord（openPublishModal → executePublish），不新造发布实现。
+describe('useClusterRoutes 保存后发布引导（route-save-publish-guidance）', () => {
+  const SAVED_TOAST = '已保存。配置尚未发布，需发布后才会在 Edge 节点生效'
+
+  function closeAllOverlayModals() {
+    document.body.querySelectorAll('.modal-overlay').forEach((el) => el.remove())
+  }
+  function bodyOverlayButtons(): HTMLButtonElement[] {
+    const overlay = document.body.querySelector('.modal-overlay')
+    if (!overlay) return []
+    return Array.from(overlay.querySelectorAll('button')) as HTMLButtonElement[]
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiGet.mockResolvedValue({ data: { total: 1, items: [makeRoute({ id: 1, name: 'ws-route' })] } })
+  })
+  afterEach(() => closeAllOverlayModals())
+
+  async function submitRoute(opts: { publishNodeIds?: number[]; dns?: boolean } = {}) {
+    const cluster = makeCluster({ id: 1 })
+    const composable = await makeComposable(cluster, opts.publishNodeIds ?? [])
+    const { handleRouteSubmit, routeForm, editingRoute, routeFormRef, _currentClusterId } = composable
+    const { default: api } = await import('@/api')
+    ;(api.put as any) = vi.fn().mockResolvedValue({ data: {} })
+    routeFormRef.value = { validate: async () => true } as any
+    _currentClusterId.value = cluster.id
+    // routeForm 是 reactive（不是 ref）：Object.assign 才能真正改字段，`.value = {...}`
+    // 只会在代理上挂一个无用属性（既有 websocket 用例的写法有同样的盲区）
+    Object.assign(routeForm, {
+      name: 'ws-route',
+      uri: '/ws',
+      methods: ['GET'],
+      priority: 0,
+      status: 1,
+      upstream_id: 1,
+      description: '',
+      enableWebsocket: false,
+      advancedMatchEnabled: false,
+      advancedMatch: { vars: [] },
+      plugins: opts.dns ? [{ plugin_name: 'dns_upstream', config: '{}' }] : [],
+      plugin_config_ids: [],
+    })
+    editingRoute.value = {
+      id: 1,
+      edge_uuid: 'e',
+      cluster_id: 1,
+      name: 'ws-route',
+      uri: '/ws',
+      priority: 0,
+      status: 1,
+      plugins: opts.dns ? [{ plugin_name: 'dns_upstream', config: '{}' }] : [],
+    } as any
+
+    await handleRouteSubmit()
+    return { cluster, composable }
+  }
+
+  it('保存 toast 统一为「已保存。配置尚未发布…」（不再「路由已更新」）且刷新集群路由', async () => {
+    const { message } = await import('ant-design-vue')
+    const { cluster } = await submitRoute()
+
+    expect(message.success).toHaveBeenCalledWith(SAVED_TOAST)
+    expect(vi.mocked(message.success).mock.calls.map((c) => String(c[0]))).not.toContain('路由已更新')
+    // 「稍后」路径也要能看到「待发布」：保存后必须刷新该集群路由列表
+    expect(mockApiGet).toHaveBeenCalledWith('/clusters/1/routes')
+    expect(cluster.routes).toHaveLength(1)
+  })
+
+  it('保存成功弹「稍后/立即发布」引导；「立即发布」走既有 publishByRecord 链路', async () => {
+    const { executePublish } = await import('@/composables/useClusterUtils')
+    vi.mocked(executePublish).mockResolvedValue(undefined)
+    const { cluster } = await submitRoute({ publishNodeIds: [7] })
+
+    const overlay = document.body.querySelector('.modal-overlay')
+    expect(overlay, '保存成功后必须弹出发布引导').toBeTruthy()
+    expect(overlay!.textContent).toContain('配置尚未发布，发布后才会推送到 Edge 节点生效。')
+    const texts = bodyOverlayButtons().map((b) => b.textContent)
+    expect(texts).toContain('稍后')
+    expect(texts).toContain('立即发布')
+
+    bodyOverlayButtons()
+      .find((b) => b.textContent === '立即发布')!
+      .click()
+    await flushPromises()
+
+    // publishByRecord：先经发布确认弹窗拿节点（openPublishModal 注入方），确认后才真正发布
+    expect(executePublish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: '发布路由: ws-route',
+        apiEndpoint: `/clusters/${cluster.id}/routes/1/publish`,
+        nodeIds: [7],
+      }),
+    )
+    expect(document.body.querySelector('.modal-overlay')).toBeNull()
+  })
+
+  it('DNS 查询路由保存：引导不给「立即发布」，指路「DNS 代理」页，且不触发发布', async () => {
+    const { executePublish } = await import('@/composables/useClusterUtils')
+    vi.mocked(executePublish).mockResolvedValue(undefined)
+    await submitRoute({ publishNodeIds: [7], dns: true })
+
+    const overlay = document.body.querySelector('.modal-overlay')
+    expect(overlay, '保存成功后仍应有提示').toBeTruthy()
+    expect(overlay!.textContent).toContain('DNS 路由请在「DNS 代理」页管理')
+    expect(bodyOverlayButtons().map((b) => b.textContent)).not.toContain('立即发布')
+    expect(executePublish).not.toHaveBeenCalled()
   })
 })

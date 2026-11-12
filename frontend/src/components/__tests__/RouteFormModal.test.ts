@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import RouteAdvancedMatch from '@/components/RouteAdvancedMatch.vue'
 
@@ -39,6 +39,17 @@ const stubs = {
   ATag: { template: '<span><slot /></span>' },
 }
 
+/** 清理 useOverlayModal 渲染到 document.body 的程序化弹窗（用例间隔离） */
+function closeAllOverlayModals() {
+  document.body.querySelectorAll('.modal-overlay').forEach((el) => el.remove())
+}
+
+function bodyOverlayButtons(): HTMLButtonElement[] {
+  const overlay = document.body.querySelector('.modal-overlay')
+  if (!overlay) return []
+  return Array.from(overlay.querySelectorAll('button')) as HTMLButtonElement[]
+}
+
 function makeEditingRoute(overrides: Record<string, unknown> = {}) {
   return {
     id: 5,
@@ -57,6 +68,10 @@ function makeEditingRoute(overrides: Record<string, unknown> = {}) {
     ...overrides,
   }
 }
+
+afterEach(() => {
+  closeAllOverlayModals()
+})
 
 describe('RouteFormModal.vue（组件级提交载荷）', () => {
   beforeEach(() => {
@@ -261,6 +276,101 @@ describe('RouteFormModal.vue（组件级提交载荷）', () => {
     expect(vm.activeTab, '应切回基础 tab 让内联红字可见').toBe('basic')
     expect(mockApiPost).not.toHaveBeenCalled()
     expect(mockApiPut).not.toHaveBeenCalled()
+  })
+
+  // ── route-save-publish-guidance：保存 ≠ 生效（toast 统一 + 保存后发布引导） ──
+  const SAVED_TOAST = '已保存。配置尚未发布，需发布后才会在 Edge 节点生效'
+
+  it('G1: 新建保存 toast 统一为「已保存。配置尚未发布…」（不再「路由已创建」）', async () => {
+    const { message } = await import('ant-design-vue')
+    const w = await mountModal()
+    fillBasics(w.vm)
+    await submit(w)
+
+    expect(message.success).toHaveBeenCalledWith(SAVED_TOAST)
+    expect(vi.mocked(message.success).mock.calls.map((c) => String(c[0]))).not.toContain('路由已创建')
+    expect(w.emitted('saved')).toBeTruthy()
+    expect(w.emitted('close')).toBeTruthy()
+  })
+
+  it('G2: 编辑保存同款文案；引导「立即发布」emit publish-requested（含 currentVersion）', async () => {
+    const { message } = await import('ant-design-vue')
+    const w = await mountModal({ editingRoute: makeEditingRoute({ current_version: 5 }) })
+    fillBasics(w.vm)
+    await submit(w)
+
+    expect(message.success).toHaveBeenCalledWith(SAVED_TOAST)
+    expect(vi.mocked(message.success).mock.calls.map((c) => String(c[0]))).not.toContain('路由已更新')
+
+    const overlay = document.body.querySelector('.modal-overlay')
+    expect(overlay, '保存成功后必须弹出发布引导').toBeTruthy()
+    expect(overlay!.textContent).toContain('配置尚未发布，发布后才会推送到 Edge 节点生效。')
+    const texts = bodyOverlayButtons().map((b) => b.textContent)
+    expect(texts).toContain('稍后')
+    expect(texts).toContain('立即发布')
+
+    bodyOverlayButtons()
+      .find((b) => b.textContent === '立即发布')!
+      .click()
+    await flushPromises()
+
+    expect(w.emitted('publish-requested')![0][0]).toEqual({
+      clusterId: 1,
+      routeId: 5,
+      name: 'adv-route',
+      currentVersion: 5,
+    })
+    expect(document.body.querySelector('.modal-overlay'), '点立即发布后引导应关闭').toBeNull()
+  })
+
+  it('G3: 复制保存同款文案（不再「路由已复制」），发布上下文指向新路由', async () => {
+    const { message } = await import('ant-design-vue')
+    const w = await mountModal({ editingRoute: makeEditingRoute({ current_version: 5 }), copyingRoute: true })
+    fillBasics(w.vm)
+    await submit(w)
+
+    expect(message.success).toHaveBeenCalledWith(SAVED_TOAST)
+    expect(vi.mocked(message.success).mock.calls.map((c) => String(c[0]))).not.toContain('路由已复制')
+
+    bodyOverlayButtons()
+      .find((b) => b.textContent === '立即发布')!
+      .click()
+    await flushPromises()
+    // 复制产物是新路由（新 id、无版本），currentVersion 必须为 null 而不是源路由版本
+    expect(w.emitted('publish-requested')![0][0]).toEqual({
+      clusterId: 1,
+      routeId: 99,
+      name: 'adv-route',
+      currentVersion: null,
+    })
+  })
+
+  it('G4: 「稍后」只关闭引导，不 emit publish-requested（不自动发布）', async () => {
+    const w = await mountModal()
+    fillBasics(w.vm)
+    await submit(w)
+
+    bodyOverlayButtons()
+      .find((b) => b.textContent === '稍后')!
+      .click()
+    await flushPromises()
+
+    expect(w.emitted('publish-requested')).toBeFalsy()
+    expect(document.body.querySelector('.modal-overlay')).toBeNull()
+  })
+
+  it('G5: DNS 查询路由（dns_upstream）保存：引导不给「立即发布」，指路「DNS 代理」页', async () => {
+    const w = await mountModal({ editingRoute: makeEditingRoute({ current_version: 2 }) })
+    const vm: any = w.vm
+    fillBasics(vm)
+    vm.form.plugins = [{ plugin_name: 'dns_upstream', config: '{}' }]
+    await submit(w)
+
+    const overlay = document.body.querySelector('.modal-overlay')
+    expect(overlay, '保存成功后仍应有提示').toBeTruthy()
+    expect(overlay!.textContent).toContain('DNS 路由请在「DNS 代理」页管理')
+    expect(bodyOverlayButtons().map((b) => b.textContent)).not.toContain('立即发布')
+    expect(w.emitted('publish-requested')).toBeFalsy()
   })
 })
 

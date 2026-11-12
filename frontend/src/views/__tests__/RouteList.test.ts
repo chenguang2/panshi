@@ -1289,3 +1289,75 @@ describe('RouteList.vue 行内发布拍平（列表操作统一·方案 A）', (
     wrapper.unmount()
   })
 })
+
+// ── route-save-publish-guidance 1.6：表单保存后的「立即发布」→ 既有发布链路 ──────
+// 表单只负责 emit publish-requested；页面把它接进行内发布同一套弹窗与 executePublish，
+// 保证「保存后立即发布」与行内发布的节点选择/进度/失败汇总完全一致（不新造发布实现）。
+describe('RouteList.vue 表单保存后发布引导接线（route-save-publish-guidance）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    vi.mocked(executePublish).mockResolvedValue(undefined)
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/routes') return Promise.resolve({ data: MOCK_ROUTES })
+      if (url === '/clusters')
+        return Promise.resolve({ data: { items: [{ id: 1, display_name: '生产集群', group_name: '线上' }] } })
+      if (url === '/plugins/builtin') return Promise.resolve({ data: { plugins: [] } })
+      return Promise.reject(new Error('unknown url'))
+    })
+  })
+
+  it('publish-requested → 打开既有 PublishConfirmModal；确认后 executePublish 打该路由发布端点', async () => {
+    const RouteList = (await import('../RouteList.vue')).default
+    const wrapper = mount(RouteList, { global: { stubs } })
+    await flushPromises()
+
+    const vm: any = wrapper.vm
+    wrapper.findComponent({ name: 'MockRouteForm' }).vm.$emit('publish-requested', {
+      clusterId: 1,
+      routeId: 2,
+      name: '订单服务',
+      currentVersion: 3,
+    })
+    await flushPromises()
+
+    expect(vm.publishVisible, '必须打开既有发布确认弹窗（用户确认后才发布）').toBe(true)
+    expect(vm.publishClusterId).toBe(1)
+    expect(vm.publishingRecord).toMatchObject({
+      id: 2,
+      cluster_id: 1,
+      name: '订单服务',
+      current_version: 3,
+    })
+
+    await vm.onPublish([7])
+    await flushPromises()
+    expect(executePublish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: '发布路由: 订单服务',
+        apiEndpoint: '/clusters/1/routes/2/publish',
+        nodeIds: [7],
+      }),
+    )
+    wrapper.unmount()
+  })
+
+  it('routeId 缺失（异常载荷）不打开发布弹窗，避免误发到空 id', async () => {
+    const RouteList = (await import('../RouteList.vue')).default
+    const wrapper = mount(RouteList, { global: { stubs } })
+    await flushPromises()
+
+    const vm: any = wrapper.vm
+    wrapper.findComponent({ name: 'MockRouteForm' }).vm.$emit('publish-requested', {
+      clusterId: 1,
+      routeId: null,
+      name: '订单服务',
+      currentVersion: null,
+    })
+    await flushPromises()
+
+    expect(vm.publishVisible).toBeFalsy()
+    expect(executePublish).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+})
