@@ -229,6 +229,10 @@ openspec/        # 变更工件；openspec/specs/ = main specs
 
 72. **`exclude_unset` 部分更新端点的前端载荷：字段缺席 = 保留旧值，条件拼接必留残值** — 后端 PUT 更新（如 `cluster_routes.py::update_route` 的 `model_dump(exclude_unset=True)`）只更新请求体里**显式出现**的字段；前端表单按开关条件拼载荷（`if (enabled) data.vars = ...`）会把「关闭」误表达成「未变更」，旧值残留库中，再经回填逻辑（如「vars 存在即视为开启」）把开关复活（2026-11-10 实测：路由管理 RouteFormModal 取消高级匹配后旧条件残留，统一管理侧 useClusterRoutes 因恒带 `vars` 而幸免）。规则：直发 PUT 的表单，布尔/列表字段一律**无条件进载荷**，「关闭即清空」语义在载荷层表达（关闭时 `[]`/`false`）；守卫用例见 `RouteFormModal.test.ts` B2（enable_websocket 同型历史 bug）与 E（高级匹配）。
 
+73. **全站搜索框统一 `components/SearchInput.vue`（2026-11-11 UX 收敛）** — 形态：放大镜**恒在右**、单色 `var(--muted)`，有输入时原位换成清空按钮（全站 allow-clear 语义）；样式单一来源 `src/style.css` 的 `.search-input-wrap` / `.search-icon` / `.search-clear`（`views/ssl-page-shared.css` 只留页面宽度，不再覆写图标）。契约：`v-model`（字符串）+ 事件 `input(value)` / `search(value)`（回车）/ `clear`；宽度 `:width="240|'100%'"`（不传沿用全局 200px→聚焦 240px），紧凑工具条 `size="small"`（26px，替代 antd `size="small"`），`data-test` 透传到内层 `input`。**禁止**页面内联手写 `.search-input-wrap`、禁止 emoji 🔍、禁止 `<a-input-search>`（右侧灰色按钮式=第三种造型，且 `fill()` 不触发 `@search`）；守卫 `components/__tests__/SearchInput.source.test.ts`（三条源码红线）+ `SearchInput.test.ts`（行为）。消费方清单：`grep -rl '<SearchInput' src --include=*.vue`（当前 24 文件）。
+
+74. **模板里写了 `<ClusterSelect>` 就必须 import** — 漏 import 时 Vue 把未解析组件渲染成空自定义元素：控件**静默消失**、其 `style="width:…"` 变成隐形占位把整行推右（视觉上的「整行居中」假象），而 `vue-tsc -b` 与组件单测**都抓不到**（2026-11-11 实测：`EdgeAutostart.vue` 换装漏 import，用户报「分组和集群下拉框没了」）。守卫 `components/__tests__/ClusterSelect.consumers.source.test.ts`（扫描全部 .vue 模板区）。同类「用了未 import 的共享组件」一律补源码守卫，别指望类型检查。
+
 ## 新增功能步骤
 
 1. 在 `backend/app/schemas/` 定义 Pydantic 模型

@@ -10,17 +10,27 @@
     <!-- 筛选条与表格同属一张卡片：筛选在上、表格在下，控件不再浮在页面空白里 -->
     <div class="table-container node-task-panel">
       <div class="node-filter-bar">
-        <input
+        <SearchInput
           v-model="filterKeyword"
-          type="text"
-          class="form-input nt-search"
+          :width="240"
           data-test="task-search"
           placeholder="搜索任务号 / 节点 IP / 命令"
-          @keyup.enter="applyFilters"
+          @search="applyFilters"
         />
+        <select
+          v-model="filterGroup"
+          class="form-input"
+          data-test="filter-group"
+          style="width: 130px"
+          @change="onFilterGroupChange"
+        >
+          <option value="__all__">全部分组</option>
+          <option v-for="g in filterGroupOptions" :key="g" :value="g">{{ g }}</option>
+          <option value="__ung__">未分组</option>
+        </select>
         <ClusterSelect
           v-model="filterClusterId"
-          :clusters="clusters"
+          :clusters="filterClusters"
           allow-all
           style="width: 150px"
           data-test="filter-cluster"
@@ -479,11 +489,11 @@
               <!-- 未选集群：虚线空态区，不要伪装成禁用输入框 -->
               <div v-if="!createClusterId" class="ntc-node-empty" data-test="node-empty">选择集群后加载节点列表</div>
               <template v-else>
-                <input
+                <SearchInput
                   v-model="nodeSearch"
-                  class="form-input ntc-node-search"
+                  width="100%"
+                  class="ntc-node-search"
                   data-test="node-search"
-                  type="text"
                   placeholder="搜索节点 IP / 名称"
                 />
                 <div class="ntc-node-list">
@@ -1040,6 +1050,7 @@ import {
 import { showOverlayModal } from '@/composables/useOverlayModal'
 import { routeLabel } from '@/composables/useClusterUtils'
 import api from '@/api'
+import SearchInput from '@/components/SearchInput.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -1053,6 +1064,22 @@ const loading = ref(false)
 const filterKeyword = ref('')
 const appliedKeyword = ref('')
 const filterClusterId = ref<number | string>('')
+/** 分组筛选（与其余列表页同款）：只收窄筛选条的集群下拉候选，不参与任务查询参数 */
+const filterGroup = ref('__all__')
+const filterGroupOptions = computed(() => {
+  const names = new Set(clusters.value.map((c) => c.group_name || ''))
+  return Array.from(names).filter(Boolean).sort() as string[]
+})
+const filterClusters = computed(() => {
+  if (filterGroup.value === '__all__') return clusters.value
+  if (filterGroup.value === '__ung__') return clusters.value.filter((c) => !c.group_name)
+  return clusters.value.filter((c) => c.group_name === filterGroup.value)
+})
+/** 切分组后清空集群筛选并重载（避免残留集群不在新分组内） */
+function onFilterGroupChange() {
+  filterClusterId.value = ''
+  void nextTick(() => loadTasks(1))
+}
 const filterStatus = ref('')
 const filterType = ref('')
 /** 时间范围快捷项：'' 全部 / 24h / 7d / 30d（映射为 created_from） */
@@ -1060,7 +1087,7 @@ const filterRange = ref('')
 const selectedRowKeys = ref<number[]>([])
 
 const createVisible = ref(false)
-const clusters = ref<Array<{ id: number; name: string; display_name?: string }>>([])
+const clusters = ref<Array<{ id: number; name: string; display_name?: string; group_name?: string }>>([])
 const createClusterId = ref(0)
 const createNodes = ref<Array<{ id: number; ip: string; status?: number; edge_path?: string; name?: string | null }>>(
   [],
@@ -1758,6 +1785,7 @@ function clearFilters() {
   filterKeyword.value = ''
   appliedKeyword.value = ''
   filterClusterId.value = ''
+  filterGroup.value = '__all__'
   filterStatus.value = ''
   filterType.value = ''
   filterRange.value = ''
@@ -2304,11 +2332,6 @@ async function submitCreateTask() {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   flex-wrap: nowrap;
-}
-
-.nt-search {
-  width: 240px;
-  flex: 0 0 auto;
 }
 
 /* 筛选条行尾：低频文件维护入口（文字链层级，与行内「详情」同款）+ 分隔线 + 刷新 */

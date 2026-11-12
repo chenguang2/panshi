@@ -7,10 +7,7 @@
     </PageHeader>
 
     <div class="upstream-filter-bar">
-      <div class="search-input-wrap">
-        <input v-model="searchText" type="text" placeholder="搜索名称或描述..." class="form-input" @input="onSearch" />
-        <span class="search-icon">🔍</span>
-      </div>
+      <SearchInput v-model="searchText" placeholder="搜索名称或描述..." @input="onSearch" />
       <select v-model="groupFilter" class="form-input" style="width: 140px" @change="onGroupChange">
         <option value="__all__">全部分组</option>
         <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
@@ -173,6 +170,7 @@ import { executePublish } from '@/composables/useClusterUtils'
 import { showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
 import { paginationProps } from '@/composables/usePagination'
 import { useRoute } from 'vue-router'
+import SearchInput from '@/components/SearchInput.vue'
 
 const route = useRoute()
 const loading = ref(false)

@@ -7,11 +7,7 @@
     </PageHeader>
 
     <div class="sr-header-actions">
-      <div class="search-input-wrap">
-        <input v-model="searchText" type="text" placeholder="搜索名称..." class="form-input" @input="onSearch" />
-        <button v-if="searchText" class="search-clear" title="清空搜索" @click="clearSearch">&times;</button>
-        <span v-else class="search-icon">🔍</span>
-      </div>
+      <SearchInput v-model="searchText" placeholder="搜索名称..." @input="onSearch" @clear="loadResources" />
       <select v-model="groupFilter" class="form-input" style="width: 140px; flex-shrink: 0" @change="onGroupChange">
         <option value="__all__">全部分组</option>
         <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
@@ -296,6 +292,7 @@ import { getGroupColorStyle, getCardBorderStyle } from '@/composables/useGroupCo
 import { showDangerConfirm } from '@/composables/useOverlayModal'
 import { useClusterStaticResources } from '@/composables/useClusterStaticResources'
 import type { VersionModalState } from '@/composables/useClusterPluginConfigs'
+import SearchInput from '@/components/SearchInput.vue'
 
 const resources = ref<any[]>([])
 const clusters = ref<any[]>([])
@@ -435,11 +432,6 @@ function onSearch() {
   onDebouncedSearch(() => {
     loadResources()
   })
-}
-
-function clearSearch() {
-  searchText.value = ''
-  loadResources()
 }
 
 async function loadResources() {
@@ -716,22 +708,6 @@ onUnmounted(() => {
   padding: 60px 0;
   color: var(--muted);
   font-size: 14px;
-}
-.search-clear {
-  position: absolute;
-  right: 8px;
-  top: 50%;
-  transform: translateY(-50%);
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  font-size: 16px;
-  line-height: 1;
-  cursor: pointer;
-  padding: 2px 6px;
-}
-.search-clear:hover {
-  color: var(--fg);
 }
 .sr-empty {
   display: flex;

@@ -7,10 +7,7 @@
     </PageHeader>
 
     <div class="node-filter-bar">
-      <div v-if="nodeSearchVisible" class="search-input-wrap">
-        <input v-model="searchText" type="text" placeholder="搜索 IP..." class="form-input" @input="onSearchInput" />
-        <span class="search-icon"><SearchOutlined /></span>
-      </div>
+      <SearchInput v-if="nodeSearchVisible" v-model="searchText" placeholder="搜索 IP..." @input="onSearchInput" />
       <select v-model="groupFilter" class="form-input" style="width: 140px" @change="onGroupChange">
         <option value="__all__">全部分组</option>
         <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
@@ -557,15 +554,10 @@ import { parseIpList, parseNodeCsv, buildNodeCsvTemplate, validateNodeImportRow 
 import { getApiErrorMessage } from '@/utils/error'
 import { buildNodeInstallCommand } from '@/utils/nodeInstallCommand'
 import { isStructuredSseEvent } from '@/utils/sse'
-import {
-  SearchOutlined,
-  PlayCircleOutlined,
-  PauseCircleOutlined,
-  ReloadOutlined,
-  MoreOutlined,
-} from '@ant-design/icons-vue'
+import { PlayCircleOutlined, PauseCircleOutlined, ReloadOutlined, MoreOutlined } from '@ant-design/icons-vue'
 
 import { useRoute } from 'vue-router'
+import SearchInput from '@/components/SearchInput.vue'
 
 const route = useRoute()
 const featuresStore = useFeaturesStore()

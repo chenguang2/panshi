@@ -11,19 +11,7 @@
   width: 200px;
   flex-shrink: 0;
 }
-.search-input-wrap .form-input {
-  width: 100%;
-  padding-left: 32px;
-}
-.search-icon {
-  position: absolute;
-  left: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 14px;
-  opacity: 0.5;
-  pointer-events: none;
-}
+/* 输入框与放大镜样式统一由 src/style.css 提供（SearchInput.vue），此处只保留页面布局宽度 */
 .loading-state {
   text-align: center;
   padding: 60px 0;

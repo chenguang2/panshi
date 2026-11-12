@@ -115,15 +115,11 @@ describe('batch1：操作图标与筛选栏（2.7）', () => {
     for (const emoji of ['🔍', '▶', '⏹', '⟳', '⋯']) {
       expect(s).not.toContain(emoji)
     }
-    for (const icon of [
-      'SearchOutlined',
-      'PlayCircleOutlined',
-      'PauseCircleOutlined',
-      'ReloadOutlined',
-      'MoreOutlined',
-    ]) {
+    for (const icon of ['PlayCircleOutlined', 'PauseCircleOutlined', 'ReloadOutlined', 'MoreOutlined']) {
       expect(s).toContain(icon)
     }
+    // 搜索框已收敛到共享组件（ux-review 搜索一致性）：放大镜图标在 SearchInput 内，页面只引用组件
+    expect(s).toContain('SearchInput')
   })
   it('筛选栏允许换行（nowrap→wrap）', () => {
     const s = src()

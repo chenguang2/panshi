@@ -83,10 +83,7 @@
       <a-tab-pane key="upstreams" tab="上游">
         <div class="table-toolbar">
           <button class="btn btn-primary" @click="showUpstreamModal('create')"><PlusOutlined /> 添加上游</button>
-          <div class="search-input-wrap">
-            <input v-model="upstreamSearch" class="form-input" placeholder="搜索上游..." style="width: 240px" />
-            <SearchOutlined class="search-icon" />
-          </div>
+          <SearchInput v-model="upstreamSearch" placeholder="搜索上游..." :width="240" />
         </div>
         <div class="table-container">
           <a-table
@@ -140,10 +137,7 @@
       <a-tab-pane key="routes" tab="路由">
         <div class="table-toolbar">
           <button class="btn btn-primary" @click="showRouteModal('create')"><PlusOutlined /> 添加路由</button>
-          <div class="search-input-wrap">
-            <input v-model="routeSearch" class="form-input" placeholder="搜索路由..." style="width: 240px" />
-            <SearchOutlined class="search-icon" />
-          </div>
+          <SearchInput v-model="routeSearch" placeholder="搜索路由..." :width="240" />
         </div>
         <div class="table-container">
           <a-table
@@ -198,10 +192,7 @@
       <a-tab-pane key="globalRules" tab="全局规则">
         <div class="table-toolbar">
           <button class="btn btn-primary" @click="showGlobalRuleModal('create')"><PlusOutlined /> 添加规则</button>
-          <div class="search-input-wrap">
-            <input v-model="globalRuleSearch" class="form-input" placeholder="搜索规则..." style="width: 240px" />
-            <SearchOutlined class="search-icon" />
-          </div>
+          <SearchInput v-model="globalRuleSearch" placeholder="搜索规则..." :width="240" />
         </div>
         <div class="table-container">
           <a-table
@@ -253,10 +244,7 @@
       <a-tab-pane key="pluginConfigs" tab="插件组">
         <div class="table-toolbar">
           <button class="btn btn-primary" @click="showPluginConfigModal('create')"><PlusOutlined /> 添加插件组</button>
-          <div class="search-input-wrap">
-            <input v-model="pluginConfigSearch" class="form-input" placeholder="搜索插件组..." style="width: 240px" />
-            <SearchOutlined class="search-icon" />
-          </div>
+          <SearchInput v-model="pluginConfigSearch" placeholder="搜索插件组..." :width="240" />
         </div>
         <div class="table-container">
           <a-table
@@ -321,10 +309,7 @@
           <button class="btn btn-ghost" @click="reloadPlugins" :disabled="reloadingPlugins">
             <ReloadOutlined /> 重新加载
           </button>
-          <div class="search-input-wrap">
-            <input v-model="pluginMetadataSearch" class="form-input" placeholder="搜索..." style="width: 200px" />
-            <SearchOutlined class="search-icon" />
-          </div>
+          <SearchInput v-model="pluginMetadataSearch" placeholder="搜索..." :width="200" />
         </div>
         <div class="table-container">
           <a-table
@@ -397,10 +382,7 @@
           <button class="btn btn-primary stream-route-add-btn" @click="showStreamRouteModal('create')">
             <PlusOutlined /> 添加四层代理
           </button>
-          <div class="search-input-wrap">
-            <input v-model="streamRouteSearch" class="form-input" placeholder="搜索四层代理..." style="width: 200px" />
-            <SearchOutlined class="search-icon" />
-          </div>
+          <SearchInput v-model="streamRouteSearch" placeholder="搜索四层代理..." :width="200" />
         </div>
         <div class="table-container">
           <a-table
@@ -472,10 +454,7 @@
       </a-tab-pane>
       <a-tab-pane key="ssl" tab="SSL 证书">
         <div class="table-toolbar">
-          <div class="search-input-wrap">
-            <input v-model="sslSearch" class="form-input" placeholder="搜索 SSL 证书..." style="width: 200px" />
-            <SearchOutlined class="search-icon" />
-          </div>
+          <SearchInput v-model="sslSearch" placeholder="搜索 SSL 证书..." :width="200" />
         </div>
         <div class="table-container">
           <a-table
@@ -1032,6 +1011,7 @@ import {
   streamRouteColumns,
   sslColumns,
 } from '@/utils/edgeColumns'
+import SearchInput from '@/components/SearchInput.vue'
 
 const inputMode = ref<'cluster' | 'manual'>('cluster')
 const clusters = ref<any[]>([])

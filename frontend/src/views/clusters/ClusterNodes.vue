@@ -100,10 +100,11 @@
       <div class="toolbar-right">
         <a-button size="small" @click="loadNodes(cluster)"> <ReloadOutlined /> 刷新 </a-button>
         <template v-if="nodeSearchVisible">
-          <a-input-search
-            v-model:value="cluster.nodesSearch"
+          <SearchInput
+            v-model="cluster.nodesSearch"
             placeholder="搜索节点"
-            style="width: 150px"
+            :width="150"
+            size="small"
             @search="
               () => {
                 cluster.nodesPagination!.page = 1
@@ -112,8 +113,6 @@
                 loadNodes(cluster)
               }
             "
-            allow-clear
-            size="small"
           />
           <a-select
             v-model:value="cluster.nodesSearchField"
@@ -516,6 +515,7 @@ import { showDangerConfirm } from '@/composables/useOverlayModal'
 import { useInstallStream } from '@/composables/useInstallStream'
 import { paginationProps } from '@/composables/usePagination'
 import { useFeaturesStore } from '@/stores/features'
+import SearchInput from '@/components/SearchInput.vue'
 
 const featuresStore = useFeaturesStore()
 

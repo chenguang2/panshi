@@ -76,19 +76,6 @@ const stubs = {
     emits: ['change'],
     template: '<button class="mock-switch" :class="{ on: checked }" @click="$emit(\'change\', !checked)" />',
   },
-  AInputSearch: {
-    props: ['value', 'placeholder'],
-    emits: ['update:value', 'input', 'search'],
-    setup(_: unknown, { emit }: { emit: (e: string, v?: unknown) => void }) {
-      const onInput = (e: Event): void => {
-        emit('update:value', (e.target as HTMLInputElement).value)
-        emit('input', e)
-      }
-      return { onInput }
-    },
-    template:
-      '<div class="search-input-wrap"><input class="mock-search" :value="value" @input="onInput" @keyup.enter="$emit(\'search\')" /></div>',
-  },
   ASelect: {
     props: ['value', 'options', 'placeholder'],
     emits: ['update:value', 'change'],
@@ -159,7 +146,7 @@ describe('UserList 批 1：筛选与反馈', () => {
     vi.useFakeTimers()
     const wrapper = await mountPage()
     mockApiGet.mockClear()
-    const input = wrapper.find('.mock-search')
+    const input = wrapper.find('.search-input-wrap input')
     await input.setValue('a')
     await vi.advanceTimersByTimeAsync(100)
     await input.setValue('ad')
@@ -177,7 +164,7 @@ describe('UserList 批 1：筛选与反馈', () => {
     vi.useFakeTimers()
     const wrapper = await mountPage()
     mockApiGet.mockClear()
-    await wrapper.find('.mock-search').setValue('  qcg  ')
+    await wrapper.find('.search-input-wrap input').setValue('  qcg  ')
     await vi.advanceTimersByTimeAsync(350)
     await flushPromises()
     await flushPromises()
@@ -204,15 +191,15 @@ describe('UserList 批 1：筛选与反馈', () => {
   it('空态双形态：有筛选 →「无匹配用户」+ 清除筛选；点击还原全部筛选', async () => {
     const wrapper = await mountPage()
     setupApi({ listResult: { total: 0, items: [] } })
-    await wrapper.find('.mock-search').setValue('nobody')
-    await wrapper.find('.mock-search').trigger('keyup.enter')
+    await wrapper.find('.search-input-wrap input').setValue('nobody')
+    await wrapper.find('.search-input-wrap input').trigger('keyup.enter')
     await flushPromises()
     expect(wrapper.text()).toContain('无匹配用户')
     const clearBtn = findBtn(wrapper, '清除筛选')
     expect(clearBtn, '应有清除筛选按钮').toBeTruthy()
     await clearBtn!.trigger('click')
     await flushPromises()
-    expect((wrapper.find('.mock-search').element as HTMLInputElement).value).toBe('')
+    expect((wrapper.find('.search-input-wrap input').element as HTMLInputElement).value).toBe('')
     const calls = mockApiGet.mock.calls.filter(([url]) => url === '/admin/users')
     expect((calls[calls.length - 1][1] as { params: Record<string, unknown> }).params).toEqual({
       page: 1,
@@ -287,12 +274,10 @@ describe('UserList 批 2：排序与状态切换', () => {
 
   it('⋯ dropdown 只留「删除」（每行菜单构成一致，禁用/启用已迁至状态开关）', async () => {
     const wrapper = await mountPage()
-    const items = wrapper
-      .findAll('.mock-menuitem')
-      .map((i) => {
-        const span = i.find('.menu-item-stack span')
-        return (span.exists() ? span.text() : i.text()).trim()
-      })
+    const items = wrapper.findAll('.mock-menuitem').map((i) => {
+      const span = i.find('.menu-item-stack span')
+      return (span.exists() ? span.text() : i.text()).trim()
+    })
     expect(items.length).toBeGreaterThanOrEqual(3)
     expect(items.every((t) => t === '删除')).toBe(true)
     expect(items.join('|')).not.toContain('禁用')

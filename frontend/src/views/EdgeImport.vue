@@ -16,6 +16,7 @@
               :model-value="selectedClusterId"
               :clusters="clusters"
               placeholder="请选择集群..."
+              style="width: 400px"
               @update:model-value="onClusterFieldChange"
               @change="onClusterChange"
             />

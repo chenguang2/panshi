@@ -39,9 +39,7 @@
 
     <!-- Filter Bar（双计数已合并：计数仅在上方状态条展示） -->
     <div class="plugin-filter-bar">
-      <div class="search-input-wrap">
-        <a-input-search v-model:value="searchText" placeholder="搜索插件名称..." />
-      </div>
+      <SearchInput v-model="searchText" placeholder="搜索插件名称..." />
       <a-select v-model:value="statusFilter" style="width: 120px">
         <a-select-option value="all">全部状态</a-select-option>
         <a-select-option value="enabled">已启用</a-select-option>
@@ -186,6 +184,7 @@ import { onBeforeRouteLeave } from 'vue-router'
 import api from '@/api'
 import PageHeader from '@/components/PageHeader.vue'
 import { useAuthStore } from '@/stores/auth'
+import SearchInput from '@/components/SearchInput.vue'
 
 interface RefCounts {
   routes: number

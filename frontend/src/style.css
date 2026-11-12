@@ -391,6 +391,36 @@ select.form-input {
   pointer-events: none;
 }
 
+/* 有输入时替换放大镜的一键清空按钮（全站统一 allow-clear 语义；SearchInput.vue 消费） */
+.search-input-wrap .search-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px;
+}
+.search-input-wrap .search-clear:hover {
+  color: var(--fg);
+}
+
+/* 紧凑工具条形态（SearchInput size="small"，替代 antd size="small" 输入框） */
+.search-input-wrap--sm input {
+  height: 26px;
+  font-size: 12px;
+  padding: 0 26px 0 8px;
+}
+.search-input-wrap--sm .search-icon,
+.search-input-wrap--sm .search-clear {
+  right: 6px;
+  font-size: 12px;
+}
+
 /* ===========================
    Tags (method, protocol, category)
    =========================== */

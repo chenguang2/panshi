@@ -23,10 +23,7 @@
           <span class="sp-status-count">{{ t.count }}</span>
         </button>
       </div>
-      <div class="search-input-wrap">
-        <input v-model="searchText" type="text" placeholder="搜索 DNS 代理..." class="form-input" @input="onSearch" />
-        <span class="search-icon">&#128269;</span>
-      </div>
+      <SearchInput v-model="searchText" placeholder="搜索 DNS 代理..." @input="onSearch" />
       <select v-model="groupFilter" class="form-input" style="width: 140px; flex-shrink: 0" @change="onGroupChange">
         <option value="__all__">全部分组</option>
         <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
@@ -211,6 +208,7 @@ import { formatDateTime as formatDate } from '@/utils/format'
 import { useStreamProxyList } from '@/composables/useStreamProxyList'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
 import PublishStatusTag from '@/components/PublishStatusTag.vue'
+import SearchInput from '@/components/SearchInput.vue'
 
 const proxyType = computed<'dns'>(() => 'dns')
 

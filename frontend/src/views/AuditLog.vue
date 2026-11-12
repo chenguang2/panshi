@@ -48,13 +48,7 @@
         :options="ipOptions"
         @change="onFilterChange"
       />
-      <input
-        v-model="keyword"
-        class="form-input keyword-input"
-        style="width: 200px"
-        placeholder="搜索详情 / 资源ID"
-        @keyup.enter="onKeywordSearch"
-      />
+      <SearchInput v-model="keyword" :width="200" placeholder="搜索详情 / 资源ID" @search="onKeywordSearch" />
       <a-range-picker
         v-model:value="dateRange"
         size="small"
@@ -237,6 +231,7 @@ import {
   auditResourceLink,
   auditVerbLabel,
 } from '@/config/auditResourceRoutes'
+import SearchInput from '@/components/SearchInput.vue'
 
 const rows = ref<AuditLogItem[]>([])
 const loading = ref(false)

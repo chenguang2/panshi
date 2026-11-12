@@ -42,10 +42,11 @@
 
       <div class="toolbar-right">
         <template v-if="routeSearchVisible">
-          <a-input-search
-            v-model:value="cluster.routesSearch"
+          <SearchInput
+            v-model="cluster.routesSearch"
             placeholder="搜索路由"
-            style="width: 150px"
+            :width="150"
+            size="small"
             @search="
               () => {
                 cluster.routesPagination!.page = 1
@@ -54,8 +55,6 @@
                 loadRoutes(cluster)
               }
             "
-            allow-clear
-            size="small"
           />
           <a-select
             v-model:value="cluster.routesSearchField"
@@ -326,6 +325,7 @@ import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PluginMetadata from '@/components/PluginMetadata.vue'
 import PluginSelector from '@/components/PluginSelector.vue'
 import ColumnConfigPopover from '@/components/ColumnConfigPopover.vue'
+import SearchInput from '@/components/SearchInput.vue'
 
 const props = defineProps<{
   cluster: Cluster

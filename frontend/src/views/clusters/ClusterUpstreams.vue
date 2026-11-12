@@ -23,10 +23,11 @@
 
       <div class="toolbar-right">
         <template v-if="upstreamSearchVisible">
-          <a-input-search
-            v-model:value="cluster.upstreamsSearch"
+          <SearchInput
+            v-model="cluster.upstreamsSearch"
             placeholder="搜索上游"
-            style="width: 150px"
+            :width="150"
+            size="small"
             @search="
               () => {
                 cluster.upstreamsPagination!.page = 1
@@ -35,8 +36,6 @@
                 loadUpstreams(cluster)
               }
             "
-            allow-clear
-            size="small"
           />
           <a-select
             v-model:value="cluster.upstreamsSearchField"
@@ -462,6 +461,7 @@ import HealthCheckForm from '@/components/HealthCheckForm.vue'
 import { useClusterUpstreams } from '@/composables/useClusterUpstreams'
 import { paginationProps } from '@/composables/usePagination'
 import ColumnConfigPopover from '@/components/ColumnConfigPopover.vue'
+import SearchInput from '@/components/SearchInput.vue'
 
 const props = defineProps<{
   cluster: Cluster

@@ -40,6 +40,8 @@ const AUDIT_RESOURCE_LABELS: Record<string, string> = {
   plugin_switch: '插件开关',
   edge_import: 'Edge 导入',
   edge_stream_route: 'Edge 四层代理',
+  relay_gateway: '中继网关',
+  db_backup: '数据库备份',
   audit_logs: '审计日志',
 }
 
@@ -79,6 +81,7 @@ const AUDIT_VERB_LABELS: Record<string, string> = {
   install_edge: '安装 Edge',
   install_openresty: '安装 OpenResty',
   cancel_install: '取消安装',
+  init: '初始化',
   ansible_run: '执行 Ansible',
   edge_pack_add: '添加 Edge 包',
   edge_pack_rebase: '重置 Edge 包',
@@ -124,6 +127,9 @@ const LEGACY_ACTION_LABELS: Record<string, string> = {
   db_backup_manual_backup: '数据库备份 备份',
   db_backup_restore_verify: '数据库备份恢复 校验',
   relay_gateway_push_config: '中继网关 下发',
+  relay_gateway_sshd_setup: '中继网关 配置跳板转发',
+  user_clusters_assign: '用户 分配集群',
+  view_credential: '中继网关 查看凭据',
 }
 
 /** 特殊形态动作的资源段（auditActionResource 优先查；无法解析的动作只在「全部操作」出现） */
@@ -132,6 +138,9 @@ const ACTION_RESOURCE_OVERRIDES: Record<string, string | null> = {
   db_backup_manual_backup: 'db_backup',
   db_backup_restore_verify: 'db_backup',
   relay_gateway_push_config: 'relay_gateway',
+  relay_gateway_sshd_setup: 'relay_gateway',
+  view_credential: 'relay_gateway',
+  user_clusters_assign: 'user_clusters',
 }
 
 /** action → 所属资源段（resource_verb 规范命名解析；特殊形态查覆盖表；解析不出返回 null） */
@@ -225,6 +234,7 @@ const AUDIT_RESOURCE_ROUTES: Record<string, (id: number | null) => string> = {
   ssl_cert: () => '/ssl',
   node_task: () => '/node-tasks',
   autostart: () => '/edge-autostart',
+  relay_gateway: () => '/relay-gateways',
 }
 
 export function auditResourceLink(resource: string, resourceId: number | null): string | null {

@@ -18,10 +18,7 @@
     />
 
     <div class="cl-header-actions">
-      <div class="search-input-wrap">
-        <input v-model="filterText" type="text" placeholder="搜索集群名称或显示名..." class="form-input" />
-        <span class="search-icon">🔍</span>
-      </div>
+      <SearchInput v-model="filterText" placeholder="搜索集群名称或显示名..." />
       <select v-model="groupFilter" class="form-input" style="width: 140px; flex-shrink: 0">
         <option value="__all__">全部分组</option>
         <option value="__ung__">未分组</option>
@@ -640,6 +637,7 @@ import ClusterRoutes from '@/views/clusters/ClusterRoutes.vue'
 import ClusterPluginConfigs from '@/views/clusters/ClusterPluginConfigs.vue'
 import ClusterGlobalRules from '@/views/clusters/ClusterGlobalRules.vue'
 import ClusterStaticResources from '@/views/clusters/ClusterStaticResources.vue'
+import SearchInput from '@/components/SearchInput.vue'
 
 const authStore = useAuthStore()
 const clusters = ref<Cluster[]>([])

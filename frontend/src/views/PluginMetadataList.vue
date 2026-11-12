@@ -7,10 +7,7 @@
     </PageHeader>
 
     <div class="pml-header-actions">
-      <div class="search-input-wrap">
-        <input v-model="searchText" type="text" placeholder="搜索插件名称..." class="form-input" @input="onSearch" />
-        <span class="search-icon">🔍</span>
-      </div>
+      <SearchInput v-model="searchText" placeholder="搜索插件名称..." @input="onSearch" />
       <select v-model="groupFilter" class="form-input" style="width: 140px; flex-shrink: 0" @change="onGroupChange">
         <option value="__all__">全部分组</option>
         <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
@@ -193,6 +190,7 @@ import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import { executePublish, showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
 import { getGroupColorStyle, getCardBorderStyle } from '@/composables/useGroupColors'
 import PublishStatusTag from '@/components/PublishStatusTag.vue'
+import SearchInput from '@/components/SearchInput.vue'
 
 // ——— List view state ———
 const items = ref<any[]>([])

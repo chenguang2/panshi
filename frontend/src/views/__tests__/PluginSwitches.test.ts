@@ -42,11 +42,6 @@ const stubs = {
     template: '<button class="mock-btn" @click="$emit(\'click\')"><slot /></button>',
     props: ['type', 'loading', 'size'],
   },
-  AInputSearch: {
-    template:
-      '<div class="mock-search"><input class="mock-search-input" :value="value" @input="$emit(\'update:value\', $event.target.value)" /></div>',
-    props: ['value', 'placeholder'],
-  },
   ASelect: {
     template:
       '<div class="mock-select"><select :value="value" @change="$emit(\'update:value\', $event.target.value)"><slot /></select></div>',
@@ -219,7 +214,7 @@ describe('PluginSwitches.vue', () => {
     const wrapper = mount(PluginSwitches, { global: { stubs } })
     await flushPromises()
     await wrapper.vm.$nextTick()
-    const searchInput = wrapper.find('.mock-search-input')
+    const searchInput = wrapper.find('.search-input-wrap input')
     await searchInput.setValue('CORS')
     await wrapper.vm.$nextTick()
     const cards = wrapper.findAll('.plugin-card')

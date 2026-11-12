@@ -1,7 +1,7 @@
 <template>
   <div class="plugin-selector">
     <!-- 搜索 -->
-    <a-input-search v-model:value="searchText" placeholder="搜索插件..." allow-clear class="plugin-search" />
+    <SearchInput v-model="searchText" placeholder="搜索插件..." width="100%" class="plugin-search" />
 
     <div class="two-columns">
       <!-- 左侧：分类树 + 网格 -->
@@ -138,6 +138,7 @@ import { message } from 'ant-design-vue'
 import { Tooltip as ATooltip } from 'ant-design-vue'
 import type { Plugin, RoutePlugin } from '@/types'
 import PluginEditorDrawer from './PluginEditorDrawer.vue'
+import SearchInput from '@/components/SearchInput.vue'
 
 const props = defineProps<{
   modelValue: RoutePlugin[]

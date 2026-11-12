@@ -467,7 +467,7 @@ describe('AuditLog.vue 批 3 归档历史与关键字检索', () => {
 
   it('关键字搜索框：回车触发 keyword 参数并回第 1 页', async () => {
     const wrapper = await mountPage()
-    const input = wrapper.find('.keyword-input')
+    const input = wrapper.find('.search-input-wrap input')
     expect(input.exists()).toBe(true)
     await input.setValue('默认连接')
     await input.trigger('keyup.enter')

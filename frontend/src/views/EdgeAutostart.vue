@@ -15,13 +15,19 @@
     </PageHeader>
 
     <div class="toolbar">
-      <ClusterSelect v-model="clusterFilter" :clusters="clusters" allow-all style="width: 200px" @change="loadNodes" />
-      <a-input-search
-        v-model:value="ipSearch"
+      <select v-model="groupFilter" class="form-input" style="width: 140px" @change="onGroupChange">
+        <option value="__all__">全部分组</option>
+        <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
+        <option value="__ung__">未分组</option>
+      </select>
+      <ClusterSelect
+        v-model="clusterFilter"
+        :clusters="filteredClusters"
+        allow-all
         style="width: 200px"
-        placeholder="搜索节点 IP"
-        allow-clear
-      ></a-input-search>
+        @change="loadNodes"
+      />
+      <SearchInput v-model="ipSearch" :width="200" placeholder="搜索节点 IP" />
       <a-select v-model:value="statusFilter" style="width: 140px" placeholder="全部状态" allow-clear>
         <a-select-option value="enabled">已启用</a-select-option>
         <a-select-option value="disabled">已禁用</a-select-option>
@@ -407,6 +413,7 @@
 import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
 import { message } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'
+import ClusterSelect from '@/components/ClusterSelect.vue'
 import NodeExecutionResultDrawer from '@/components/NodeExecutionResultDrawer.vue'
 import { useInstallStream } from '@/composables/useInstallStream'
 import { routeLabel } from '@/composables/useClusterUtils'
@@ -429,6 +436,7 @@ import {
 } from '@/api/edgeAutostart'
 import { listClusters } from '@/api/clusters'
 import { listNodes } from '@/api/nodes'
+import SearchInput from '@/components/SearchInput.vue'
 
 const authStore = useAuthStore()
 
@@ -439,6 +447,22 @@ const clusters = ref<any[]>([])
 const nodes = ref<any[]>([])
 const loading = ref(false)
 const clusterFilter = ref<number | string>('')
+/** 分组筛选（与其余列表页同款：只收窄集群下拉候选，不参与数据查询参数） */
+const groupFilter = ref('__all__')
+const groupOptions = computed(() => {
+  const names = new Set(clusters.value.map((c: any) => c.group_name || ''))
+  return Array.from(names).filter(Boolean).sort() as string[]
+})
+const filteredClusters = computed(() => {
+  if (groupFilter.value === '__all__') return clusters.value
+  if (groupFilter.value === '__ung__') return clusters.value.filter((c: any) => !c.group_name)
+  return clusters.value.filter((c: any) => c.group_name === groupFilter.value)
+})
+/** 切分组后清空集群选择并重载（避免残留的集群不在新分组内） */
+function onGroupChange() {
+  clusterFilter.value = ''
+  void loadNodes()
+}
 const ipSearch = ref('')
 const statusFilter = ref<string | undefined>(undefined)
 // 表格分页状态（#59：跨页序号公式 (page-1)*pageSize+index+1 依赖 page/pageSize）

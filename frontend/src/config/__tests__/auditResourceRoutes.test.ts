@@ -149,6 +149,83 @@ it('标签缺口补齐（真实 meta 词表实测发现的未识别动作）', (
   expect(auditVerbLabel('db_backup_manual_backup')).toBe('备份')
 })
 
+/**
+ * 真实 meta 词表快照（2026-11-11 由 GET /system/operations/meta 抓取）。
+ * 新增资源/动作若没配中文，审计日志的资源下拉会显示裸英文键、操作下拉显示「未识别（raw）」——
+ * 用户实测报障入口（relay_gateway / relay_gateway_* / view_credential / user_clusters_assign）。
+ * 后端新增资源或动作后，请把新词补进本快照并确保下面两条守卫仍绿。
+ */
+const REAL_META_RESOURCES = [
+  'audit_logs',
+  'autostart',
+  'clickhouse_config',
+  'cluster',
+  'edge_import',
+  'node',
+  'plugin_config',
+  'plugin_metadata',
+  'relay_gateway',
+  'route',
+  'route_plugins',
+  'ssl_cert',
+  'upstream',
+  'user',
+  'user_clusters',
+  'user_permissions',
+]
+
+const REAL_META_ACTIONS = [
+  'archive',
+  'autostart_set',
+  'clickhouse_config_activate',
+  'cluster_create',
+  'cluster_update',
+  'edge_import_execute',
+  'node_batch_delete',
+  'node_create',
+  'node_start',
+  'node_update',
+  'plugin_config_publish',
+  'plugin_metadata_create',
+  'plugin_metadata_publish',
+  'plugin_metadata_update',
+  'relay_gateway_create',
+  'relay_gateway_delete',
+  'relay_gateway_init',
+  'relay_gateway_push_config',
+  'relay_gateway_sshd_setup',
+  'relay_gateway_update',
+  'route_plugins_update',
+  'route_publish',
+  'route_update',
+  'ssl_cert_generate_ca',
+  'upstream_publish',
+  'user_change_password',
+  'user_clusters_assign',
+  'user_permissions_update',
+  'user_update',
+  'view_credential',
+]
+
+describe('审计中文覆盖守卫（真实 meta 快照零裸英文/零未识别）', () => {
+  it('每个资源都有中文标签（下拉不出现裸英文键）', () => {
+    const offenders = REAL_META_RESOURCES.filter((r) => auditResourceLabel(r) === r)
+    expect(offenders, `以下资源缺中文标签：${offenders.join(', ')}`).toEqual([])
+  })
+
+  it('每个动作都有中文标签（不出现「未识别」）', () => {
+    const offenders = REAL_META_ACTIONS.filter((a) => auditActionLabel(a).includes('未识别'))
+    expect(offenders, `以下动作缺中文标签：${offenders.join(', ')}`).toEqual([])
+  })
+
+  it('每个动作都能解析出资源段（选中资源后动作下拉可按资源联动）', () => {
+    // 裸词/旧命名动作天然无资源段（download_key 等），仅要求规范命名 relay_gateway_* 与 view_credential 可解析
+    const mustResolve = REAL_META_ACTIONS.filter((a) => a.startsWith('relay_gateway_') || a === 'view_credential')
+    const offenders = mustResolve.filter((a) => auditActionResource(a) !== 'relay_gateway')
+    expect(offenders, `以下动作资源段解析错误：${offenders.join(', ')}`).toEqual([])
+  })
+})
+
 describe('auditResourceLabel / auditResourceLink', () => {
   it('资源中文标签', () => {
     expect(auditResourceLabel('route')).toBe('路由')

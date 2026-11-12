@@ -18,10 +18,9 @@
 
     <!-- Filter Bar -->
     <div class="user-filter-bar">
-      <a-input-search
-        v-model:value="searchText"
-        class="search-input-wrap"
-        style="width: 240px"
+      <SearchInput
+        v-model="searchText"
+        :width="240"
         placeholder="搜索用户名"
         @input="onSearchInput"
         @search="onSearchNow"
@@ -373,6 +372,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useFeaturesStore } from '@/stores/features'
 import { PERMISSION_GROUPS, permissionKeyToLabel as permissionKeyToLabelMap } from '@/config/permissionGroups'
 import PageHeader from '@/components/PageHeader.vue'
+import SearchInput from '@/components/SearchInput.vue'
 
 // ── Auth ──────────────────────────────────────────────────────────────────
 const authStore = useAuthStore()

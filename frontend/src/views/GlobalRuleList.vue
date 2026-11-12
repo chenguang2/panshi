@@ -7,18 +7,7 @@
     </PageHeader>
 
     <div class="gr-header-actions">
-      <div class="search-input-wrap">
-        <input
-          v-model="searchText"
-          type="text"
-          placeholder="搜索全局规则名称..."
-          class="form-input"
-          @input="onSearch"
-        />
-        <!-- 7.5：图标字体替换 emoji；有输入时提供一键清空（allow-clear 语义） -->
-        <button v-if="searchText" class="search-clear" title="清空搜索" @click="clearSearch">&times;</button>
-        <SearchOutlined v-else class="search-icon" />
-      </div>
+      <SearchInput v-model="searchText" placeholder="搜索全局规则名称..." @input="onSearch" @clear="loadRules" />
       <select v-model="groupFilter" class="form-input" style="width: 140px; flex-shrink: 0" @change="onGroupChange">
         <option value="__all__">全部分组</option>
         <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
@@ -139,7 +128,6 @@ import ClusterSelect from '@/components/ClusterSelect.vue'
 
 const route = useRoute()
 import { message } from 'ant-design-vue'
-import { SearchOutlined } from '@ant-design/icons-vue'
 import { PAGE_SIZE_CARD_GRID, PAGE_SIZE_DROPDOWN } from '@/constants'
 import { listGlobalRules } from '@/api/globalRules'
 import { listClusters, getClusterNodes } from '@/api/clusters'
@@ -153,6 +141,7 @@ import { globalRuleDeleteWarning } from '@/composables/useClusterPluginEntity'
 import { getGroupColorStyle, getCardBorderStyle } from '@/composables/useGroupColors'
 import { getApiErrorMessage } from '@/utils/error'
 import PublishStatusTag from '@/components/PublishStatusTag.vue'
+import SearchInput from '@/components/SearchInput.vue'
 
 const rules = ref<any[]>([])
 const clusters = ref<any[]>([])
@@ -207,11 +196,6 @@ function clearFilters() {
 }
 
 /** 7.5 搜索一键清空（allow-clear 语义）：清词并立即重载 */
-function clearSearch() {
-  searchText.value = ''
-  loadRules()
-}
-
 const formVisible = ref(false)
 const editingConfig = ref<any | null>(null)
 const vmVisible = ref(false)
@@ -376,23 +360,6 @@ onUnmounted(() => {
   gap: 12px;
   margin-bottom: 20px;
   flex-wrap: nowrap;
-}
-/* 7.5 搜索一键清空按钮（原生 input 的 allow-clear 语义） */
-.search-clear {
-  position: absolute;
-  right: 8px;
-  top: 50%;
-  transform: translateY(-50%);
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  font-size: 14px;
-  line-height: 1;
-  cursor: pointer;
-  padding: 2px;
-}
-.search-clear:hover {
-  color: var(--fg);
 }
 /* 7.5 超量截断提示 */
 .gr-truncate-notice {
