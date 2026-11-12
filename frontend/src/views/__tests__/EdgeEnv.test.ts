@@ -788,7 +788,7 @@ describe('EdgeEnv.vue 未发布内容保护与 URL 同步', () => {
 
   it('dirty 切集群弹确认，取消则不切换且内容保留', async () => {
     const { wrapper, vm } = await mountDirty()
-    void vm.onClusterSelectChange({ target: { value: '2' } })
+    void vm.onASelectClusterChange(2)
     await wrapper.vm.$nextTick()
     expect(vm.confirmVisible).toBe(true)
     vm.onConfirmCancel()
@@ -800,7 +800,7 @@ describe('EdgeEnv.vue 未发布内容保护与 URL 同步', () => {
 
   it('dirty 切集群确认后切换、内容清空、URL 同步 cluster_id', async () => {
     const { wrapper, vm } = await mountDirty()
-    void vm.onClusterSelectChange({ target: { value: '2' } })
+    void vm.onASelectClusterChange(2)
     await wrapper.vm.$nextTick()
     vm.onConfirmOk()
     await flushPromises()
@@ -815,7 +815,7 @@ describe('EdgeEnv.vue 未发布内容保护与 URL 同步', () => {
   it('不 dirty 切集群不弹确认直接切换', async () => {
     const { wrapper, vm } = await mountDirty()
     vm.editorContent = vm.savedContent
-    void vm.onClusterSelectChange({ target: { value: '2' } })
+    void vm.onASelectClusterChange(2)
     await flushPromises()
     expect(vm.confirmVisible).toBe(false)
     expect(vm.selectedClusterId).toBe(2)
@@ -1050,6 +1050,85 @@ describe('EdgeEnv.vue 读取自动关与状态条', () => {
     await vm.onClusterChange()
     await flushPromises()
     expect(wrapper.text()).not.toContain('内容来自 10.0.0.1')
+    wrapper.unmount()
+  })
+})
+
+describe('EdgeEnv 集群切换接线（bug fix 2026-11-12：值先于事件契约）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/clusters') return Promise.resolve({ data: MOCK_CLUSTERS })
+      if (url.startsWith('/clusters/1/nodes'))
+        return Promise.resolve({ data: { items: [{ id: 10, ip: '10.0.0.1', management_port: 9180, status: 1 }] } })
+      if (url.startsWith('/clusters/2/nodes'))
+        return Promise.resolve({ data: { items: [{ id: 20, ip: '10.0.0.2', management_port: 9180, status: 1 }] } })
+      return Promise.reject(new Error('unknown url: ' + url))
+    })
+  })
+
+  async function mountPage() {
+    const EdgeEnv = (await import('../EdgeEnv.vue')).default
+    const wrapper = mount(EdgeEnv, mountGlobal)
+    await flushPromises()
+    return wrapper
+  }
+
+  /** 模拟 ClusterSelect 真实 emit 序列：值先于事件（组件契约，AGENTS #74 同款消费方路径） */
+  async function pickCluster(wrapper: any, id: number) {
+    const cs = wrapper.findComponent({ name: 'ClusterSelect' })
+    expect(cs.exists()).toBe(true)
+    await cs.vm.$emit('update:modelValue', id)
+    await cs.vm.$emit('change', id)
+    await flushPromises()
+  }
+
+  const nodesCalls = () => mockApiGet.mock.calls.filter(([u]) => String(u).includes('/nodes'))
+
+  it('选集群必须触发节点加载（回归：去重守卫比较 v-model 已更新值导致恒早退）', async () => {
+    const wrapper = await mountPage()
+    expect(nodesCalls().length).toBe(0)
+    await pickCluster(wrapper, 1)
+    expect(nodesCalls().length).toBeGreaterThan(0)
+    expect(wrapper.vm.nodes).toHaveLength(1)
+    wrapper.unmount()
+  })
+
+  it('切换到另一集群：加载新集群节点', async () => {
+    const wrapper = await mountPage()
+    await pickCluster(wrapper, 1)
+    await pickCluster(wrapper, 2)
+    expect((wrapper.vm.nodes as any[])[0].id).toBe(20)
+    wrapper.unmount()
+  })
+
+  it('dirty 状态取消切换：v-model 显式回弹到已加载集群，且不发新集群请求', async () => {
+    const wrapper = await mountPage()
+    await pickCluster(wrapper, 1)
+    ;(wrapper.vm as any).editorContent = '未保存内容'
+    expect((wrapper.vm as any).isDirty).toBe(true)
+    await pickCluster(wrapper, 2)
+    // 确认弹窗出现 → 取消
+    expect((wrapper.vm as any).confirmVisible).toBe(true)
+    ;(wrapper.vm as any).onConfirmCancel()
+    await flushPromises()
+    expect((wrapper.vm as any).selectedClusterId).toBe(1)
+    expect((wrapper.vm as any).nodes[0].id).toBe(10)
+    expect(nodesCalls().filter(([u]) => String(u).includes('/clusters/2/nodes')).length).toBe(0)
+    wrapper.unmount()
+  })
+
+  it('dirty 状态确认切换：正常加载新集群', async () => {
+    const wrapper = await mountPage()
+    await pickCluster(wrapper, 1)
+    ;(wrapper.vm as any).editorContent = '未保存内容'
+    await pickCluster(wrapper, 2)
+    expect((wrapper.vm as any).confirmVisible).toBe(true)
+    ;(wrapper.vm as any).onConfirmOk()
+    await flushPromises()
+    expect((wrapper.vm as any).selectedClusterId).toBe(2)
+    expect((wrapper.vm as any).nodes[0].id).toBe(20)
     wrapper.unmount()
   })
 })

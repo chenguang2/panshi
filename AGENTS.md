@@ -235,6 +235,8 @@ openspec/        # 变更工件；openspec/specs/ = main specs
 
 75. **原生控件换装 a-select 族必须核对宽度语义** — antd 的 `.ant-select` 是 `inline-block` + `width:auto`，宽度跟随已选文本：选短名（如 jd）后控件收缩、弹出层默认同宽（`dropdownMatchSelectWidth` 默认 true）→ 不可读；而原生 `<select class="form-input">` 自带 `width:100%`，换装丢类即丢宽度（2026-11-12 实测：集群选择统一换装后添加上游弹窗集群下拉缩成内容宽、长名+分组缩进截断）。规则：共享选择控件自带布局默认值（`ClusterSelect.vue` 的 `.cluster-select{width:100%}` + `:dropdown-match-select-width="false"`，守卫 `ClusterSelect.test.ts` 源码钉住）；antd-vue 4.x 只有 `dropdownMatchSelectWidth`（无 antd 5 的 `popupMatchSelectWidth` 改名）；jsdom 不注入 SFC 样式，宽度行为断言走源码守卫范式。
 
+76. **ClusterSelect（值先于事件）消费方的 `@change` 禁止与 v-model 状态做去重比较** — ClusterSelect 契约是 `update:modelValue` 先行、`change` 后到：`@change` 到达时 v-model 已更新为新值，任何「`next === selectedXxx` 则 early-return」的守卫恒真 → 加载副作用永不触发；dirty 确认取消的「`:value` 回弹」也随之失效（v-model 已先行，取消需显式回弹到已加载集群）。2026-11-12 实测：EdgeEnv 换装后选集群恒不加载节点（`/clusters/{id}/nodes` 请求根本不发、API 正常，纯前端守卫吞掉 change）；修复为 `activeClusterId`（已加载归属集群）作去重基准 + 取消显式回弹（守卫 `EdgeEnv.test.ts` 值先于事件四连用例）。排查口诀：换装后「选了没反应」而 API 手调正常，先查 `@change` 处理器是否拿 v-model 已更新值做比较；全站清扫确认仅 EdgeEnv 一处此模式。
+
 ## 新增功能步骤
 
 1. 在 `backend/app/schemas/` 定义 Pydantic 模型

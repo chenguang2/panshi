@@ -316,10 +316,28 @@ const clusters = ref<Cluster[]>([])
 const nodes = ref<any[]>([])
 const allNodes = ref<any[]>([])
 const selectedClusterId = ref<number | string>('')
+/** 当前编辑器内容归属（已加载完成）的集群：切换去重基准 + 取消切换时 v-model 回弹目标 */
+const activeClusterId = ref<number | ''>('')
 const selectedNodeId = ref<number | string>('')
 
-function onASelectClusterChange(val: unknown) {
-  void applyClusterChange(val === undefined || val === null || val === '' ? '' : Number(val))
+async function onASelectClusterChange(val: unknown) {
+  const next = val === undefined || val === null || val === '' ? '' : Number(val)
+  if (next === activeClusterId.value) return
+  if (isDirty.value) {
+    const ok = await showConfirm({
+      title: '确认切换集群',
+      content: '当前编辑内容尚未发布，切换集群将丢弃编辑内容，是否继续？',
+      okText: '确认切换',
+    })
+    if (!ok) {
+      // ClusterSelect 契约「值先于事件」（AGENTS #109-111）：change 到达时 v-model 已更新为新值，
+      // 取消切换必须显式回弹到已加载集群，否则下拉显示与编辑器内容错位
+      selectedClusterId.value = activeClusterId.value
+      return
+    }
+  }
+  selectedClusterId.value = next
+  await onClusterChange()
 }
 
 const editorContent = ref('')
@@ -514,29 +532,9 @@ async function onClusterChange() {
   if (nodes.value.length > 0) {
     selectedNodeId.value = nodes.value[0].id
   }
+  // 数据已归属该集群：作为切换去重基准与取消回弹目标（onASelectClusterChange）
+  activeClusterId.value = selectedClusterId.value === '' ? '' : Number(selectedClusterId.value)
   router.replace({ query: { ...route.query, cluster_id: String(selectedClusterId.value) } })
-}
-
-/** 受控切换集群：dirty 先确认，取消则不赋值（下拉显示随 :value 回弹，无回滚问题） */
-function onClusterSelectChange(e: Event) {
-  const raw = (e.target as HTMLSelectElement).value
-  void applyClusterChange(raw === '' ? '' : Number(raw))
-}
-
-async function applyClusterChange(newId: number | '') {
-  const cur = selectedClusterId.value
-  const next = newId === '' ? '' : Number(newId)
-  if (next === (cur === '' ? '' : Number(cur))) return
-  if (isDirty.value) {
-    const ok = await showConfirm({
-      title: '确认切换集群',
-      content: '当前编辑内容尚未发布，切换集群将丢弃编辑内容，是否继续？',
-      okText: '确认切换',
-    })
-    if (!ok) return
-  }
-  selectedClusterId.value = newId
-  await onClusterChange()
 }
 
 /** 受控切换节点：同款确认守卫（onNodeChange 仅剩确认后清空职责） */
