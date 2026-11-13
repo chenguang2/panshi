@@ -159,8 +159,10 @@
       :clusters="clusters"
       :editing-proxy="editingProxy"
       :default-proxy-type="'dns'"
+      with-publish-guide
       @close="closeWizard"
       @saved="onWizardSaved"
+      @publish-requested="onWizardPublishRequested"
     />
 
     <!-- View Modal -->
@@ -347,6 +349,17 @@ function onWizardSaved() {
   wizardVisible.value = false
   editingProxy.value = null
   loadProxies()
+}
+
+// publish-guide 批 4：向导保存引导「立即发布」→ 打开该代理的发布确认弹窗（与行内发布同链路）
+function onWizardPublishRequested(payload: { clusterId: number; proxyId: number | null; name: string }) {
+  publishingProxy.value = {
+    id: payload.proxyId,
+    cluster_id: payload.clusterId,
+    name: payload.name,
+  } as StreamProxy
+  publishClusterId.value = payload.clusterId
+  publishVisible.value = true
 }
 
 function viewProxy(p: StreamProxy) {

@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const mockCreateStreamProxy = vi.fn(() => Promise.resolve({ data: {} }))
 const mockUpdateStreamProxy = vi.fn(() => Promise.resolve({ data: {} }))
 const mockShowOverlayModal = vi.hoisted(() => vi.fn())
+const mockMessageSuccess = vi.hoisted(() => vi.fn())
 vi.mock('@/api/streamProxy', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>()
   return {
@@ -20,7 +21,9 @@ vi.mock('@/api', () => ({
     post: vi.fn(() => Promise.resolve({ data: { id: 99 } })),
   },
 }))
-vi.mock('@/ant-design-vue', () => ({ message: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }))
+vi.mock('ant-design-vue', () => ({
+  message: { success: (...a: unknown[]) => mockMessageSuccess(...(a as [])), error: vi.fn(), warning: vi.fn() },
+}))
 import { flushPromises, mount } from '@vue/test-utils'
 
 const MOCK_CLUSTERS = [
@@ -740,5 +743,67 @@ describe('StreamProxyFormWizard DNS 型 WAN 与名词', () => {
     const btn = [...document.querySelectorAll('button')].find((b) => b.textContent?.includes('创建'))
     expect(btn?.textContent?.trim()).toBe('创建 DNS 代理')
     expect(document.body.textContent).not.toContain('创建四层代理')
+  })
+})
+
+describe('StreamProxyFormWizard.vue 保存后发布引导（publish-guide 批 4）', () => {
+  async function createVmGuide(withGuide: boolean) {
+    const StreamProxyFormWizard = (await import('../StreamProxyFormWizard.vue')).default
+    const wrapper = mount(StreamProxyFormWizard, {
+      props: { visible: true, editingProxy: null, clusters: MOCK_CLUSTERS, withPublishGuide: withGuide },
+      global: {
+        stubs: [
+          'AModal',
+          'AForm',
+          'AFormItem',
+          'AInput',
+          'ASelect',
+          'ASelectOption',
+          'AButton',
+          'AInputNumber',
+          'ATable',
+          'HealthCheckForm',
+        ],
+      },
+    })
+    return { vm: wrapper.vm as any, wrapper }
+  }
+
+  function fillNormalForm(vm: any) {
+    vm.form.name = 'ps-guide-proxy'
+    vm.form.cluster_id = 1
+    vm.form.listen_port = 18080
+    vm.form.proxy_type = 'normal'
+    vm.form.load_balance = 'roundrobin'
+    vm.form.targets = [{ host: '10.0.0.1', port: 80, weight: 10 }]
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockCreateStreamProxy.mockResolvedValue({ data: { id: 77 } })
+  })
+
+  it('withPublishGuide：创建成功不弹 toast、弹「保存成功」引导；立即发布 emit publish-requested', async () => {
+    const { vm, wrapper } = await createVmGuide(true)
+    fillNormalForm(vm)
+    await vm.handleSubmit()
+    expect(mockMessageSuccess).not.toHaveBeenCalled()
+    expect(wrapper.emitted('close')).toHaveLength(1)
+    expect(mockShowOverlayModal).toHaveBeenCalledTimes(1)
+    const opts = mockShowOverlayModal.mock.calls[0][0]
+    expect(opts.title).toBe('保存成功')
+    expect(opts.content).toContain('配置尚未发布，发布后才会推送到 Edge 节点生效。')
+    expect(opts.okText).toBe('立即发布')
+    opts.onOk()
+    expect(wrapper.emitted('publish-requested')).toEqual([[{ clusterId: 1, proxyId: 77, name: 'ps-guide-proxy' }]])
+  })
+
+  it('默认（未开启引导）：创建成功 toast 保留、无引导弹窗（回归钉）', async () => {
+    const { vm, wrapper } = await createVmGuide(false)
+    fillNormalForm(vm)
+    await vm.handleSubmit()
+    expect(mockMessageSuccess).toHaveBeenCalledWith('四层代理已创建')
+    expect(mockShowOverlayModal).not.toHaveBeenCalled()
+    expect(wrapper.emitted('publish-requested')).toBeUndefined()
   })
 })

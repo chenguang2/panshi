@@ -632,11 +632,21 @@ const props = defineProps<{
   clusters: Cluster[]
   editingProxy?: StreamProxy | null
   defaultProxyType?: 'normal' | 'dns'
+  /** 保存后发布引导（publish-guide 批 4）：开启后保存成功弹「立即发布/稍后」引导并停发 toast */
+  withPublishGuide?: boolean
 }>()
 
 const emit = defineEmits<{
   close: []
   saved: []
+  /** 引导弹窗「立即发布」→ 调用方打开该代理的既有发布确认弹窗，系统不自动发布 */
+  'publish-requested': [
+    payload: {
+      clusterId: number
+      proxyId: number | null
+      name: string
+    },
+  ]
 }>()
 
 const currentStep = ref(1)
@@ -1303,15 +1313,32 @@ async function doSubmit() {
     }
 
     const cid = Number(form.cluster_id)
+    const savedName = form.name.trim()
+    let savedId: number | null = null
     if (props.editingProxy) {
+      savedId = props.editingProxy.id ?? null
       await streamProxyApi.updateStreamProxy(cid, props.editingProxy.id, submitData)
-      message.success(`${resourceLabel.value}已更新`)
+      if (!props.withPublishGuide) message.success(`${resourceLabel.value}已更新`)
     } else {
-      await streamProxyApi.createStreamProxy(cid, submitData)
-      message.success(`${resourceLabel.value}已创建`)
+      const res = await streamProxyApi.createStreamProxy(cid, submitData)
+      savedId = res?.data?.id ?? null
+      if (!props.withPublishGuide) message.success(`${resourceLabel.value}已创建`)
     }
     emit('saved')
     emit('close')
+    if (props.withPublishGuide) {
+      // publish-guide 批 4：单通道——保存成功由引导弹窗呈现（save-guide-single-channel），
+      // 「立即发布」emit 交调用方打开既有发布确认弹窗（选节点），不自动发布
+      showOverlayModal({
+        title: '保存成功',
+        content: '配置尚未发布，发布后才会推送到 Edge 节点生效。',
+        okText: '立即发布',
+        cancelText: '稍后',
+        onOk: () => {
+          emit('publish-requested', { clusterId: cid, proxyId: savedId, name: savedName })
+        },
+      })
+    }
   } catch (e: any) {
     const detail = e.response?.data?.detail
     message.error(typeof detail === 'string' ? detail : '操作失败')
