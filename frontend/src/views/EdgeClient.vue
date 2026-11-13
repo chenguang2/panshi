@@ -57,6 +57,14 @@
       <span v-if="loadedNode" class="text-muted text-sm" style="margin-left: auto">
         已连接: {{ loadedNode }}{{ loadedNodeRouteText }}
       </span>
+      <span
+        v-if="ipHint"
+        class="text-muted text-sm"
+        style="margin-left: 12px"
+        :title="ipHint.title"
+        data-test="ip-hint"
+        >{{ ipHint.text }}</span
+      >
     </div>
 
     <!-- 查询失败聚合反馈（edge-client-ux-review-fixes 1.4） -->
@@ -1018,6 +1026,10 @@ const clusters = ref<any[]>([])
 const selectedClusterId = ref<number | string>('')
 const clusterNodes = ref<any[]>([])
 const selectedNode = ref<string>('')
+/** 集群模式查询携带的集群上下文（edge-direct-relay：集群上下文优先消解 IP 歧义）；手动模式不携带 */
+const activeClusterId = computed(() =>
+  inputMode.value === 'cluster' && selectedClusterId.value ? Number(selectedClusterId.value) : null,
+)
 const manualNode = ref('')
 const activeTab = ref('upstreams')
 const loading = ref(false)
@@ -1209,7 +1221,10 @@ const failedLabels: string[] = []
 
 const loadUpstreams = async (ip: string, port: string): Promise<boolean> => {
   try {
-    const res = await api.get(`/edge-client/nodes/${ip}/${port}/upstreams`, { signal: currentSignal.value })
+    const res = await api.get(`/edge-client/nodes/${ip}/${port}/upstreams`, {
+      signal: currentSignal.value,
+      params: activeClusterId.value ? { cluster_id: activeClusterId.value } : undefined,
+    })
     upstreams.value = res.data.upstreams || []
     routeInfo.value = { route: res.data.route, relay_via: res.data.relay_via }
     return true
@@ -1223,7 +1238,10 @@ const loadUpstreams = async (ip: string, port: string): Promise<boolean> => {
 
 const loadRoutes = async (ip: string, port: string): Promise<boolean> => {
   try {
-    const res = await api.get(`/edge-client/nodes/${ip}/${port}/routes`, { signal: currentSignal.value })
+    const res = await api.get(`/edge-client/nodes/${ip}/${port}/routes`, {
+      signal: currentSignal.value,
+      params: activeClusterId.value ? { cluster_id: activeClusterId.value } : undefined,
+    })
     routes.value = res.data.routes || []
     routeInfo.value = { route: res.data.route, relay_via: res.data.relay_via }
     return true
@@ -1237,7 +1255,10 @@ const loadRoutes = async (ip: string, port: string): Promise<boolean> => {
 
 const loadGlobalRules = async (ip: string, port: string): Promise<boolean> => {
   try {
-    const res = await api.get(`/edge-client/nodes/${ip}/${port}/global_rules`, { signal: currentSignal.value })
+    const res = await api.get(`/edge-client/nodes/${ip}/${port}/global_rules`, {
+      signal: currentSignal.value,
+      params: activeClusterId.value ? { cluster_id: activeClusterId.value } : undefined,
+    })
     globalRules.value = res.data.global_rules || []
     routeInfo.value = { route: res.data.route, relay_via: res.data.relay_via }
     return true
@@ -1251,7 +1272,10 @@ const loadGlobalRules = async (ip: string, port: string): Promise<boolean> => {
 
 const loadPluginConfigs = async (ip: string, port: string): Promise<boolean> => {
   try {
-    const res = await api.get(`/edge-client/nodes/${ip}/${port}/plugin_configs`, { signal: currentSignal.value })
+    const res = await api.get(`/edge-client/nodes/${ip}/${port}/plugin_configs`, {
+      signal: currentSignal.value,
+      params: activeClusterId.value ? { cluster_id: activeClusterId.value } : undefined,
+    })
     pluginConfigs.value = res.data.plugin_configs || []
     routeInfo.value = { route: res.data.route, relay_via: res.data.relay_via }
     return true
@@ -1265,7 +1289,10 @@ const loadPluginConfigs = async (ip: string, port: string): Promise<boolean> => 
 
 const loadPluginMetadata = async (ip: string, port: string): Promise<boolean> => {
   try {
-    const res = await api.get(`/edge-client/nodes/${ip}/${port}/plugin_metadata`, { signal: currentSignal.value })
+    const res = await api.get(`/edge-client/nodes/${ip}/${port}/plugin_metadata`, {
+      signal: currentSignal.value,
+      params: activeClusterId.value ? { cluster_id: activeClusterId.value } : undefined,
+    })
     pluginMetadataList.value = res.data.plugin_metadata || []
     routeInfo.value = { route: res.data.route, relay_via: res.data.relay_via }
     return true
@@ -1279,7 +1306,10 @@ const loadPluginMetadata = async (ip: string, port: string): Promise<boolean> =>
 
 const loadPluginList = async (ip: string, port: string): Promise<boolean> => {
   try {
-    const res = await api.get(`/edge-client/nodes/${ip}/${port}/plugins/list`, { signal: currentSignal.value })
+    const res = await api.get(`/edge-client/nodes/${ip}/${port}/plugins/list`, {
+      signal: currentSignal.value,
+      params: activeClusterId.value ? { cluster_id: activeClusterId.value } : undefined,
+    })
     pluginList.value = res.data.plugins || []
     routeInfo.value = { route: res.data.route, relay_via: res.data.relay_via }
     return true
@@ -1292,7 +1322,10 @@ const loadPluginList = async (ip: string, port: string): Promise<boolean> => {
 
 const loadStreamRoutes = async (ip: string, port: string): Promise<boolean> => {
   try {
-    const res = await api.get(`/edge-client/nodes/${ip}/${port}/stream-routes`, { signal: currentSignal.value })
+    const res = await api.get(`/edge-client/nodes/${ip}/${port}/stream-routes`, {
+      signal: currentSignal.value,
+      params: activeClusterId.value ? { cluster_id: activeClusterId.value } : undefined,
+    })
     streamRoutes.value = res.data.stream_routes || []
     routeInfo.value = { route: res.data.route, relay_via: res.data.relay_via }
     return true
@@ -1306,7 +1339,10 @@ const loadStreamRoutes = async (ip: string, port: string): Promise<boolean> => {
 
 const loadSslCertificates = async (ip: string, port: string): Promise<boolean> => {
   try {
-    const res = await api.get(`/edge-client/nodes/${ip}/${port}/ssl`, { signal: currentSignal.value })
+    const res = await api.get(`/edge-client/nodes/${ip}/${port}/ssl`, {
+      signal: currentSignal.value,
+      params: activeClusterId.value ? { cluster_id: activeClusterId.value } : undefined,
+    })
     sslList.value = res.data.ssl_certificates || []
     routeInfo.value = { route: res.data.route, relay_via: res.data.relay_via }
     return true
@@ -1346,6 +1382,40 @@ const deleteSslCert = (record: any) => {
 }
 
 // 预加载所有标签页数据（并行）
+// ── IP 归属提示（edge-direct-relay 批 2：手动模式查询时反查，中性说明不阻塞）──
+const ipHint = ref<{ text: string; title: string } | null>(null)
+const loadIpHint = async (ip: string) => {
+  try {
+    const res = await api.get('/edge-client/ip-info', { params: { ip }, signal: currentSignal.value })
+    const d = res.data || {}
+    if (!d.clusters?.length) {
+      ipHint.value = null
+      return
+    }
+    if (d.relay_state === 'ambiguous' && d.conflict_detail) {
+      ipHint.value = {
+        text: `IP 歧义：${d.conflict_detail}——默认直连，可从集群下拉选择以经中继`,
+        title: `该 IP 属于多个挂区域集群（${d.conflict_detail}）`,
+      }
+    } else {
+      const c = d.clusters[0]
+      const regions = d.clusters
+        .map((x: any) => x.region_code)
+        .filter(Boolean)
+        .join('/')
+      ipHint.value = {
+        text: `IP 归属：集群 ${d.clusters.map((x: any) => x.cluster_name).join('、')}${regions ? `（区域 ${regions}）` : ''}`,
+        title:
+          d.relay_state === 'active'
+            ? `该 IP 区域中继活跃（${d.relay_via || ''}）`
+            : `该 IP 区域状态：${d.relay_state}`,
+      }
+    }
+  } catch {
+    ipHint.value = null
+  }
+}
+
 // 节点解析（edge-client-ux-review-fixes 1.3：manual 直读输入框当前值，移除 blur 依赖）
 function resolveNode(): string {
   const raw = inputMode.value === 'manual' ? manualNode.value.trim() : selectedNode.value
@@ -1383,6 +1453,9 @@ const loadAllData = async () => {
   queryError.value = ''
   queryPartial.value = ''
   failedLabels.length = 0
+
+  if (inputMode.value === 'manual') void loadIpHint(ip)
+  else ipHint.value = null
 
   try {
     const results = await Promise.all([

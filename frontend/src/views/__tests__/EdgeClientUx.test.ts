@@ -235,3 +235,86 @@ describe('批 2/3：警示与观感', () => {
     expect(input.attributes('placeholder')).toBe('192.168.0.14:16620')
   })
 })
+
+describe('直连页集群上下文中继（edge-direct-relay 批 2）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+    mockApi.get.mockResolvedValue({ data: {} })
+  })
+
+  function mockAllSuccess() {
+    mockApiResults([])
+  }
+
+  it('集群模式查询：请求携带 cluster_id（选节点自动查询同链路）', async () => {
+    const wrapper = await mountPage()
+    const vm = wrapper.vm as any
+    vm.inputMode = 'cluster'
+    await wrapper.vm.$nextTick()
+    vm.selectedClusterId = 4
+    vm.selectedNode = '192.168.0.14:16620'
+    mockAllSuccess()
+    const queryBtn = wrapper.findAll('button').find((b) => b.text().includes('查询') && !b.text().includes('取消'))!
+    await queryBtn.trigger('click')
+    await flushPromises()
+    const upstreamCall = mockApi.get.mock.calls.find((c: any[]) => String(c[0]).includes('/upstreams'))!
+    expect(upstreamCall).toBeTruthy()
+    expect(upstreamCall[1]?.params).toEqual({ cluster_id: 4 })
+  })
+
+  it('手动模式查询：调用 ip-info 并渲染歧义归属提示', async () => {
+    const wrapper = await mountPage()
+    const vm = wrapper.vm as any
+    vm.inputMode = 'manual'
+    await wrapper.vm.$nextTick()
+    const input = wrapper.find('.edge-filter-bar input.form-input')
+    await input.setValue('192.168.0.14:16620')
+    mockAllSuccess()
+    const base = mockApi.get.mockImplementation.bind(mockApi.get)
+    mockApi.get.mockImplementation((url: string, config?: any) => {
+      if (url.includes('/edge-client/ip-info'))
+        return Promise.resolve({
+          data: {
+            clusters: [{ cluster_id: 4, cluster_name: 'test', region_code: 'qqq' }],
+            relay_state: 'ambiguous',
+            conflict_detail: 'test/qqq、test-2/bj',
+            management_ports: [16620],
+          },
+        })
+      return base(url, config)
+    })
+    const queryBtn = wrapper.findAll('button').find((b) => b.text().includes('查询') && !b.text().includes('取消'))!
+    await queryBtn.trigger('click')
+    await flushPromises()
+    const ipInfoCall = mockApi.get.mock.calls.find((c: any[]) => String(c[0]).includes('/edge-client/ip-info'))!
+    expect(ipInfoCall).toBeTruthy()
+    expect(ipInfoCall[1]?.params).toEqual({ ip: '192.168.0.14' })
+     
+    console.log('[probe] get calls:', JSON.stringify(mockApi.get.mock.calls.map((c: any[]) => [String(c[0]).replace(/^.*\/nodes/, '/nodes').slice(0, 40), c[1]?.params])))
+    // 歧义分支文案：IP 歧义 + 冲突明细 + 消解指引
+    expect(wrapper.text()).toContain('IP 歧义：test/qqq、test-2/bj')
+    expect(wrapper.text()).toContain('可从集群下拉选择以经中继')
+  })
+
+  it('手动模式未登记 IP：不显示归属提示（静默）', async () => {
+    const wrapper = await mountPage()
+    const vm = wrapper.vm as any
+    vm.inputMode = 'manual'
+    await wrapper.vm.$nextTick()
+    const input = wrapper.find('.edge-filter-bar input.form-input')
+    await input.setValue('10.99.99.99:9180')
+    mockAllSuccess()
+    const base = mockApi.get.mockImplementation.bind(mockApi.get)
+    mockApi.get.mockImplementation((url: string, config?: any) => {
+      if (url.includes('/edge-client/ip-info'))
+        return Promise.resolve({ data: { clusters: [], relay_state: 'none', conflict_detail: null, management_ports: [] } })
+      return base(url, config)
+    })
+    const queryBtn = wrapper.findAll('button').find((b) => b.text().includes('查询') && !b.text().includes('取消'))!
+    await queryBtn.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('IP 归属')
+    expect(wrapper.text()).not.toContain('可从集群下拉选择以经中继')
+  })
+})
