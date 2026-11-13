@@ -1,0 +1,535 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>发布差异预览（待发布 vs Edge 节点）— 设计示例页</title>
+<style>
+  /* 令牌取自 frontend/src/styles/theme.css；PublishStatusTag 四态色取自组件源码 */
+  :root {
+    --bg: oklch(97% 0.005 250);
+    --surface: oklch(100% 0 0);
+    --fg: oklch(20% 0.02 240);
+    --muted: oklch(50% 0.018 240);
+    --border: oklch(88% 0.008 240);
+    --border-strong: oklch(74% 0.02 240);
+    --accent: oklch(56% 0.16 210);
+    --accent-bg: oklch(56% 0.16 210 / 10%);
+    --success: #52c41a;
+    --warning: #fa8c16;
+    --danger: #fa541c;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 14px; line-height: 1.6;
+  }
+  .page { max-width: 1180px; margin: 0 auto; padding: 24px 28px 80px; display: flex; flex-direction: column; gap: 18px; }
+
+  /* ── 页头 ── */
+  .ph h1 { margin: 0; font-size: 20px; }
+  .ph .desc { margin: 4px 0 0; color: var(--muted); font-size: 13px; max-width: 760px; }
+  .ph .note { margin-top: 8px; font-size: 12px; color: var(--accent); background: var(--accent-bg); border: 1px solid oklch(56% 0.16 210 / 28%); border-radius: 6px; padding: 8px 12px; display: inline-block; }
+
+  /* ── 方案卡 ── */
+  .plans { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .plan { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; position: relative; }
+  .plan.recommended { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .plan .badge { position: absolute; top: -10px; right: 12px; background: var(--accent); color: #fff; font-size: 11px; padding: 1px 8px; border-radius: 10px; }
+  .plan h3 { margin: 0 0 6px; font-size: 14px; }
+  .plan .entry { font-size: 12px; color: var(--accent); font-weight: 600; margin-bottom: 6px; }
+  .plan ul { margin: 0; padding-left: 16px; font-size: 12px; color: var(--muted); line-height: 1.7; }
+  .plan ul b { color: var(--fg); font-weight: 600; }
+  .plan .verdict { margin-top: 8px; font-size: 12px; padding-top: 8px; border-top: 1px dashed var(--border); }
+  .plan .verdict .pro { color: var(--success); }
+  .plan .verdict .con { color: var(--danger); }
+
+  .sec-title { font-size: 15px; font-weight: 700; margin: 8px 0 0; }
+  .sec-sub { font-size: 12px; color: var(--muted); margin: 2px 0 0; }
+
+  /* ── 演示：上游列表 ── */
+  .list-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .list-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .list-toolbar h4 { margin: 0; font-size: 14px; }
+  .list-toolbar .demo-hint { font-size: 12px; color: var(--accent); }
+  table.list { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.list th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; padding: 8px 16px; background: var(--bg); border-bottom: 1px solid var(--border); }
+  table.list td { padding: 10px 16px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  table.list tr:last-child td { border-bottom: none; }
+  .target-tag { display: inline-block; background: var(--bg); border: 1px solid var(--border); border-radius: 3px; padding: 0 6px; font-size: 12px; font-family: var(--mono); margin-right: 4px; }
+  .target-tag .weight { color: var(--muted); }
+
+  /* PublishStatusTag 四态（源码色） */
+  .ps-tag { display: inline-block; font-size: 12px; line-height: 18px; padding: 0 6px; border-radius: 3px; font-weight: 500; }
+  .ps-pending { border: 1px solid #fa8c16; color: #fa8c16; background: #fff7e6; }
+  .ps-partial { border: 1px solid #fa541c; color: #fa541c; background: #fff2e8; }
+  .ps-published { border: 1px solid #52c41a; color: #52c41a; background: #f6ffed; }
+  .ps-date { font-size: 11px; color: #666; margin-left: 4px; }
+  .publish-status { display: inline-flex; align-items: baseline; }
+
+  /* 方案 A：待发布旁的小三角按钮 */
+  .diff-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px; margin-left: 5px; padding: 0;
+    border: 1px solid var(--border-strong); border-radius: 4px;
+    background: var(--surface); color: var(--muted);
+    font-size: 10px; cursor: pointer; vertical-align: middle;
+  }
+  .diff-btn:hover { border-color: var(--warning); color: var(--warning); background: #fff7e6; }
+  .diff-btn .tri { display: inline-block; transition: transform 0.15s; }
+
+  .btn { border: 1px solid var(--border); background: var(--surface); color: var(--fg); border-radius: 6px; padding: 6px 14px; font-size: 13px; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.sm { padding: 3px 10px; font-size: 12px; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { filter: brightness(1.06); color: #fff; }
+  .btn.ghost { border-color: transparent; background: transparent; color: var(--accent); }
+  .mono { font-family: var(--mono); font-size: 12px; }
+
+  /* ── 预览弹窗（方案 A 主界面） ── */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45);
+    display: none; align-items: flex-start; justify-content: center; z-index: 100;
+    padding: 40px 16px; overflow: auto;
+  }
+  .overlay.open { display: flex; }
+  .modal {
+    background: var(--surface); border-radius: 8px; width: 900px; max-width: 96vw;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2); display: flex; flex-direction: column;
+    max-height: calc(100vh - 80px);
+  }
+  .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--border); }
+  .modal-head h3 { margin: 0; font-size: 15px; }
+  .modal-head .close { border: none; background: none; font-size: 18px; color: var(--muted); cursor: pointer; }
+  .modal-body { padding: 14px 20px; overflow: auto; display: flex; flex-direction: column; gap: 12px; }
+  .modal-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 12px 20px; border-top: 1px solid var(--border); }
+
+  .meta-line { font-size: 12px; color: var(--muted); }
+  .meta-line b { color: var(--fg); font-weight: 600; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .chip { font-size: 12px; padding: 1px 10px; border-radius: 10px; border: 1px solid; }
+  .chip.warn { color: var(--warning); border-color: var(--warning); background: #fff7e6; }
+  .chip.danger { color: var(--danger); border-color: var(--danger); background: #fff2e8; }
+  .chip.ok { color: var(--success); border-color: var(--success); background: #f6ffed; }
+  .chip.info { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
+  .chip .sub { font-weight: 400; opacity: 0.85; }
+
+  .conclusion {
+    display: flex; gap: 10px; align-items: flex-start; font-size: 12.5px;
+    border: 1px solid oklch(78% 0.12 70); background: #fffbe6; border-radius: 6px; padding: 10px 12px;
+    color: oklch(40% 0.08 70);
+  }
+  .conclusion .ico { font-style: normal; font-size: 14px; }
+  .conclusion b { color: oklch(35% 0.1 60); }
+
+  .diff-section { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .diff-section > .sec-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 9px 14px; background: var(--bg); border-bottom: 1px solid var(--border);
+    font-size: 13px; font-weight: 700;
+  }
+  .diff-section .sec-head .hint { font-weight: 400; font-size: 12px; color: var(--muted); }
+  .diff-section .sec-body { padding: 10px 14px; }
+
+  table.matrix { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.matrix th { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border-strong); background: var(--bg); font-size: 12px; color: var(--muted); white-space: nowrap; }
+  table.matrix th.node-h { border-left: 1px solid var(--border); }
+  table.matrix th .nb { display: block; font-size: 11px; font-weight: 600; margin-top: 1px; }
+  table.matrix th .nb.warn { color: var(--warning); }
+  table.matrix th .nb.danger { color: var(--danger); }
+  table.matrix td { padding: 6px 10px; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: 12px; vertical-align: top; }
+  table.matrix td.path { font-family: var(--mono); color: var(--fg); }
+  table.matrix td.cand { color: var(--fg); font-weight: 600; border-left: 1px solid var(--border); }
+  table.matrix td.node { border-left: 1px solid var(--border); color: var(--muted); }
+  table.matrix td.node.diff { background: #fff2e8; color: var(--danger); font-weight: 600; }
+  table.matrix td.node.same-row-diff { color: var(--muted); }
+  table.matrix tr.same td { color: var(--muted); }
+  table.matrix tr.hidden { display: none; }
+  .missing { color: var(--danger); font-weight: 700; }
+
+  .toggle-line { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); user-select: none; }
+  .toggle-line input { accent-color: var(--accent); }
+
+  .changelog { margin: 0; padding: 0; list-style: none; font-size: 12.5px; display: flex; flex-direction: column; gap: 4px; }
+  .changelog li { font-family: var(--mono); font-size: 12px; }
+  .changelog .arrow { color: var(--warning); font-weight: 700; padding: 0 4px; }
+  .changelog .from { color: var(--muted); text-decoration: line-through; }
+  .changelog .to { color: var(--fg); font-weight: 700; }
+
+  /* ── 方案 B / C 静态示意 ── */
+  .statics { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .static-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
+  .static-card h3 { margin: 0 0 4px; font-size: 14px; }
+  .static-card .entry { font-size: 12px; color: var(--accent); font-weight: 600; margin-bottom: 8px; }
+  .mini-window { border: 1px solid var(--border); border-radius: 6px; overflow: hidden; font-size: 12px; }
+  .mini-window .mw-head { background: var(--bg); padding: 7px 12px; font-weight: 700; border-bottom: 1px solid var(--border); }
+  .mini-window .mw-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+  .mw-note { font-size: 12px; color: var(--muted); margin-top: 8px; }
+
+  /* ── 决策点 ── */
+  table.decide { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; font-size: 13px; }
+  table.decide th { text-align: left; padding: 9px 14px; background: var(--bg); border-bottom: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+  table.decide td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  table.decide tr:last-child td { border-bottom: none; }
+  table.decide td.opt { color: var(--muted); font-size: 12px; }
+  table.decide td.rec { color: var(--accent); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="ph">
+    <div>
+      <h1>发布差异预览（待发布 vs Edge 节点实况）</h1>
+      <p class="desc">解决「保存后显示待发布，但不知道待发布版本与各 Edge 节点数据差在哪」：把逐节点找数据库对比的排查，收敛为一次点击的逐节点差异报告。</p>
+      <p class="note">设计示例页（静态假数据，非生产代码）· 上游 user-service · 集群 demo-cls · 3 节点</p>
+    </div>
+  </header>
+
+  <!-- ── 方案卡 ── -->
+  <section class="plans">
+    <div class="plan recommended">
+      <span class="badge">推荐</span>
+      <h3>方案 A · 单资源差异预览（交互演示见下）</h3>
+      <div class="entry">入口：「待发布 / 发布未完全生效」标签旁的小三角按钮</div>
+      <ul>
+        <li>点击 → 只读查询各活跃节点的该资源实况，弹窗汇总报告</li>
+        <li>矩阵表：<b>字段路径 × 待发布值 × 各节点当前值</b>，逐格标差异</li>
+        <li>头部结论条直接回答「能不能直接发布」：<b>节点是否落后于上次发布</b></li>
+        <li>复用漂移检测的采集与 diff 机器（EdgeClient HTTP 腿，中继感知）</li>
+      </ul>
+      <div class="verdict">
+        <span class="pro">✓ 正面回答你描述的痛点，一次点击、逐节点、秒级</span><br>
+        <span class="con">✗ 逐资源查询（批量场景另有方案 C 兜底）</span>
+      </div>
+    </div>
+    <div class="plan">
+      <h3>方案 B · 版本管理内对比（纯平台侧）</h3>
+      <div class="entry">入口：版本管理弹窗，待发布时显示「当前配置 vs vN」</div>
+      <ul>
+        <li>平台侧 diff：上次发布快照 vs 当前 DB 行，<b>零网络请求</b></li>
+        <li>回答「我改了什么」，不回答「各节点现在是什么样」</li>
+      </ul>
+      <div class="verdict">
+        <span class="pro">✓ 便宜、稳定、离线可看</span><br>
+        <span class="con">✗ 看不到节点差异/落后节点（可并入 A 作为弹窗内的一个段落）</span>
+      </div>
+    </div>
+    <div class="plan">
+      <h3>方案 C · 集群级「发布预检」批量报告</h3>
+      <div class="entry">入口：集群卡片/列表工具栏「发布预检」按钮</div>
+      <ul>
+        <li>一次拉取<b>全部待发布资源</b> × 全部节点，一份批量报告</li>
+        <li>适合「发布前最后检查一遍」的批量场景</li>
+      </ul>
+      <div class="verdict">
+        <span class="pro">✓ 发布前总览，顺带发现落后节点</span><br>
+        <span class="con">✗ 单资源「这个待发布改了啥」路径变长；与漂移检测入口职责接近</span>
+      </div>
+    </div>
+  </section>
+
+  <p class="sec-sub">推荐组合：<b>A 为核心</b>（本页演示），A 的弹窗内含 B 的平台侧变更段（零额外成本）；C 作为后续独立立项，非本批范围。</p>
+
+  <!-- ── 方案 A 交互演示 ── -->
+  <h2 class="sec-title">方案 A 交互演示 — 上游列表（独立页与统一管理 Tab 同款接入）</h2>
+  <div class="list-card">
+    <div class="list-toolbar">
+      <h4>上游服务 · demo-cls</h4>
+      <span class="demo-hint">👉 点击「待发布」或「发布未完全生效」旁的 ▾ 按钮，打开差异预览</span>
+    </div>
+    <table class="list">
+      <thead>
+        <tr><th>#</th><th>名称</th><th>目标</th><th>协议</th><th>发布状态</th><th>操作</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td>user-service</td>
+          <td>
+            <span class="target-tag">192.168.0.20:8080 <span class="weight">(30)</span></span>
+            <span class="target-tag">192.168.0.21:8080 <span class="weight">(70)</span></span>
+          </td>
+          <td class="mono">http</td>
+          <td>
+            <span class="publish-status">
+              <span class="ps-tag ps-pending">待发布</span>
+              <button class="diff-btn" onclick="openPreview()" title="查看与 Edge 节点的差异"><span class="tri">▾</span></button>
+            </span>
+          </td>
+          <td><button class="btn sm">发布</button> <button class="btn sm ghost">⋯</button></td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td>order-service</td>
+          <td><span class="target-tag">192.168.0.22:8080 <span class="weight">(100)</span></span></td>
+          <td class="mono">http</td>
+          <td><span class="publish-status"><span class="ps-tag ps-published">v3</span><span class="ps-date">11-12 14:30</span></span></td>
+          <td><button class="btn sm">发布</button> <button class="btn sm ghost">⋯</button></td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td>payment-svc</td>
+          <td><span class="target-tag">192.168.0.23:8443 <span class="weight">(50)</span></span></td>
+          <td class="mono">https</td>
+          <td>
+            <span class="publish-status">
+              <span class="ps-tag ps-partial">⚠ v2 · 发布未完全生效</span>
+              <button class="diff-btn" onclick="openPreview()" title="查看与 Edge 节点的差异"><span class="tri">▾</span></button>
+            </span>
+          </td>
+          <td><button class="btn sm">发布</button> <button class="btn sm ghost">⋯</button></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="sec-sub">按钮出现状态见决策点 D2。演示弹窗内容均为 user-service 的假数据。</p>
+
+  <!-- ── 预览弹窗（方案 A 主界面） ── -->
+  <div class="overlay" id="overlay" onclick="if (event.target === this) closePreview()">
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal-head">
+        <h3>发布差异预览 · 上游 user-service（demo-cls）</h3>
+        <button class="close" onclick="closePreview()">✕</button>
+      </div>
+      <div class="modal-body">
+
+        <div class="meta-line">
+          当前平台配置<b>待发布</b>（上次发布 v3 · 2026-11-12 14:30）·
+          检测 <b>3/3</b> 活跃节点 · 检测时间 2026-11-13 10:05 ·
+          <a href="javascript:void(0)" onclick="closePreview()">什么是待发布？</a>
+        </div>
+
+        <div class="chips">
+          <span class="chip info">平台本次变更 <span class="sub">3 项（vs v3）</span></span>
+          <span class="chip warn">192.168.0.13 <span class="sub">差 3 项</span></span>
+          <span class="chip warn">192.168.0.14 <span class="sub">差 3 项</span></span>
+          <span class="chip danger">192.168.0.15 <span class="sub">差 4 项 · 落后于上次发布</span></span>
+        </div>
+
+        <div class="conclusion">
+          <i class="ico">⚠</i>
+          <div>
+            所有节点均未包含本次变更（正常待发布状态）；<b>节点 192.168.0.15 还落后于上次发布</b>——
+            其 checks 仍为 v2 内容，上次发布时该节点失败。直接发布即可一次性覆盖以下全部差异。
+          </div>
+        </div>
+
+        <!-- 平台侧变更段（方案 B 并入处） -->
+        <div class="diff-section">
+          <div class="sec-head">
+            <span>平台侧本次变更（vs v3，不发网络请求）</span>
+            <span class="hint">保存即产生，与节点无关</span>
+          </div>
+          <div class="sec-body">
+            <ul class="changelog">
+              <li>targets[1].weight <span class="from">50</span><span class="arrow">→</span><span class="to">70</span></li>
+              <li>retries <span class="from">2</span><span class="arrow">→</span><span class="to">3</span></li>
+              <li>timeout.connect <span class="from">60</span><span class="arrow">→</span><span class="to">30</span></li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- 逐节点矩阵 -->
+        <div class="diff-section">
+          <div class="sec-head">
+            <span>待发布配置 vs 各节点当前实况</span>
+            <span class="hint">每节点 1 次 Edge 只读请求 · 中继感知</span>
+          </div>
+          <div class="sec-body">
+            <div class="toggle-line" style="margin-bottom: 8px;">
+              <input type="checkbox" id="showSame" onchange="toggleSame(this.checked)">
+              <label for="showSame">显示一致字段（当前隐藏 6 个一致字段）</label>
+            </div>
+            <table class="matrix">
+              <thead>
+                <tr>
+                  <th style="width: 26%;">字段路径</th>
+                  <th class="node-h" style="width: 16%;">待发布</th>
+                  <th class="node-h">192.168.0.13 <span class="nb warn">差 3 项</span></th>
+                  <th class="node-h">192.168.0.14 <span class="nb warn">差 3 项</span></th>
+                  <th class="node-h">192.168.0.15 <span class="nb danger">差 4 项 · 落后</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="diffrow">
+                  <td class="path">targets[1].weight</td>
+                  <td class="cand">70</td>
+                  <td class="node diff">50</td>
+                  <td class="node diff">50</td>
+                  <td class="node diff">50</td>
+                </tr>
+                <tr class="diffrow">
+                  <td class="path">retries</td>
+                  <td class="cand">3</td>
+                  <td class="node diff">2</td>
+                  <td class="node diff">2</td>
+                  <td class="node diff">2</td>
+                </tr>
+                <tr class="diffrow">
+                  <td class="path">timeout.connect</td>
+                  <td class="cand">30</td>
+                  <td class="node diff">60</td>
+                  <td class="node diff">60</td>
+                  <td class="node diff">60</td>
+                </tr>
+                <tr class="diffrow">
+                  <td class="path">checks.active.http_path</td>
+                  <td class="cand">/status</td>
+                  <td class="node same-row-diff">/status</td>
+                  <td class="node same-row-diff">/status</td>
+                  <td class="node diff"><span class="missing">缺失</span></td>
+                </tr>
+                <tr class="samewrow hidden">
+                  <td class="path">name</td>
+                  <td class="cand">user-service</td>
+                  <td class="node">user-service</td>
+                  <td class="node">user-service</td>
+                  <td class="node">user-service</td>
+                </tr>
+                <tr class="samewrow hidden">
+                  <td class="path">load_balance</td>
+                  <td class="cand">roundrobin</td>
+                  <td class="node">roundrobin</td>
+                  <td class="node">roundrobin</td>
+                  <td class="node">roundrobin</td>
+                </tr>
+                <tr class="samewrow hidden">
+                  <td class="path">targets[0].target</td>
+                  <td class="cand">192.168.0.20:8080</td>
+                  <td class="node">192.168.0.20:8080</td>
+                  <td class="node">192.168.0.20:8080</td>
+                  <td class="node">192.168.0.20:8080</td>
+                </tr>
+                <tr class="samewrow hidden">
+                  <td class="path">targets[0].weight</td>
+                  <td class="cand">30</td>
+                  <td class="node">30</td>
+                  <td class="node">30</td>
+                  <td class="node">30</td>
+                </tr>
+                <tr class="samewrow hidden">
+                  <td class="path">scheme</td>
+                  <td class="cand">http</td>
+                  <td class="node">http</td>
+                  <td class="node">http</td>
+                  <td class="node">http</td>
+                </tr>
+                <tr class="samewrow hidden">
+                  <td class="path">pass_host</td>
+                  <td class="cand">pass</td>
+                  <td class="node">pass</td>
+                  <td class="node">pass</td>
+                  <td class="node">pass</td>
+                </tr>
+              </tbody>
+            </table>
+            <p class="sec-sub" style="margin-top: 8px;">
+              一致性口径与漂移检测相同：Edge 服务端自动展开的自管理字段（id / 时间戳 / etcd 索引）不参与对比；
+              数值/字符串自动归一（"70" == 70）；敏感字段（SSL 私钥）脱敏显示。
+            </p>
+          </div>
+        </div>
+
+      </div>
+      <div class="modal-foot">
+        <button class="btn" onclick="alert('演示：重新执行逐节点检测')">重新检测</button>
+        <button class="btn" onclick="closePreview()">关 闭</button>
+        <button class="btn primary" onclick="alert('演示：进入既有发布确认弹窗（executePublish 共享流程，可选节点）')">去发布</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 方案 B / C 静态示意 ── -->
+  <h2 class="sec-title">方案 B / C 静态示意（不交互）</h2>
+  <div class="statics">
+    <div class="static-card">
+      <h3>方案 B · 版本管理弹窗内「当前配置 vs vN」</h3>
+      <div class="entry">入口：行操作「版本管理」→ 弹窗顶部待发布提示段</div>
+      <div class="mini-window">
+        <div class="mw-head">版本管理 · 上游 user-service</div>
+        <div class="mw-body">
+          <div style="color: var(--warning); font-weight: 600;">⚠ 当前配置待发布（相对 v3 变更 3 项，发布后生成 v4）</div>
+          <ul class="changelog">
+            <li>targets[1].weight <span class="from">50</span><span class="arrow">→</span><span class="to">70</span></li>
+            <li>retries <span class="from">2</span><span class="arrow">→</span><span class="to">3</span></li>
+            <li>timeout.connect <span class="from">60</span><span class="arrow">→</span><span class="to">30</span></li>
+          </ul>
+        </div>
+      </div>
+      <p class="mw-note">纯平台侧 diff（上次发布快照 vs 当前 DB 行），零网络请求。<b>不体现节点实况</b>——独立价值有限，推荐并入方案 A 的弹窗作为「平台侧变更」段。</p>
+    </div>
+    <div class="static-card">
+      <h3>方案 C · 集群级「发布预检」批量报告</h3>
+      <div class="entry">入口：集群卡片操作「发布预检」（与「漂移检测」并排）</div>
+      <div class="mini-window">
+        <div class="mw-head">发布预检 · demo-cls · 待发布资源 2 个</div>
+        <div class="mw-body">
+          <table class="matrix">
+            <thead><tr><th>资源</th><th>类型</th><th>节点覆盖</th><th>差异</th></tr></thead>
+            <tbody>
+              <tr><td class="path">user-service</td><td>上游</td><td>3/3 过时</td><td class="node diff">3 项</td></tr>
+              <tr><td class="path">/api/orders</td><td>路由</td><td>2/3 过时</td><td class="node diff">1 项</td></tr>
+            </tbody>
+          </table>
+          <div style="font-size: 12px; color: var(--muted);">另发现：节点 192.168.0.15 落后于上次发布（上游 user-service）</div>
+        </div>
+      </div>
+      <p class="mw-note">发布前的批量总览。单资源细节点击行下钻（复用方案 A 弹窗）。与「漂移检测」入口职责接近，建议后续独立立项，非本批范围。</p>
+    </div>
+  </div>
+
+  <!-- ── 决策点 ── -->
+  <h2 class="sec-title">待你拍板的决策点（已附推荐）</h2>
+  <table class="decide">
+    <thead><tr><th style="width: 6%;">#</th><th style="width: 22%;">决策点</th><th style="width: 44%;">选项</th><th>推荐</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>D1</td>
+        <td>一致的字段要不要显示</td>
+        <td class="opt">a. 全量显示（含一致）&nbsp;&nbsp;b. 只显差异&nbsp;&nbsp;c. 只显差异 + 「显示一致字段」开关（chip 标注一致计数，本页演示即 c）</td>
+        <td class="rec">c — 差异是主角；一致字段按需展开审计</td>
+      </tr>
+      <tr>
+        <td>D2</td>
+        <td>按钮出现在哪些状态</td>
+        <td class="opt">a. 仅「待发布」&nbsp;&nbsp;b. 待发布 + 发布未完全生效（⚠ partial 时各节点落后程度正是该报告最擅长回答的）&nbsp;&nbsp;c. 所有已发布资源（含已发布状态也可看）</td>
+        <td class="rec">b — partial 与待发布是同一痛点两阶段</td>
+      </tr>
+      <tr>
+        <td>D3</td>
+        <td>容器形态</td>
+        <td class="opt">a. 居中弹窗（AppModal，与「漂移检测」同款家族，本页演示）&nbsp;&nbsp;b. 右侧抽屉（更适合边看列表边对比）</td>
+        <td class="rec">a — 与漂移检测弹窗同族，实现与认知成本低</td>
+      </tr>
+      <tr>
+        <td>D4</td>
+        <td>首批资源范围</td>
+        <td class="opt">a. 仅上游（你的例子）&nbsp;&nbsp;b. 上游 + 路由（高频两类先行）&nbsp;&nbsp;c. 全部 7 类（注册表驱动，一次到位但验收面大）</td>
+        <td class="rec">b — 机制按 7 类设计，实施分批</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="sec-sub">
+    实现要点（供评审，非本页范围）：复用 config-drift-detection 的采集/diff 机器（EdgeClient HTTP 腿、中继感知、to_thread 采集）；
+    「发布候选载荷」构造从各 publish 端点抽取为共享单点（发布与预览同源，杜绝两套口径）；
+    新增只读端点挂 router 级鉴权；前端新增独立按钮组件置于 PublishStatusTag 旁（不改 15 处消费的共享组件本体）。
+    按约定，方案确认后先出 openspec 需求文档再动代码。
+  </p>
+
+</div>
+<script>
+  function openPreview() { document.getElementById('overlay').classList.add('open') }
+  function closePreview() { document.getElementById('overlay').classList.remove('open') }
+  function toggleSame(show) {
+    document.querySelectorAll('.samewrow').forEach(function (tr) { tr.classList.toggle('hidden', !show) })
+    const label = document.querySelector('.toggle-line label')
+    label.textContent = show ? '显示一致字段（当前显示全部 10 个字段）' : '显示一致字段（当前隐藏 6 个一致字段）'
+  }
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closePreview() })
+</script>
+</body>
+</html>
