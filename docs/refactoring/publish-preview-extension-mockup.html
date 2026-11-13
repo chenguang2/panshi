@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>发布差异预览扩展到其余资源 — 方案演示页</title>
+<style>
+  :root {
+    --bg: oklch(97% 0.005 250);
+    --surface: oklch(100% 0 0);
+    --fg: oklch(20% 0.02 240);
+    --muted: oklch(50% 0.018 240);
+    --border: oklch(88% 0.008 240);
+    --border-strong: oklch(74% 0.02 240);
+    --accent: oklch(56% 0.16 210);
+    --accent-bg: oklch(56% 0.16 210 / 10%);
+    --mono: ui-monospace, "SF Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 14px; line-height: 1.6; }
+  .page { max-width: 1180px; margin: 0 auto; padding: 24px 28px 80px; display: flex; flex-direction: column; gap: 16px; }
+  h1 { font-size: 20px; margin: 0; }
+  h2.sec { font-size: 15px; margin: 8px 0 0; }
+  .desc { color: var(--muted); font-size: 13px; max-width: 820px; }
+  .note { font-size: 12px; color: var(--accent); background: var(--accent-bg);
+    border: 1px solid oklch(56% 0.16 210 / 28%); border-radius: 6px; padding: 8px 12px; display: inline-block; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
+  .card h3 { margin: 0 0 6px; font-size: 14px; }
+  .badge { font-size: 11px; background: var(--accent); color: #fff; padding: 1px 8px; border-radius: 10px; }
+  .badge.gray { background: var(--muted); }
+  .plans { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .plan { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; position: relative; }
+  .plan.recommended { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .plan .badge { position: absolute; top: -10px; right: 12px; }
+  .plan ul { margin: 6px 0 0; padding-left: 16px; font-size: 12px; color: var(--muted); line-height: 1.7; }
+  .plan ul b { color: var(--fg); }
+
+  /* PublishStatusTag 真实样式 */
+  .ps-tag { display: inline-block; font-size: 12px; line-height: 18px; padding: 0 6px; border-radius: 3px; font-weight: 500; }
+  .ps-pending { border: 1px solid #fa8c16; color: #fa8c16; background: #fff7e6; }
+  .ps-partial { border: 1px solid #fa541c; color: #fa541c; background: #fff2e8; }
+  .ps-published { border: 1px solid #52c41a; color: #52c41a; background: #f6ffed; }
+  .ps-unpublished { border: 1px solid #d9d9d9; color: #999; background: #fafafa; }
+  .ps-date { font-size: 11px; color: #666; margin-left: 4px; }
+  .status-cell-flex { display: inline-flex; align-items: center; white-space: nowrap; }
+  .diff-btn { display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px; margin-left: 5px; padding: 0; flex: 0 0 auto;
+    border: 1px solid var(--border-strong); border-radius: 4px; background: var(--surface);
+    color: var(--muted); font-size: 10px; cursor: pointer; }
+  .diff-btn:hover { border-color: #fa8c16; color: #fa8c16; background: #fff7e6; }
+
+  table.sim { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--surface); }
+  table.sim th { text-align: left; padding: 8px 12px; background: var(--bg); border-bottom: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+  table.sim td { padding: 9px 12px; border-bottom: 1px solid var(--border); }
+  table.sim tr:last-child td { border-bottom: none; }
+  .sim-wrap { border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+
+  /* SSL 卡片（对齐 SslCertCard 真实解剖：头部 meta 行 + 主体字段） */
+  .ssl-card { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid #52c41a;
+    border-radius: 8px; padding: 12px 14px; width: 360px; }
+  .ssl-card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .ssl-card-title { font-weight: 700; font-size: 14px; }
+  .ssl-meta { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  .ssl-field { font-size: 12.5px; color: var(--muted); padding: 3px 0; }
+  .ssl-field b { color: var(--fg); font-weight: 600; }
+  .ssl-actions { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); display: flex; gap: 8px; }
+  .btn { border: 1px solid var(--border); background: var(--surface); border-radius: 6px; padding: 4px 12px; font-size: 12px; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .variants { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .variant-label { font-size: 12px; color: var(--accent); font-weight: 600; margin-bottom: 6px; }
+
+  table.decide { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; font-size: 13px; }
+  table.decide th { text-align: left; padding: 9px 14px; background: var(--bg); border-bottom: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+  table.decide td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  table.decide tr:last-child td { border-bottom: none; }
+  .opt { color: var(--muted); font-size: 12px; }
+  .rec { color: var(--accent); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>发布差异预览扩展 — 其余 5 类资源</h1>
+  <p class="desc">机制已就绪（注册表驱动，无新端点/新弹窗）：每类 = 注册表加 build_candidate + publish 端点同源改调 + 入口接 ▾ 按钮。演示页只展示有设计差异的部分（SSL 卡片入口、四层/DNS），表格类与已上线的上游形态完全一致。</p>
+
+  <!-- 批次方案 -->
+  <div class="plans">
+    <div class="plan recommended">
+      <span class="badge">推荐 · 分两批</span>
+      <h3 style="margin:0; font-size:14px;">批 1：表格同构类（插件组 / 全局规则 / 插件元数据）</h3>
+      <ul>
+        <li>3 类型 × 6 入口（独立页 + 统一管理 Tab），UI 与上游/路由<b>完全同构</b>：发布状态列旁加 ▾</li>
+        <li>builder 抽取 3 处 + publish 端点同源改调 + 守卫扩展</li>
+        <li>纯机械扩展，一个变更内完成</li>
+      </ul>
+    </div>
+    <div class="plan">
+      <h3 style="margin:0; font-size:14px;">批 2：特殊形态类（SSL 证书 / 四层代理 / DNS 代理）</h3>
+      <ul>
+        <li><b>SSL</b>：卡片 UI（非表格）、无 partial 态、私钥脱敏已就绪——入口形态见下方拍板点</li>
+        <li><b>四层/DNS</b>：同一张表、两种发布载荷形态（TCP/DNS），注册表需双键共享快照类型</li>
+        <li>各自有设计点，值得单独一小批</li>
+      </ul>
+    </div>
+    <div class="plan">
+      <h3 style="margin:0; font-size:14px;">备选 · 一次全量 5 类</h3>
+      <ul>
+        <li>一个变更全做：5 builder + 6 publish 端点 + ~10 入口 + SSL 卡片设计</li>
+        <li>回归与验收战线长；SSL 入口形态未拍板即捆绑（裁剪过广捆绑风险）</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 批 1 表格同构示例 -->
+  <h2 class="sec">批 1 表格形态示例（与已上线的上游完全同构，仅示例一行）</h2>
+  <div class="sim-wrap">
+    <table class="sim">
+      <thead><tr><th style="width:24%">资源</th><th style="width:30%">发布状态（▾ 为新增）</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>插件组 global_comm（PluginConfigList + 集群 Tab）</td>
+          <td><span class="status-cell-flex"><span class="ps-tag ps-partial">⚠ v3 · 发布未完全生效</span><button class="diff-btn">▾</button></span></td>
+          <td class="desc">空基线旁路告警语义已在 diff 机器内（{} → 非空 报差异）</td>
+        </tr>
+        <tr>
+          <td>全局规则 traceid（GlobalRuleList + 集群 Tab）</td>
+          <td><span class="status-cell-flex"><span class="ps-tag ps-pending">待发布</span><button class="diff-btn">▾</button></span></td>
+          <td class="desc">作用于全部路由，风险最高的一条，最值得预览</td>
+        </tr>
+        <tr>
+          <td>插件元数据 log_process（PluginMetadataList + 统一管理 Tab）</td>
+          <td><span class="status-cell-flex"><span class="ps-tag ps-published">v2</span><span class="ps-date">2026/11/12 10:07:38</span></span></td>
+          <td class="desc">已发布态无按钮；Edge 存储展平信封由 normalize 钩子处理（已就绪）</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- SSL 卡片入口形态 -->
+  <h2 class="sec">批 2 拍板点 ①：SSL 服务器证书卡片的入口形态（卡片 UI，非表格）</h2>
+  <div class="variants">
+    <div class="card">
+      <div class="variant-label">形态 a（推荐）· 状态标签旁小三角 — 与全站按钮语义一致</div>
+      <div class="ssl-card">
+        <div class="ssl-card-head">
+          <span class="ssl-card-title">gateway-ssl</span>
+          <span class="ssl-meta">
+            <span class="status-cell-flex">
+              <span class="ps-tag ps-pending">待发布</span>
+              <button class="diff-btn" title="查看与 Edge 节点的差异">▾</button>
+            </span>
+          </span>
+        </div>
+        <div class="ssl-field">类型：<b>服务器证书</b> · 签发 CA：<b>panyh-root-ca</b></div>
+        <div class="ssl-field">SNI：<b>*.example.com</b></div>
+        <div class="ssl-field">有效期至：<b>2027-11-13</b></div>
+        <div class="ssl-actions">
+          <button class="btn">发布</button>
+          <button class="btn">下载</button>
+          <button class="btn">编辑</button>
+        </div>
+      </div>
+      <p class="desc" style="margin-top:8px">卡片头 meta 行「待发布」旁小三角，与表格行完全同款；私钥脱敏走注册表 mask（已就绪）。SSL 无 partial 态 → 按钮仅「待发布」显示。</p>
+    </div>
+    <div class="card">
+      <div class="variant-label">形态 b · 操作区加「差异预览」文字按钮</div>
+      <div class="ssl-card">
+        <div class="ssl-card-head">
+          <span class="ssl-card-title">gateway-ssl</span>
+          <span class="ssl-meta"><span class="ps-tag ps-pending">待发布</span></span>
+        </div>
+        <div class="ssl-field">类型：<b>服务器证书</b> · 签发 CA：<b>panyh-root-ca</b></div>
+        <div class="ssl-field">SNI：<b>*.example.com</b></div>
+        <div class="ssl-actions">
+          <button class="btn">发布</button>
+          <button class="btn primary" style="border-color:#fa8c16; background:#fff7e6; color:#fa8c16;">差异预览</button>
+          <button class="btn">下载</button>
+          <button class="btn">编辑</button>
+        </div>
+      </div>
+      <p class="desc" style="margin-top:8px">操作区显式按钮更易发现，但与全站 ▾ 语义不一致，且待发布态操作区多一个常驻按钮。</p>
+    </div>
+  </div>
+
+  <!-- 四层/DNS -->
+  <h2 class="sec">批 2 拍板点 ②：四层代理 / DNS 代理（独立页列表行，与上游同款 ▾）</h2>
+  <div class="sim-wrap">
+    <table class="sim">
+      <thead><tr><th style="width:26%">资源</th><th style="width:30%">发布状态（▾ 为新增）</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>四层代理 8113（StreamProxyList）</td>
+          <td><span class="status-cell-flex"><span class="ps-tag ps-partial">⚠ v2 · 发布未完全生效</span><button class="diff-btn">▾</button></span></td>
+          <td class="desc">TCP 载荷形态 builder</td>
+        </tr>
+        <tr>
+          <td>DNS 代理 dns-1（DnsUdpProxyList）</td>
+          <td><span class="status-cell-flex"><span class="ps-tag ps-pending">待发布</span><button class="diff-btn">▾</button></span></td>
+          <td class="desc">DNS 载荷形态 builder（含 dns_config/checks 全量语义，#18）</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="desc">四层/DNS 共用 StreamProxy 表与 stream_proxy 快照类型（发布留痕同一类型），但两种发布载荷形态不同——预览注册表将设 stream_proxy / dns_proxy 双键，各挂各的 builder（与发布同源），采集共享同一 edge_key。查看抽屉（StreamProxyViewDrawer）内的状态标签不加按钮（拍板点：抽屉不加，列表行为主入口，避免双入口维护）。</p>
+
+  <!-- 决策点 -->
+  <h2 class="sec">待你拍板</h2>
+  <table class="decide">
+    <thead><tr><th style="width:6%">#</th><th style="width:24%">决策点</th><th style="width:42%">选项</th><th>推荐</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>D1</td>
+        <td>批次划分</td>
+        <td class="opt">a. 两批（批1 表格同构 3 类 → 批2 SSL/四层/DNS）　b. 一次全量 5 类</td>
+        <td class="rec">a</td>
+      </tr>
+      <tr>
+        <td>D2</td>
+        <td>SSL 卡片入口形态</td>
+        <td class="opt">a. 状态标签旁 ▾（全站同款）　b. 操作区「差异预览」按钮</td>
+        <td class="rec">a</td>
+      </tr>
+      <tr>
+        <td>D3</td>
+        <td>SSL 按钮显隐状态</td>
+        <td class="opt">SSL 域无 partial 态（既有设计）→ 仅「待发布」显示按钮</td>
+        <td class="rec">仅待发布</td>
+      </tr>
+      <tr>
+        <td>D4</td>
+        <td>四层/DNS 查看抽屉</td>
+        <td class="opt">a. 仅列表行接入（抽屉标签不加按钮）　b. 抽屉内也加</td>
+        <td class="rec">a — 列表为主入口，避免双入口维护</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="desc">实施提示（供评审）：每类 builder 抽取后 publish 端点同源改调（守卫测试逐域扩展，#18 精神）；批 1/批 2 各自全量 pytest + vitest 收口 + 真实页面四类入口验收截图；改前确认各列表端点已输出 pending_publish/last_publish_status（插件组/全局规则/插件元数据/SSL/四层 DNS 均已接线，无需后端列表改动）。</p>
+</div>
+</body>
+</html>
