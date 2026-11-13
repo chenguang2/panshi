@@ -62,7 +62,9 @@
   padding: 2px 0;
 }
 .menu-item-stack span {
-  font-size: 13px;
+  /* 主文案 600（方案 A）：动作词是扫读锚点，600 是 14px 中文的清晰上限；解释行保持 11px 灰 */
+  font-size: 14px;
+  font-weight: 600;
 }
 .menu-item-stack small {
   color: var(--muted);

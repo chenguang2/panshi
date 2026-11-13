@@ -974,18 +974,23 @@ select.form-input {
 .ant-dropdown-menu-item {
   color: var(--fg) !important;
   border-radius: var(--radius-sm) !important;
-  font-size: 13px !important;
+  /* 菜单显著性分级（方案 A，2026-11-13）：基础 14px/500 建立动作锚点，hover 主文案转主题蓝（指针反馈） */
+  font-size: 14px !important;
+  font-weight: 500 !important;
   padding: 6px 12px !important;
   transition: background 0.15s !important;
 }
 .ant-dropdown-menu-item:hover {
   background: var(--bg) !important;
+  color: var(--accent) !important;
 }
 .ant-dropdown-menu-item-danger {
   color: var(--danger) !important;
+  font-weight: 600 !important;
 }
 .ant-dropdown-menu-item-danger:hover {
   background: oklch(55% 0.18 28 / 8%) !important;
+  color: var(--danger) !important;
 }
 
 /* ── Confirm Modal (Modal.confirm / Modal.warning) ── */
