@@ -40,8 +40,10 @@ The system SHALL provide a `ClusterUpstreams` component that renders the upstrea
 
 #### Scenario: 保存成功提示语义
 - **WHEN** 用户在集群内表单保存成功（新建/编辑/复制保存）
-- **THEN** toast SHALL 为「已保存。配置尚未发布，需发布后才会在 Edge 节点生效」（与全局表单统一，SHALL NOT 使用「上游已添加」等无发布语义文案）
-- **AND** SHALL 弹出与全局一致的「稍后/立即发布」引导
+- **THEN** 系统 SHALL NOT 弹出成功 toast（`message.success`）
+- **AND** 保存成功与「配置尚未发布」语义 SHALL 由随后的「稍后/立即发布」引导弹窗承担（标题「保存成功」，与全局表单一致）
+- **AND** SHALL NOT 使用「上游已添加」等无发布语义文案
+<!-- 2026-11-12 裁决（save-guide-single-feedback）：单通道，理由见 `save-feedback-single-channel`。 -->
 
 #### Scenario: 校验失败自动切换到首个出错 Tab
 - **WHEN** 用户在基础配置 Tab 点击保存且校验失败字段位于高级配置 Tab

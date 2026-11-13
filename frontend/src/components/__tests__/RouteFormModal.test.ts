@@ -278,29 +278,30 @@ describe('RouteFormModal.vue（组件级提交载荷）', () => {
     expect(mockApiPut).not.toHaveBeenCalled()
   })
 
-  // ── route-save-publish-guidance：保存 ≠ 生效（toast 统一 + 保存后发布引导） ──
-  const SAVED_TOAST = '已保存。配置尚未发布，需发布后才会在 Edge 节点生效'
-
-  it('G1: 新建保存 toast 统一为「已保存。配置尚未发布…」（不再「路由已创建」）', async () => {
+  // ── 保存 ≠ 生效（保存后发布引导）＋ save-guide-single-feedback：成功反馈单通道 ──
+  it('G1: 新建保存不弹 toast——成功与「尚未发布」语义只由引导弹窗承担', async () => {
     const { message } = await import('ant-design-vue')
     const w = await mountModal()
     fillBasics(w.vm)
     await submit(w)
 
-    expect(message.success).toHaveBeenCalledWith(SAVED_TOAST)
-    expect(vi.mocked(message.success).mock.calls.map((c) => String(c[0]))).not.toContain('路由已创建')
+    // 单通道：toast 恒在引导弹窗遮罩（z-index 2000）之下且 3 秒自动消失，不得再弹
+    expect(message.success).not.toHaveBeenCalled()
+    const overlayG1 = document.body.querySelector('.modal-overlay')
+    expect(overlayG1, '保存成功后必须弹出发布引导（唯一成功反馈）').toBeTruthy()
+    expect(overlayG1!.querySelector('.modal-header h2')?.textContent).toBe('保存成功')
+    expect(overlayG1!.textContent).toContain('配置尚未发布，发布后才会推送到 Edge 节点生效。')
     expect(w.emitted('saved')).toBeTruthy()
     expect(w.emitted('close')).toBeTruthy()
   })
 
-  it('G2: 编辑保存同款文案；引导「立即发布」emit publish-requested（含 currentVersion）', async () => {
+  it('G2: 编辑保存同样不弹 toast；引导「立即发布」emit publish-requested（含 currentVersion）', async () => {
     const { message } = await import('ant-design-vue')
     const w = await mountModal({ editingRoute: makeEditingRoute({ current_version: 5 }) })
     fillBasics(w.vm)
     await submit(w)
 
-    expect(message.success).toHaveBeenCalledWith(SAVED_TOAST)
-    expect(vi.mocked(message.success).mock.calls.map((c) => String(c[0]))).not.toContain('路由已更新')
+    expect(message.success).not.toHaveBeenCalled()
 
     const overlay = document.body.querySelector('.modal-overlay')
     expect(overlay, '保存成功后必须弹出发布引导').toBeTruthy()
@@ -323,14 +324,13 @@ describe('RouteFormModal.vue（组件级提交载荷）', () => {
     expect(document.body.querySelector('.modal-overlay'), '点立即发布后引导应关闭').toBeNull()
   })
 
-  it('G3: 复制保存同款文案（不再「路由已复制」），发布上下文指向新路由', async () => {
+  it('G3: 复制保存同样不弹 toast，发布上下文指向新路由', async () => {
     const { message } = await import('ant-design-vue')
     const w = await mountModal({ editingRoute: makeEditingRoute({ current_version: 5 }), copyingRoute: true })
     fillBasics(w.vm)
     await submit(w)
 
-    expect(message.success).toHaveBeenCalledWith(SAVED_TOAST)
-    expect(vi.mocked(message.success).mock.calls.map((c) => String(c[0]))).not.toContain('路由已复制')
+    expect(message.success).not.toHaveBeenCalled()
 
     bodyOverlayButtons()
       .find((b) => b.textContent === '立即发布')!

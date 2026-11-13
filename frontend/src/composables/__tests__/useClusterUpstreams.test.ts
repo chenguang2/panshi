@@ -564,16 +564,19 @@ describe('useClusterUpstreams 保存后发布引导 (3.1)', () => {
     c.upstreamForm.targets = [{ key: 1, host: '10.0.0.1', port: 80, weight: 100 }]
   }
 
-  it('编辑保存 toast 统一为「已保存。配置尚未发布…」并弹「稍后/立即发布」引导', async () => {
+  it('编辑保存不弹 toast（单通道），成功语义由「稍后/立即发布」引导承担', async () => {
     const cluster = makeCluster({ id: 1 })
     const c = await makeComposable(cluster)
     await prepareValidForm(c, cluster)
     c.editingUpstream.value = makeUpstream({ id: 5, name: 'svc' })
     mockApiPut.mockResolvedValue({ data: { id: 5, name: 'svc' } })
     await c.handleUpstreamSubmit()
-    expect(mockMessageSuccess).toHaveBeenCalledWith('已保存。配置尚未发布，需发布后才会在 Edge 节点生效')
+    // save-guide-single-feedback：toast 恒在引导弹窗遮罩（z-index 2000）之下且自动消失，不再弹
+    expect(mockMessageSuccess).not.toHaveBeenCalled()
     expect(mockShowOverlayModal).toHaveBeenCalledTimes(1)
     const opts = mockShowOverlayModal.mock.calls[0][0]
+    // 单通道后弹窗标题必须承担「已保存」语义（与路由域/上游表单一致，均为「保存成功」）
+    expect(opts.title).toBe('保存成功')
     expect(String(opts.content)).toContain('配置尚未发布，发布后才会推送到 Edge 节点生效')
     expect(opts.okText).toBe('立即发布')
     expect(opts.cancelText).toBe('稍后')
@@ -601,7 +604,7 @@ describe('useClusterUpstreams 保存后发布引导 (3.1)', () => {
     c.editingUpstream.value = null
     mockApiPost.mockResolvedValue({ data: { id: 9, name: 'svc' } })
     await c.handleUpstreamSubmit()
-    expect(mockMessageSuccess).toHaveBeenCalledWith('已保存。配置尚未发布，需发布后才会在 Edge 节点生效')
+    expect(mockMessageSuccess).not.toHaveBeenCalled()
     const opts = mockShowOverlayModal.mock.calls[0][0]
     await opts.onOk()
     expect(mockOpenPublishModal).toHaveBeenCalledWith('发布上游: svc', 1)

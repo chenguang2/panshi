@@ -804,8 +804,8 @@ export function useClusterUpstreams(options: {
         const res = await api.post(`/clusters/${currentClusterId.value}/upstreams`, submitData)
         savedRecord = (res?.data as UpstreamFull | undefined) ?? null
       }
-      // 保存成功文案统一（3.1）：不再用「上游已更新/已添加」，显式表达未发布语义
-      message.success('已保存。配置尚未发布，需发布后才会在 Edge 节点生效')
+      // save-guide-single-feedback：单通道——不再弹成功 toast（恒在引导弹窗遮罩之下且自动消失），
+      // 成功与「尚未发布」语义由下方引导弹窗承担
 
       // Refresh the cluster's upstream list so the table and re-edit show latest data
       upstreamModalVisible.value = false
@@ -827,7 +827,7 @@ export function useClusterUpstreams(options: {
   const showSavePublishGuide = (cluster: Cluster | null, record: UpstreamFull | null) => {
     if (!cluster || !record) return
     showOverlayModal({
-      title: '配置尚未发布',
+      title: '保存成功',
       content: '配置尚未发布，发布后才会推送到 Edge 节点生效。',
       okText: '立即发布',
       cancelText: '稍后',

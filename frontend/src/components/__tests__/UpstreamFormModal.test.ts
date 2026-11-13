@@ -551,7 +551,16 @@ describe('UpstreamFormModal.vue 保存后发布引导（3.1/3.2）', () => {
     closeAllOverlayModals()
   })
 
-  it('新建保存 toast 统一为「已保存。配置尚未发布，需发布后才会在 Edge 节点生效」', async () => {
+  // save-guide-single-feedback：保存成功只由引导弹窗呈现，不得再弹 toast（遮罩下 + 重复信息）
+  function expectSavedByGuideOnly() {
+    expect(message.success).not.toHaveBeenCalled()
+    const overlay = document.body.querySelector('.modal-overlay')
+    expect(overlay, '保存成功后必须弹发布引导（唯一成功反馈）').toBeTruthy()
+    expect(overlay!.querySelector('.modal-header h2')?.textContent).toBe('保存成功')
+    expect(overlay!.textContent).toContain('配置尚未发布，发布后才会推送到 Edge 节点生效。')
+  }
+
+  it('新建保存不弹 toast，成功语义由引导弹窗承担', async () => {
     const UpstreamFormModal = (await import('../UpstreamFormModal.vue')).default
     const wrapper = mount(UpstreamFormModal, {
       props: { visible: true, editingUpstream: null, clusters: MOCK_CLUSTERS },
@@ -559,10 +568,10 @@ describe('UpstreamFormModal.vue 保存后发布引导（3.1/3.2）', () => {
     })
     await fillAndSubmit(wrapper)
     await flushPromises()
-    expect(message.success).toHaveBeenCalledWith('已保存。配置尚未发布，需发布后才会在 Edge 节点生效')
+    expectSavedByGuideOnly()
   })
 
-  it('编辑保存同一文案（不再「上游已更新」）', async () => {
+  it('编辑保存同款（不弹 toast）', async () => {
     const UpstreamFormModal = (await import('../UpstreamFormModal.vue')).default
     const wrapper = mount(UpstreamFormModal, {
       props: { visible: true, editingUpstream: MOCK_UPSTREAM, clusters: MOCK_CLUSTERS },
@@ -571,10 +580,10 @@ describe('UpstreamFormModal.vue 保存后发布引导（3.1/3.2）', () => {
     await fillAndSubmit(wrapper, true)
     await flushPromises()
     expect(mockApiPut).toHaveBeenCalled()
-    expect(message.success).toHaveBeenCalledWith('已保存。配置尚未发布，需发布后才会在 Edge 节点生效')
+    expectSavedByGuideOnly()
   })
 
-  it('复制保存同一文案（不再「上游已创建」）', async () => {
+  it('复制保存同款（不弹 toast）', async () => {
     const UpstreamFormModal = (await import('../UpstreamFormModal.vue')).default
     const wrapper = mount(UpstreamFormModal, {
       props: { visible: true, editingUpstream: MOCK_UPSTREAM, copyingUpstream: true, clusters: MOCK_CLUSTERS },
@@ -583,7 +592,7 @@ describe('UpstreamFormModal.vue 保存后发布引导（3.1/3.2）', () => {
     await fillAndSubmit(wrapper)
     await flushPromises()
     expect(mockApiPost).toHaveBeenCalled()
-    expect(message.success).toHaveBeenCalledWith('已保存。配置尚未发布，需发布后才会在 Edge 节点生效')
+    expectSavedByGuideOnly()
   })
 
   it('保存成功后弹引导（稍后/立即发布）；「立即发布」emit publish-requested 并已关闭表单', async () => {

@@ -912,8 +912,8 @@ async function handleSubmit() {
       const res = await api.post(`/clusters/${clusterId}/upstreams`, submitData)
       savedId = res?.data?.id ?? null
     }
-    // 3.1：三处保存入口（新建/编辑/复制）统一文案——保存 ≠ 生效
-    message.success('已保存。配置尚未发布，需发布后才会在 Edge 节点生效')
+    // save-guide-single-feedback：单通道——不再弹成功 toast（恒在引导弹窗遮罩之下且自动消失），
+    // 成功与「尚未发布」语义由下方引导弹窗承担
     isDirty.value = false
     emit('saved')
     emit('close')

@@ -345,3 +345,36 @@ class TestFeaturesModule:
         st = cfg.stat()
         os.utime(cfg, (st.st_atime + 10, st.st_mtime + 10))
         assert feature_enabled("tools") is False
+
+
+class TestNoSaveFeedbackFeatureSwitch:
+    """save-feedback-single-channel 守卫：保存提示类配置不得进 features.yaml。
+
+    裁决（2026-11-12，openspec/specs/save-feedback-single-channel）：features.yaml 的键
+    全部是「部署级能力闸门」（一实例一取值）；而「是否弹保存后发布引导 / 是否显示 toast」
+    属个人交互偏好，且「配置尚未发布」是正确性提示——整体关闭会让用户重新误以为保存即
+    生效。故禁止在此文件出现任何保存提示类开关；未来若需可配，只允许作用于呈现形式且
+    必须保留持久形态（待行内「待发布」标签或集群级未发布变更条）。
+    """
+
+    # 命中任一即视为违规新键（保存提示/引导/toast/弹窗 相关）
+    _FORBIDDEN_PATTERN = (
+        "toast",
+        "save_publish",
+        "publish_guide",
+        "save_guide",
+        "save_feedback",
+        "publish_confirm",
+    )
+
+    def test_real_features_yaml_has_no_save_feedback_switches(self):
+        from app.core.features import _FEATURES_PATH
+
+        data = yaml.safe_load(Path(_FEATURES_PATH).read_text()) or {}
+        keys = list((data.get("features") or {}).keys())
+
+        offenders = [k for k in keys if any(p in k.lower() for p in self._FORBIDDEN_PATTERN)]
+        assert offenders == [], (
+            "features.yaml 不得包含保存提示类开关（属个人交互偏好，且『配置尚未发布』不可关闭）："
+            f"{offenders}；见 openspec/specs/save-feedback-single-channel"
+        )

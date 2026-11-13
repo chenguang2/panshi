@@ -515,10 +515,8 @@ async function handleSubmit() {
         plugins: form.plugins.map((p: any) => ({ plugin_name: p.plugin_name, config: p.config })),
       })
     }
-    // route-save-publish-guidance 1.1：三处保存入口（新建/编辑/复制）统一文案——保存 ≠ 生效。
-    // 文案与上游域（UpstreamFormModal 3.1）同一句式；不再用「路由已更新/已创建/已复制」，
-    // 且放在插件组写入之后：任何一步写库失败都不冒「已保存」
-    message.success('已保存。配置尚未发布，需发布后才会在 Edge 节点生效')
+    // save-guide-single-feedback：单通道——保存成功不再弹 toast（恒在引导弹窗遮罩 z-index 2000
+    // 之下且 3 秒自动消失，信息与弹窗重复）；成功与「尚未发布」语义统一由下方引导弹窗承担
     emit('saved')
     emit('close')
     announceUnpublished(cid, routeId)

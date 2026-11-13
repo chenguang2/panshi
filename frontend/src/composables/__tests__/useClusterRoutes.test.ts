@@ -527,9 +527,7 @@ describe('useClusterRoutes 校验失败反馈（与 RouteFormModal 同款：提�
 // ── route-save-publish-guidance 2.x：集群路由 Tab 保存 ≠ 生效 ──────────────────
 // 与独立页（RouteFormModal/RouteList）同款语义：toast 显式未发布 + 保存后「稍后/立即发布」引导，
 // 「立即发布」走集群内既有 publishByRecord（openPublishModal → executePublish），不新造发布实现。
-describe('useClusterRoutes 保存后发布引导（route-save-publish-guidance）', () => {
-  const SAVED_TOAST = '已保存。配置尚未发布，需发布后才会在 Edge 节点生效'
-
+describe('useClusterRoutes 保存后发布引导（route-save-publish-guidance / save-guide-single-feedback）', () => {
   function closeAllOverlayModals() {
     document.body.querySelectorAll('.modal-overlay').forEach((el) => el.remove())
   }
@@ -585,12 +583,15 @@ describe('useClusterRoutes 保存后发布引导（route-save-publish-guidance�
     return { cluster, composable }
   }
 
-  it('保存 toast 统一为「已保存。配置尚未发布…」（不再「路由已更新」）且刷新集群路由', async () => {
+  it('保存不弹 toast（单通道）——成功语义由引导弹窗承担，且刷新集群路由', async () => {
     const { message } = await import('ant-design-vue')
     const { cluster } = await submitRoute()
 
-    expect(message.success).toHaveBeenCalledWith(SAVED_TOAST)
-    expect(vi.mocked(message.success).mock.calls.map((c) => String(c[0]))).not.toContain('路由已更新')
+    // save-guide-single-feedback 2.1：toast 恒在引导弹窗遮罩之下且自动消失，保存成功只走弹窗
+    expect(message.success).not.toHaveBeenCalled()
+    const overlay = document.body.querySelector('.modal-overlay')
+    expect(overlay, '保存成功后必须弹发布引导').toBeTruthy()
+    expect(overlay!.querySelector('.modal-header h2')?.textContent).toBe('保存成功')
     // 「稍后」路径也要能看到「待发布」：保存后必须刷新该集群路由列表
     expect(mockApiGet).toHaveBeenCalledWith('/clusters/1/routes')
     expect(cluster.routes).toHaveLength(1)

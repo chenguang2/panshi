@@ -496,10 +496,8 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
         plugins: routeForm.plugins,
       })
 
-      // route-save-publish-guidance 2.1：保存 ≠ 生效——文案与独立页 / 上游域同一句式，
-      // 放在插件写入之后（任何一步写库失败都不冒「已保存」）
-      message.success('已保存。配置尚未发布，需发布后才会在 Edge 节点生效')
-
+      // save-guide-single-feedback：单通道——不再弹成功 toast（恒在引导弹窗遮罩之下且自动消失），
+      // 成功与「尚未发布」语义由下方 showSavePublishGuide 弹窗承担（仍放在插件写入之后）
       routeModalVisible.value = false
       const c = clusters.value.find((c) => c.id === currentClusterId.value)
       let savedRecord: Route | null = editingRoute.value ?? null
