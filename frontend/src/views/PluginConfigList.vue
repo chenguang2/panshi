@@ -57,12 +57,19 @@
             <div v-if="pc.description" class="pc-card-desc">{{ pc.description }}</div>
           </div>
           <div class="pc-card-meta">
-            <PublishStatusTag
-              :version="pc.current_version"
-              :published-at="pc.published_at"
-              :pending="pc.pending_publish === true"
-              :last-publish-status="pc.last_publish_status"
-            />
+            <span class="status-cell-flex">
+              <PublishStatusTag
+                :version="pc.current_version"
+                :published-at="pc.published_at"
+                :pending="pc.pending_publish === true"
+                :last-publish-status="pc.last_publish_status"
+              />
+              <PublishDiffButton
+                :pending="pc.pending_publish === true"
+                :last-publish-status="pc.last_publish_status"
+                @click="openPublishPreview(pc)"
+              />
+            </span>
           </div>
         </div>
         <div class="pc-card-plugins">
@@ -115,6 +122,15 @@
       @confirm="onPublishConfirm"
       @cancel="publishVisible = false"
     />
+
+    <PublishPreviewModal
+      v-model:open="previewVisible"
+      :cluster-id="previewRecord?.cluster_id ?? null"
+      :resource-type="'plugin_config'"
+      :resource-id="previewRecord?.id ?? null"
+      :resource-name="previewRecord?.name"
+      @publish="onPreviewPublish"
+    />
   </div>
 </template>
 
@@ -134,6 +150,8 @@ import PluginEntityFormModal from '@/components/PluginEntityFormModal.vue'
 import PluginConfigViewDrawer from '@/components/PluginConfigViewDrawer.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
+import PublishDiffButton from '@/components/PublishDiffButton.vue'
+import PublishPreviewModal from '@/components/PublishPreviewModal.vue'
 import {
   executePublish,
   showDeleteConfirm,
@@ -318,6 +336,21 @@ function publishConfig(pc: any) {
   publishClusterId.value = pc.cluster_id
   publishRefreshFn.value = loadConfigs
   publishVisible.value = true
+}
+
+// 发布差异预览（publish-diff-preview-batch1）：弹窗自持拉取；「去发布」接既有发布流程
+const previewVisible = ref(false)
+const previewRecord = ref<any | null>(null)
+
+function openPublishPreview(pc: any) {
+  previewRecord.value = pc
+  previewVisible.value = true
+}
+
+function onPreviewPublish() {
+  const pc = previewRecord.value
+  previewVisible.value = false
+  if (pc) publishConfig(pc)
 }
 
 async function onPublishConfirm(nodeIds: number[]) {

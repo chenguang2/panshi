@@ -20,6 +20,8 @@ vi.mock('vue-router', () => ({
 // message 仅用于错误 toast 断言；模板无 antd 组件（弹窗组件全部 stub），可整模块 mock
 vi.mock('ant-design-vue', () => ({
   message: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() },
+  // AppModal（PublishPreviewModal 挂载，batch1）经 Modal 渲染：给可渲染桩，open=false 不产出内容
+  Modal: { template: '<div v-if="open"><slot /></div>', props: ['open'] },
 }))
 
 // 删除确认 mock：断言 3.2 extraWarning 与 5.1 节点全量取数（不渲染真实确认弹窗）

@@ -27,6 +27,9 @@ def _check_publish_uses_shared_candidate(filepath: str, func_name: str, convert_
 
 UPSTREAMS = "app/api/v1/cluster_upstreams.py"
 ROUTES = "app/api/v1/cluster_routes.py"
+PLUGIN_CONFIGS = "app/api/v1/cluster_plugin_configs.py"
+GLOBAL_RULES = "app/api/v1/cluster_global_rules.py"
+PLUGIN_METADATA = "app/api/v1/cluster_plugin_metadata.py"
 
 
 class TestPublishCandidateSingleSource:
@@ -36,3 +39,14 @@ class TestPublishCandidateSingleSource:
 
     def test_publish_route(self):
         _check_publish_uses_shared_candidate(ROUTES, "publish_route", "convert_route_to_edge_format")
+
+    def test_publish_plugin_config(self):
+        # 内联构造标记：edge_data = {"desc": ...} 字典字面量
+        _check_publish_uses_shared_candidate(PLUGIN_CONFIGS, "publish_plugin_config", 'edge_data = {"desc"')
+
+    def test_publish_global_rule(self):
+        _check_publish_uses_shared_candidate(GLOBAL_RULES, "publish_global_rule", 'edge_data = {"desc"')
+
+    def test_publish_plugin_metadata(self):
+        # 内联构造标记：edge_data 直接赋值为解析后的 config 本体
+        _check_publish_uses_shared_candidate(PLUGIN_METADATA, "publish_plugin_metadata", "edge_data = plugin_config")

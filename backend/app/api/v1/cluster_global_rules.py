@@ -15,6 +15,7 @@ from app.schemas.cluster import (
 )
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 from app.services import edge_sync
+from app.services import publish_preview
 from app.core.deps import require_permission
 
 router = APIRouter(prefix="/clusters", tags=["clusters"], dependencies=[Depends(require_permission('clusters'))])
@@ -113,10 +114,9 @@ async def delete_global_rule(cluster_id: int, rule_id: int, body: DeleteClusterR
 @router.post("/{cluster_id}/global_rules/{rule_id}/publish")
 async def publish_global_rule(cluster_id: int, rule_id: int, req: Optional[PublishRequest] = None, db: AsyncSession = Depends(get_db)):
     rule = await edge_sync.get_or_404(db, GlobalRule, id=rule_id, cluster_id=cluster_id, detail="全局规则不存在")
-    rule_plugins = json.loads(rule.plugins) if rule.plugins else None
 
-    config_data = {"id": rule.id, "edge_uuid": rule.edge_uuid, "name": rule.name, "description": rule.description, "plugins": rule_plugins}
-    edge_data = {"desc": rule.name, "plugins": rule_plugins or {}}
+    # 候选载荷与发布差异预览同源（publish-diff-preview）：守卫见 test_publish_candidate_single_source.py
+    config_data, edge_data = await publish_preview.build_candidate(db, "global_rule", rule)
 
     return await edge_sync.publish_resource(
         db, cluster_id=cluster_id, resource=rule, resource_type="global_rule",

@@ -56,12 +56,19 @@
           </div>
           <div class="gr-card-meta">
             <!-- 2.2：PublishStatusTag 四态单一表达，移除「badge + tag」双显 -->
-            <PublishStatusTag
-              :version="pc.current_version"
-              :published-at="pc.published_at"
-              :pending="pc.pending_publish === true"
-              :last-publish-status="pc.last_publish_status"
-            />
+            <span class="status-cell-flex">
+              <PublishStatusTag
+                :version="pc.current_version"
+                :published-at="pc.published_at"
+                :pending="pc.pending_publish === true"
+                :last-publish-status="pc.last_publish_status"
+              />
+              <PublishDiffButton
+                :pending="pc.pending_publish === true"
+                :last-publish-status="pc.last_publish_status"
+                @click="openPublishPreview(pc)"
+              />
+            </span>
           </div>
         </div>
         <div class="gr-card-plugins">
@@ -119,6 +126,15 @@
       @confirm="onPublishConfirm"
       @cancel="publishVisible = false"
     />
+
+    <PublishPreviewModal
+      v-model:open="previewVisible"
+      :cluster-id="previewRecord?.cluster_id ?? null"
+      :resource-type="'global_rule'"
+      :resource-id="previewRecord?.id ?? null"
+      :resource-name="previewRecord?.name"
+      @publish="onPreviewPublish"
+    />
   </div>
 </template>
 
@@ -138,6 +154,8 @@ import PluginEntityFormModal from '@/components/PluginEntityFormModal.vue'
 import GlobalRuleViewDrawer from '@/components/GlobalRuleViewDrawer.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
+import PublishDiffButton from '@/components/PublishDiffButton.vue'
+import PublishPreviewModal from '@/components/PublishPreviewModal.vue'
 import { executePublish, showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
 import { globalRuleDeleteWarning } from '@/composables/useClusterPluginEntity'
 import { getGroupColorStyle, getCardBorderStyle } from '@/composables/useGroupColors'
@@ -324,6 +342,21 @@ function publishRule(pc: any) {
   publishClusterId.value = pc.cluster_id
   publishRefreshFn.value = loadRules
   publishVisible.value = true
+}
+
+// 发布差异预览（publish-diff-preview-batch1）：弹窗自持拉取；「去发布」接既有发布流程
+const previewVisible = ref(false)
+const previewRecord = ref<any | null>(null)
+
+function openPublishPreview(pc: any) {
+  previewRecord.value = pc
+  previewVisible.value = true
+}
+
+function onPreviewPublish() {
+  const pc = previewRecord.value
+  previewVisible.value = false
+  if (pc) publishRule(pc)
 }
 
 async function onPublishConfirm(nodeIds: number[]) {

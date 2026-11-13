@@ -16,7 +16,7 @@ const props = defineProps<{
   open: boolean
   clusterId: number | null
   clusterName?: string
-  resourceType: 'upstream' | 'route'
+  resourceType: 'upstream' | 'route' | 'plugin_config' | 'global_rule' | 'plugin_metadata'
   resourceId: number | null
   resourceName?: string
 }>()
@@ -26,7 +26,13 @@ const emit = defineEmits<{
   (e: 'publish'): void
 }>()
 
-const RESOURCE_LABELS: Record<string, string> = { upstream: '上游', route: '路由' }
+const RESOURCE_LABELS: Record<string, string> = {
+  upstream: '上游',
+  route: '路由',
+  plugin_config: '插件组',
+  global_rule: '全局规则',
+  plugin_metadata: '插件元数据',
+}
 
 const result = ref<PublishPreviewResult | null>(null)
 const loading = ref(false)

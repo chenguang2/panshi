@@ -8,6 +8,7 @@ from app.core.database import get_db
 from app.models.cluster import PluginMetadata, ConfigVersion, Node
 from app.schemas.cluster import DeleteClusterRequest, PublishRequest
 from app.services import edge_sync
+from app.services import publish_preview
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 
 from app.core.deps import require_permission
@@ -184,9 +185,8 @@ async def publish_plugin_metadata(
 
     item = await edge_sync.get_or_404(db, PluginMetadata, cluster_id=cluster_id, plugin_name=plugin_name, detail="插件配置不存在")
 
-    plugin_config = json.loads(item.config_data) if item.config_data else {}
-    config_data = {"plugin_name": item.plugin_name, "config_data": plugin_config}
-    edge_data = plugin_config
+    # 候选载荷与发布差异预览同源（publish-diff-preview）：守卫见 test_publish_candidate_single_source.py
+    config_data, edge_data = await publish_preview.build_candidate(db, "plugin_metadata", item)
 
     return await edge_sync.publish_resource(
         db, cluster_id=cluster_id, resource=item, resource_type="plugin_metadata",

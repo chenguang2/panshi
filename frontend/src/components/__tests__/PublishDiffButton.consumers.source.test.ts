@@ -17,6 +17,12 @@ const ENTRY_FILES = [
   'src/views/RouteList.vue',
   'src/views/clusters/ClusterUpstreams.vue',
   'src/views/clusters/ClusterRoutes.vue',
+  'src/views/PluginConfigList.vue',
+  'src/views/GlobalRuleList.vue',
+  'src/views/PluginMetadataList.vue',
+  'src/views/clusters/ClusterPluginConfigs.vue',
+  'src/views/clusters/ClusterGlobalRules.vue',
+  'src/components/PluginMetadata.vue',
 ]
 
 const WIDTH_FILES = [

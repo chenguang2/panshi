@@ -21,12 +21,19 @@
           <strong class="pcc-title">{{ pc.name }}</strong>
           <div class="pcc-meta">
             <div class="pcc-status-row">
-              <PublishStatusTag
-                :version="pc.current_version"
-                :published-at="pc.published_at"
-                :pending="pc.pending_publish === true"
-                :last-publish-status="pc.last_publish_status"
-              />
+              <span class="status-cell-flex">
+                <PublishStatusTag
+                  :version="pc.current_version"
+                  :published-at="pc.published_at"
+                  :pending="pc.pending_publish === true"
+                  :last-publish-status="pc.last_publish_status"
+                />
+                <PublishDiffButton
+                  :pending="pc.pending_publish === true"
+                  :last-publish-status="pc.last_publish_status"
+                  @click.stop="openPublishPreview(pc)"
+                />
+              </span>
             </div>
           </div>
         </div>
@@ -116,6 +123,16 @@
       @published="onVersionPublished"
       @publish-requested="handleVmPublishRequested"
     />
+
+    <!-- 发布差异预览（publish-diff-preview-batch1）：自持拉取；「去发布」接既有发布流程 -->
+    <PublishPreviewModal
+      v-model:open="previewVisible"
+      :cluster-id="props.cluster.id"
+      :resource-type="'plugin_config'"
+      :resource-id="previewRecord?.id ?? null"
+      :resource-name="previewRecord?.name"
+      @publish="onPreviewPublish"
+    />
   </div>
 </template>
 
@@ -133,6 +150,8 @@ import { useClusterPluginConfigs } from '@/composables/useClusterPluginConfigs'
 import type { VersionModalState } from '@/composables/useClusterPluginConfigs'
 import { formatDate } from '@/utils/format'
 import PublishStatusTag from '@/components/PublishStatusTag.vue'
+import PublishDiffButton from '@/components/PublishDiffButton.vue'
+import PublishPreviewModal from '@/components/PublishPreviewModal.vue'
 
 const props = defineProps<{
   cluster: Cluster
@@ -212,6 +231,21 @@ const loadError = computed(() => props.cluster.pluginConfigsLoadError || '')
 
 function retryLoad() {
   return loadPluginConfigs(props.cluster)
+}
+
+// 发布差异预览（publish-diff-preview-batch1）：弹窗自持拉取；「去发布」接既有发布流程
+const previewVisible = ref(false)
+const previewRecord = ref<any | null>(null)
+
+function openPublishPreview(pc: any) {
+  previewRecord.value = pc
+  previewVisible.value = true
+}
+
+function onPreviewPublish() {
+  const pc = previewRecord.value
+  previewVisible.value = false
+  if (pc) void publishPluginConfig(props.cluster, pc)
 }
 
 function onVersionPublished() {

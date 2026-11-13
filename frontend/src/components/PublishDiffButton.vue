@@ -17,7 +17,13 @@ const visible = computed(() => props.pending === true || props.lastPublishStatus
 </script>
 
 <template>
-  <button v-if="visible" class="diff-preview-btn" type="button" title="查看与 Edge 节点的差异" @click="$emit('click')">
+  <button
+    v-if="visible"
+    class="diff-preview-btn"
+    type="button"
+    title="查看与 Edge 节点的差异"
+    @click.stop="$emit('click', $event)"
+  >
     <span class="tri">▾</span>
   </button>
 </template>

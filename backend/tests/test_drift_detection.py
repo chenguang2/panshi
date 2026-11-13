@@ -73,7 +73,8 @@ async def _seed_world(isolated_session):
                           edge_payload=json.dumps(STREAM_BASELINE)),
             ConfigVersion(cluster_id=1, resource_type="plugin_metadata", resource_id=ids["pm"],
                           version=1, config=json.dumps(PM_BASELINE),
-                          edge_payload=json.dumps(PM_BASELINE)),
+                          # 真实快照形态（2026-11-13 真实库钉定）：实发载荷即内层 config，无信封
+                          edge_payload=json.dumps(PM_BASELINE["config_data"])),
             # 旧快照：无 edge_payload（基线缺失降级）
             ConfigVersion(cluster_id=1, resource_type="route", resource_id=ids["route_unpub"],
                           version=1, config=json.dumps({"name": "r-unpub"}),
@@ -383,3 +384,42 @@ class TestMultiNode:
             print("DEBUG items:", json.dumps(result["types"]["plugin_config"], ensure_ascii=False))
         assert items["ghost"]["status"] == "drift"
         assert "10.0.0.15" in (items["ghost"]["reason"] or "")
+
+    @pytest.mark.asyncio
+    async def test_plugin_metadata_bypass_on_one_node_is_drift(self, isolated_session):
+        """缺陷回归（2026-11-13）：plugin_metadata 实发载荷为内层 config（无信封），
+        历史版本 normalize 按假想信封解包成 {} → 多节点均匀性过滤把旁路差异吞成「一致」，
+        旁路检测在该类型上从未生效。真实形态下：单节点被旁路改 → 必须报漂移并归因。"""
+        async with isolated_session() as s:
+            s.add(Node(cluster_id=1, ip="10.0.0.14", service_port=80,
+                       management_port=9180, edge_path="/edge", status=1))
+            s.add(Node(cluster_id=1, ip="10.0.0.15", service_port=80,
+                       management_port=9180, edge_path="/edge", status=1))
+            pm = PluginMetadata(cluster_id=1, plugin_name="log_process",
+                                config_data='{"formats": ["${status}"]}')
+            s.add(pm)
+            await s.flush()
+            s.add(ConfigVersion(
+                cluster_id=1, resource_type="plugin_metadata", resource_id=pm.id,
+                version=1,
+                config=json.dumps({"plugin_name": "log_process", "config_data": {"formats": ["${status}"]}}),
+                # 真实快照形态：实发载荷即内层 config
+                edge_payload=json.dumps({"formats": ["${status}"]}),
+            ))
+            await s.commit()
+
+        def _collect(cluster_id, ip, port, only_edge_keys=None):
+            entry = _entry("log_process", {"formats": ["${status}"]},
+                           key_prefix="/edge/plugin_metadata")
+            if ip == "10.0.0.15":
+                entry["value"]["formats"] = ["${query}"]  # 旁路修改
+            return _node_lists(pm_entries=_parse_entries([entry]))
+
+        with patch("app.services.drift_detection._collect_edge_lists_for_node",
+                   side_effect=_collect):
+            async with isolated_session() as s:
+                result = await detect_cluster_drift(s, 1)
+
+        pms = _by_name(result["types"], "plugin_metadata")
+        assert pms["log_process"]["status"] == "drift"
+        assert "10.0.0.15" in (pms["log_process"]["reason"] or "")

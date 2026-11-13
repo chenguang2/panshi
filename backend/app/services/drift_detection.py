@@ -49,11 +49,13 @@ def _identity(baseline: dict) -> dict:
 
 
 def _normalize_plugin_metadata(baseline: dict) -> dict:
-    """Edge 存储 plugin_metadata 时展平 {plugin_name, config_data} 信封：
-    实测存储形态 {id: 名字, **config_data 内容}。"""
-    inner = baseline.get("config_data")
-    normalized = dict(inner) if isinstance(inner, dict) else {}
-    return normalized
+    """实发载荷即内层 config（publish edge_data=config 解析本体；真实库快照钉定
+    2026-11-13：ps_config_version.edge_payload 无 {plugin_name, config_data} 信封）。
+    节点侧存储为 {id: 名字, **config} 展平形态，id/时间戳走白名单剔除——
+    identity 即与节点展平值对齐。历史版本曾按假想信封解包，导致多节点集群上
+    plugin_metadata 漂移恒被均匀性过滤吞掉（旁路检测从未生效），本钩子即缺陷修复。
+    """
+    return dict(baseline)
 
 
 def _normalize_ssl(baseline: dict) -> dict:

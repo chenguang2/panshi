@@ -15,6 +15,7 @@ from app.schemas.cluster import (
 )
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 from app.services import edge_sync
+from app.services import publish_preview
 from app.core.deps import require_permission
 
 router = APIRouter(prefix="/clusters", tags=["clusters"], dependencies=[Depends(require_permission('clusters'))])
@@ -161,12 +162,9 @@ async def get_plugin_config_references(cluster_id: int, config_id: int, db: Asyn
 @router.post("/{cluster_id}/plugin_configs/{config_id}/publish")
 async def publish_plugin_config(cluster_id: int, config_id: int, req: Optional[PublishRequest] = None, db: AsyncSession = Depends(get_db)):
     config = await edge_sync.get_or_404(db, PluginConfig, id=config_id, cluster_id=cluster_id, detail="插件组不存在")
-    upstream_plugins = json.loads(config.plugins) if config.plugins else None
 
-    config_data = {
-        "id": config.id, "edge_uuid": config.edge_uuid, "name": config.name,
-        "description": config.description, "plugins": upstream_plugins}
-    edge_data = {"desc": config.name, "plugins": upstream_plugins or {}}
+    # 候选载荷与发布差异预览同源（publish-diff-preview）：守卫见 test_publish_candidate_single_source.py
+    config_data, edge_data = await publish_preview.build_candidate(db, "plugin_config", config)
 
     return await edge_sync.publish_resource(
         db, cluster_id=cluster_id, resource=config, resource_type="plugin_config",

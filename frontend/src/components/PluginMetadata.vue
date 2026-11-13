@@ -43,12 +43,19 @@
             <div class="plugin-info">
               <div class="plugin-name">{{ item.plugin_name }}</div>
               <div class="plugin-right">
-                <PublishStatusTag
-                  :version="item.current_version"
-                  :published-at="item.published_at"
-                  :pending="item.pending_publish"
-                  :last-publish-status="item.last_publish_status"
-                />
+                <span class="status-cell-flex">
+                  <PublishStatusTag
+                    :version="item.current_version"
+                    :published-at="item.published_at"
+                    :pending="item.pending_publish"
+                    :last-publish-status="item.last_publish_status"
+                  />
+                  <PublishDiffButton
+                    :pending="item.pending_publish"
+                    :last-publish-status="item.last_publish_status"
+                    @click.stop="openPublishPreview(item)"
+                  />
+                </span>
               </div>
             </div>
             <div class="plugin-actions">
@@ -120,6 +127,16 @@
       @confirm="handlePublishConfirm"
       @cancel="handlePublishCancel"
     />
+
+    <!-- 发布差异预览（publish-diff-preview-batch1）：自持拉取；「去发布」接既有发布流程 -->
+    <PublishPreviewModal
+      v-model:open="previewVisible"
+      :cluster-id="clusterId"
+      :resource-type="'plugin_metadata'"
+      :resource-id="previewRecord?.id ?? null"
+      :resource-name="previewRecord?.plugin_name"
+      @publish="onPreviewPublish"
+    />
   </div>
 </template>
 
@@ -131,7 +148,9 @@ import api from '@/api'
 import PluginEditorDrawer from './PluginEditorDrawer.vue'
 import VersionManagementModal from './VersionManagementModal.vue'
 import PublishConfirmModal from './PublishConfirmModal.vue'
-import PublishStatusTag from './PublishStatusTag.vue'
+import PublishStatusTag from '@/components/PublishStatusTag.vue'
+import PublishDiffButton from '@/components/PublishDiffButton.vue'
+import PublishPreviewModal from '@/components/PublishPreviewModal.vue'
 import { formatDate } from '@/utils/format'
 import type { PluginMetadata } from '@/types'
 import { showDeleteConfirm, executePublish, executeDeleteWithProgress } from '@/composables/useClusterUtils'
@@ -395,6 +414,21 @@ const publishPlugin = async (item: ConfiguredPlugin) => {
     nodeIds,
     refreshFn: loadConfiguredPlugins,
   })
+}
+
+// 发布差异预览（publish-diff-preview-batch1）：弹窗自持拉取；「去发布」接既有发布流程
+const previewVisible = ref(false)
+const previewRecord = ref<ConfiguredPlugin | null>(null)
+
+function openPublishPreview(item: ConfiguredPlugin) {
+  previewRecord.value = item
+  previewVisible.value = true
+}
+
+function onPreviewPublish() {
+  const item = previewRecord.value
+  previewVisible.value = false
+  if (item) void publishPlugin(item)
 }
 
 const openVersionManagement = (item: ConfiguredPlugin) => {

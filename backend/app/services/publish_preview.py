@@ -19,7 +19,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.cluster import (
     ConfigVersion,
+    GlobalRule,
     Node,
+    PluginConfig,
+    PluginMetadata,
     Route,
     RoutePlugin,
     Upstream,
@@ -107,6 +110,31 @@ async def _build_route_candidate(db: AsyncSession, route: Route) -> tuple[dict, 
     return config_data, edge_data
 
 
+async def _build_plugin_metadata_candidate(db: AsyncSession, item: PluginMetadata) -> tuple[dict, Any]:
+    plugin_config = json.loads(item.config_data) if item.config_data else {}
+    config_data = {"plugin_name": item.plugin_name, "config_data": plugin_config}
+    edge_data = plugin_config
+    return config_data, edge_data
+
+
+async def _build_plugin_config_candidate(db: AsyncSession, config: PluginConfig) -> tuple[dict, Any]:
+    upstream_plugins = json.loads(config.plugins) if config.plugins else None
+
+    config_data = {
+        "id": config.id, "edge_uuid": config.edge_uuid, "name": config.name,
+        "description": config.description, "plugins": upstream_plugins}
+    edge_data = {"desc": config.name, "plugins": upstream_plugins or {}}
+    return config_data, edge_data
+
+
+async def _build_global_rule_candidate(db: AsyncSession, rule: GlobalRule) -> tuple[dict, Any]:
+    rule_plugins = json.loads(rule.plugins) if rule.plugins else None
+
+    config_data = {"id": rule.id, "edge_uuid": rule.edge_uuid, "name": rule.name, "description": rule.description, "plugins": rule_plugins}
+    edge_data = {"desc": rule.name, "plugins": rule_plugins or {}}
+    return config_data, edge_data
+
+
 # ── 类型注册表（引用漂移检测单一事实源 + 候选构造器）────────────────
 
 PUBLISH_PREVIEW_REGISTRY: dict = {
@@ -117,6 +145,18 @@ PUBLISH_PREVIEW_REGISTRY: dict = {
     "route": {
         **DRIFT_TYPE_REGISTRY["route"],
         "build_candidate": _build_route_candidate,
+    },
+    "plugin_config": {
+        **DRIFT_TYPE_REGISTRY["plugin_config"],
+        "build_candidate": _build_plugin_config_candidate,
+    },
+    "global_rule": {
+        **DRIFT_TYPE_REGISTRY["global_rule"],
+        "build_candidate": _build_global_rule_candidate,
+    },
+    "plugin_metadata": {
+        **DRIFT_TYPE_REGISTRY["plugin_metadata"],
+        "build_candidate": _build_plugin_metadata_candidate,
     },
 }
 

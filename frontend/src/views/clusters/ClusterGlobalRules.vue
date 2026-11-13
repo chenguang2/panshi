@@ -16,12 +16,19 @@
           <div class="pcc-meta">
             <div class="pcc-status-row">
               <!-- 2.3：四态单一表达（未发布/待发布/⚠ partial/已发布 vX+时间），与主页面同源 -->
-              <PublishStatusTag
-                :version="gr.current_version"
-                :published-at="gr.published_at"
-                :pending="gr.pending_publish === true"
-                :last-publish-status="gr.last_publish_status"
-              />
+              <span class="status-cell-flex">
+                <PublishStatusTag
+                  :version="gr.current_version"
+                  :published-at="gr.published_at"
+                  :pending="gr.pending_publish === true"
+                  :last-publish-status="gr.last_publish_status"
+                />
+                <PublishDiffButton
+                  :pending="gr.pending_publish === true"
+                  :last-publish-status="gr.last_publish_status"
+                  @click.stop="openPublishPreview(gr)"
+                />
+              </span>
             </div>
           </div>
         </div>
@@ -114,6 +121,16 @@
       @published="onVersionPublished"
       @publish-requested="handleVmPublishRequested"
     />
+
+    <!-- 发布差异预览（publish-diff-preview-batch1）：自持拉取；「去发布」接既有发布流程 -->
+    <PublishPreviewModal
+      v-model:open="previewVisible"
+      :cluster-id="props.cluster.id"
+      :resource-type="'global_rule'"
+      :resource-id="previewRecord?.id ?? null"
+      :resource-name="previewRecord?.name"
+      @publish="onPreviewPublish"
+    />
   </div>
 </template>
 
@@ -126,6 +143,8 @@ import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import { useClusterGlobalRules } from '@/composables/useClusterGlobalRules'
 import type { VersionModalState } from '@/composables/useClusterPluginConfigs'
 import PublishStatusTag from '@/components/PublishStatusTag.vue'
+import PublishDiffButton from '@/components/PublishDiffButton.vue'
+import PublishPreviewModal from '@/components/PublishPreviewModal.vue'
 
 const props = defineProps<{
   cluster: Cluster
@@ -219,6 +238,21 @@ const loadError = computed(() => props.cluster.globalRulesLoadError || '')
 
 function retryLoad() {
   return loadGlobalRules(props.cluster)
+}
+
+// 发布差异预览（publish-diff-preview-batch1）：弹窗自持拉取；「去发布」接既有发布流程
+const previewVisible = ref(false)
+const previewRecord = ref<any | null>(null)
+
+function openPublishPreview(gr: any) {
+  previewRecord.value = gr
+  previewVisible.value = true
+}
+
+function onPreviewPublish() {
+  const gr = previewRecord.value
+  previewVisible.value = false
+  if (gr) void publishGlobalRule(props.cluster, gr)
 }
 
 function onVersionPublished() {

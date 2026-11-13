@@ -17,7 +17,16 @@ from unittest.mock import patch
 import pytest
 from sqlalchemy import select
 
-from app.models.cluster import Cluster, ConfigVersion, Node, Upstream, UpstreamTarget
+from app.models.cluster import (
+    Cluster,
+    ConfigVersion,
+    GlobalRule,
+    Node,
+    PluginConfig,
+    PluginMetadata,
+    Upstream,
+    UpstreamTarget,
+)
 from app.services.drift_detection import _parse_entries
 from app.services.publish_preview import build_candidate, preview_publish_diff
 
@@ -293,8 +302,9 @@ class TestPreviewEndpoint:
         from app.main import app
         from tests.api_helpers import AuthedTestClient, isolated_app_lifespan
 
+        # SSL 证书为批 2 范围（spec 场景示例），当前未接入 → 400 明示
         with isolated_app_lifespan(), AuthedTestClient(app) as c:
-            resp = c.get("/api/v1/clusters/1/publish-preview/plugin_group/1")
+            resp = c.get("/api/v1/clusters/1/publish-preview/ssl/1")
         assert resp.status_code == 400
         assert "尚未接入" in resp.json()["detail"]
 
@@ -322,3 +332,137 @@ class TestPreviewEndpoint:
         with isolated_app_lifespan(), AuthedTestClient(app) as c:
             resp = c.get(f"/api/v1/clusters/{cluster_id}/publish-preview/upstream/999")
         assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_plugin_metadata_missing_404_by_id(self, isolated_session):
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from tests.api_helpers import AuthedTestClient, isolated_app_lifespan
+
+        async with isolated_session() as s:
+            cluster = Cluster(name="demo-cls-2")
+            s.add(cluster)
+            await s.commit()
+            cluster_id = cluster.id
+
+        with isolated_app_lifespan(), AuthedTestClient(app) as c:
+            resp = c.get(f"/api/v1/clusters/{cluster_id}/publish-preview/plugin_metadata/999")
+        assert resp.status_code == 404
+
+
+# ── 批 1 三类候选形态（publish-diff-preview-batch1，任务 2.1）────
+
+class TestBatch1CandidateShapes:
+    @pytest.mark.asyncio
+    async def test_plugin_config_candidate_diff(self, isolated_session):
+        """插件组：候选 {desc, plugins}；节点旧值 → plugins 路径差异 + platform_change 同路径。"""
+        async with isolated_session() as s:
+            s.add(Node(cluster_id=1, ip="10.0.0.13", service_port=80,
+                       management_port=9180, edge_path="/edge", status=1))
+            pc = PluginConfig(cluster_id=1, name="global_comm", edge_uuid="uu-pc-1",
+                              plugins='{"log_process": {"a": "1"}}')
+            s.add(pc)
+            await s.flush()
+            pc_id = pc.id
+            s.add(ConfigVersion(
+                cluster_id=1, resource_type="plugin_config", resource_id=pc_id,
+                version=1,
+                config=json.dumps({"desc": "global_comm", "plugins": {"log_process": {"a": "0"}}}),
+                edge_payload=json.dumps({"desc": "global_comm", "plugins": {"log_process": {"a": "0"}}}),
+            ))
+            await s.commit()
+
+        def _collect(cluster_id, ip, port, only_edge_keys=None):
+            entry = _entry("uu-pc-1", {"desc": "global_comm", "plugins": {"log_process": {"a": "0"}}})
+            return {"plugin_config": _parse_entries([entry])}
+
+        with patch("app.services.drift_detection._collect_edge_lists_for_node",
+                   side_effect=_collect):
+            async with isolated_session() as s:
+                result = await preview_publish_diff(
+                    s, cluster_id=1, resource_type="plugin_config", resource_id=pc_id)
+
+        assert result["name"] == "global_comm"
+        assert result["has_baseline"] is True
+        paths = {r["path"] for r in result["matrix"]["diff_rows"]}
+        assert "plugins.log_process.a" in paths
+        pc_changed = [c["path"] for c in result["platform_change"]["changed"]]
+        assert "plugins.log_process.a" in pc_changed
+        assert _node(result, "10.0.0.13")["status"] == "diff"
+
+    @pytest.mark.asyncio
+    async def test_global_rule_candidate_consistent(self, isolated_session):
+        """全局规则：候选与节点实况一致 → ok、无差异。"""
+        async with isolated_session() as s:
+            s.add(Node(cluster_id=1, ip="10.0.0.13", service_port=80,
+                       management_port=9180, edge_path="/edge", status=1))
+            gr = GlobalRule(cluster_id=1, name="traceid", edge_uuid="uu-gr-1",
+                            plugins='{"traceid": {"enable": true}}')
+            s.add(gr)
+            await s.flush()
+            gr_id = gr.id
+            s.add(ConfigVersion(
+                cluster_id=1, resource_type="global_rule", resource_id=gr_id,
+                version=1,
+                config=json.dumps({"desc": "traceid", "plugins": {"traceid": {"enable": True}}}),
+                edge_payload=json.dumps({"desc": "traceid", "plugins": {"traceid": {"enable": True}}}),
+            ))
+            await s.commit()
+
+        def _collect(cluster_id, ip, port, only_edge_keys=None):
+            entry = _entry("uu-gr-1", {"desc": "traceid", "plugins": {"traceid": {"enable": True}}})
+            return {"global_rule": _parse_entries([entry])}
+
+        with patch("app.services.drift_detection._collect_edge_lists_for_node",
+                   side_effect=_collect):
+            async with isolated_session() as s:
+                result = await preview_publish_diff(
+                    s, cluster_id=1, resource_type="global_rule", resource_id=gr_id)
+
+        assert result["name"] == "traceid"
+        assert result["summary"]["diff_count"] == 0
+        assert _node(result, "10.0.0.13")["status"] == "ok"
+
+    @pytest.mark.asyncio
+    async def test_plugin_metadata_flattened_envelope(self, isolated_session):
+        """插件元数据：Edge 展平信封（normalize 钩子）——候选内层 config 与节点展平值对比。"""
+        async with isolated_session() as s:
+            s.add(Node(cluster_id=1, ip="10.0.0.13", service_port=80,
+                       management_port=9180, edge_path="/edge", status=1))
+            s.add(Node(cluster_id=1, ip="10.0.0.15", service_port=80,
+                       management_port=9180, edge_path="/edge", status=1))
+            pm = PluginMetadata(cluster_id=1, plugin_name="log_process",
+                                config_data='{"formats": ["${status}"]}')
+            s.add(pm)
+            await s.flush()
+            pm_id = pm.id
+            s.add(ConfigVersion(
+                cluster_id=1, resource_type="plugin_metadata", resource_id=pm_id,
+                version=1,
+                config=json.dumps({"plugin_name": "log_process", "config_data": {"formats": ["${status}"]}}),
+                edge_payload=json.dumps({"formats": ["${status}"]}),
+            ))
+            await s.commit()
+
+        def _collect(cluster_id, ip, port, only_edge_keys=None):
+            # 真实抓形：{id: 名字, **config_data} 展平存储
+            value = {"formats": ["${status}"]}
+            if ip == "10.0.0.15":
+                value = {"formats": ["${query}"]}  # 该节点被旁路改过
+            entry = _entry("log_process", value)
+            return {"plugin_metadata": _parse_entries([entry])}
+
+        with patch("app.services.drift_detection._collect_edge_lists_for_node",
+                   side_effect=_collect):
+            async with isolated_session() as s:
+                result = await preview_publish_diff(
+                    s, cluster_id=1, resource_type="plugin_metadata", resource_id=pm_id)
+
+        assert result["name"] == "log_process"
+        assert _node(result, "10.0.0.13")["status"] == "ok"
+        assert _node(result, "10.0.0.15")["status"] == "diff"
+        paths = {r["path"] for r in result["matrix"]["diff_rows"]}
+        assert "formats[0]" in paths
+        row = _row(result["matrix"], "formats[0]")
+        assert row["candidate"] == "${status}"
+        assert row["values"]["10.0.0.15"] == "${query}"

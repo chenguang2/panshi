@@ -44,12 +44,19 @@
             <div class="pml-card-name">{{ item.plugin_name }}</div>
           </div>
           <div class="pml-card-meta">
-            <PublishStatusTag
-              :version="item.current_version"
-              :published-at="item.published_at"
-              :pending="item.pending_publish"
-              :last-publish-status="item.last_publish_status"
-            />
+            <span class="status-cell-flex">
+              <PublishStatusTag
+                :version="item.current_version"
+                :published-at="item.published_at"
+                :pending="item.pending_publish"
+                :last-publish-status="item.last_publish_status"
+              />
+              <PublishDiffButton
+                :pending="item.pending_publish"
+                :last-publish-status="item.last_publish_status"
+                @click="openPublishPreview(item)"
+              />
+            </span>
           </div>
         </div>
         <div class="pml-card-actions">
@@ -163,6 +170,15 @@
       @confirm="onPublishConfirm"
       @cancel="publishVisible = false"
     />
+
+    <PublishPreviewModal
+      v-model:open="previewVisible"
+      :cluster-id="previewRecord?.cluster_id ?? null"
+      :resource-type="'plugin_metadata'"
+      :resource-id="previewRecord?.id ?? null"
+      :resource-name="previewRecord?.plugin_name"
+      @publish="onPreviewPublish"
+    />
   </div>
 </template>
 
@@ -187,6 +203,8 @@ import PageHeader from '@/components/PageHeader.vue'
 import PluginEditorDrawer from '@/components/PluginEditorDrawer.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
+import PublishDiffButton from '@/components/PublishDiffButton.vue'
+import PublishPreviewModal from '@/components/PublishPreviewModal.vue'
 import { executePublish, showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
 import { showOverlayModal } from '@/composables/useOverlayModal'
 import { getGroupColorStyle, getCardBorderStyle } from '@/composables/useGroupColors'
@@ -434,6 +452,21 @@ function publishItem(item: any) {
   publishTitle.value = `发布插件元数据: ${item.plugin_name}`
   publishRefreshFn.value = loadItems
   publishVisible.value = true
+}
+
+// 发布差异预览（publish-diff-preview-batch1）：弹窗自持拉取；「去发布」接既有发布流程
+const previewVisible = ref(false)
+const previewRecord = ref<any | null>(null)
+
+function openPublishPreview(item: any) {
+  previewRecord.value = item
+  previewVisible.value = true
+}
+
+function onPreviewPublish() {
+  const item = previewRecord.value
+  previewVisible.value = false
+  if (item) publishItem(item)
 }
 
 async function onPublishConfirm(nodeIds: number[]) {
