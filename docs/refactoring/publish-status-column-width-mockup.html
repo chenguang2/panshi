@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>发布状态列宽调整 — 方案对照演示页</title>
+<style>
+  :root {
+    --bg: oklch(97% 0.005 250);
+    --surface: oklch(100% 0 0);
+    --fg: oklch(20% 0.02 240);
+    --muted: oklch(50% 0.018 240);
+    --border: oklch(88% 0.008 240);
+    --border-strong: oklch(74% 0.02 240);
+    --accent: oklch(56% 0.16 210);
+    --accent-bg: oklch(56% 0.16 210 / 10%);
+    --mono: ui-monospace, "SF Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 14px; line-height: 1.6; }
+  .page { max-width: 1180px; margin: 0 auto; padding: 24px 28px 80px; display: flex; flex-direction: column; gap: 16px; }
+  h1 { font-size: 20px; margin: 0; }
+  .desc { color: var(--muted); font-size: 13px; max-width: 780px; }
+  .note { font-size: 12px; color: var(--accent); background: var(--accent-bg);
+    border: 1px solid oklch(56% 0.16 210 / 28%); border-radius: 6px; padding: 8px 12px; display: inline-block; }
+
+  .plan-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .plan-card.recommended { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .pc-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--bg); }
+  .pc-head h2 { margin: 0; font-size: 15px; }
+  .badge { font-size: 11px; background: var(--accent); color: #fff; padding: 1px 8px; border-radius: 10px; }
+  .badge.gray { background: var(--muted); }
+  .pc-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+
+  /* ── 模拟 antd 表格（仅发布状态列局部）── */
+  .sim-table { border: 1px solid var(--border); border-radius: 6px; overflow: hidden; font-size: 13px; }
+  .sim-thead { display: flex; background: var(--bg); border-bottom: 1px solid var(--border); font-size: 12px; color: var(--muted); font-weight: 600; }
+  .sim-thead > div { padding: 8px 12px; }
+  .sim-row { display: flex; border-bottom: 1px solid var(--border); align-items: stretch; }
+  .sim-row:last-child { border-bottom: none; }
+  .c-name { width: 180px; padding: 9px 12px; border-right: 1px solid var(--border); }
+  .c-status { border-right: 1px solid var(--border); padding: 9px 12px; display: flex; align-items: center; }
+  .c-desc { flex: 1; padding: 9px 12px; color: var(--muted); font-size: 12px; }
+  .w140 { width: 140px; } .w160 { width: 160px; } .w176 { width: 176px; } .w200 { width: 200px; }
+  .nowrap { white-space: nowrap; }
+  .redline { outline: 1px dashed #fa541c; outline-offset: -1px; }
+  .clip-note { color: #fa541c; font-size: 11px; }
+
+  /* PublishStatusTag 真实样式（组件源码色） */
+  .ps-tag { display: inline-block; font-size: 12px; line-height: 18px; padding: 0 6px; border-radius: 3px; font-weight: 500; }
+  .ps-pending { border: 1px solid #fa8c16; color: #fa8c16; background: #fff7e6; }
+  .ps-partial { border: 1px solid #fa541c; color: #fa541c; background: #fff2e8; }
+  .ps-published { border: 1px solid #52c41a; color: #52c41a; background: #f6ffed; }
+  .ps-date { font-size: 11px; color: #666; margin-left: 4px; }
+  .publish-status { display: inline-flex; align-items: baseline; }
+
+  /* ▾ 按钮（真实尺寸 18px + margin 5px） */
+  .diff-btn { display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px; margin-left: 5px; padding: 0; flex: 0 0 auto;
+    border: 1px solid var(--border-strong); border-radius: 4px; background: var(--surface);
+    color: var(--muted); font-size: 10px; cursor: pointer; vertical-align: middle; }
+  .diff-btn:hover { border-color: #fa8c16; color: #fa8c16; background: #fff7e6; }
+
+  .cell-flex { display: inline-flex; align-items: center; gap: 0; max-width: 100%; }
+
+  table.compare { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; font-size: 13px; }
+  table.compare th { text-align: left; padding: 9px 14px; background: var(--bg); border-bottom: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+  table.compare td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  table.compare tr:last-child td { border-bottom: none; }
+  .rec { color: var(--accent); font-weight: 600; }
+  .con { color: #fa541c; }
+  .pro { color: #52c41a; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>发布状态列宽调整 — 方案对照</h1>
+  <p class="desc">问题：统一管理上游 Tab 的发布状态列定宽 140px，partial 态标签「⚠ v15 · 发布未完全生效」约 170px，▾ 按钮被裁切不可见。路由 Tab（140px）与路由独立页（160px）存在同款隐患。</p>
+  <p class="note">改动范围（已按约定先行圈定）：仅发布状态列的列宽/单元格布局/（可选）标签文案；名称、目标节点、描述、操作列与各弹窗一律不动。</p>
+
+  <!-- 现状 -->
+  <div class="plan-card">
+    <div class="pc-head"><h2>现状复现（上游 Tab · width: 140）</h2><span class="badge gray">问题</span></div>
+    <div class="pc-body">
+      <div class="sim-table">
+        <div class="sim-thead"><div class="c-name">名称</div><div class="c-status w140 nowrap">发布状态</div><div class="c-desc">描述</div></div>
+        <div class="sim-row">
+          <div class="c-name">8111</div>
+          <div class="c-status w140 redline"><span class="ps-tag ps-partial nowrap">⚠ v15 · 发布未完全生效</span><button class="diff-btn" title="按钮被裁切，实际不可见">▾</button></div>
+          <div class="c-desc">▾ 按钮被定宽裁切（红框为 140px 列边界）</div>
+        </div>
+        <div class="sim-row">
+          <div class="c-name">8113</div>
+          <div class="c-status w140"><span class="ps-tag ps-pending">待发布</span><button class="diff-btn">▾</button></div>
+          <div class="c-desc">短标签正常（对照）</div>
+        </div>
+      </div>
+      <p class="desc" style="margin:0">同款隐患：路由 Tab（width 140）、路由独立页（width 160，partial 同样放不下）。缩放无济于事——所有 px 等比缩小，相对空间不变。</p>
+    </div>
+  </div>
+
+  <!-- 方案 A -->
+  <div class="plan-card recommended">
+    <div class="pc-head"><h2>方案 A · 四入口列宽统一 200px + 单元格 nowrap 防裁切</h2><span class="badge">推荐</span></div>
+    <div class="pc-body">
+      <div class="sim-table">
+        <div class="sim-thead"><div class="c-name">名称</div><div class="c-status w200 nowrap">发布状态</div><div class="c-desc">描述</div></div>
+        <div class="sim-row">
+          <div class="c-name">8111</div>
+          <div class="c-status w200"><span class="cell-flex nowrap"><span class="ps-tag ps-partial nowrap">⚠ v15 · 发布未完全生效</span><button class="diff-btn">▾</button></span></div>
+          <div class="c-desc">partial 全文案 + 按钮，同行完整可见</div>
+        </div>
+        <div class="sim-row">
+          <div class="c-name">8113</div>
+          <div class="c-status w200"><span class="cell-flex nowrap"><span class="ps-tag ps-pending">待发布</span><button class="diff-btn">▾</button></span></div>
+          <div class="c-desc">待发布 + 按钮</div>
+        </div>
+        <div class="sim-row">
+          <div class="c-name">50001-前端页面</div>
+          <div class="c-status w200"><span class="cell-flex nowrap"><span class="publish-status nowrap"><span class="ps-tag ps-published">v6</span><span class="ps-date">2026/10/19 13:46:35</span></span></span></div>
+          <div class="c-desc">已发布态（ps-date 超宽时省略号，悬浮 title 有全文，行为不变）</div>
+        </div>
+      </div>
+      <ul style="margin:0; padding-left: 18px; font-size: 13px; color: var(--muted);">
+        <li>四处列宽统一 140/160 → <b>200</b>（上游 Tab、路由 Tab、路由独立页；上游独立页本就 auto 不动）</li>
+        <li>状态单元格包一层 <span class="mono">nowrap</span> 容器：标签与按钮永不分离、永不裁切（未来新增更长状态也安全）</li>
+        <li>不动任何文案；已发布态的 ps-date 保留既有省略号语义（「定宽收敛防挤压操作列」的历史决策不被回退）</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 方案 B -->
+  <div class="plan-card">
+    <div class="pc-head"><h2>方案 B · 缩短 partial 文案为「⚠ v15 · 未完全生效」+ 列宽 176</h2><span class="badge gray">改全站文案</span></div>
+    <div class="pc-body">
+      <div class="sim-table">
+        <div class="sim-thead"><div class="c-name">名称</div><div class="c-status w176 nowrap">发布状态</div><div class="c-desc">描述</div></div>
+        <div class="sim-row">
+          <div class="c-name">8111</div>
+          <div class="c-status w176"><span class="cell-flex nowrap"><span class="ps-tag ps-partial nowrap" title="上次发布存在未完全生效节点，请重新发布">⚠ v15 · 未完全生效</span><button class="diff-btn">▾</button></span></div>
+          <div class="c-desc">tooltip 保留完整语义</div>
+        </div>
+        <div class="sim-row">
+          <div class="c-name">8113</div>
+          <div class="c-status w176"><span class="cell-flex nowrap"><span class="ps-tag ps-pending">待发布</span><button class="diff-btn">▾</button></span></div>
+          <div class="c-desc"></div>
+        </div>
+      </div>
+      <ul style="margin:0; padding-left: 18px; font-size: 13px; color: var(--muted);">
+        <li>PublishStatusTag 单点改文案，全站 6 处消费（上游/路由/插件元数据/全局规则/SSL 卡片/查看抽屉）同时变窄</li>
+        <li>用户可见文案变更需你拍板；既有测试断言「发布未完全生效」需同步反转（约定 #217 清单式收口）</li>
+        <li>可与 A 叠加（B 的 176 已含按钮空间，A 的 nowrap 防裁切依然建议保留）</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 方案 C -->
+  <div class="plan-card">
+    <div class="pc-head"><h2>方案 C · 预览按钮挪到操作列（状态列不动）</h2><span class="badge gray">不推荐</span></div>
+    <div class="pc-body">
+      <p class="desc" style="margin:0">彻底解耦列宽问题，但违背你已确认的「待发布旁边小三角」交互设计；且 Tab 操作列已有 6 个按钮（复制/编辑/删除/发布/版本管理），再塞一个更挤。列出仅为完整性。</p>
+    </div>
+  </div>
+
+  <!-- 对照表 -->
+  <table class="compare">
+    <thead><tr><th style="width:12%">方案</th><th style="width:30%">改动</th><th style="width:30%">优点</th><th>代价 / 风险</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="rec">A（推荐）</td>
+        <td>四处列宽 → 200 + 状态单元格 nowrap 容器</td>
+        <td class="pro">改动最小；按钮任何状态下可见；不动文案不碰共享组件断言</td>
+        <td>状态列宽 60px（描述列有余量，见截图）；无</td>
+      </tr>
+      <tr>
+        <td>B</td>
+        <td>partial 文案「发布未完全生效」→「未完全生效」+ 列宽 176</td>
+        <td class="pro">全站更窄更整齐；语义由 tooltip 承载</td>
+        <td class="con">全站用户可见文案变更；#217 断言反转清单；列表上警示语义弱化一档</td>
+      </tr>
+      <tr>
+        <td>C</td>
+        <td>按钮挪操作列</td>
+        <td>彻底解耦</td>
+        <td class="con">违背已确认交互设计；操作列更挤</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="desc">推荐：A 直接落地（低风险先行）；B 若你认可「未完全生效」措辞可作为第二批文案优化叠加。回复如「A」或「A+B」即可。</p>
+</div>
+</body>
+</html>

@@ -68,17 +68,19 @@
           </template>
 
           <template v-if="column.key === 'publish_status'">
-            <PublishStatusTag
-              :version="record.current_version"
-              :published-at="record.published_at"
-              :pending="record.pending_publish === true"
-              :last-publish-status="record.last_publish_status"
-            />
-            <PublishDiffButton
-              :pending="record.pending_publish === true"
-              :last-publish-status="record.last_publish_status"
-              @click="openPublishPreview(record)"
-            />
+            <span class="status-cell-flex">
+              <PublishStatusTag
+                :version="record.current_version"
+                :published-at="record.published_at"
+                :pending="record.pending_publish === true"
+                :last-publish-status="record.last_publish_status"
+              />
+              <PublishDiffButton
+                :pending="record.pending_publish === true"
+                :last-publish-status="record.last_publish_status"
+                @click="openPublishPreview(record)"
+              />
+            </span>
           </template>
 
           <template v-if="column.key === 'actions'">

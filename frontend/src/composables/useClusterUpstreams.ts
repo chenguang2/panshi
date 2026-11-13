@@ -363,7 +363,9 @@ export function useClusterUpstreams(options: {
     {
       title: '发布状态',
       key: 'publish_status',
-      width: 140,
+      // 200（发布状态列宽方案 A）：partial 态标签 ~170px + ▾ 预览按钮 23px，
+      // 定宽 140 曾把按钮裁没；配合 status-cell-flex（nowrap）防标签与按钮分离
+      width: 200,
       customRender: ({ record }: { record: Record<string, unknown> }) =>
         // 四态标签：pending_publish/last_publish_status 由后端列表响应推导（2.7，前端不做本地推导）
         h(PublishStatusTag, {

@@ -122,17 +122,19 @@
           </template>
 
           <template v-if="column.key === 'publish_status'">
-            <PublishStatusTag
-              :version="record.current_version"
-              :published-at="record.published_at"
-              :pending="record.pending_publish === true"
-              :last-publish-status="record.last_publish_status ?? null"
-            />
-            <PublishDiffButton
-              :pending="record.pending_publish === true"
-              :last-publish-status="record.last_publish_status ?? null"
-              @click="openPublishPreview(record)"
-            />
+            <span class="status-cell-flex">
+              <PublishStatusTag
+                :version="record.current_version"
+                :published-at="record.published_at"
+                :pending="record.pending_publish === true"
+                :last-publish-status="record.last_publish_status ?? null"
+              />
+              <PublishDiffButton
+                :pending="record.pending_publish === true"
+                :last-publish-status="record.last_publish_status ?? null"
+                @click="openPublishPreview(record)"
+              />
+            </span>
           </template>
 
           <template v-if="column.key === 'created_at'">
@@ -334,8 +336,9 @@ const columns = [
     title: '发布状态',
     key: 'publish_status',
     // 定宽收敛（用户反馈：auto 宽度挤压行内发布后的操作列）；已发布态的完整时间在 ps-date
-    // 省略号截断，悬浮 title 已带全量时间（PublishStatusTag 内建）
-    width: 160,
+    // 省略号截断，悬浮 title 已带全量时间（PublishStatusTag 内建）。
+    // 200（发布状态列宽方案 A）：partial 态标签 ~170px + ▾ 预览按钮 23px，160 曾裁掉按钮。
+    width: 200,
   },
   {
     title: '创建时间',

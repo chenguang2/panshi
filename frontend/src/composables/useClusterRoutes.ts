@@ -37,7 +37,8 @@ const allRouteColumns = [
   {
     title: '发布状态',
     key: 'publish_status',
-    width: 140,
+    // 200（发布状态列宽方案 A）：partial 态标签 ~170px + ▾ 预览按钮 23px，140 曾裁掉按钮
+    width: 200,
     customRender: ({ record }: { record: Route }) =>
       publishStatusRender(record.current_version ?? null, record.published_at ?? null),
   },

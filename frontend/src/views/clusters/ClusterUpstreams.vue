@@ -92,17 +92,19 @@
         </template>
         <!-- 发布状态（publish-diff-preview）：覆盖 composable 的 customRender，加差异预览入口 -->
         <template v-else-if="column.key === 'publish_status'">
-          <PublishStatusTag
-            :version="record.current_version"
-            :published-at="record.published_at"
-            :pending="record.pending_publish === true"
-            :last-publish-status="record.last_publish_status ?? null"
-          />
-          <PublishDiffButton
-            :pending="record.pending_publish === true"
-            :last-publish-status="record.last_publish_status ?? null"
-            @click="openPublishPreview(record)"
-          />
+          <span class="status-cell-flex">
+            <PublishStatusTag
+              :version="record.current_version"
+              :published-at="record.published_at"
+              :pending="record.pending_publish === true"
+              :last-publish-status="record.last_publish_status ?? null"
+            />
+            <PublishDiffButton
+              :pending="record.pending_publish === true"
+              :last-publish-status="record.last_publish_status ?? null"
+              @click="openPublishPreview(record)"
+            />
+          </span>
         </template>
         <template v-else-if="column.key === 'actions'">
           <template v-for="btnKey in upstreamActionsSelected" :key="btnKey">

@@ -120,17 +120,19 @@
         </template>
         <!-- 发布状态（组4 4.3）：覆盖 composable 的 customRender（三分支），透传 pending 升级为四态 -->
         <template v-else-if="column.key === 'publish_status'">
-          <PublishStatusTag
-            :version="record.current_version"
-            :published-at="record.published_at"
-            :pending="record.pending_publish === true"
-            :last-publish-status="record.last_publish_status ?? null"
-          />
-          <PublishDiffButton
-            :pending="record.pending_publish === true"
-            :last-publish-status="record.last_publish_status ?? null"
-            @click="openPublishPreview(record)"
-          />
+          <span class="status-cell-flex">
+            <PublishStatusTag
+              :version="record.current_version"
+              :published-at="record.published_at"
+              :pending="record.pending_publish === true"
+              :last-publish-status="record.last_publish_status ?? null"
+            />
+            <PublishDiffButton
+              :pending="record.pending_publish === true"
+              :last-publish-status="record.last_publish_status ?? null"
+              @click="openPublishPreview(record)"
+            />
+          </span>
         </template>
         <template v-if="column.key === 'actions'">
           <template v-for="btnKey in routeActionsSelected" :key="btnKey">

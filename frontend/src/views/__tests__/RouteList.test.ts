@@ -553,11 +553,11 @@ describe('RouteList.vue 服务端排序（batch1 组5）', () => {
     wrapper.unmount()
   })
 
-  it('列宽：发布状态定宽 160（日期超宽走省略+tooltip）、操作列 110 容纳行内发布+菜单（拍平后不挤）', async () => {
+  it('列宽：发布状态定宽 200（partial 态标签+▾ 预览按钮放得下；日期超宽走省略+tooltip）、操作列 110 容纳行内发布+菜单（拍平后不挤）', async () => {
     const wrapper = await mountPage()
     const cols = (wrapper.vm as any).columns as Array<Record<string, unknown>>
     const byKey = (k: string) => cols.find((c) => c.key === k) as Record<string, unknown> | undefined
-    expect(byKey('publish_status')?.width).toBe(160)
+    expect(byKey('publish_status')?.width).toBe(200)
     expect(byKey('actions')?.width).toBe(110)
     wrapper.unmount()
   })

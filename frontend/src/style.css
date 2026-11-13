@@ -1050,3 +1050,13 @@ select.form-input {
 .ant-modal-confirm .ant-modal-confirm-btns .ant-btn + .ant-btn {
   margin-inline-start: 0 !important;
 }
+
+/* 发布状态单元格（publish-diff-preview 方案 A）：标签与 ▾ 预览按钮同行不分离，
+   定宽列下不被裁切；partial 长标签（⚠ vN · 发布未完全生效）+ 按钮约 195px，
+   配合发布状态列 width: 200 使用（守卫 PublishDiffButton.consumers.source.test.ts） */
+.status-cell-flex {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  max-width: 100%;
+}
