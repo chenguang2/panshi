@@ -405,6 +405,7 @@ import { createSslCertificate, updateSslCertificate, previewSslPem } from '@/api
 import { isReservedSni, splitSniTags } from '@/utils/sniTags'
 import { isIpAddress } from '@/utils/ip'
 import { sslAlgorithmLabel } from '@/utils/sslLabel'
+import { showOverlayModal } from '@/composables/useOverlayModal'
 import { formatDateOnly } from '@/utils/format'
 import type { SslCertificate, SslPemPreviewResponse } from '@/types/ssl'
 
@@ -414,9 +415,15 @@ const props = defineProps<{
   editingCert?: SslCertificate | null
   /** ssl-ux-review-fixes 6.6：列表集群筛选非空时预选该集群（仅创建模式） */
   initialClusterId?: string | null
+  /** 保存后发布引导（publish-guide 批 5）：开启后保存成功弹「立即发布/稍后」引导并停发 toast */
+  withPublishGuide?: boolean
 }>()
 
-const emit = defineEmits<{ close: [] }>()
+const emit = defineEmits<{
+  close: []
+  /** 引导弹窗「立即发布」→ 调用方打开该证书的既有发布确认弹窗，系统不自动发布 */
+  'publish-requested': [payload: { clusterId: number; certId: number | null; name: string }]
+}>()
 
 // ssl-ux-review-fixes 9.3：编辑模式私钥不回填明文，占位符提示留空语义
 const editingKeyPlaceholder = computed(() =>
@@ -758,15 +765,35 @@ async function handleSubmit() {
       if (form.client_depth !== '' && form.client_depth != null) data.client_depth = Number(form.client_depth)
       if (mtlsSkipTags.value.length > 0) data.skip_mtls_uri_regex = JSON.stringify(mtlsSkipTags.value)
     }
+    const cid = Number(form.cluster_id)
+    const savedName = form.name
+    let savedId: number | null = null
     if (props.editingCert) {
-      await updateSslCertificate(Number(form.cluster_id), props.editingCert.id, data)
-      // ssl-ux-review-fixes 组 2.4：已发布证书的修改仅平台侧生效，提示重新发布
-      message.success(props.editingCert.pending_publish ? '已更新（平台侧），重新发布后 Edge 生效' : '已更新')
+      savedId = props.editingCert.id ?? null
+      await updateSslCertificate(cid, props.editingCert.id, data)
+      // ssl-ux-review-fixes 组 2.4：已发布证书的修改仅平台侧生效
+      if (!props.withPublishGuide) {
+        message.success(props.editingCert.pending_publish ? '已更新（平台侧），重新发布后 Edge 生效' : '已更新')
+      }
     } else {
-      await createSslCertificate(Number(form.cluster_id), data)
-      message.success('已创建')
+      const res = await createSslCertificate(cid, data)
+      savedId = res?.data?.id ?? null
+      if (!props.withPublishGuide) message.success('已创建')
     }
     emit('close')
+    if (props.withPublishGuide) {
+      // publish-guide 批 5：单通道——保存成功由引导弹窗呈现（save-guide-single-channel），
+      // 「立即发布」emit 交调用方打开既有发布确认弹窗（选节点），不自动发布
+      showOverlayModal({
+        title: '保存成功',
+        content: '配置尚未发布，发布后才会推送到 Edge 节点生效。',
+        okText: '立即发布',
+        cancelText: '稍后',
+        onOk: () => {
+          emit('publish-requested', { clusterId: cid, certId: savedId, name: savedName })
+        },
+      })
+    }
   } catch (e: any) {
     // ssl-ux-review-fixes 5.3：422 detail 数组逐条拼接，不再直出 [object Object]
     const d = e.response?.data?.detail

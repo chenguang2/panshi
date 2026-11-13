@@ -632,3 +632,81 @@ describe('SslFormDrawer 编辑态证书 SAN 展示（uapm 修复）', () => {
     expect(w.text()).toContain('10.0.0.5')
   })
 })
+
+describe('SslFormDrawer 保存后发布引导（publish-guide 批 5）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+    mockUpdate.mockResolvedValue({ data: { id: 9 } })
+  })
+
+  function publishedCert(overrides: Record<string, any> = {}) {
+    return {
+      id: 9,
+      name: 'srv',
+      cluster_id: 1,
+      sni: 'a.example.com',
+      cert: 'C',
+      private_key: 'K',
+      cert_type: 'server',
+      algorithm: 'rsa',
+      gm: false,
+      current_version: 2,
+      ...overrides,
+    }
+  }
+
+  async function mountEditGuide(cert: Record<string, any>) {
+    const SslFormDrawer = (await import('../SslFormDrawer.vue')).default
+    const wrapper = mount(SslFormDrawer, {
+      props: { visible: false, clusters: [], editingCert: cert, withPublishGuide: true },
+      global: { stubs },
+    })
+    await wrapper.setProps({ visible: true })
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    return wrapper
+  }
+
+  async function mountEdit(cert: Record<string, any>) {
+    const SslFormDrawer = (await import('../SslFormDrawer.vue')).default
+    const wrapper = mount(SslFormDrawer, {
+      props: { visible: false, clusters: [], editingCert: cert },
+      global: { stubs },
+    })
+    await wrapper.setProps({ visible: true })
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    return wrapper
+  }
+
+  async function submit(wrapper: any) {
+    await wrapper.find('.modal-footer .btn-primary').trigger('click')
+    await flushPromises()
+  }
+
+  it('withPublishGuide：编辑保存不弹 toast、弹「保存成功」引导；立即发布 emit publish-requested', async () => {
+    const w = await mountEditGuide(publishedCert())
+    await submit(w)
+    expect(mockUpdate).toHaveBeenCalledTimes(1)
+    expect(message.success).not.toHaveBeenCalled()
+    expect(w.emitted('close')).toHaveLength(1)
+    const overlay = Array.from(document.body.querySelectorAll('.modal-overlay')).find((el) =>
+      (el.textContent || '').includes('配置尚未发布，发布后才会推送到 Edge 节点生效。'),
+    )
+    expect(overlay).toBeTruthy()
+    const okBtn = Array.from(overlay!.querySelectorAll('button')).find(
+      (b) => b.textContent === '立即发布',
+    ) as HTMLButtonElement
+    okBtn!.click()
+    await flushPromises()
+    expect(w.emitted('publish-requested')).toEqual([[{ clusterId: 1, certId: 9, name: 'srv' }]])
+  })
+
+  it('默认（未开启引导）：toast 保留、无引导弹窗（回归钉）', async () => {
+    const w = await mountEdit(publishedCert())
+    await submit(w)
+    expect(vi.mocked(message.success)).toHaveBeenCalledWith('已更新')
+    expect(w.emitted('publish-requested')).toBeUndefined()
+  })
+})

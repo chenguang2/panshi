@@ -72,7 +72,9 @@
       :clusters="clusters"
       :editing-cert="editingCert"
       :initial-cluster-id="String(clusterFilter)"
+      with-publish-guide
       @close="closeForm"
+      @publish-requested="onFormPublishRequested"
     />
 
     <SslViewDrawer v-model:visible="viewDrawerVisible" :cert="viewingCert" :cluster-label="viewingClusterLabel" />
@@ -393,6 +395,17 @@ function publishCert(cert: any) {
   publishingCert.value = cert
   publishClusterId.value = cert.cluster_id
   publishRefreshFn.value = loadCerts
+  publishVisible.value = true
+}
+
+// publish-guide 批 5：表单保存引导「立即发布」→ 打开该证书的发布确认弹窗（与卡片发布同链路）
+function onFormPublishRequested(payload: { clusterId: number; certId: number | null; name: string }) {
+  publishingCert.value = {
+    id: payload.certId,
+    cluster_id: payload.clusterId,
+    name: payload.name,
+  }
+  publishClusterId.value = payload.clusterId
   publishVisible.value = true
 }
 
