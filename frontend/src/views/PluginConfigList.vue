@@ -255,8 +255,18 @@ function onSaved() {
 }
 
 // publish-guide 批 1：表单保存引导「立即发布」→ 打开该插件组的发布弹窗（与行内发布同链路）
-function onFormPublishRequested(payload: { clusterId: number | string; entityId: number | null; name: string }) {
-  publishingRecord.value = { id: payload.entityId, cluster_id: payload.clusterId, name: payload.name }
+function onFormPublishRequested(payload: {
+  clusterId: number | string
+  entityId: number | null
+  name: string
+  currentVersion: number | null
+}) {
+  publishingRecord.value = {
+    id: payload.entityId,
+    cluster_id: payload.clusterId,
+    name: payload.name,
+    current_version: payload.currentVersion,
+  }
   publishClusterId.value = payload.clusterId as number
   publishVisible.value = true
 }

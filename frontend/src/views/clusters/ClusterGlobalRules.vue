@@ -69,8 +69,10 @@
       :editing-config="editingGr"
       :clusters="[props.cluster]"
       resource-type="global_rule"
+      with-publish-guide
       @close="closeForm"
       @saved="onFormSaved"
+      @publish-requested="onFormPublishRequested"
     />
 
     <!-- View Global Rule Drawer -->
@@ -195,6 +197,20 @@ function closeForm() {
 async function onFormSaved() {
   closeForm()
   await loadGlobalRules(props.cluster)
+}
+
+// publish-guide 批 2：表单保存引导「立即发布」→ 复用既有发布链路（openPublishModal 选节点，不自动发布）
+function onFormPublishRequested(payload: {
+  clusterId: number | string
+  entityId: number | null
+  name: string
+  currentVersion: number | null
+}) {
+  void publishGlobalRule(props.cluster, {
+    id: payload.entityId,
+    name: payload.name,
+    current_version: payload.currentVersion,
+  } as GlobalRule)
 }
 
 // ── 6.2 失败态：原因由 useClusterPluginEntity.loadItems 写在 cluster 对象上 ──

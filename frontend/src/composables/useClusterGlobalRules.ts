@@ -9,6 +9,9 @@ const CONFIG = {
   displayName: '全局规则',
   clusterProp: 'global_rules',
   versionType: 'global_rule',
+  // publish-guide 批 2（全局规则）：保存后发布引导（表单走共享 PluginEntityFormModal 的
+  // withPublishGuide 分支，本 flag 覆盖 composable 侧 handleSubmit 的同一语义）
+  publishGuide: true,
 } as const
 
 /**

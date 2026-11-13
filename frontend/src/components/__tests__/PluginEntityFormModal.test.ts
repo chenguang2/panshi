@@ -389,7 +389,9 @@ describe('PluginEntityFormModal.vue — 保存后发布引导（publish-guide �
     ) as HTMLButtonElement
     okBtn!.click()
     await flushPromises()
-    expect(w.emitted('publish-requested')).toEqual([[{ clusterId: 1, entityId: 9, name: 'new-pg' }]])
+    expect(w.emitted('publish-requested')).toEqual([
+      [{ clusterId: 1, entityId: 9, name: 'new-pg', currentVersion: null }],
+    ])
   })
 
   it('withPublishGuide：编辑成功 onOk 携带已有 id（5）', async () => {
@@ -406,7 +408,9 @@ describe('PluginEntityFormModal.vue — 保存后发布引导（publish-guide �
     ) as HTMLButtonElement
     okBtn!.click()
     await flushPromises()
-    expect(w.emitted('publish-requested')).toEqual([[{ clusterId: 1, entityId: 5, name: MOCK_EDITING.name }]])
+    expect(w.emitted('publish-requested')).toEqual([
+      [{ clusterId: 1, entityId: 5, name: MOCK_EDITING.name, currentVersion: null }],
+    ])
   })
 
   it('默认（未开启引导）：toast 保留、无引导弹窗（全局规则批 2 接线前的回归钉）', async () => {

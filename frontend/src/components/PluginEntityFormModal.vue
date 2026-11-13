@@ -86,7 +86,14 @@ const emit = defineEmits<{
   close: []
   saved: []
   /** 引导弹窗「立即发布」→ 调用方打开该实体的既有发布确认弹窗，系统不自动发布 */
-  'publish-requested': [payload: { clusterId: number | string; entityId: number | null; name: string }]
+  'publish-requested': [
+    payload: {
+      clusterId: number | string
+      entityId: number | null
+      name: string
+      currentVersion: number | null
+    },
+  ]
 }>()
 
 const displayName = props.resourceType === 'plugin_config' ? '插件组' : '全局规则'
@@ -277,7 +284,12 @@ async function handleSubmit() {
         okText: '立即发布',
         cancelText: '稍后',
         onOk: () => {
-          emit('publish-requested', { clusterId: cid, entityId: savedId, name: savedName })
+          emit('publish-requested', {
+            clusterId: cid,
+            entityId: savedId,
+            name: savedName,
+            currentVersion: props.editingConfig?.current_version ?? null,
+          })
         },
       })
     } else {

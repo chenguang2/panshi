@@ -92,8 +92,10 @@
       :editing-config="editingConfig"
       :clusters="clusters"
       resource-type="global_rule"
+      with-publish-guide
       @close="closeForm"
       @saved="onSaved"
+      @publish-requested="onFormPublishRequested"
     />
 
     <GlobalRuleViewDrawer v-model:visible="viewDrawerVisible" :config="viewingGr" />
@@ -262,6 +264,23 @@ function closeForm() {
 function onSaved() {
   loadRules()
   closeForm()
+}
+
+// publish-guide 批 2：表单保存引导「立即发布」→ 打开该全局规则的发布弹窗（与行内发布同链路）
+function onFormPublishRequested(payload: {
+  clusterId: number | string
+  entityId: number | null
+  name: string
+  currentVersion: number | null
+}) {
+  publishingRecord.value = {
+    id: payload.entityId,
+    cluster_id: payload.clusterId,
+    name: payload.name,
+    current_version: payload.currentVersion,
+  }
+  publishClusterId.value = payload.clusterId as number
+  publishVisible.value = true
 }
 
 function viewRule(pc: any) {
