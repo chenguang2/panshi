@@ -77,3 +77,47 @@ describe('PluginMetadata.vue 发布风格统一', () => {
     expect(call.nodeIds).toEqual([1])
   })
 })
+
+describe('PluginMetadata.vue 保存后发布引导（publish-guide 批 3）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+    mockApiGet.mockImplementation((url: string) => {
+      if (url.includes('/plugin-metadata'))
+        return Promise.resolve({
+          data: [
+            { id: 1, plugin_name: 'data_center', metadata: {}, version: 5, current_version: 5, is_published: true },
+          ],
+        })
+      return Promise.reject(new Error('unexpected GET: ' + url))
+    })
+  })
+
+  it('handleSavePlugin：保存后不弹 toast、弹「保存成功」引导（立即发布/稍后）', async () => {
+    const PluginMetadata = (await import('../PluginMetadata.vue')).default
+    const wrapper = mount(PluginMetadata, {
+      props: { clusterId: 1, nodes: [] },
+      global: { stubs },
+    })
+    await flushPromises()
+    // 进编辑态（复用组件既有状态，editor drawer 关闭由组件自身处理）
+    const vm = wrapper.vm as any
+    vm.editPlugin({ plugin_name: 'data_center', metadata: {} })
+    await vm.handleSavePlugin('{}')
+    await flushPromises()
+
+    const overlay = Array.from(document.body.querySelectorAll('.modal-overlay')).find((el) =>
+      (el.textContent || '').includes('配置尚未发布，发布后才会推送到 Edge 节点生效。'),
+    )
+    expect(overlay).toBeTruthy()
+    expect(overlay!.textContent).toContain('立即发布')
+    // 「稍后」关闭引导，不触发发布
+    const cancelBtn = Array.from(overlay!.querySelectorAll('button')).find(
+      (b) => b.textContent === '稍后',
+    ) as HTMLButtonElement
+    cancelBtn!.click()
+    await flushPromises()
+    expect(document.body.querySelector('.modal-overlay')).toBeNull()
+  })
+})

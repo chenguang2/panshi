@@ -135,6 +135,7 @@ import PublishStatusTag from './PublishStatusTag.vue'
 import { formatDate } from '@/utils/format'
 import type { PluginMetadata } from '@/types'
 import { showDeleteConfirm, executePublish, executeDeleteWithProgress } from '@/composables/useClusterUtils'
+import { showOverlayModal } from '@/composables/useOverlayModal'
 
 interface Plugin {
   name: string
@@ -268,8 +269,17 @@ const loadConfiguredPlugins = async () => {
 const addPlugin = async (plugin: Plugin) => {
   try {
     await api.post(`/clusters/${props.clusterId}/plugin-metadata?plugin_name=${plugin.name}`)
-    message.success(`已添加插件 ${plugin.name}`)
     await loadConfiguredPlugins()
+    // publish-guide 批 3：添加即保存——单通道引导替代 toast（立即发布复用既有发布链路，不自动发布）
+    showOverlayModal({
+      title: '保存成功',
+      content: '配置尚未发布，发布后才会推送到 Edge 节点生效。',
+      okText: '立即发布',
+      cancelText: '稍后',
+      onOk: () => {
+        void publishPlugin({ plugin_name: plugin.name } as ConfiguredPlugin)
+      },
+    })
   } catch (error: any) {
     if (error.response?.status === 400) {
       message.warning('该插件已配置')
@@ -302,9 +312,18 @@ const handleSavePlugin = async (config: string) => {
   try {
     const metadata = typeof config === 'string' ? JSON.parse(config) : config
     await api.put(`/clusters/${props.clusterId}/plugin-metadata/${editingPluginName.value}`, metadata)
-    message.success('保存成功')
     editorDrawerVisible.value = false
     await loadConfiguredPlugins()
+    // publish-guide 批 3：单通道引导替代 toast；立即发布复用既有发布链路
+    showOverlayModal({
+      title: '保存成功',
+      content: '配置尚未发布，发布后才会推送到 Edge 节点生效。',
+      okText: '立即发布',
+      cancelText: '稍后',
+      onOk: () => {
+        void publishPlugin({ plugin_name: editingPluginName.value } as ConfiguredPlugin)
+      },
+    })
   } catch (error) {
     message.error('保存失败')
     throw error

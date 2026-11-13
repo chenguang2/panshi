@@ -188,6 +188,7 @@ import PluginEditorDrawer from '@/components/PluginEditorDrawer.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import { executePublish, showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
+import { showOverlayModal } from '@/composables/useOverlayModal'
 import { getGroupColorStyle, getCardBorderStyle } from '@/composables/useGroupColors'
 import PublishStatusTag from '@/components/PublishStatusTag.vue'
 import SearchInput from '@/components/SearchInput.vue'
@@ -336,9 +337,18 @@ async function handleCreateDirect() {
   if (!canCreate.value || !createPluginName.value) return
   try {
     await addClusterPluginMetadata(Number(createClusterId.value), createPluginName.value)
-    message.success('已添加')
     createVisible.value = false
-    loadItems()
+    await loadItems()
+    // publish-guide 批 3：添加即保存——单通道引导替代 toast
+    showOverlayModal({
+      title: '保存成功',
+      content: '配置尚未发布，发布后才会推送到 Edge 节点生效。',
+      okText: '立即发布',
+      cancelText: '稍后',
+      onOk: () => {
+        publishItem({ cluster_id: Number(createClusterId.value), plugin_name: createPluginName.value })
+      },
+    })
   } catch (e: any) {
     message.error(e?.response?.data?.detail || '添加失败')
   }
@@ -370,9 +380,18 @@ async function handleEditorSave(config: string) {
   try {
     const metadata = typeof config === 'string' ? JSON.parse(config) : config
     await updateClusterPluginMetadata(editingItemClusterId.value, editingPluginName.value, metadata)
-    message.success('保存成功')
     editorDrawerVisible.value = false
     await loadItems()
+    // publish-guide 批 3：单通道引导替代 toast；立即发布复用既有发布链路
+    showOverlayModal({
+      title: '保存成功',
+      content: '配置尚未发布，发布后才会推送到 Edge 节点生效。',
+      okText: '立即发布',
+      cancelText: '稍后',
+      onOk: () => {
+        publishItem({ cluster_id: editingItemClusterId.value, plugin_name: editingPluginName.value })
+      },
+    })
   } catch (error) {
     message.error('保存失败')
     throw error
