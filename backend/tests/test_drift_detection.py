@@ -423,3 +423,35 @@ class TestMultiNode:
         pms = _by_name(result["types"], "plugin_metadata")
         assert pms["log_process"]["status"] == "drift"
         assert "10.0.0.15" in (pms["log_process"]["reason"] or "")
+
+    @pytest.mark.asyncio
+    async def test_single_node_empty_plugin_default_expansion_not_drift(self, isolated_session):
+        """空插件默认等效（equivalence_rules.yaml）：单节点集群无均匀性对照，
+        基线 log_process {} vs 节点 lua 默认展开 → 一致（历史上会误报漂移）。"""
+        async with isolated_session() as s:
+            s.add(Node(cluster_id=1, ip="10.9.9.1", service_port=80,
+                       management_port=9180, edge_path="/edge", status=1))
+            pc = PluginConfig(cluster_id=1, name="solo", edge_uuid="uu-pc-solo",
+                              plugins='{"log_process": {}}')
+            s.add(pc)
+            await s.flush()
+            s.add(ConfigVersion(
+                cluster_id=1, resource_type="plugin_config", resource_id=pc.id,
+                version=1,
+                config=json.dumps({"desc": "solo", "plugins": {"log_process": {}}}),
+                edge_payload=json.dumps({"desc": "solo", "plugins": {"log_process": {}}}),
+            ))
+            await s.commit()
+
+        def _collect(cluster_id, ip, port, only_edge_keys=None):
+            entry = _entry("uu-pc-solo", {"desc": "solo",
+                                          "plugins": {"log_process": {"logs": "logs/process.log"}}})
+            return _node_lists() | {"plugin_config": _parse_entries([entry])}
+
+        with patch("app.services.drift_detection._collect_edge_lists_for_node",
+                   side_effect=_collect):
+            async with isolated_session() as s:
+                result = await detect_cluster_drift(s, 1)
+
+        pcs = _by_name(result["types"], "plugin_config")
+        assert pcs["solo"]["status"] == "ok"

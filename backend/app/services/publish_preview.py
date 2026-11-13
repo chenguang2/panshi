@@ -29,6 +29,7 @@ from app.models.cluster import (
     UpstreamTarget,
 )
 from app.services import drift_detection
+from app.services.config_diff import expand_empty_plugin_config, expand_empty_plugin_defaults
 from app.services.drift_detection import (
     BASE_WHITELIST,
     DRIFT_TYPE_REGISTRY,
@@ -257,6 +258,16 @@ async def preview_publish_diff(db: AsyncSession, *, cluster_id: int,
         raise HTTPException(status_code=404, detail=f"{conf['label']}不存在")
 
     candidate_config, candidate_edge = await build_candidate(db, resource_type, resource)
+    # 空插件配置 {} → 已知默认展开（equivalence_rules.yaml 单一事实源）：
+    # Edge lua 对空插件补默认（如 log_process {} → {logs: logs/process.log}），
+    # 此差异不是旁路修改，三个对比面（数据库对比/漂移/预览）统一等效。
+    if resource_type in ("plugin_config", "global_rule"):
+        candidate_edge = dict(candidate_edge)
+        candidate_edge["plugins"] = expand_empty_plugin_defaults(
+            resource_type, candidate_edge.get("plugins") or {})
+    elif resource_type == "plugin_metadata":
+        candidate_edge = expand_empty_plugin_config(
+            resource_type, resource.plugin_name, candidate_edge)
     normalized_candidate = conf["normalize"](candidate_edge)
     whitelist = BASE_WHITELIST | set()
     mask_fields = conf["mask"]
@@ -296,6 +307,14 @@ async def preview_publish_diff(db: AsyncSession, *, cluster_id: int,
         except ValueError:
             result["baseline_missing_reason"] = "基线损坏：实发载荷非合法 JSON"
         else:
+            # 平台侧变更同样做空插件默认等效（与候选同口径）
+            if resource_type in ("plugin_config", "global_rule") and isinstance(baseline, dict):
+                baseline = dict(baseline)
+                baseline["plugins"] = expand_empty_plugin_defaults(
+                    resource_type, baseline.get("plugins") or {})
+            elif resource_type == "plugin_metadata" and isinstance(baseline, dict):
+                baseline = expand_empty_plugin_config(
+                    resource_type, resource.plugin_name, baseline)
             result["has_baseline"] = True
             base_diff = diff_edge_payload(baseline, candidate_edge, mask_fields=mask_fields)
             result["platform_change"] = {

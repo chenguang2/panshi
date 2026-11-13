@@ -31,6 +31,7 @@ from app.models.cluster import (
     Upstream,
 )
 from app.models.ssl import SslCertificate
+from app.services.config_diff import expand_empty_plugin_config, expand_empty_plugin_defaults
 from app.services.edge_client import EdgeClient
 
 logger = logging.getLogger("app.drift")
@@ -269,6 +270,25 @@ def _match_entry(entries, edge_id):
     return next((e for e in entries if e["match_id"] == str(edge_id)), None)
 
 
+def _expand_baseline_defaults(type_key: str, plugin_name: str | None, baseline_raw: str) -> str:
+    """漂移基线的空插件默认等效（equivalence_rules.yaml 单一事实源）：
+    基线里的空插件配置 {} 展开为已知默认，与 Edge lua 补默认的节点实况对齐——
+    多节点场景原本靠均匀性过滤兜住，单节点集群无对照（如实上报）会误报；
+    展开后三种集群拓扑口径一致。非 JSON/非 dict 原样返回。"""
+    try:
+        bl = json.loads(baseline_raw)
+    except (ValueError, TypeError):
+        return baseline_raw
+    if not isinstance(bl, dict):
+        return baseline_raw
+    if type_key == "plugin_metadata":
+        bl = expand_empty_plugin_config(type_key, plugin_name or "", bl)
+    elif type_key in ("plugin_config", "global_rule"):
+        bl = dict(bl)
+        bl["plugins"] = expand_empty_plugin_defaults(type_key, bl.get("plugins") or {})
+    return json.dumps(bl)
+
+
 def _merge_node_diffs(baseline_raw: str, conf: dict, per_node_entries: dict) -> tuple:
     """跨节点 diff 汇总（多节点语义，2026-11-05 真实事故驱动）：
 
@@ -467,7 +487,9 @@ async def detect_cluster_drift(db: AsyncSession, cluster_id: int) -> dict:
                 ))
                 continue
 
-            status, reason, diff = _merge_node_diffs(cv.edge_payload, conf, per_node_entries)
+            baseline_raw = _expand_baseline_defaults(
+                type_key, name_map.get(rid), cv.edge_payload)
+            status, reason, diff = _merge_node_diffs(baseline_raw, conf, per_node_entries)
             items.append(_item(rid, display, status, reason=reason, diff=diff))
 
         # Edge 多出的旁路资源（跨节点并集；平台无对应发布记录恒报，不按一致性过滤）

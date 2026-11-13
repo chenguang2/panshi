@@ -294,6 +294,115 @@ class TestPreviewOrchestration:
         assert not any(p.split(".")[0] in ("id", "create_time", "update_time") for p in paths)
 
 
+class TestEmptyPluginDefaultEquivalence:
+    """空插件配置 {} 与已知默认展开等效（equivalence_rules.yaml 单一事实源，
+    三个对比面统一；2026-11-13 用户裁决：log_process {} ≡ {logs: logs/process.log}）。"""
+
+    @pytest.mark.asyncio
+    async def test_plugin_config_empty_expanded_matches_edge(self, isolated_session):
+        """log_process {}（候选）vs 节点 lua 默认展开 → 无差异、节点 ok。"""
+        async with isolated_session() as s:
+            s.add(Node(cluster_id=1, ip="10.0.0.13", service_port=80,
+                       management_port=9180, edge_path="/edge", status=1))
+            pc = PluginConfig(cluster_id=1, name="global_comm", edge_uuid="uu-pc-9",
+                              plugins='{"log_process": {}, "data_center": {"a": "1"}}')
+            s.add(pc)
+            await s.flush()
+            pc_id = pc.id
+            s.add(ConfigVersion(
+                cluster_id=1, resource_type="plugin_config", resource_id=pc_id,
+                version=1,
+                config=json.dumps({"desc": "global_comm",
+                                   "plugins": {"log_process": {}, "data_center": {"a": "1"}}}),
+                edge_payload=json.dumps({"desc": "global_comm",
+                                         "plugins": {"log_process": {}, "data_center": {"a": "1"}}}),
+            ))
+            await s.commit()
+
+        def _collect(cluster_id, ip, port, only_edge_keys=None):
+            # Edge lua 补默认：log_process 展开为 {logs: logs/process.log}
+            entry = _entry("uu-pc-9", {"desc": "global_comm",
+                                       "plugins": {"log_process": {"logs": "logs/process.log"},
+                                                   "data_center": {"a": "1"}}})
+            return {"plugin_config": _parse_entries([entry])}
+
+        with patch("app.services.drift_detection._collect_edge_lists_for_node",
+                   side_effect=_collect):
+            async with isolated_session() as s:
+                result = await preview_publish_diff(
+                    s, cluster_id=1, resource_type="plugin_config", resource_id=pc_id)
+
+        assert _node(result, "10.0.0.13")["status"] == "ok"
+        assert result["summary"]["diff_count"] == 0
+        paths = {r["path"] for r in result["matrix"]["diff_rows"] + result["matrix"]["same_rows"]}
+        # 展开后的等效默认值进「一致字段」全集（开关可见）
+        assert "plugins.log_process.logs" in paths
+
+    @pytest.mark.asyncio
+    async def test_plugin_config_edge_value_not_default_still_diff(self, isolated_session):
+        """节点值不是已知默认（旁路改过）→ 仍报差异并归因，等效规则不放行。"""
+        async with isolated_session() as s:
+            s.add(Node(cluster_id=1, ip="10.0.0.13", service_port=80,
+                       management_port=9180, edge_path="/edge", status=1))
+            pc = PluginConfig(cluster_id=1, name="global_comm", edge_uuid="uu-pc-10",
+                              plugins='{"log_process": {}}')
+            s.add(pc)
+            await s.flush()
+            pc_id = pc.id
+            s.add(ConfigVersion(
+                cluster_id=1, resource_type="plugin_config", resource_id=pc_id,
+                version=1,
+                config=json.dumps({"desc": "global_comm", "plugins": {"log_process": {}}}),
+                edge_payload=json.dumps({"desc": "global_comm", "plugins": {"log_process": {}}}),
+            ))
+            await s.commit()
+
+        def _collect(cluster_id, ip, port, only_edge_keys=None):
+            entry = _entry("uu-pc-10", {"desc": "global_comm",
+                                        "plugins": {"log_process": {"logs": "other.log"}}})
+            return {"plugin_config": _parse_entries([entry])}
+
+        with patch("app.services.drift_detection._collect_edge_lists_for_node",
+                   side_effect=_collect):
+            async with isolated_session() as s:
+                result = await preview_publish_diff(
+                    s, cluster_id=1, resource_type="plugin_config", resource_id=pc_id)
+
+        assert _node(result, "10.0.0.13")["status"] == "diff"
+        paths = {r["path"] for r in result["matrix"]["diff_rows"]}
+        assert any(p.startswith("plugins.log_process") for p in paths)
+
+    @pytest.mark.asyncio
+    async def test_plugin_metadata_empty_expanded_matches_edge(self, isolated_session):
+        """插件元数据 log_process {} vs 节点默认展开 → ok（批 1 信封修复同款数据形态）。"""
+        async with isolated_session() as s:
+            s.add(Node(cluster_id=1, ip="10.0.0.13", service_port=80,
+                       management_port=9180, edge_path="/edge", status=1))
+            pm = PluginMetadata(cluster_id=1, plugin_name="log_process", config_data='{}')
+            s.add(pm)
+            await s.flush()
+            pm_id = pm.id
+            s.add(ConfigVersion(
+                cluster_id=1, resource_type="plugin_metadata", resource_id=pm_id,
+                version=1, config=json.dumps({"plugin_name": "log_process", "config_data": {}}),
+                edge_payload=json.dumps({}),
+            ))
+            await s.commit()
+
+        def _collect(cluster_id, ip, port, only_edge_keys=None):
+            entry = _entry("log_process", {"logs": "logs/process.log"})
+            return {"plugin_metadata": _parse_entries([entry])}
+
+        with patch("app.services.drift_detection._collect_edge_lists_for_node",
+                   side_effect=_collect):
+            async with isolated_session() as s:
+                result = await preview_publish_diff(
+                    s, cluster_id=1, resource_type="plugin_metadata", resource_id=pm_id)
+
+        assert _node(result, "10.0.0.13")["status"] == "ok"
+        assert result["summary"]["diff_count"] == 0
+
+
 # ── 端点（鉴权经 security guard 采样；此处覆盖 400/404）─────────
 
 class TestPreviewEndpoint:

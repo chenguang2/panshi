@@ -177,6 +177,34 @@ class EquivalenceRules:
 
 
 # ════════ 配置对比纯函数（2026-10-01 自 config_diff_service.py 并入，单一原子模块） ════════
+
+def expand_empty_plugin_defaults(resource_type: str, plugins: dict) -> dict:
+    """插件组/全局规则载荷里的空插件配置（{}）→ per_plugin_defaults 已知默认展开。
+
+    equivalence_rules.yaml 单一事实源，三个对比面共用（数据库对比 compare_plugins
+    的等效语义 / 漂移检测基线 / 发布差异预览候选）：Edge lua 会把空插件补默认
+    （如 log_process {} → {logs: logs/process.log}），此差异不是旁路修改。
+    仅空配置展开——部分配置不填充，缺失键如实上报（#69：空基线代表「平台发送
+    的就是空」，非已知默认的内容出现仍按旁路差异上报）。
+    """
+    defaults = EquivalenceRules().get_plugin_defaults(resource_type)
+    if not defaults or not isinstance(plugins, dict):
+        return plugins
+    out = dict(plugins)
+    for name, conf in out.items():
+        if isinstance(conf, dict) and not conf and name in defaults:
+            out[name] = dict(defaults[name])
+    return out
+
+
+def expand_empty_plugin_config(resource_type: str, plugin_name: str, config: dict) -> dict:
+    """插件元数据行（载荷即单个插件的配置本体）的空配置 {} → 已知默认展开。"""
+    defaults = EquivalenceRules().get_plugin_defaults(resource_type).get(plugin_name)
+    if isinstance(config, dict) and not config and defaults:
+        return dict(defaults)
+    return config
+
+
 def normalize_sni_csv(raw: str) -> str:
     """归一化 SNI 逗号分隔字符串，统一去除逗号周围空格。"""
     return ",".join(part.strip() for part in raw.split(",") if part.strip())

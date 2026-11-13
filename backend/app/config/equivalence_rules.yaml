@@ -184,6 +184,11 @@ plugin_metadata:
   # Edge 服务端自动注入的字段，对比前忽略
   ignore_edge_fields:
     - id
+  # 插件元数据行即单个插件的配置本体：空配置 {} 与已知默认展开等效
+  # （Edge lua 对空插件补默认，实测 log_process → {logs: logs/process.log}）
+  per_plugin_defaults:
+    log_process:
+      logs: logs/process.log
 
 ssl_certificate:
   field_aliases:
