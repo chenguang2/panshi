@@ -1,14 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ref } from 'vue'
+import { flushPromises } from '@vue/test-utils'
 
 const mockApiGet = vi.fn()
 const mockApiDelete = vi.fn()
+const mockApiPost = vi.fn()
+const mockApiPut = vi.fn()
 
 vi.mock('@/api', () => ({
   default: {
     get: (...args: any[]) => mockApiGet(...args),
-    post: vi.fn(),
-    put: vi.fn(),
+    post: (...args: any[]) => mockApiPost(...args),
+    put: (...args: any[]) => mockApiPut(...args),
     delete: (...args: any[]) => mockApiDelete(...args),
   },
 }))
@@ -255,5 +258,81 @@ describe('useClusterPluginEntity — 发布确认弹窗参数（5.5，资源名 
     await entity.publishItem(cluster, cluster.plugin_configs![0] as any)
 
     expect(deps.openPublishModal).toHaveBeenCalledWith('发布插件组: referenced-pg', 1, { currentVersion: null })
+  })
+})
+
+describe('handleSubmit 保存后发布引导（publish-guide 批 1：插件组）', () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+    mockApiPost.mockResolvedValue({ data: { id: 9 } })
+    mockApiGet.mockResolvedValue({ data: { items: [] } })
+  })
+
+  it('publishGuide=true：保存后不弹 toast、弹「保存成功」引导；立即发布 → openPublishModal（既有发布链路）', async () => {
+    const cluster = makeCluster()
+    const deps = makeDeps()
+    deps.clusters.value = [cluster]
+    const entity = useClusterPluginEntity(
+      {
+        apiEndpoint: 'plugin_configs',
+        displayName: '插件组',
+        clusterProp: 'plugin_configs',
+        versionType: 'plugin_config',
+        publishVersionHint: true,
+        publishGuide: true,
+      },
+      deps,
+    )
+
+    await entity.showAdd(cluster)
+    entity.formData.name = 'pg-guide'
+    await entity.handleSubmit()
+
+    // 单通道：引导弹窗挂 body（loadItems 刷新出「待发布」后再弹）
+    const overlay = Array.from(document.body.querySelectorAll('.modal-overlay')).find((el) =>
+      (el.textContent || '').includes('配置尚未发布，发布后才会推送到 Edge 节点生效。'),
+    )
+    expect(overlay).toBeTruthy()
+    expect(deps.openPublishModal).not.toHaveBeenCalled()
+
+    const okBtn = Array.from(overlay!.querySelectorAll('button')).find(
+      (b) => b.textContent === '立即发布',
+    ) as HTMLButtonElement
+    okBtn!.click()
+    await flushPromises()
+    expect(deps.openPublishModal).toHaveBeenCalledTimes(1)
+    expect(deps.openPublishModal).toHaveBeenCalledWith('发布插件组: pg-guide', 1, { currentVersion: null })
+  })
+
+  it('publishGuide 缺省：保存仍弹成功 toast、无引导弹窗（全局规则批 2 前的回归钉）', async () => {
+    const { message } = await import('ant-design-vue')
+    const successSpy = vi.spyOn(message, 'success').mockImplementation(() => '')
+    try {
+      const cluster = makeCluster()
+      const deps = makeDeps()
+      deps.clusters.value = [cluster]
+      const entity = useClusterPluginEntity(
+        {
+          apiEndpoint: 'global_rules',
+          displayName: '全局规则',
+          clusterProp: 'global_rules',
+          versionType: 'global_rule',
+        },
+        deps,
+      )
+
+      await entity.showAdd(cluster)
+      entity.formData.name = 'gr-toast'
+      await entity.handleSubmit()
+
+      expect(successSpy).toHaveBeenCalledWith(expect.stringContaining('已保存'))
+      expect(
+        Array.from(document.body.querySelectorAll('.modal-overlay')).some((el) =>
+          (el.textContent || '').includes('立即发布'),
+        ),
+      ).toBe(false)
+    } finally {
+      successSpy.mockRestore()
+    }
   })
 })

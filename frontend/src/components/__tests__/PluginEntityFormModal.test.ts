@@ -350,3 +350,75 @@ describe('PluginEntityFormModal traffic_split 上游分发目标选项（bug fix
     w.unmount()
   })
 })
+
+describe('PluginEntityFormModal.vue — 保存后发布引导（publish-guide 批 1：插件组）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/plugins/builtin') return Promise.resolve({ data: { plugins: [] } })
+      if (url === '/system/features') return Promise.resolve({ data: { features: {}, enabled_plugins: [] } })
+      return Promise.reject(new Error('unexpected GET: ' + url))
+    })
+    mockApiPost.mockResolvedValue({ data: { id: 9 } })
+    mockApiPut.mockResolvedValue({ data: {} })
+  })
+
+  it('withPublishGuide：创建成功不弹 toast，弹「保存成功」引导（立即发布/稍后）', async () => {
+    const w = await mountModal({ withPublishGuide: true })
+    const vm: any = w.vm
+    vm.form.name = 'new-pg'
+    vm.form.cluster_id = 1
+    await footerButtons(w)[1]!.trigger('click')
+    await flushPromises()
+
+    // save-guide-single-channel：有引导弹窗的入口 MUST NOT 同时 toast（toast 恒被遮罩压住）
+    expect(message.success).not.toHaveBeenCalled()
+    // 先关表单再弹引导（useOverlayModal 挂 body）
+    expect(w.emitted('close')).toHaveLength(1)
+    const overlay = document.querySelector('.modal-overlay')
+    expect(overlay).not.toBeNull()
+    expect(overlay!.textContent).toContain('保存成功')
+    expect(overlay!.textContent).toContain('配置尚未发布，发布后才会推送到 Edge 节点生效。')
+    expect(overlay!.textContent).toContain('立即发布')
+    expect(overlay!.textContent).toContain('稍后')
+    // 「立即发布」→ emit publish-requested（POST 创建返回 id=9），不自动发布
+    const okBtn = Array.from(overlay!.querySelectorAll('button')).find(
+      (b) => b.textContent === '立即发布',
+    ) as HTMLButtonElement
+    okBtn!.click()
+    await flushPromises()
+    expect(w.emitted('publish-requested')).toEqual([[{ clusterId: 1, entityId: 9, name: 'new-pg' }]])
+  })
+
+  it('withPublishGuide：编辑成功 onOk 携带已有 id（5）', async () => {
+    const w = await mountModal({ withPublishGuide: true, editingConfig: MOCK_EDITING })
+    const vm: any = w.vm
+    await footerButtons(w)[1]!.trigger('click')
+    await flushPromises()
+
+    expect(mockApiPut).toHaveBeenCalledWith('/clusters/1/plugin_configs/5', expect.any(Object))
+    const overlay = document.querySelector('.modal-overlay')
+    expect(overlay).not.toBeNull()
+    const okBtn = Array.from(overlay!.querySelectorAll('button')).find(
+      (b) => b.textContent === '立即发布',
+    ) as HTMLButtonElement
+    okBtn!.click()
+    await flushPromises()
+    expect(w.emitted('publish-requested')).toEqual([[{ clusterId: 1, entityId: 5, name: MOCK_EDITING.name }]])
+  })
+
+  it('默认（未开启引导）：toast 保留、无引导弹窗（全局规则批 2 接线前的回归钉）', async () => {
+    const w = await mountModal({ resourceType: 'global_rule' })
+    const vm: any = w.vm
+    vm.form.name = 'new-gr'
+    vm.form.cluster_id = 1
+    await footerButtons(w)[1]!.trigger('click')
+    await flushPromises()
+
+    expect(message.success).toHaveBeenCalledWith('全局规则已保存。配置尚未发布，需发布后才会在 Edge 节点生效')
+    expect(w.emitted('publish-requested')).toBeUndefined()
+    expect(document.querySelector('.modal-overlay')).toBeNull()
+  })
+})

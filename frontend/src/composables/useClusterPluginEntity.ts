@@ -23,6 +23,9 @@ interface PluginEntityConfig {
   versionType: 'upstream' | 'route' | 'plugin_config' | 'global_rule' | 'static_resource'
   /** 发布确认弹窗显示「将创建新版本 v(N+1)」提示（M5，插件组开启；全局规则等默认关闭） */
   publishVersionHint?: boolean
+  /** 保存后发布引导（publish-guide 批 1 插件组 / 批 2 全局规则）：保存成功弹「立即发布/稍后」
+   * 引导弹窗并停发 toast；默认关闭保持 toast（无引导入口的唯一反馈） */
+  publishGuide?: boolean
 }
 
 export interface PluginEntityDeps {
@@ -49,7 +52,7 @@ export function globalRuleDeleteWarning(clusterName: string): string {
  */
 export function useClusterPluginEntity(config: PluginEntityConfig, deps: PluginEntityDeps) {
   const { clusters, versionModal, availablePlugins, loadAvailablePlugins, openPublishModal } = deps
-  const { apiEndpoint, displayName, clusterProp, versionType } = config
+  const { apiEndpoint, displayName, clusterProp, versionType, publishGuide } = config
 
   const core = useClusterResourceCore(
     {
@@ -100,6 +103,8 @@ export function useClusterPluginEntity(config: PluginEntityConfig, deps: PluginE
   const formMode = ref<'add' | 'edit'>('add')
   const editingClusterId = ref<number | null>(null)
   const editingId = ref<number | null>(null)
+  /** 编辑进入时的 current_version（引导弹窗「立即发布」经 publishByRecord 提示「将创建 v(N+1)」；新增为 null） */
+  const editingCurrentVersion = ref<number | null>(null)
 
   const formData = reactive({
     name: '',
@@ -137,6 +142,7 @@ export function useClusterPluginEntity(config: PluginEntityConfig, deps: PluginE
     formMode.value = 'add'
     editingClusterId.value = cluster.id
     editingId.value = null
+    editingCurrentVersion.value = null
     formData.name = ''
     formData.description = ''
     formData.selectedPlugins = []
@@ -154,6 +160,7 @@ export function useClusterPluginEntity(config: PluginEntityConfig, deps: PluginE
     formMode.value = 'edit'
     editingClusterId.value = cluster.id
     editingId.value = item.id
+    editingCurrentVersion.value = (item as { current_version?: number | null }).current_version ?? null
     formData.name = item.name || ''
     formData.description = item.description || ''
     formData.selectedPlugins = Object.entries(item.plugins).map(([plugin_name, config]) => ({
@@ -188,17 +195,38 @@ export function useClusterPluginEntity(config: PluginEntityConfig, deps: PluginE
       const payload = { name: formData.name, description: formData.description, plugins }
       // 保存 ≠ 生效：两条分支统一文案（对齐上游先例），保存后下方 loadItems 立即刷新出「待发布」
       const savedToast = `${displayName}已保存。配置尚未发布，需发布后才会在 Edge 节点生效`
+      let savedId: number | null = null
       if (editingId.value) {
+        savedId = editingId.value
         await api.put(`/clusters/${editingClusterId.value}/${apiEndpoint}/${editingId.value}`, payload)
-        message.success(savedToast)
+        if (!publishGuide) message.success(savedToast)
       } else {
-        await api.post(`/clusters/${editingClusterId.value}/${apiEndpoint}`, payload)
-        message.success(savedToast)
+        const res = await api.post(`/clusters/${editingClusterId.value}/${apiEndpoint}`, payload)
+        savedId = (res as { data?: { id?: number } })?.data?.id ?? null
+        if (!publishGuide) message.success(savedToast)
       }
 
       modalVisible.value = false
       const cluster = clusters.value.find((c) => c.id === editingClusterId.value)
       if (cluster) await loadItems(cluster)
+      if (publishGuide) {
+        // publish-guide：先关表单/刷新出「待发布」再弹引导（save-guide-single-channel 单通道，
+        // 不再 toast）；「立即发布」复用既有 publishByRecord（内置发布确认弹窗选节点），不自动发布
+        showOverlayModal({
+          title: '保存成功',
+          content: '配置尚未发布，发布后才会推送到 Edge 节点生效。',
+          okText: '立即发布',
+          cancelText: '稍后',
+          onOk: () => {
+            if (!cluster) return
+            void publishItem(cluster, {
+              id: savedId,
+              name: formData.name,
+              current_version: editingCurrentVersion.value,
+            } as PluginEntityItem)
+          },
+        })
+      }
     } catch (error: unknown) {
       message.error(getApiErrorMessage(error))
     }

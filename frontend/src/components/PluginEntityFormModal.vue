@@ -77,9 +77,17 @@ const props = defineProps<{
   editingConfig: any | null
   clusters: { id: number; name: string; display_name?: string }[]
   resourceType: 'plugin_config' | 'global_rule'
+  /** 保存后发布引导（publish-guide 批 1 插件组 / 批 2 全局规则）：开启后保存成功弹「立即发布/稍后」
+   * 引导弹窗并停发 toast（save-guide-single-channel 单通道）；默认关闭保持 toast（无引导入口的唯一反馈） */
+  withPublishGuide?: boolean
 }>()
 
-const emit = defineEmits<{ close: []; saved: [] }>()
+const emit = defineEmits<{
+  close: []
+  saved: []
+  /** 引导弹窗「立即发布」→ 调用方打开该实体的既有发布确认弹窗，系统不自动发布 */
+  'publish-requested': [payload: { clusterId: number | string; entityId: number | null; name: string }]
+}>()
 
 const displayName = props.resourceType === 'plugin_config' ? '插件组' : '全局规则'
 const apiEndpoint = props.resourceType === 'plugin_config' ? 'plugin_configs' : 'global_rules'
@@ -246,17 +254,35 @@ async function handleSubmit() {
     }
     const payload: any = { name: form.name, description: form.description, plugins }
     const cid = form.cluster_id
+    const savedName = form.name
+    let savedId: number | null = null
     // 保存 ≠ 生效：两分支统一文案（对齐上游先例）；emit saved 后父页面刷新列表使「待发布」立即可见
     if (props.editingConfig) {
+      savedId = props.editingConfig.id ?? null
       await api.put(`/clusters/${cid}/${apiEndpoint}/${props.editingConfig.id}`, payload)
     } else {
-      await api.post(`/clusters/${cid}/${apiEndpoint}`, payload)
+      const res = await api.post(`/clusters/${cid}/${apiEndpoint}`, payload)
+      savedId = res?.data?.id ?? null
     }
-    message.success(`${displayName}已保存。配置尚未发布，需发布后才会在 Edge 节点生效`)
     // 先清 dirty 再关窗：避免误弹「放弃更改」确认
     isDirty.value = false
     emit('saved')
     emit('close')
+    if (props.withPublishGuide) {
+      // save-guide-single-channel：单通道——不再弹成功 toast（恒在引导弹窗遮罩之下且自动消失），
+      // 成功与「尚未发布」语义由下方引导弹窗承担；「立即发布」emit 交调用方打开既有发布确认弹窗
+      showOverlayModal({
+        title: '保存成功',
+        content: '配置尚未发布，发布后才会推送到 Edge 节点生效。',
+        okText: '立即发布',
+        cancelText: '稍后',
+        onOk: () => {
+          emit('publish-requested', { clusterId: cid, entityId: savedId, name: savedName })
+        },
+      })
+    } else {
+      message.success(`${displayName}已保存。配置尚未发布，需发布后才会在 Edge 节点生效`)
+    }
   } catch (error: unknown) {
     message.error(getApiErrorMessage(error))
   } finally {
