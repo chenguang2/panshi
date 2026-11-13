@@ -45,6 +45,7 @@ UNAUTHENTICATED_SAMPLES = [
     # 任务审计历史（2026-11 node-task 详情页审计历史，rule #19）
     ("get", "/api/v1/node-tasks/1/audit"),
     ("get", "/api/v1/edge-client/nodes"),
+    ("get", "/api/v1/edge-client/ip-info"),
     ("get", "/api/v1/nodes/autostart/records"),
     ("get", "/api/v1/plugin-switches"),
     ("post", "/api/v1/edge-import/preview"),

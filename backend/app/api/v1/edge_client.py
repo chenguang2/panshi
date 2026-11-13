@@ -107,7 +107,7 @@ class RouteUpdate(BaseModel):
 
 
 @router.get("/nodes")
-async def list_edge_nodes(db: AsyncSession = Depends(get_db)):
+async def list_edge_nodes(db: AsyncSession = Depends(get_db), cluster_id: int = 0):
     result = await db.execute(select(Node).where(Node.status == 1))
     nodes = result.scalars().all()
     node_list = []
@@ -124,9 +124,41 @@ async def list_edge_nodes(db: AsyncSession = Depends(get_db)):
     return {"nodes": node_list}
 
 
+@router.get("/ip-info")
+async def edge_ip_info(ip: str, db: AsyncSession = Depends(get_db)):
+    """IP 归属反查（edge-direct-relay-cluster-context）：该 IP 登记在哪些集群/区域、
+    中继判定状态与歧义冲突明细。数据直查 ps_node/ps_cluster（不受快照 TTL 时滞影响），
+    中继状态读注册表快照。未登记 IP → clusters=[]、relay_state=none。"""
+    rows = (
+        await db.execute(
+            select(Node.management_port, Node.cluster_id, Cluster.name, Cluster.region_code)
+            .join(Cluster, Cluster.id == Node.cluster_id)
+            .where(Node.ip == ip)
+        )
+    ).all()
+    clusters = [
+        {"cluster_id": cid, "cluster_name": name, "region_code": code}
+        for _port, cid, name, code in rows
+    ]
+    # 同集群多行（同 IP 重复登记）去重
+    seen: set[int] = set()
+    clusters = [c for c in clusters if not (c["cluster_id"] in seen or seen.add(c["cluster_id"]))]
+    from app.services import relay_registry
+
+    route, state = relay_registry.route_for_ip(ip)
+    return {
+        "ip": ip,
+        "clusters": clusters,
+        "relay_state": state,
+        "conflict_detail": relay_registry.route_conflict_for_ip(ip),
+        "management_ports": sorted({p for p, *_ in rows}),
+        "relay_via": route.http_base_url if (state == "active" and route) else None,
+    }
+
+
 @router.get("/nodes/{ip}/{port}/upstreams")
-async def list_upstreams(ip: str, port: int, db: AsyncSession = Depends(get_db)):
-    client = EdgeClient(0, node_ip=ip, node_port=port)
+async def list_upstreams(ip: str, port: int, db: AsyncSession = Depends(get_db), cluster_id: int = 0):
+    client = EdgeClient(cluster_id, node_ip=ip, node_port=port)
     # 节点执行路径：按该 client 实例判定，在发起 Edge 请求前调用 → 失败也带。
     route_info: dict[str, Any] = {}
     edge_sync.mark_route(route_info, client)
@@ -145,8 +177,8 @@ async def list_upstreams(ip: str, port: int, db: AsyncSession = Depends(get_db))
 
 
 @router.get("/nodes/{ip}/{port}/upstreams/{upstream_id}")
-async def get_upstream(ip: str, port: int, upstream_id: str, db: AsyncSession = Depends(get_db)):
-    client = EdgeClient(0, node_ip=ip, node_port=port)
+async def get_upstream(ip: str, port: int, upstream_id: str, db: AsyncSession = Depends(get_db), cluster_id: int = 0):
+    client = EdgeClient(cluster_id, node_ip=ip, node_port=port)
     try:
         result = await run_edge_sync(lambda: client.get_upstream(upstream_id))
         return result
@@ -157,8 +189,8 @@ async def get_upstream(ip: str, port: int, upstream_id: str, db: AsyncSession = 
 
 
 @router.post("/nodes/{ip}/{port}/upstreams")
-async def create_upstream(ip: str, port: int, data: UpstreamCreate, db: AsyncSession = Depends(get_db)):
-    client = EdgeClient(0, node_ip=ip, node_port=port)
+async def create_upstream(ip: str, port: int, data: UpstreamCreate, db: AsyncSession = Depends(get_db), cluster_id: int = 0):
+    client = EdgeClient(cluster_id, node_ip=ip, node_port=port)
     payload = data.model_dump(exclude_none=True)
     try:
         result = await run_edge_sync(lambda: client.create_upstream(payload))
@@ -170,8 +202,8 @@ async def create_upstream(ip: str, port: int, data: UpstreamCreate, db: AsyncSes
 
 
 @router.put("/nodes/{ip}/{port}/upstreams/{upstream_id}")
-async def update_upstream(ip: str, port: int, upstream_id: str, data: UpstreamUpdate, db: AsyncSession = Depends(get_db)):
-    client = EdgeClient(0, node_ip=ip, node_port=port)
+async def update_upstream(ip: str, port: int, upstream_id: str, data: UpstreamUpdate, db: AsyncSession = Depends(get_db), cluster_id: int = 0):
+    client = EdgeClient(cluster_id, node_ip=ip, node_port=port)
     payload = data.model_dump(exclude_none=True)
     try:
         result = await run_edge_sync(lambda: client.update_upstream(upstream_id, payload))
@@ -183,8 +215,8 @@ async def update_upstream(ip: str, port: int, upstream_id: str, data: UpstreamUp
 
 
 @router.patch("/nodes/{ip}/{port}/upstreams/{upstream_id}")
-async def patch_upstream_endpoint(ip: str, port: int, upstream_id: str, data: dict, db: AsyncSession = Depends(get_db)):
-    client = EdgeClient(0, node_ip=ip, node_port=port)
+async def patch_upstream_endpoint(ip: str, port: int, upstream_id: str, data: dict, db: AsyncSession = Depends(get_db), cluster_id: int = 0):
+    client = EdgeClient(cluster_id, node_ip=ip, node_port=port)
     try:
         result = await run_edge_sync(lambda: client.patch_upstream(upstream_id, data))
         return result
@@ -195,8 +227,8 @@ async def patch_upstream_endpoint(ip: str, port: int, upstream_id: str, data: di
 
 
 @router.delete("/nodes/{ip}/{port}/upstreams/{upstream_id}")
-async def delete_upstream(ip: str, port: int, upstream_id: str, db: AsyncSession = Depends(get_db)):
-    client = EdgeClient(0, node_ip=ip, node_port=port)
+async def delete_upstream(ip: str, port: int, upstream_id: str, db: AsyncSession = Depends(get_db), cluster_id: int = 0):
+    client = EdgeClient(cluster_id, node_ip=ip, node_port=port)
     try:
         result = await run_edge_sync(lambda: client.delete_upstream(upstream_id))
         return result
@@ -207,8 +239,8 @@ async def delete_upstream(ip: str, port: int, upstream_id: str, db: AsyncSession
 
 
 @router.get("/nodes/{ip}/{port}/routes")
-async def list_routes(ip: str, port: int, db: AsyncSession = Depends(get_db)):
-    client = EdgeClient(0, node_ip=ip, node_port=port)
+async def list_routes(ip: str, port: int, db: AsyncSession = Depends(get_db), cluster_id: int = 0):
+    client = EdgeClient(cluster_id, node_ip=ip, node_port=port)
     # 节点执行路径：按该 client 实例判定，在发起 Edge 请求前调用 → 失败也带。
     route_info: dict[str, Any] = {}
     edge_sync.mark_route(route_info, client)
@@ -222,8 +254,8 @@ async def list_routes(ip: str, port: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/nodes/{ip}/{port}/routes/{route_id}")
-async def get_route(ip: str, port: int, route_id: str, db: AsyncSession = Depends(get_db)):
-    client = EdgeClient(0, node_ip=ip, node_port=port)
+async def get_route(ip: str, port: int, route_id: str, db: AsyncSession = Depends(get_db), cluster_id: int = 0):
+    client = EdgeClient(cluster_id, node_ip=ip, node_port=port)
     try:
         result = await run_edge_sync(lambda: client.get_route(route_id))
         return result
@@ -234,8 +266,8 @@ async def get_route(ip: str, port: int, route_id: str, db: AsyncSession = Depend
 
 
 @router.post("/nodes/{ip}/{port}/routes")
-async def create_route(ip: str, port: int, data: RouteCreate, db: AsyncSession = Depends(get_db)):
-    client = EdgeClient(0, node_ip=ip, node_port=port)
+async def create_route(ip: str, port: int, data: RouteCreate, db: AsyncSession = Depends(get_db), cluster_id: int = 0):
+    client = EdgeClient(cluster_id, node_ip=ip, node_port=port)
     payload = data.model_dump(exclude_none=True)
     try:
         result = await run_edge_sync(lambda: client.create_route(payload))
@@ -247,8 +279,8 @@ async def create_route(ip: str, port: int, data: RouteCreate, db: AsyncSession =
 
 
 @router.put("/nodes/{ip}/{port}/routes/{route_id}")
-async def update_route_endpoint(ip: str, port: int, route_id: str, data: RouteUpdate, db: AsyncSession = Depends(get_db)):
-    client = EdgeClient(0, node_ip=ip, node_port=port)
+async def update_route_endpoint(ip: str, port: int, route_id: str, data: RouteUpdate, db: AsyncSession = Depends(get_db), cluster_id: int = 0):
+    client = EdgeClient(cluster_id, node_ip=ip, node_port=port)
     payload = data.model_dump(exclude_none=True)
     try:
         result = await run_edge_sync(lambda: client.update_route(route_id, payload))
@@ -260,8 +292,8 @@ async def update_route_endpoint(ip: str, port: int, route_id: str, data: RouteUp
 
 
 @router.patch("/nodes/{ip}/{port}/routes/{route_id}")
-async def patch_route_endpoint(ip: str, port: int, route_id: str, data: dict, db: AsyncSession = Depends(get_db)):
-    client = EdgeClient(0, node_ip=ip, node_port=port)
+async def patch_route_endpoint(ip: str, port: int, route_id: str, data: dict, db: AsyncSession = Depends(get_db), cluster_id: int = 0):
+    client = EdgeClient(cluster_id, node_ip=ip, node_port=port)
     try:
         result = await run_edge_sync(lambda: client.patch_route(route_id, data))
         return result
@@ -272,8 +304,8 @@ async def patch_route_endpoint(ip: str, port: int, route_id: str, data: dict, db
 
 
 @router.delete("/nodes/{ip}/{port}/routes/{route_id}")
-async def delete_route_endpoint(ip: str, port: int, route_id: str, db: AsyncSession = Depends(get_db)):
-    client = EdgeClient(0, node_ip=ip, node_port=port)
+async def delete_route_endpoint(ip: str, port: int, route_id: str, db: AsyncSession = Depends(get_db), cluster_id: int = 0):
+    client = EdgeClient(cluster_id, node_ip=ip, node_port=port)
     try:
         result = await run_edge_sync(lambda: client.delete_route(route_id))
         return result
@@ -284,8 +316,8 @@ async def delete_route_endpoint(ip: str, port: int, route_id: str, db: AsyncSess
 
 
 @router.get("/nodes/{ip}/{port}/plugins")
-async def list_plugins(ip: str, port: int, db: AsyncSession = Depends(get_db)):
-    client = EdgeClient(0, node_ip=ip, node_port=port)
+async def list_plugins(ip: str, port: int, db: AsyncSession = Depends(get_db), cluster_id: int = 0):
+    client = EdgeClient(cluster_id, node_ip=ip, node_port=port)
     try:
         result = await run_edge_sync(client.list_plugins)
         return {"plugins": result}
@@ -296,8 +328,8 @@ async def list_plugins(ip: str, port: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/nodes/{ip}/{port}/global_rules")
-async def list_global_rules(ip: str, port: int, db: AsyncSession = Depends(get_db)):
-    client = EdgeClient(0, node_ip=ip, node_port=port)
+async def list_global_rules(ip: str, port: int, db: AsyncSession = Depends(get_db), cluster_id: int = 0):
+    client = EdgeClient(cluster_id, node_ip=ip, node_port=port)
     # 节点执行路径：按该 client 实例判定，在发起 Edge 请求前调用 → 失败也带。
     route_info: dict[str, Any] = {}
     edge_sync.mark_route(route_info, client)
@@ -311,8 +343,8 @@ async def list_global_rules(ip: str, port: int, db: AsyncSession = Depends(get_d
 
 
 @router.get("/nodes/{ip}/{port}/global_rules/{rule_id}")
-async def get_global_rule(ip: str, port: int, rule_id: str, db: AsyncSession = Depends(get_db)):
-    client = EdgeClient(0, node_ip=ip, node_port=port)
+async def get_global_rule(ip: str, port: int, rule_id: str, db: AsyncSession = Depends(get_db), cluster_id: int = 0):
+    client = EdgeClient(cluster_id, node_ip=ip, node_port=port)
     try:
         result = await run_edge_sync(lambda: client.get_global_rule(rule_id))
         return result
@@ -323,8 +355,8 @@ async def get_global_rule(ip: str, port: int, rule_id: str, db: AsyncSession = D
 
 
 @router.put("/nodes/{ip}/{port}/global_rules/{rule_id}")
-async def create_global_rule(ip: str, port: int, rule_id: str, data: dict, db: AsyncSession = Depends(get_db)):
-    client = EdgeClient(0, node_ip=ip, node_port=port)
+async def create_global_rule(ip: str, port: int, rule_id: str, data: dict, db: AsyncSession = Depends(get_db), cluster_id: int = 0):
+    client = EdgeClient(cluster_id, node_ip=ip, node_port=port)
     try:
         result = await run_edge_sync(lambda: client.create_global_rule(rule_id, data))
         return result
@@ -335,8 +367,8 @@ async def create_global_rule(ip: str, port: int, rule_id: str, data: dict, db: A
 
 
 @router.patch("/nodes/{ip}/{port}/global_rules/{rule_id}")
-async def update_global_rule(ip: str, port: int, rule_id: str, data: dict, db: AsyncSession = Depends(get_db)):
-    client = EdgeClient(0, node_ip=ip, node_port=port)
+async def update_global_rule(ip: str, port: int, rule_id: str, data: dict, db: AsyncSession = Depends(get_db), cluster_id: int = 0):
+    client = EdgeClient(cluster_id, node_ip=ip, node_port=port)
     try:
         result = await run_edge_sync(lambda: client.update_global_rule(rule_id, data))
         return result
@@ -347,8 +379,8 @@ async def update_global_rule(ip: str, port: int, rule_id: str, data: dict, db: A
 
 
 @router.delete("/nodes/{ip}/{port}/global_rules/{rule_id}")
-async def delete_global_rule(ip: str, port: int, rule_id: str, db: AsyncSession = Depends(get_db)):
-    client = EdgeClient(0, node_ip=ip, node_port=port)
+async def delete_global_rule(ip: str, port: int, rule_id: str, db: AsyncSession = Depends(get_db), cluster_id: int = 0):
+    client = EdgeClient(cluster_id, node_ip=ip, node_port=port)
     try:
         result = await run_edge_sync(lambda: client.delete_global_rule(rule_id))
         return result
@@ -359,8 +391,8 @@ async def delete_global_rule(ip: str, port: int, rule_id: str, db: AsyncSession 
 
 
 @router.get("/nodes/{ip}/{port}/plugin_configs")
-async def list_plugin_configs(ip: str, port: int, db: AsyncSession = Depends(get_db)):
-    client = EdgeClient(0, node_ip=ip, node_port=port)
+async def list_plugin_configs(ip: str, port: int, db: AsyncSession = Depends(get_db), cluster_id: int = 0):
+    client = EdgeClient(cluster_id, node_ip=ip, node_port=port)
     # 节点执行路径：按该 client 实例判定，在发起 Edge 请求前调用 → 失败也带。
     route_info: dict[str, Any] = {}
     edge_sync.mark_route(route_info, client)
@@ -374,8 +406,8 @@ async def list_plugin_configs(ip: str, port: int, db: AsyncSession = Depends(get
 
 
 @router.get("/nodes/{ip}/{port}/plugin_configs/{config_id}")
-async def get_plugin_config(ip: str, port: int, config_id: str, db: AsyncSession = Depends(get_db)):
-    client = EdgeClient(0, node_ip=ip, node_port=port)
+async def get_plugin_config(ip: str, port: int, config_id: str, db: AsyncSession = Depends(get_db), cluster_id: int = 0):
+    client = EdgeClient(cluster_id, node_ip=ip, node_port=port)
     try:
         result = await run_edge_sync(lambda: client.get_plugin_config(config_id))
         return result
@@ -386,8 +418,8 @@ async def get_plugin_config(ip: str, port: int, config_id: str, db: AsyncSession
 
 
 @router.put("/nodes/{ip}/{port}/plugin_configs/{config_id}")
-async def create_plugin_config(ip: str, port: int, config_id: str, data: dict, db: AsyncSession = Depends(get_db)):
-    client = EdgeClient(0, node_ip=ip, node_port=port)
+async def create_plugin_config(ip: str, port: int, config_id: str, data: dict, db: AsyncSession = Depends(get_db), cluster_id: int = 0):
+    client = EdgeClient(cluster_id, node_ip=ip, node_port=port)
     try:
         result = await run_edge_sync(lambda: client.create_plugin_config(config_id, data))
         return result
@@ -398,8 +430,8 @@ async def create_plugin_config(ip: str, port: int, config_id: str, data: dict, d
 
 
 @router.patch("/nodes/{ip}/{port}/plugin_configs/{config_id}")
-async def update_plugin_config(ip: str, port: int, config_id: str, data: dict, db: AsyncSession = Depends(get_db)):
-    client = EdgeClient(0, node_ip=ip, node_port=port)
+async def update_plugin_config(ip: str, port: int, config_id: str, data: dict, db: AsyncSession = Depends(get_db), cluster_id: int = 0):
+    client = EdgeClient(cluster_id, node_ip=ip, node_port=port)
     try:
         result = await run_edge_sync(lambda: client.update_plugin_config(config_id, data))
         return result
@@ -410,8 +442,8 @@ async def update_plugin_config(ip: str, port: int, config_id: str, data: dict, d
 
 
 @router.delete("/nodes/{ip}/{port}/plugin_configs/{config_id}")
-async def delete_plugin_config(ip: str, port: int, config_id: str, db: AsyncSession = Depends(get_db)):
-    client = EdgeClient(0, node_ip=ip, node_port=port)
+async def delete_plugin_config(ip: str, port: int, config_id: str, db: AsyncSession = Depends(get_db), cluster_id: int = 0):
+    client = EdgeClient(cluster_id, node_ip=ip, node_port=port)
     try:
         result = await run_edge_sync(lambda: client.delete_plugin_config(config_id))
         return result
@@ -422,8 +454,8 @@ async def delete_plugin_config(ip: str, port: int, config_id: str, db: AsyncSess
 
 
 @router.get("/nodes/{ip}/{port}/plugin_metadata")
-async def list_plugin_metadata(ip: str, port: int, db: AsyncSession = Depends(get_db)):
-    client = EdgeClient(0, node_ip=ip, node_port=port)
+async def list_plugin_metadata(ip: str, port: int, db: AsyncSession = Depends(get_db), cluster_id: int = 0):
+    client = EdgeClient(cluster_id, node_ip=ip, node_port=port)
     # 节点执行路径：按该 client 实例判定，在发起 Edge 请求前调用 → 失败也带。
     route_info: dict[str, Any] = {}
     edge_sync.mark_route(route_info, client)
@@ -437,8 +469,8 @@ async def list_plugin_metadata(ip: str, port: int, db: AsyncSession = Depends(ge
 
 
 @router.get("/nodes/{ip}/{port}/plugin_metadata/{plugin_name}")
-async def get_plugin_metadata(ip: str, port: int, plugin_name: str, db: AsyncSession = Depends(get_db)):
-    client = EdgeClient(0, node_ip=ip, node_port=port)
+async def get_plugin_metadata(ip: str, port: int, plugin_name: str, db: AsyncSession = Depends(get_db), cluster_id: int = 0):
+    client = EdgeClient(cluster_id, node_ip=ip, node_port=port)
     try:
         result = await run_edge_sync(lambda: client.get_plugin_metadata(plugin_name))
         return result
@@ -449,8 +481,8 @@ async def get_plugin_metadata(ip: str, port: int, plugin_name: str, db: AsyncSes
 
 
 @router.put("/nodes/{ip}/{port}/plugin_metadata/{plugin_name}")
-async def create_plugin_metadata(ip: str, port: int, plugin_name: str, data: dict, db: AsyncSession = Depends(get_db)):
-    client = EdgeClient(0, node_ip=ip, node_port=port)
+async def create_plugin_metadata(ip: str, port: int, plugin_name: str, data: dict, db: AsyncSession = Depends(get_db), cluster_id: int = 0):
+    client = EdgeClient(cluster_id, node_ip=ip, node_port=port)
     try:
         result = await run_edge_sync(lambda: client.create_plugin_metadata(plugin_name, data))
         return result
@@ -461,8 +493,8 @@ async def create_plugin_metadata(ip: str, port: int, plugin_name: str, data: dic
 
 
 @router.patch("/nodes/{ip}/{port}/plugin_metadata/{plugin_name}")
-async def patch_plugin_metadata_endpoint(ip: str, port: int, plugin_name: str, data: dict, db: AsyncSession = Depends(get_db)):
-    client = EdgeClient(0, node_ip=ip, node_port=port)
+async def patch_plugin_metadata_endpoint(ip: str, port: int, plugin_name: str, data: dict, db: AsyncSession = Depends(get_db), cluster_id: int = 0):
+    client = EdgeClient(cluster_id, node_ip=ip, node_port=port)
     try:
         result = await run_edge_sync(lambda: client.update_plugin_metadata(plugin_name, data))
         return result
@@ -473,8 +505,8 @@ async def patch_plugin_metadata_endpoint(ip: str, port: int, plugin_name: str, d
 
 
 @router.delete("/nodes/{ip}/{port}/plugin_metadata/{plugin_name}")
-async def delete_plugin_metadata(ip: str, port: int, plugin_name: str, db: AsyncSession = Depends(get_db)):
-    client = EdgeClient(0, node_ip=ip, node_port=port)
+async def delete_plugin_metadata(ip: str, port: int, plugin_name: str, db: AsyncSession = Depends(get_db), cluster_id: int = 0):
+    client = EdgeClient(cluster_id, node_ip=ip, node_port=port)
     try:
         result = await run_edge_sync(lambda: client.delete_plugin_metadata(plugin_name))
         return result
@@ -485,8 +517,8 @@ async def delete_plugin_metadata(ip: str, port: int, plugin_name: str, db: Async
 
 
 @router.get("/nodes/{ip}/{port}/ssl")
-async def list_ssl_certificates(ip: str, port: int, db: AsyncSession = Depends(get_db)):
-    client = EdgeClient(0, node_ip=ip, node_port=port)
+async def list_ssl_certificates(ip: str, port: int, db: AsyncSession = Depends(get_db), cluster_id: int = 0):
+    client = EdgeClient(cluster_id, node_ip=ip, node_port=port)
     # 节点执行路径：按该 client 实例判定，在发起 Edge 请求前调用 → 失败也带。
     route_info: dict[str, Any] = {}
     edge_sync.mark_route(route_info, client)
@@ -500,8 +532,8 @@ async def list_ssl_certificates(ip: str, port: int, db: AsyncSession = Depends(g
 
 
 @router.get("/nodes/{ip}/{port}/ssl/{cert_id}")
-async def get_ssl_certificate(ip: str, port: int, cert_id: str, db: AsyncSession = Depends(get_db)):
-    client = EdgeClient(0, node_ip=ip, node_port=port)
+async def get_ssl_certificate(ip: str, port: int, cert_id: str, db: AsyncSession = Depends(get_db), cluster_id: int = 0):
+    client = EdgeClient(cluster_id, node_ip=ip, node_port=port)
     try:
         return await run_edge_sync(lambda: client.api("ssl", "get", cert_id))
     except EdgeConnectionError as e:
@@ -511,8 +543,8 @@ async def get_ssl_certificate(ip: str, port: int, cert_id: str, db: AsyncSession
 
 
 @router.delete("/nodes/{ip}/{port}/ssl/{cert_id}")
-async def delete_ssl_certificate(ip: str, port: int, cert_id: str, db: AsyncSession = Depends(get_db)):
-    client = EdgeClient(0, node_ip=ip, node_port=port)
+async def delete_ssl_certificate(ip: str, port: int, cert_id: str, db: AsyncSession = Depends(get_db), cluster_id: int = 0):
+    client = EdgeClient(cluster_id, node_ip=ip, node_port=port)
     try:
         return await run_edge_sync(lambda: client.api("ssl", "delete", cert_id))
     except EdgeConnectionError as e:
@@ -522,8 +554,8 @@ async def delete_ssl_certificate(ip: str, port: int, cert_id: str, db: AsyncSess
 
 
 @router.get("/nodes/{ip}/{port}/plugins/list")
-async def list_available_plugins(ip: str, port: int, db: AsyncSession = Depends(get_db)):
-    client = EdgeClient(0, node_ip=ip, node_port=port)
+async def list_available_plugins(ip: str, port: int, db: AsyncSession = Depends(get_db), cluster_id: int = 0):
+    client = EdgeClient(cluster_id, node_ip=ip, node_port=port)
     # 节点执行路径：按该 client 实例判定，在发起 Edge 请求前调用 → 失败也带。
     route_info: dict[str, Any] = {}
     edge_sync.mark_route(route_info, client)
@@ -537,8 +569,8 @@ async def list_available_plugins(ip: str, port: int, db: AsyncSession = Depends(
 
 
 @router.put("/nodes/{ip}/{port}/plugins/reload")
-async def reload_plugins(ip: str, port: int, db: AsyncSession = Depends(get_db)):
-    client = EdgeClient(0, node_ip=ip, node_port=port)
+async def reload_plugins(ip: str, port: int, db: AsyncSession = Depends(get_db), cluster_id: int = 0):
+    client = EdgeClient(cluster_id, node_ip=ip, node_port=port)
     try:
         result = await run_edge_sync(client.reload_plugins)
         return result
@@ -552,8 +584,8 @@ async def reload_plugins(ip: str, port: int, db: AsyncSession = Depends(get_db))
 
 
 @router.get("/nodes/{ip}/{port}/stream-routes")
-async def list_stream_routes(ip: str, port: int, db: AsyncSession = Depends(get_db)):
-    client = EdgeClient(0, node_ip=ip, node_port=port)
+async def list_stream_routes(ip: str, port: int, db: AsyncSession = Depends(get_db), cluster_id: int = 0):
+    client = EdgeClient(cluster_id, node_ip=ip, node_port=port)
     # 节点执行路径：按该 client 实例判定，在发起 Edge 请求前调用 → 失败也带。
     route_info: dict[str, Any] = {}
     edge_sync.mark_route(route_info, client)
@@ -567,8 +599,8 @@ async def list_stream_routes(ip: str, port: int, db: AsyncSession = Depends(get_
 
 
 @router.get("/nodes/{ip}/{port}/stream-routes/{route_id}")
-async def get_stream_route(ip: str, port: int, route_id: str, db: AsyncSession = Depends(get_db)):
-    client = EdgeClient(0, node_ip=ip, node_port=port)
+async def get_stream_route(ip: str, port: int, route_id: str, db: AsyncSession = Depends(get_db), cluster_id: int = 0):
+    client = EdgeClient(cluster_id, node_ip=ip, node_port=port)
     try:
         result = await run_edge_sync(lambda: client.get_stream_route(route_id))
         return result
@@ -579,12 +611,12 @@ async def get_stream_route(ip: str, port: int, route_id: str, db: AsyncSession =
 
 
 @router.post("/nodes/{ip}/{port}/stream-routes")
-async def create_stream_route(ip: str, port: int, data: StreamRouteCreate, db: AsyncSession = Depends(get_db)):
+async def create_stream_route(ip: str, port: int, data: StreamRouteCreate, db: AsyncSession = Depends(get_db), cluster_id: int = 0):
     """在 Edge 节点上创建 Stream 路由（集合创建，id 由 Edge 分配）。
 
     `StreamRouteCreate` 负责把无效载荷挡在平台侧——Edge 不做校验（见模型 docstring）。
     """
-    client = EdgeClient(0, node_ip=ip, node_port=port)
+    client = EdgeClient(cluster_id, node_ip=ip, node_port=port)
     payload = data.model_dump(exclude_unset=True)
     try:
         result = await run_edge_sync(lambda: client.create_stream_route(payload))
@@ -596,9 +628,9 @@ async def create_stream_route(ip: str, port: int, data: StreamRouteCreate, db: A
 
 
 @router.put("/nodes/{ip}/{port}/stream-routes/{route_id}")
-async def update_stream_route(ip: str, port: int, route_id: str, data: StreamRouteUpdate, db: AsyncSession = Depends(get_db)):
+async def update_stream_route(ip: str, port: int, route_id: str, data: StreamRouteUpdate, db: AsyncSession = Depends(get_db), cluster_id: int = 0):
     """更新 Edge 节点上的 Stream 路由（PUT 全量替换，路径 id 为准）。"""
-    client = EdgeClient(0, node_ip=ip, node_port=port)
+    client = EdgeClient(cluster_id, node_ip=ip, node_port=port)
     payload = data.model_dump(exclude_unset=True)
     try:
         result = await run_edge_sync(lambda: client.update_stream_route(route_id, payload))
@@ -610,8 +642,8 @@ async def update_stream_route(ip: str, port: int, route_id: str, data: StreamRou
 
 
 @router.delete("/nodes/{ip}/{port}/stream-routes/{route_id}")
-async def delete_stream_route(ip: str, port: int, route_id: str, db: AsyncSession = Depends(get_db)):
-    client = EdgeClient(0, node_ip=ip, node_port=port)
+async def delete_stream_route(ip: str, port: int, route_id: str, db: AsyncSession = Depends(get_db), cluster_id: int = 0):
+    client = EdgeClient(cluster_id, node_ip=ip, node_port=port)
     try:
         result = await run_edge_sync(lambda: client.delete_stream_route(route_id))
         return result
