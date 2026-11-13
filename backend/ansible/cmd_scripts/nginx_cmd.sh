@@ -46,8 +46,41 @@ is_pid_running() {
   ps -p "$pid" >/dev/null 2>&1
 }
 
+# Clean up leftovers from an unclean exit (power loss / SIGKILL) before start/stop.
+#
+# nginx only unlinks its listening unix sockets on a graceful exit
+# (ngx_close_listening_sockets requires ngx_process <= NGX_PROCESS_MASTER and
+# ngx_new_binary == 0), so after a hard kill the socket files stay on disk and the
+# next `bin/edge start` dies with:
+#   nginx: [emerg] bind() to unix:.../conf/edge_events.sock failed (98: Address already in use)
+# The real sockets live in conf/ (conf/edge_events.sock, conf/edge_stream_*.sock);
+# the older cleanup only looked in logs/ and therefore never matched anything.
+#
+# A live instance is never touched: its socket removal would break all new connections.
+clean_stale_sockets() {
+  local pid=$(get_nginx_pid)
+  if [[ -n $pid ]] && is_pid_running "$pid" && is_nginx_process "$pid"; then
+    echo "Nginx process (PID: $pid) is running, skip stale socket cleanup."
+    return
+  fi
+
+  rm -f "$nginx_pid_file"
+
+  local dir leftover
+  for dir in "$prefix/conf" "$prefix/logs" "$nginx_install_path/conf" "$nginx_install_path/logs"; do
+    [[ -d $dir ]] || continue
+    for leftover in "$dir"/*.sock; do
+      [[ -e $leftover ]] || continue
+      rm -f "$leftover"
+      echo "Cleaned up stale socket file: $leftover"
+    done
+  done
+}
+
 # Start Nginx
 nginx_start() {
+  clean_stale_sockets
+
   local nginx_pid=$(get_nginx_pid)
   if [[ -n $nginx_pid ]]; then
       if is_pid_running "$nginx_pid" && is_nginx_process "$nginx_pid"; then
@@ -90,12 +123,8 @@ nginx_stop() {
     echo "The Nginx process with PID $nginx_pid does not exist or is not an Nginx process."
   fi
 
-  # Clean up leftover socket files that block restart
-  local sock_dir="$prefix/logs/"
-  if ls "$sock_dir"edge_*.sock 2>/dev/null; then
-    rm -f "$sock_dir"edge_*.sock
-    echo "Cleaned up stale socket files in $sock_dir"
-  fi
+  # Clean up leftover socket files that block the next start
+  clean_stale_sockets
 }
 
 

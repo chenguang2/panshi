@@ -830,7 +830,10 @@ class TestBuildEdgeServiceContent:
         assert "ExecStart=/data/rocks/uap-edge/bin/edge start" in content
         assert "ExecStop=" in content
         assert "/data/rocks/uap-edge/bin/edge stop" in content
-        assert "kill -TERM" in content
+        # ExecStop 走 bin/edge stop（自带 socket 清理）并以前缀 - 容忍幂等失败；
+        # 旧实现的 "…"$PID"…" 嵌套引号会被 systemd 在内层引号处截断（从未真正执行）。
+        assert "-/data/rocks/uap-edge/bin/edge stop" in content
+        assert "kill -TERM" not in content
         assert "ExecReload=/data/rocks/uap-edge/bin/edge reload" in content
         assert "PIDFile=/data/rocks/uap-edge/logs/nginx.pid" in content
         assert "Type=forking" in content

@@ -4,12 +4,14 @@
 
 Edge 网关节点（部署了 `uap-edge` + `openresty`）默认**不会开机自启**——机器重启后 Edge 服务不会自动拉起，需要人工执行 `bin/edge start`。
 
-本文档说明如何通过 **systemd 服务**将 Edge 配置为开机自启动。已在 `192.168.0.24`（Kylin Linux V10）真机验证通过。
+本文档说明如何通过 **systemd 服务**将 Edge 配置为开机自启动。已在 `192.168.0.24`（Kylin Linux V10）、`192.168.0.14`（LinxOS V6.0.99 ARM64）真机验证。
+
+> **重要**：`bin/edge start` 本身**不清理**上次异常退出残留的 unix socket 与 pid 文件，而 nginx 只在**正常退出**时才 unlink 监听 socket。因此**断电/强杀之后的下一次开机必然启动失败**（`bind() … (98: Address already in use)`）。下面的服务文件带 `ExecStartPre` 启动自愈步骤，这是自启动能真正生效的前提，**不要省略**。
 
 ## 前置条件
 
-- 能通过 SSH 以 `root` 登录节点
-- 节点操作系统为 systemd 发行版（如 Kylin V10、CentOS 7+、Ubuntu 16+），执行 `systemctl --version` 确认
+- 能通过 SSH 以 `root` 登录节点（写 `/etc/systemd/system/`、`systemctl` 需要 root）
+- 节点操作系统为 systemd 发行版（如 Kylin V10、LinxOS、CentOS 7+、Ubuntu 16+），执行 `systemctl --version` 确认
 - 知道以下路径与运行用户（**每台节点可能不同，务必先确认**）：
 
 | 项 | 说明 | 示例值（192.168.0.24） |
@@ -17,7 +19,7 @@ Edge 网关节点（部署了 `uap-edge` + `openresty`）默认**不会开机自
 | Edge 目录 | 含 `bin/edge` 的目录 | `/data/rocks/rockses/3.1/uapm/uap-edge` |
 | 运行用户 | Edge 以哪个用户运行 | `rocksware` |
 
-> **确认方法**：执行 `ps aux | grep bin/openresty | grep -v grep`，输出第一列就是运行用户；`ls /proc/<pid>/cwd` 或看命令里的 `-p` 参数即为 Edge 目录。
+> **确认方法**：执行 `ps aux | grep bin/openresty | grep -v grep`，输出第一列就是运行用户；命令里 `-p` 后面的路径即为 Edge 目录。
 
 ## 配置步骤
 
@@ -28,23 +30,26 @@ SSH 登录节点后，创建 `/etc/systemd/system/edge.service`：
 ```bash
 cat > /etc/systemd/system/edge.service <<'EOF'
 [Unit]
-Description=Edge Gateway (uap-edge)
+Description=Edge Gateway
 After=network.target
 
 [Service]
-Type=oneshot
+Type=forking
 User=rocksware
 Group=rocksware
 WorkingDirectory=/data/rocks/rockses/3.1/uapm/uap-edge
+ExecStartPre=/bin/bash -c 'if pgrep -f "[b]in/openresty -p /data/rocks/rockses/3.1/uapm/uap-edge" >/dev/null 2>&1; then echo "Edge 已在运行，跳过残留清理" 1>&2; exit 1; fi; rm -f /data/rocks/rockses/3.1/uapm/uap-edge/logs/nginx.pid /data/rocks/rockses/3.1/uapm/uap-edge/conf/*.sock /data/rocks/rockses/3.1/uapm/uap-edge/logs/*.sock; echo "已清理 Edge 残留 socket / pid 文件"'
 ExecStart=/data/rocks/rockses/3.1/uapm/uap-edge/bin/edge start
-RemainAfterExit=yes
+ExecStop=-/data/rocks/rockses/3.1/uapm/uap-edge/bin/edge stop
+ExecReload=/data/rocks/rockses/3.1/uapm/uap-edge/bin/edge reload
+PIDFile=/data/rocks/rockses/3.1/uapm/uap-edge/logs/nginx.pid
 
 [Install]
 WantedBy=multi-user.target
 EOF
 ```
 
-> **按实际节点修改**：`User`/`Group` 改成该节点的运行用户，`WorkingDirectory`/`ExecStart` 里的路径改成该节点的 Edge 目录。
+> **按实际节点修改**：`User`/`Group` 改成该节点的运行用户，四处路径改成该节点的 Edge 目录（`ExecStartPre` 里的路径出现 3 次，一处都不能漏）。
 
 ### 2. 重新加载并启用开机自启
 
@@ -68,7 +73,7 @@ systemctl status edge
 ps aux | grep bin/openresty | grep -v grep
 ```
 
-`systemctl status edge` 应显示 `active (exited)` 且 `status=0/SUCCESS`。
+`systemctl status edge` 应显示 `active (running)`（`Type=forking` + `PIDFile` 后 systemd 跟踪 nginx master）。
 
 ### 4. 验证开机自启（可选，重启机器测试）
 
@@ -84,65 +89,56 @@ reboot                      # 重启后应自动拉起 Edge
 | 查看状态 | `systemctl status edge` |
 | 手动启动 | `systemctl start edge` |
 | 停止 | `systemctl stop edge` |
+| 重载配置 | `systemctl reload edge` |
 | 查看日志 | `journalctl -u edge -n 100` |
 | 取消开机自启 | `systemctl disable edge` |
 
 ## 配置说明
 
-- **`Type=oneshot` + `RemainAfterExit=yes`**：`bin/edge start` 会 daemon 化启动 nginx 后立即返回（不阻塞），用 oneshot + RemainAfterExit 让服务保持 active 状态，便于 `systemctl status` 查看。
-- **`User=rocksware`**：Edge 必须以创建它的用户运行（否则 nginx 可能因目录权限/日志权限失败）。不要用 root 运行 Edge。
-- **崩溃自动重启**：本配置未开启 `Restart=`。如需 Edge 异常退出时自动重启，可在 `[Service]` 加一行：
-  ```ini
-  Restart=on-failure
-  ```
-  > 注意：`bin/edge start` 是 daemon 化的，systemd 的 `Restart` 检测的是 start 命令进程而非 nginx 进程本身，对 nginx 崩溃的感知有限。若要强健的守护，需改用 `Type=simple` + nginx `daemon off` 方式（改动较大，默认不采用）。
+- **`Type=forking` + `PIDFile`**：`bin/edge start` 会 fork 出 nginx master 后退出。`forking` 让 systemd 按 `PIDFile` 跟踪 nginx master 主进程，`active (running)` 即代表 nginx 真在跑；`systemctl restart` 也能正确先停后起。（已废弃的 `Type=oneshot` + `RemainAfterExit=yes` 会把「命令退出」当成「服务活跃」，nginx 挂了也显示 active，不要回退。）
+- **`ExecStartPre` 启动自愈**：清理上次断电/强杀残留的 `conf/*.sock`、`logs/*.sock` 与 `logs/nginx.pid`。判据是「本前缀有没有 `bin/openresty -p <edge_path>` 进程」而不是 pid 文件（pid 文件本身就是残留物）；**有实例在跑时脚本以非零退出码结束**，拒绝起第二个同前缀实例，也绝不删在跑实例的 socket。
+- **`ExecStop=-…bin/edge stop`**：`-` 前缀表示忽略退出码，停一个已经停掉的实例视为成功。`bin/edge stop` 自己会 `openresty -s stop` 并清理 socket。
+- **`User=` 必须与 Edge 实际运行用户一致**：socket/pid/日志目录都属该用户，用错用户会因权限失败（也不要图省事用 root）。
+- **崩溃自动重启**：本配置未开启 `Restart=`。`bin/edge start` 是 daemon 化的，systemd 的 `Restart` 只能感知 `start` 命令本身、对 nginx 崩溃感知有限；且 `Restart` 解决不了残留 socket（每次重试都以同样方式失败）。若要强健的守护，需改用 `Type=simple` + nginx `daemon off`（改动较大，默认不采用）。
+
+## 排障：开机启动失败 `bind() … (98: Address already in use)`
+
+典型现场（节点关机重启后 nginx 没起来）：
+
+```
+edge[1937]: nginx: [emerg] bind() to unix:/data/.../uap-edge/conf/edge_events.sock failed (98: Address already in use)
+…（重试 5 次）
+systemd[1]: edge.service: New main PID 2910714 does not exist or is a zombie.
+systemd[1]: edge.service: Failed with result 'protocol'.
+```
+
+**根因**：`98` 不等于「别的进程占着」——nginx 只在**正常退出**时 unlink 监听 unix socket，断电/强杀后 socket 文件留在磁盘上，下一次 `bind()` 就撞自己上次留下的 inode；同时残留的 `logs/nginx.pid` 让 systemd 读到早已回收的 PID，报 `protocol` 失败。这也是为什么「手动 `bin/edge stop` 后再 `bin/edge start` 就恢复了」——清理恰好发生在 `stop` 分支。
+
+**处理**：
+
+1. 确认当前 unit 是否带 `ExecStartPre`：`grep ExecStartPre /etc/systemd/system/edge.service`。没有就是老版本 unit（平台在 2026-11-13 之前下发的），按本文档第 1 步覆盖后 `systemctl daemon-reload`。
+2. 立即恢复（不必 reboot）：先在平台上点该节点的「启动 Nginx」（脚本已先清理再启动），或手工 `bin/edge stop` 后 `systemctl start edge`。
+3. 若 `ps aux | grep bin/openresty` 显示**确有** nginx 在跑而服务仍 failed：说明它不在 systemd 管理下（人工启动过），`systemctl start` 会被启动自愈以「已在运行」拒绝，属预期；执行 `bin/edge stop` 后 `systemctl start edge` 托管过去。
+4. 手工排查残留（**先确认没有活实例**再删）：
+
+   ```bash
+   ps aux | grep '[b]in/openresty'            # 应无输出
+   ls -l <edge_path>/conf/*.sock <edge_path>/logs/*.sock <edge_path>/logs/nginx.pid
+   rm -f <edge_path>/logs/nginx.pid <edge_path>/conf/*.sock <edge_path>/logs/*.sock
+   ```
 
 ## 多节点批量配置提示
 
-若需在多台节点统一配置，可借助磐石 Admin 的 ansible 能力或自行脚本化。每台节点只需按上述"按实际节点修改"调整 `User`/`Group`/路径即可复用同一份服务文件模板。
+若需在多台节点统一配置，可直接使用平台「自启动管理」（见文末），或自行脚本化。每台节点只需按上述「按实际节点修改」调整 `User`/`Group`/路径即可复用同一份服务文件模板。
 
-## 附：正常启动后的状态说明
-
-配置完成后执行 `systemctl status edge`，会看到类似以下输出：
-
-```
-Active: active (exited) since Thu 2026-08-20 09:57:36 CST; 19s ago
-Process: 854 ExecStart=/data/rocks/rockses/3.1/uapm/uap-edge/bin/edge start (code=exited, status=0/SUCCESS)
-```
-
-各字段含义如下：
-
-| 字段 | 含义 | 是否正常 |
-|---|---|---|
-| `Active: active (exited)` | 服务处于活跃状态，但启动命令已返回 | ✅ 正常 |
-| `since ... 19s ago` | 服务启动于该时间，已运行 19 秒 | ✅ 正常 |
-| `Process: 854 ExecStart=... (code=exited, status=0/SUCCESS)` | 启动命令 `bin/edge start` 以退出码 0（成功）结束 | ✅ 正常 |
-
-**重点理解：`active (exited)` 不代表服务挂了。**
-
-- 本配置采用 `Type=oneshot` + `RemainAfterExit=yes`。
-- `bin/edge start` 会 **daemon 化**启动 nginx 后**立即返回**（不阻塞），所以 systemd 记录到的主进程（`bin/edge start` 命令本身）执行完就退出了。
-- `RemainAfterExit=yes` 让 systemd 在命令退出后**仍将服务标记为 active**（而非 failed/inactive），便于 `systemctl status` 查看。
-
-**真正的 nginx 进程是独立运行的，不归 systemd 直接管理。** 因此判断服务是否正常，应确认 nginx 进程存在：
-
-```bash
-# 确认 nginx 进程存在且以正确用户运行
-ps aux | grep bin/openresty | grep -v grep
-
-# 或确认监听端口（换成该节点实际端口）
-ss -tlnp | grep -E '16620|:80 '
-```
-
-只要 nginx 进程存在，服务即为正常运行。若看到 `active (failed)` 或 `status=1`（非 0），才是启动失败，可执行 `journalctl -u edge -n 100` 查看日志排查。
-
+> **存量节点注意**：`ExecStartPre` 自愈是 2026-11-13 引入的。**升级后需对每台已启用自启动的节点重新执行一次「启用自启动」**，把新 unit 下发下去（平台不会自动重启在跑的网关）。
 
 ## 平台功能：自启动管理
 
-磐石 Admin 已提供"自启动管理"页面（侧边栏"边缘网络"菜单），可在平台上统一对多个 Edge 节点启用/禁用/查询开机自启动，无需逐台 SSH 手动配置。
+磐石 Admin 已提供「自启动管理」页面（侧边栏「边缘网络」菜单），可在平台上统一对多个 Edge 节点启用/禁用/查询开机自启动，无需逐台 SSH 手动配置。
 
 - **启用/禁用**：下发上述 `edge.service` 并执行 `systemctl enable/disable`。需提供节点的 **root 账号密码**（仅本次操作使用，不保存）。
 - **查询状态**：显示 enabled / disabled / not_configured（未配置）三态，复用节点现有连接，无需 root。
 - **高级参数**：可覆盖 Edge 目录、运行用户（默认取运行后台程序的用户，请确认为节点 Edge 实际运行用户）。
 
-> 本页的手动 systemd 配置步骤，适用于不通过平台、自行配置节点的场景；平台功能与手动配置效果一致，最终都会在节点生成 `/etc/systemd/system/edge.service` 并 enable。
+> 本页的手动 systemd 配置步骤，适用于不通过平台、自行配置节点的场景；平台功能与手动配置效果一致，最终都会在节点生成 `/etc/systemd/system/edge.service` 并 enable。平台下发的 unit 与本文档完全一致（含 `ExecStartPre` 自愈）。

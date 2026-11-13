@@ -1845,27 +1845,52 @@ def sanitize_command_for_store(command: str) -> str:
     return re.sub(r"sshpass -p (\S+)", "sshpass -p *****", command)
 
 
+def _edge_service_prestart_script(edge_path: str) -> str:
+    """``ExecStartPre`` 脚本体：启动前自愈残留 unix socket / pid 文件。
+
+    2026-11-13 事故（节点关机重启后 nginx 起不来）：nginx 只在**正常退出**时
+    unlink 监听 unix socket（``ngx_close_listening_sockets`` 要求
+    ``ngx_process <= NGX_PROCESS_MASTER && ngx_new_binary == 0``），断电/强杀后
+    ``conf/edge_events.sock`` 等残留在磁盘上；``bin/edge`` 的残留清理只在
+    ``stop`` 分支执行（`start` 不清），于是开机 ``ExecStart`` 必然报
+    ``bind() ... (98: Address already in use)`` 并留下 ``logs/nginx.pid``
+    → systemd 判 ``result 'protocol'``（"New main PID ... does not exist"）。
+
+    脚本约束（由 ``tests/test_edge_service_stale_socket.py`` 钉住）：
+    - 不出现 ``$``/``%``/单引号：Exec 行外层用单引号包裹，systemd 会先做变量与
+      说明符展开，脚本自身的 shell 变量会被提前吞掉；
+    - 「是否已有实例在跑」只看命令行 ``bin/openresty -p <edge_path>``（模式写成
+      ``[b]in`` 以免匹配到执行本脚本的 bash 自身），**不看 pid 文件**——pid 文件
+      恰是残留物本身，且旧 PID 可能被复用；
+    - 有实例在跑则显式失败（拒绝同前缀起第二个实例，也绝不删在跑实例的 socket，
+      否则其新连接全断）；否则清理 ``conf/*.sock`` / ``logs/*.sock`` 与 pid 文件。
+    """
+    pidfile = f"{edge_path}/logs/nginx.pid"
+    return (
+        f'if pgrep -f "[b]in/openresty -p {edge_path}" >/dev/null 2>&1; then '
+        f'echo "Edge 已在运行，跳过残留清理" 1>&2; '
+        f"exit 1; fi; "
+        f"rm -f {pidfile} {edge_path}/conf/*.sock {edge_path}/logs/*.sock; "
+        f'echo "已清理 Edge 残留 socket / pid 文件"'
+    )
+
+
 def build_edge_service_content(run_user: str, edge_path: str) -> str:
     """Build the /etc/systemd/system/edge.service content.
 
     Type=forking + PIDFile because ``bin/edge start`` daemonizes (forks nginx).
 
-    ExecStop uses ``bin/edge stop`` which calls ``openresty -s stop``.  When the
-    PID file is missing or stale, the fallback reads the PID from the file and
-    kills it directly.  We avoid ``pkill -f`` because the search pattern would
-    also match the bash process running ExecStop itself.
+    ExecStartPre 清理上次异常退出残留的 unix socket 与 pid 文件（见
+    ``_edge_service_prestart_script``）——没有它，断电/强杀后的下一次开机必挂。
+
+    ExecStop 直接用 ``bin/edge stop``（calls ``openresty -s stop``，随后自行清理
+    socket）。用 ``-`` 前缀忽略退出码：停一个已经停掉的实例应是幂等成功。
+    不要写成 ``/bin/bash -c "…"$PID"…"`` 这类嵌套引号——systemd 会在内层第一个
+    双引号处截断命令（历史实现即因此从未真正执行过，兜底 kill 变成死代码）；
+    ExecStop 失败时 systemd 仍会向 cgroup 发 SIGTERM，兜底 kill 本身冗余。
     """
     pidfile = f"{edge_path}/logs/nginx.pid"
-    # ExecStop: try edge stop first; fallback reads PID file and kills directly.
-    # SIGTERM to master: nginx gracefully shuts down all workers before exiting.
-    # Avoid pkill -f: the search string appears in the bash command line itself.
-    stop_cmd = (
-        f"{edge_path}/bin/edge stop 2>/dev/null; "
-        f"sleep 1; "
-        f"PID=$(cat {pidfile} 2>/dev/null); "
-        f'if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then '
-        f'kill -TERM "$PID"; fi'
-    )
+    prestart = _edge_service_prestart_script(edge_path)
     return (
         "[Unit]\n"
         "Description=Edge Gateway\n"
@@ -1876,8 +1901,9 @@ def build_edge_service_content(run_user: str, edge_path: str) -> str:
         f"User={run_user}\n"
         f"Group={run_user}\n"
         f"WorkingDirectory={edge_path}\n"
+        f"ExecStartPre=/bin/bash -c '{prestart}'\n"
         f"ExecStart={edge_path}/bin/edge start\n"
-        f'ExecStop=/bin/bash -c "{stop_cmd}"\n'
+        f"ExecStop=-{edge_path}/bin/edge stop\n"
         f"ExecReload={edge_path}/bin/edge reload\n"
         f"PIDFile={pidfile}\n"
         "\n"
