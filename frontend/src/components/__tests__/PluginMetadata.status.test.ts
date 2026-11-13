@@ -110,12 +110,12 @@ describe('PluginMetadata.vue 状态四态单一表达（与独立页同参数，
     expect(tags[1].props('pending')).toBe(true)
     expect(tags[1].props('lastPublishStatus')).toBe('partial')
     // 四态单一表达：无 badge 双显、无「v{N} · 日期」第三种表达（updated_at 拼接）、无「未同步」分支。
-    // 注意共享组件 partial 分支的「⚠ v2 · 发布未完全生效」属四态表达，不在禁止之列
+    // 共享组件「⚠ v2 · 发布未完全生效」属四态表达，不在禁止之列（无 pending 时呈现）
     expect(wrapper.find('.badge').exists()).toBe(false)
     expect(wrapper.text()).not.toMatch(/v\d+ · \d{4}-\d{2}-\d{2}/)
     expect(wrapper.text()).not.toContain('未同步')
-    // partial 态文案由共享组件承载
-    expect(wrapper.text()).toContain('发布未完全生效')
+    // publish-status-unify：tags[1] pending+partial 同传 → 待发布优先，显示「待发布」
+    expect(wrapper.text()).toContain('待发布')
     wrapper.unmount()
   })
 

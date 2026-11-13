@@ -106,6 +106,9 @@ class SslCertificateResponse(SslCertificateBase):
     # 待发布（ssl-ux-review-fixes D1：经 edge_sync.derive_pending_publish 单点推导，端点回填；
     # 前端 MUST NOT 按时间戳自行实现）
     pending_publish: bool = False
+    # 上次发布结果（publish-status-unify）：'partial'=部分/全部节点失败，全部成功为 NULL；
+    # 掩码出口单点透传（列表/详情同字段）
+    last_publish_status: Optional[str] = None
     status: int = 1
     generate_log: Optional[list[CommandLogEntry]] = None
     created_at: Optional[str] = None

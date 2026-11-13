@@ -24,7 +24,8 @@ ALLOWED_SEARCH_FIELDS = {"name", "uri", "description", "hosts"}
 
 
 def route_to_response(r: Route, current_version: int | None = None, published_at: str | None = None,
-                       plugins: list | None = None, pending_publish: bool = False) -> RouteResponse:
+                       plugins: list | None = None, pending_publish: bool = False,
+                       last_publish_status: str | None = None) -> RouteResponse:
     """Convert Route model to RouteResponse"""
     # edge_uuid may be None for legacy rows; generate fallback to satisfy schema
     edge_uuid = r.edge_uuid or str(uuid.uuid4())
@@ -50,6 +51,8 @@ def route_to_response(r: Route, current_version: int | None = None, published_at
         # 待发布（4.1）：单点推导 = edge_sync.derive_pending_publish（与 upstreams 同款），
         # 由两个列表端点组装时传入；详情端点有意不传（B1：发布状态展示只走列表）。
         "pending_publish": pending_publish,
+        # partial 持久化（publish-status-unify 批 2）：同由两个列表端点透传，能力探测写回。
+        "last_publish_status": last_publish_status,
         "created_at": r.created_at.isoformat() if r.created_at else None,
         "plugins": plugins or [],
     }
@@ -134,6 +137,7 @@ async def list_routes(
                 updated_at=r.updated_at,
                 published_at=pub_map.get(r.id),
             ),
+            last_publish_status=r.last_publish_status,
         )
         for r in routes
     ]

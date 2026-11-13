@@ -39,6 +39,8 @@ export interface SslCertificate {
   skip_mtls_uri_regex?: string
   /** ssl-ux-review-fixes 组 2：发布状态四态——发布后被修改（列表端点派生下发） */
   pending_publish?: boolean
+  /** 上次发布结果（publish-status-unify）：'partial'=部分/全部节点失败，全部成功为 NULL */
+  last_publish_status?: string | null
   /** ssl-ux-review-fixes 组 9：私钥掩码后由布尔表达「是否在位」（private_key/sign_key 恒空串） */
   has_private_key?: boolean
   has_sign_key?: boolean

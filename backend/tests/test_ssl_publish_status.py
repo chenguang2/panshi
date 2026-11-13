@@ -199,3 +199,91 @@ class TestSslPendingPublishWiring:
         m1, m2 = await _fetch_lists(async_authed_client)
         for m in (m1, m2):
             assert m["zz-ssl-rollback"]["pending_publish"] is True
+
+
+# ═══════════════════════════════════════════════════════════════════
+# publish-status-unify 批 2：SSL 补 last_publish_status（partial 持久化 + 透传）
+# ═══════════════════════════════════════════════════════════════════
+class TestSslPartialStatus:
+    @pytest.mark.asyncio
+    async def test_partial_publish_persists_and_lists_carry_it(
+        self, async_authed_client, isolated_session
+    ):
+        """部分节点失败 → 'partial' 落库；列表响应携带该字段。"""
+        cert_id = await _create_cert(async_authed_client, "zz-ssl-partial")
+
+        async with isolated_session() as s:
+            s.add(Node(cluster_id=1, ip="10.9.0.1", service_port=80,
+                       management_port=9180, edge_path="/edge", status=1))
+            s.add(Node(cluster_id=1, ip="10.9.0.2", service_port=80,
+                       management_port=9180, edge_path="/edge", status=1))
+            await s.commit()
+
+        calls = {"n": 0}
+
+        def flaky(client, *a, **kw):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                from app.services.edge_client import EdgeConnectionError
+
+                raise EdgeConnectionError("connection refused")
+            return FAKE_EDGE_OK
+
+        from unittest.mock import patch as _patch
+
+        with _patch.object(EdgeClient, "api", side_effect=flaky):
+            pub = await async_authed_client.post(
+                f"/api/v1/clusters/1/ssl/{cert_id}/publish"
+            )
+            assert pub.status_code == 200, pub.text
+
+        m1, m2 = await _fetch_lists(async_authed_client)
+        for m in (m1, m2):
+            assert m["zz-ssl-partial"]["last_publish_status"] == "partial"
+            assert m["zz-ssl-partial"]["pending_publish"] is False
+
+        # 详情端点同字段（列表/详情口径一致，防卡片两入口漂移）
+        detail = await async_authed_client.get(f"/api/v1/clusters/1/ssl/{cert_id}")
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["last_publish_status"] == "partial"
+
+    @pytest.mark.asyncio
+    async def test_full_success_republish_clears_partial(
+        self, async_authed_client, isolated_session
+    ):
+        """partial 后再次发布全部成功 → 清 NULL。"""
+        cert_id = await _create_cert(async_authed_client, "zz-ssl-clear")
+
+        async with isolated_session() as s:
+            s.add(Node(cluster_id=1, ip="10.9.0.1", service_port=80,
+                       management_port=9180, edge_path="/edge", status=1))
+            s.add(Node(cluster_id=1, ip="10.9.0.2", service_port=80,
+                       management_port=9180, edge_path="/edge", status=1))
+            await s.commit()
+
+        calls = {"n": 0}
+
+        def flaky(client, *a, **kw):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                from app.services.edge_client import EdgeConnectionError
+
+                raise EdgeConnectionError("connection refused")
+            return FAKE_EDGE_OK
+
+        from unittest.mock import patch as _patch
+
+        with _patch.object(EdgeClient, "api", side_effect=flaky):
+            await async_authed_client.post(f"/api/v1/clusters/1/ssl/{cert_id}/publish")
+        with _publish_patch():
+            await async_authed_client.post(f"/api/v1/clusters/1/ssl/{cert_id}/publish")
+
+        m1, m2 = await _fetch_lists(async_authed_client)
+        for m in (m1, m2):
+            assert m["zz-ssl-clear"]["last_publish_status"] is None
+
+    def test_ssl_last_publish_status_registered_in_column_migrations(self):
+        """缺注册会启动 crash-loop（#118）。"""
+        from app.core.migrate import COLUMN_MIGRATIONS
+
+        assert ("ps_ssl_certificate", "last_publish_status", "VARCHAR(16)") in COLUMN_MIGRATIONS

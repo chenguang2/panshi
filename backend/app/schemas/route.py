@@ -47,6 +47,9 @@ class RouteResponse(RouteBase):
     upstream_name: Optional[str] = None
     current_version: Optional[int] = None
     published_at: Optional[str] = None
+    # 上次发布结果（publish-status-unify）：'partial'=部分/全部节点失败，全部成功为 NULL；
+    # 由两个列表端点透传，详情端点保持 None（对齐 B1：发布状态展示只走列表）
+    last_publish_status: Optional[str] = None
     # 发布状态语义由后端单点推导（edge_sync.derive_pending_publish），前端不本地推导；
     # 两个列表端点组装时传入，详情端点有意不推导（B1），默认 False
     pending_publish: bool = False

@@ -276,9 +276,9 @@ class TestListPendingPublish:
     async def test_rollback_clears_partial_status(self, test_db):
         """D6 共享单点回归（upstream 路径）：partial 后回滚 → last_publish_status 清 NULL。
 
-        回滚后用户恰恰需要被提示重新发布；四态判定顺序 partial 优先于 pending，
-        不清除会以「⚠ 发布未完全生效」掩盖「待发布」。能力探测在共享单点
-        rollback_resource 内（无此列资源不受影响）。
+        回滚后用户恰恰需要被提示重新发布；四态判定顺序为「待发布优先于 partial」
+        （publish-status-unify 2026-11-13），清除后回滚行以「待发布」呈现。
+        能力探测在共享单点 rollback_resource 内（无此列资源不受影响）。
         """
         up = await _seed_two_nodes_upstream(test_db)
 

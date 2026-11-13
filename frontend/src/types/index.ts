@@ -162,6 +162,8 @@ export interface Route {
   published_at?: string
   /** 待发布（后端经 edge_sync.derive_pending_publish 统一推导，单一事实源） */
   pending_publish?: boolean
+  /** 上次发布结果（publish-status-unify）：'partial'=部分/全部节点失败，全部成功为 NULL */
+  last_publish_status?: string | null
   plugins?: RoutePlugin[]
 }
 

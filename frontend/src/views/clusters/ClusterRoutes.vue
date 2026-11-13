@@ -124,6 +124,7 @@
             :version="record.current_version"
             :published-at="record.published_at"
             :pending="record.pending_publish === true"
+            :last-publish-status="record.last_publish_status ?? null"
           />
         </template>
         <template v-if="column.key === 'actions'">

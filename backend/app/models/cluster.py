@@ -96,6 +96,10 @@ class Route(Base):
     advanced_match_enabled = Column(Integer, nullable=False, default=0)
     enable_websocket = Column(Boolean, nullable=False, default=False)
     plugin_config_ids = Column(Text, nullable=True)  # JSON array of plugin_config edge_uuids
+    # 上次发布结果：'partial'=部分/全部节点失败（publish-status-unify）；全部成功为 NULL。
+    # publish_resource/rollback_resource 既有 hasattr 能力探测单点写回，加列即自动接入。
+    # 须同步注册 core/migrate.py COLUMN_MIGRATIONS（漏注册会启动 crash-loop）。
+    last_publish_status = Column(String(16), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

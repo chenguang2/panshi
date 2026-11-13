@@ -12,6 +12,11 @@ test_upstream_publish_status.py，upstream-publish-status 的路由版）：
    pending   = 有 current_version 且 pending；
    unpublished = 无 current_version（既有语义不变）。
    SHALL NOT 重叠命中。既有「已发布」= 存在任意 ConfigVersion 的行为改变属已裁决。
+
+publish-status-unify 批 2 追加（B2 段，helper 带前缀防撞名）：
+4. last_publish_status 新列——partial 持久化（部分/全部失败落 partial、全成功清 NULL）
+   与两个列表端点透传；写回经既有 hasattr 能力探测（加列即接入）；列注册
+   COLUMN_MIGRATIONS 钉住（#118）。
 """
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
@@ -19,7 +24,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.models.cluster import ConfigVersion, Node, Route
-from app.services.edge_client import EdgeClient
+from app.services.edge_client import EdgeClient, EdgeConnectionError
 
 
 PUB_TS = datetime(2026, 1, 1, 12, 0, 0)
@@ -254,3 +259,137 @@ class TestPublishStatusFilterPartition:
 
         unpublished = await self._filtered_names(async_authed_client, "unpublished")
         assert unpublished == {"zz-st-unpub"}
+
+
+# ═══════════════════════════════════════════════════════════════════
+# B2（publish-status-unify 批 2）：last_publish_status 持久化 + 透传
+# ═══════════════════════════════════════════════════════════════════
+def _b2_publish_patch(fail_first: bool = False):
+    """mock Edge 网络与发布日志文件；fail_first=True 时首次调用抛连接错误。"""
+    from contextlib import ExitStack
+
+    calls = {"n": 0}
+
+    def flaky(client, *a, **kw):
+        calls["n"] += 1
+        if fail_first and calls["n"] == 1:
+            raise EdgeConnectionError("connection refused")
+        return FAKE_EDGE_OK
+
+    stack = ExitStack()
+    stack.enter_context(patch.object(EdgeClient, "update_route", side_effect=flaky))
+    stack.enter_context(
+        patch("app.services.edge_sync.get_edge_logger", return_value=MagicMock())
+    )
+    return stack
+
+
+async def _b2_seed_two_nodes(session):
+    nodes = [
+        Node(cluster_id=1, ip="10.9.1.1", service_port=80, management_port=9180,
+             edge_path="/edge", status=1),
+        Node(cluster_id=1, ip="10.9.1.2", service_port=80, management_port=9180,
+             edge_path="/edge", status=1),
+    ]
+    session.add_all(nodes)
+    await session.commit()
+
+
+class TestRoutePartialWriteBack:
+    @pytest.mark.asyncio
+    async def test_partial_publish_persists_and_lists_carry_it(
+        self, async_authed_client, isolated_session
+    ):
+        """部分节点失败 → 'partial' 落库，两个列表端点透传该字段。"""
+        rid = await _create_route(async_authed_client, "zz-ps-partial")
+        async with isolated_session() as s:
+            await _b2_seed_two_nodes(s)
+
+        with _b2_publish_patch(fail_first=True):
+            pub = await async_authed_client.post(
+                f"/api/v1/clusters/1/routes/{rid}/publish"
+            )
+            assert pub.status_code == 200, pub.text
+
+        m1, m2 = await _fetch_both_lists(async_authed_client)
+        for m in (m1, m2):
+            assert m["zz-ps-partial"]["last_publish_status"] == "partial"
+            assert m["zz-ps-partial"]["pending_publish"] is False
+
+    @pytest.mark.asyncio
+    async def test_all_failed_publish_also_partial(
+        self, async_authed_client, isolated_session
+    ):
+        """全部节点失败亦落 'partial'（版本=配置快照而非部署凭证）。"""
+        rid = await _create_route(async_authed_client, "zz-ps-allfail")
+        async with isolated_session() as s:
+            await _b2_seed_two_nodes(s)
+
+        from contextlib import ExitStack
+
+        stack = ExitStack()
+        stack.enter_context(
+            patch.object(EdgeClient, "update_route",
+                         side_effect=EdgeConnectionError("connection refused"))
+        )
+        stack.enter_context(
+            patch("app.services.edge_sync.get_edge_logger", return_value=MagicMock())
+        )
+        with stack:
+            pub = await async_authed_client.post(
+                f"/api/v1/clusters/1/routes/{rid}/publish"
+            )
+            assert pub.status_code == 200, pub.text
+
+        m1, _m2 = await _fetch_both_lists(async_authed_client)
+        assert m1["zz-ps-allfail"]["last_publish_status"] == "partial"
+
+    @pytest.mark.asyncio
+    async def test_full_success_republish_clears_partial(
+        self, async_authed_client, isolated_session
+    ):
+        """partial 后再次发布全部成功 → 清 NULL（按最近一次结果更新）。"""
+        rid = await _create_route(async_authed_client, "zz-ps-clear")
+        async with isolated_session() as s:
+            await _b2_seed_two_nodes(s)
+
+        with _b2_publish_patch(fail_first=True):
+            await async_authed_client.post(f"/api/v1/clusters/1/routes/{rid}/publish")
+        with _publish_patch():
+            await async_authed_client.post(f"/api/v1/clusters/1/routes/{rid}/publish")
+
+        m1, m2 = await _fetch_both_lists(async_authed_client)
+        for m in (m1, m2):
+            assert m["zz-ps-clear"]["last_publish_status"] is None
+
+    @pytest.mark.asyncio
+    async def test_edit_after_partial_pending_true_field_orthogonal(
+        self, async_authed_client, isolated_session
+    ):
+        """语义钉住：partial 后编辑保存 → 列表仍带 'partial' 字段且 pending_publish=True
+        （「待发布优先于 partial」的展示判定在共享 PublishStatusTag 层，后端两字段正交）。"""
+        rid = await _create_route(async_authed_client, "zz-ps-edit")
+        async with isolated_session() as s:
+            await _b2_seed_two_nodes(s)
+
+        with _b2_publish_patch(fail_first=True):
+            await async_authed_client.post(f"/api/v1/clusters/1/routes/{rid}/publish")
+
+        put = await async_authed_client.put(
+            f"/api/v1/clusters/1/routes/{rid}",
+            json={"name": "zz-ps-edit", "uri": "/ps2/*", "methods": "GET", "priority": 100},
+        )
+        assert put.status_code == 200, put.text
+
+        m1, m2 = await _fetch_both_lists(async_authed_client)
+        for m in (m1, m2):
+            assert m["zz-ps-edit"]["last_publish_status"] == "partial"
+            assert m["zz-ps-edit"]["pending_publish"] is True
+
+
+class TestRouteColumnMigration:
+    def test_route_last_publish_status_registered_in_column_migrations(self):
+        """缺注册会启动 crash-loop（#118）。"""
+        from app.core.migrate import COLUMN_MIGRATIONS
+
+        assert ("ps_route", "last_publish_status", "VARCHAR(16)") in COLUMN_MIGRATIONS

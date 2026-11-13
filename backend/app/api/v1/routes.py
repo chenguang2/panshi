@@ -196,6 +196,7 @@ async def list_all_routes(
                 updated_at=r.updated_at,
                 published_at=pub_map.get(r.id),
             ),
+            last_publish_status=r.last_publish_status,
         )
         item_dict = item.model_dump()
         item_dict["cluster_name"] = cluster_name_map.get(r.cluster_id, "")

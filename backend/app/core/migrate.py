@@ -179,6 +179,9 @@ COLUMN_MIGRATIONS = [
     ("ps_global_rule", "last_publish_status", "VARCHAR(16)"),
     ("ps_plugin_metadata", "last_publish_status", "VARCHAR(16)"),
     ("ps_stream_proxy", "last_publish_status", "VARCHAR(16)"),
+    # publish-status-unify 批 2：路由与 SSL 证书接入 partial 持久化（加列即接入）
+    ("ps_route", "last_publish_status", "VARCHAR(16)"),
+    ("ps_ssl_certificate", "last_publish_status", "VARCHAR(16)"),
     # static-resources-ux-close-loop 组 5：发布结果持久化（#118 三列缺一即启动崩溃环）
     ("ps_static_resource", "last_publish_ok", "BOOLEAN"),
     ("ps_static_resource", "last_publish_detail", "TEXT"),

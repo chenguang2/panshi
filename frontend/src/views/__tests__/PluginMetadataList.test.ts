@@ -413,7 +413,9 @@ describe('PluginMetadataList.vue 卡片操作 → composable 接线', () => {
     expect(tags[0].props('publishedAt')).toBe('2025-01-05T06:07:08Z')
     expect(tags[0].props('pending')).toBe(true)
     expect(tags[0].props('lastPublishStatus')).toBe('partial')
-    expect(wrapper.text()).toContain('发布未完全生效')
+    // publish-status-unify：待发布优先于 partial——pending+partial 同传时共享组件显示「待发布」
+    expect(wrapper.text()).toContain('待发布')
+    expect(wrapper.text()).not.toContain('发布未完全生效')
     wrapper.unmount()
   })
 

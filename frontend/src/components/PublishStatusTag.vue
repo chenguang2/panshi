@@ -22,7 +22,9 @@ const props = withDefaults(
 
 const published = computed(() => props.version !== null && props.version !== undefined)
 // 四态感知：任一新 props 显式传入即启用；两新 props 均未传（或 lastPublishStatus 为 null）时
-// 保持既有三分支，未接入的资源类型零变化（「vX · 未同步」分支仅为这些资源保留）
+// 保持既有三分支，未接入的资源类型零变化（「vX · 未同步」分支仅为这些资源保留）。
+// 判定顺序（publish-status-unify 2026-11-13）：未发布 → 待发布 → 部分失败 → 已发布——
+// 待发布优先于 partial：partial 描述旧内容的上次发布结果，内容已变后「待发布」是主导事实。
 const pendingAware = computed(() => props.pending !== undefined || props.lastPublishStatus != null)
 const isPartial = computed(() => props.lastPublishStatus === 'partial')
 const dateText = computed(() => formatPublishDateTime(props.publishedAt ?? null))
@@ -30,10 +32,10 @@ const dateText = computed(() => formatPublishDateTime(props.publishedAt ?? null)
 
 <template>
   <span v-if="!published" class="ps-tag ps-unpublished">未发布</span>
+  <span v-else-if="pendingAware && pending" class="ps-tag ps-pending" title="配置已修改，发布后生效">待发布</span>
   <span v-else-if="pendingAware && isPartial" class="ps-tag ps-partial" title="上次发布存在未生效节点，请重新发布"
     >⚠ v{{ version }} · 发布未完全生效</span
   >
-  <span v-else-if="pendingAware && pending" class="ps-tag ps-pending" title="配置已修改，发布后生效">待发布</span>
   <span v-else-if="pendingAware" class="publish-status">
     <span class="ps-tag ps-published">v{{ version }}</span>
     <span v-if="publishedAt" class="ps-date" :title="`${timeLabel}: ${dateText}`">{{ dateText }}</span>

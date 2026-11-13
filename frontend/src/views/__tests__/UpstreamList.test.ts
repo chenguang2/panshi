@@ -227,6 +227,15 @@ describe('UpstreamList.vue', () => {
                 pending_publish: false,
                 last_publish_status: 'partial',
               }),
+              makeItem({
+                id: 5,
+                // publish-status-unify：partial 后编辑保存 → 待发布优先于 partial
+                name: 'e PartialThenEdited',
+                current_version: 5,
+                published_at: '2026-01-18T10:30:00Z',
+                pending_publish: true,
+                last_publish_status: 'partial',
+              }),
             ],
           },
         })
@@ -240,11 +249,13 @@ describe('UpstreamList.vue', () => {
     const wrapper = mount(UpstreamList, { global: { stubs } })
     await flushPromises()
     const rows = wrapper.findAll('tr.ant-table-row')
-    expect(rows).toHaveLength(4)
+    expect(rows).toHaveLength(5)
     expect(rows[0].text()).toContain('v3')
     expect(rows[1].text()).toContain('待发布')
     expect(rows[2].text()).toContain('未发布')
     expect(rows[3].text()).toContain('发布未完全生效')
+    expect(rows[4].text()).toContain('待发布')
+    expect(rows[4].text()).not.toContain('发布未完全生效')
   })
 
   // ── 2.6 协议列：未配置显示 — ──────────────────────────────────────────
@@ -307,12 +318,10 @@ describe('UpstreamList.vue', () => {
     const wrapper = mount(UpstreamList, { global: { stubs } })
     await flushPromises()
     // 主行文案按 menu-item-stack 主行提取（解释行是 small，不参与收敛断言）
-    const items = wrapper
-      .findAll('.mock-menuitem')
-      .map((m) => {
-        const span = m.find('.menu-item-stack span')
-        return (span.exists() ? span.text() : m.text()).trim()
-      })
+    const items = wrapper.findAll('.mock-menuitem').map((m) => {
+      const span = m.find('.menu-item-stack span')
+      return (span.exists() ? span.text() : m.text()).trim()
+    })
     expect([...new Set(items)]).toEqual(['编辑', '版本管理', '复制', '删除'])
     expect(items).not.toContain('发布')
     expect(items).not.toContain('回滚')

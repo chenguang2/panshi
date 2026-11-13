@@ -297,7 +297,8 @@ def derive_pending_publish(
     published_at 为 None（版本历史被删光，publish-map 回查落空）时恒 False，
     MUST NOT 对 None 执行时间比较（Python ``updated_at > None`` 会 TypeError）。
     last_publish_status（'partial'）是前端四态判定的另一输入、与本布尔正交
-    （判定顺序：未发布 → 部分失败 → 待发布 → 已发布），此处仅作显式入参以
+    （判定顺序：未发布 → 待发布 → 部分失败 → 已发布，publish-status-unify
+    2026-11-13 反转：内容已变后「待发布」优先于 partial），此处仅作显式入参以
     固定调用点上下文，不参与推导。两个上游列表端点 MUST 经本函数推导，
     禁止各自实现（单一事实源）。
     """

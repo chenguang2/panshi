@@ -72,6 +72,7 @@ const caExpiring =
           :version="cert.current_version"
           :published-at="cert.published_at"
           :pending="cert.pending_publish"
+          :last-publish-status="cert.last_publish_status ?? null"
         />
       </div>
     </div>

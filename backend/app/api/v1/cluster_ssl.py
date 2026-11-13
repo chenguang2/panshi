@@ -51,6 +51,8 @@ def _masked_ssl_response(cert) -> "SslCertificateResponse":
     resp.has_sign_key = bool((cert.sign_key or "").strip())
     resp.private_key = ""
     resp.sign_key = ""
+    # partial 持久化（publish-status-unify 批 2）：掩码出口单点透传，列表/详情天然同字段
+    resp.last_publish_status = cert.last_publish_status
     return resp
 
 

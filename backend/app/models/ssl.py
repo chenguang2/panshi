@@ -39,3 +39,7 @@ class SslCertificate(Base):
     # 注意：必须用 naive utcnow（约定 #26）。曾用 aware datetime.now(timezone.utc)，
     # SQLite 弱类型容忍，PG/asyncpg 拒绝 aware 值绑定 TIMESTAMP WITHOUT TIME ZONE → 500。
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # 上次发布结果：'partial'=部分/全部节点失败（publish-status-unify）；全部成功为 NULL。
+    # publish_resource/rollback_resource 既有 hasattr 能力探测单点写回，加列即自动接入。
+    # 须同步注册 core/migrate.py COLUMN_MIGRATIONS（漏注册会启动 crash-loop）。
+    last_publish_status = Column(String(16), nullable=True)

@@ -75,10 +75,10 @@ describe('PublishStatusTag.vue - 四态（pendingAware）', () => {
     expect(wrapper.find('.ps-published').exists()).toBe(false)
   })
 
-  it('判定顺序：partial 优先于 pending', () => {
+  it('判定顺序：待发布优先于 partial（publish-status-unify：编辑后「待发布」是主导事实）', () => {
     const wrapper = renderTag(3, null, { pending: true, lastPublishStatus: 'partial' })
-    expect(wrapper.find('.ps-partial').exists()).toBe(true)
-    expect(wrapper.find('.ps-pending').exists()).toBe(false)
+    expect(wrapper.find('.ps-pending').exists()).toBe(true)
+    expect(wrapper.find('.ps-partial').exists()).toBe(false)
   })
 
   it('待发布（橙 ps-pending）+ tooltip「配置已修改，发布后生效」，不显示版本号', () => {
