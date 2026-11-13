@@ -11,6 +11,7 @@ from app.models.cluster import Cluster, Route, RoutePlugin, ConfigVersion, Upstr
 from app.schemas.route import RouteCreate, RouteUpdate, RouteResponse, RouteListResponse, PluginUpdateRequest
 from app.schemas.cluster import DeleteClusterRequest, BatchDeleteRoutesRequest, PublishRequest
 from app.services import edge_sync
+from app.services import publish_preview
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 
 from app.core.deps import require_permission
@@ -388,43 +389,9 @@ async def publish_route(cluster_id: int, route_id: int, req: Optional[PublishReq
 
     route = await edge_sync.get_or_404(db, Route, id=route_id, cluster_id=cluster_id, detail="路由不存在")
 
-    plugins_result = await db.execute(select(RoutePlugin).where(RoutePlugin.route_id == route_id))
-    plugins = plugins_result.scalars().all()
-
-    upstream_edge_uuid = None
-    if route.upstream_id:
-        upstream_result = await db.execute(select(Upstream).where(Upstream.id == route.upstream_id))
-        upstream = upstream_result.scalar_one_or_none()
-        if upstream:
-            upstream_edge_uuid = upstream.edge_uuid
-
-    plugins_edge_format = {}
-    for p in plugins:
-        try:
-            plugins_edge_format[p.plugin_name] = json.loads(p.config) if isinstance(p.config, str) else (p.config or {})
-        except (json.JSONDecodeError, TypeError):
-            plugins_edge_format[p.plugin_name] = {}
-
-    config_data = {
-        "id": route.id, "edge_uuid": route.edge_uuid, "name": route.name,
-        "uri": route.uri, "methods": route.methods, "priority": route.priority,
-        "status": route.status, "upstream_id": route.upstream_id,
-        "upstream_edge_uuid": upstream_edge_uuid, "hosts": route.hosts,
-        "remote_addrs": route.remote_addrs,
-        "vars": json.loads(route.vars) if isinstance(route.vars, str) and route.vars else None,
-        "advanced_match_enabled": bool(route.advanced_match_enabled) if route.advanced_match_enabled else False,
-        "plugins": plugins_edge_format,
-        "plugin_config_ids": json.loads(route.plugin_config_ids) if route.plugin_config_ids else None,
-        "enable_websocket": route.enable_websocket or False}
-
-    edge_data = EdgeClient.convert_route_to_edge_format(
-        edge_uuid=route.edge_uuid, name=route.name, uri=route.uri,
-        methods=route.methods, hosts=route.hosts,
-        upstream_edge_uuid=upstream_edge_uuid, priority=route.priority or 0,
-        vars_json=route.vars if isinstance(route.vars, str) else None,
-        plugins=plugins, status=route.status,
-        plugin_config_ids=json.loads(route.plugin_config_ids) if route.plugin_config_ids else None,
-        enable_websocket=route.enable_websocket)
+    # 候选载荷与发布差异预览同源（publish-diff-preview）：publish 端点不得保留
+    # 内联载荷构造，守卫见 test_publish_candidate_single_source.py
+    config_data, edge_data = await publish_preview.build_candidate(db, "route", route)
 
     return await edge_sync.publish_resource(
         db, cluster_id=cluster_id, resource=route, resource_type="route",

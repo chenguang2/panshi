@@ -58,3 +58,53 @@ export interface ClusterDriftResult {
 export function getClusterDrift(clusterId: number) {
   return api.get<ClusterDriftResult>(`/clusters/${clusterId}/drift`)
 }
+
+// ── 发布差异预览（publish-diff-preview）：待发布候选 vs 各节点实况 ──
+
+export interface PublishPreviewNode {
+  label: string
+  status: 'ok' | 'diff' | 'missing' | 'unreachable'
+  reason?: string | null
+  diff_count: number
+  behind: boolean
+  behind_reason?: string | null
+}
+
+export interface PublishPreviewRow {
+  path: string
+  candidate: unknown
+  /** 节点标签 → 当前值；null = 该节点缺失此字段（发布将新增） */
+  values: Record<string, unknown>
+}
+
+export interface PublishPreviewMatrix {
+  node_labels: string[]
+  diff_rows: PublishPreviewRow[]
+  same_rows: PublishPreviewRow[]
+}
+
+export interface PublishPreviewChange {
+  changed: { path: string; baseline: unknown; candidate: unknown }[]
+  removed: Record<string, unknown>
+  added: Record<string, unknown>
+}
+
+export interface PublishPreviewResult {
+  cluster_id: number
+  resource_type: string
+  resource_id: number
+  name: string
+  checked_at: string
+  cluster_error: string | null
+  has_baseline: boolean
+  baseline_missing_reason?: string | null
+  platform_change: PublishPreviewChange | null
+  nodes: PublishPreviewNode[]
+  matrix: PublishPreviewMatrix
+  summary: { diff_count: number; same_count: number; behind_nodes: string[] }
+}
+
+/** 发布差异预览（只读）：候选载荷 vs 各活跃节点实况，逐节点字段级对比 */
+export function getPublishPreview(clusterId: number, resourceType: string, resourceId: number) {
+  return api.get<PublishPreviewResult>(`/clusters/${clusterId}/publish-preview/${resourceType}/${resourceId}`)
+}

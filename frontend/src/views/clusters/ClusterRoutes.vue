@@ -126,6 +126,11 @@
             :pending="record.pending_publish === true"
             :last-publish-status="record.last_publish_status ?? null"
           />
+          <PublishDiffButton
+            :pending="record.pending_publish === true"
+            :last-publish-status="record.last_publish_status ?? null"
+            @click="openPublishPreview(record)"
+          />
         </template>
         <template v-if="column.key === 'actions'">
           <template v-for="btnKey in routeActionsSelected" :key="btnKey">
@@ -310,6 +315,16 @@
       @published="onVersionPublished"
       @publish-requested="handleVmPublishRequested"
     />
+
+    <!-- 发布差异预览（publish-diff-preview）：自持拉取；「去发布」接既有发布流程 -->
+    <PublishPreviewModal
+      v-model:open="previewVisible"
+      :cluster-id="props.cluster.id"
+      :resource-type="'route'"
+      :resource-id="previewRecord?.id ?? null"
+      :resource-name="previewRecord?.name"
+      @publish="onPreviewPublish"
+    />
   </div>
 </template>
 
@@ -321,6 +336,8 @@ import { useClusterRoutes } from '@/composables/useClusterRoutes'
 import { paginationProps } from '@/composables/usePagination'
 import BadgeStatus from '@/components/BadgeStatus.vue'
 import PublishStatusTag from '@/components/PublishStatusTag.vue'
+import PublishDiffButton from '@/components/PublishDiffButton.vue'
+import PublishPreviewModal from '@/components/PublishPreviewModal.vue'
 import RouteAdvancedMatch from '@/components/RouteAdvancedMatch.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PluginMetadata from '@/components/PluginMetadata.vue'
@@ -346,6 +363,22 @@ const props = defineProps<{
 
 // ── Internal refs for composable deps ───────────────────────────────
 const currentClusterId = ref<number | null>(null) as Ref<number | null>
+
+// 发布差异预览（publish-diff-preview）：预览弹窗自持拉取；「去发布」接既有发布流程
+const previewVisible = ref(false)
+const previewRecord = ref<Route | null>(null)
+
+function openPublishPreview(record: Route) {
+  previewRecord.value = record
+  previewVisible.value = true
+}
+
+function onPreviewPublish() {
+  const record = previewRecord.value
+  previewVisible.value = false
+  if (record) publishRouteByRecord(props.cluster, record)
+}
+
 const versionModalVisible = ref(false)
 const versionModalType = ref<'upstream' | 'route' | 'plugin_config' | 'global_rule' | 'static_resource'>('route')
 const versionModalResourceId = ref<number | null>(null)

@@ -90,6 +90,20 @@
           </div>
           <span v-else class="target-empty">—</span>
         </template>
+        <!-- 发布状态（publish-diff-preview）：覆盖 composable 的 customRender，加差异预览入口 -->
+        <template v-else-if="column.key === 'publish_status'">
+          <PublishStatusTag
+            :version="record.current_version"
+            :published-at="record.published_at"
+            :pending="record.pending_publish === true"
+            :last-publish-status="record.last_publish_status ?? null"
+          />
+          <PublishDiffButton
+            :pending="record.pending_publish === true"
+            :last-publish-status="record.last_publish_status ?? null"
+            @click="openPublishPreview(record)"
+          />
+        </template>
         <template v-else-if="column.key === 'actions'">
           <template v-for="btnKey in upstreamActionsSelected" :key="btnKey">
             <a-divider type="vertical" v-if="btnKey === 'publish'" />
@@ -449,6 +463,16 @@
       @published="versionModalOnPublished"
       @publish-requested="publishRestoredUpstream"
     />
+
+    <!-- 发布差异预览（publish-diff-preview）：自持拉取；「去发布」接既有发布流程 -->
+    <PublishPreviewModal
+      v-model:open="previewVisible"
+      :cluster-id="props.cluster.id"
+      :resource-type="'upstream'"
+      :resource-id="previewRecord?.id ?? null"
+      :resource-name="previewRecord?.name"
+      @publish="onPreviewPublish"
+    />
   </div>
 </template>
 
@@ -457,6 +481,9 @@ import { ref, computed } from 'vue'
 import type { Cluster, Upstream } from '@/types'
 import { PlusOutlined, WarningOutlined } from '@ant-design/icons-vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
+import PublishStatusTag from '@/components/PublishStatusTag.vue'
+import PublishDiffButton from '@/components/PublishDiffButton.vue'
+import PublishPreviewModal from '@/components/PublishPreviewModal.vue'
 import HealthCheckForm from '@/components/HealthCheckForm.vue'
 import { useClusterUpstreams } from '@/composables/useClusterUpstreams'
 import { paginationProps } from '@/composables/usePagination'
@@ -537,6 +564,21 @@ const batchCount = computed(() => (props.cluster.selectedUpstreamKeys || []).len
 const singleOpEnabled = computed(() => batchCount.value <= 1 && !!props.cluster.selectedUpstream)
 const deleteCount = computed(() => (batchCount.value > 0 ? batchCount.value : props.cluster.selectedUpstream ? 1 : 0))
 const deleteEnabled = computed(() => deleteCount.value > 0)
+
+// 发布差异预览（publish-diff-preview）：预览弹窗自持拉取；「去发布」接既有发布流程
+const previewVisible = ref(false)
+const previewRecord = ref<Upstream | null>(null)
+
+function openPublishPreview(record: Upstream) {
+  previewRecord.value = record
+  previewVisible.value = true
+}
+
+function onPreviewPublish() {
+  const record = previewRecord.value
+  previewVisible.value = false
+  if (record) publishUpstreamByRecord(props.cluster, record)
+}
 
 function handleDeleteClick() {
   if (batchCount.value > 0) {

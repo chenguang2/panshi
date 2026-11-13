@@ -4,6 +4,7 @@ from app.api.v1 import (
     cluster_upstreams, cluster_plugin_configs, cluster_global_rules, cluster_nodes,
     cluster_routes, cluster_static_resources, cluster_plugin_metadata,
     cluster_drift,
+    cluster_publish_preview,
     cluster_edge_env, cluster_stream_proxies, cluster_dns_proxies, cluster_ssl,
     cluster_backup,
     cluster_export,
@@ -38,6 +39,8 @@ api_router.include_router(cluster_nodes.router)
 api_router.include_router(cluster_routes.router)
 # 漂移检测（config-drift-detection）：只读，router 级鉴权依赖
 api_router.include_router(cluster_drift.router)
+# 发布差异预览（publish-diff-preview）：只读，router 级鉴权依赖
+api_router.include_router(cluster_publish_preview.router)
 api_router.include_router(plugins.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(cluster_plugin_metadata.router)

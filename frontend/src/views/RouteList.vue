@@ -128,6 +128,11 @@
               :pending="record.pending_publish === true"
               :last-publish-status="record.last_publish_status ?? null"
             />
+            <PublishDiffButton
+              :pending="record.pending_publish === true"
+              :last-publish-status="record.last_publish_status ?? null"
+              @click="openPublishPreview(record)"
+            />
           </template>
 
           <template v-if="column.key === 'created_at'">
@@ -222,6 +227,14 @@
       @confirm="onPublish"
       @cancel="publishVisible = false"
     />
+    <PublishPreviewModal
+      v-model:open="previewVisible"
+      :cluster-id="previewRecord?.cluster_id ?? null"
+      :resource-type="'route'"
+      :resource-id="previewRecord?.id ?? null"
+      :resource-name="previewRecord?.name"
+      @publish="onPreviewPublish"
+    />
   </div>
 </template>
 
@@ -237,6 +250,8 @@ import { PAGE_SIZE_TABLE, PAGE_SIZE_DROPDOWN } from '@/constants'
 import PageHeader from '@/components/PageHeader.vue'
 import RouteFormModal from '@/components/RouteFormModal.vue'
 import PublishStatusTag from '@/components/PublishStatusTag.vue'
+import PublishDiffButton from '@/components/PublishDiffButton.vue'
+import PublishPreviewModal from '@/components/PublishPreviewModal.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import {
@@ -511,6 +526,21 @@ function publishRoute(r: any) {
   // 行内发布默认只刷新列表；版本弹窗出口条发布会用「刷新 + 重开版本弹窗」覆盖此默认（组3 3.1）
   publishRefreshFn.value = loadRoutes
   publishVisible.value = true
+}
+
+// 发布差异预览（publish-diff-preview）：预览弹窗自持拉取；「去发布」接既有发布确认流程
+const previewVisible = ref(false)
+const previewRecord = ref<any>(null)
+
+function openPublishPreview(r: any) {
+  previewRecord.value = r
+  previewVisible.value = true
+}
+
+function onPreviewPublish() {
+  const r = previewRecord.value
+  previewVisible.value = false
+  if (r) publishRoute(r)
 }
 
 // 本次发布完成后的刷新动作（组3 3.1）：发布确认弹窗是行内发布与版本弹窗出口条共用的单入口，

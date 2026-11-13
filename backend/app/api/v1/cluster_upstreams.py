@@ -17,6 +17,7 @@ from app.schemas.cluster import (
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 from app.services.audit import enrich_audit
 from app.services import edge_sync
+from app.services import publish_preview
 from app.core.deps import require_permission
 
 router = APIRouter(prefix="/clusters", tags=["clusters"], dependencies=[Depends(require_permission('clusters'))])
@@ -287,31 +288,9 @@ async def delete_upstreams_batch(cluster_id: int, body: BatchDeleteUpstreamsRequ
 async def publish_upstream(cluster_id: int, upstream_id: int, req: Optional[PublishRequest] = None, db: AsyncSession = Depends(get_db)):
     upstream = await edge_sync.get_or_404(db, Upstream, id=upstream_id, cluster_id=cluster_id, detail="上游服务不存在")
 
-    targets_result = await db.execute(select(UpstreamTarget).where(UpstreamTarget.upstream_id == upstream_id))
-    targets = targets_result.scalars().all()
-    targets_list = [{"target": t.target, "weight": t.weight} for t in targets]
-
-    config_data = {
-        "id": upstream.id, "edge_uuid": upstream.edge_uuid, "name": upstream.name,
-        "load_balance": upstream.load_balance, "hash_on": upstream.hash_on, "key": upstream.key,
-        "targets": targets_list,
-        "checks": json.loads(upstream.checks) if upstream.checks else None,
-        "retries": upstream.retries, "retry_timeout": upstream.retry_timeout,
-        "timeout": json.loads(upstream.timeout) if upstream.timeout else None,
-        "pass_host": upstream.pass_host, "upstream_host": upstream.upstream_host,
-        "scheme": upstream.scheme,
-        "keepalive_pool": json.loads(upstream.keepalive_pool) if upstream.keepalive_pool else None,
-    }
-
-    upstream_checks = json.loads(upstream.checks) if upstream.checks else None
-    upstream_timeout = json.loads(upstream.timeout) if upstream.timeout else None
-    upstream_keepalive = json.loads(upstream.keepalive_pool) if upstream.keepalive_pool else None
-    edge_data = EdgeClient.convert_upstream_to_edge_format(
-        upstream_id, upstream.name, upstream.load_balance, targets_list,
-        hash_on=upstream.hash_on, key=upstream.key,
-        checks=upstream_checks, retries=upstream.retries, retry_timeout=upstream.retry_timeout,
-        timeout=upstream_timeout, pass_host=upstream.pass_host, upstream_host=upstream.upstream_host,
-        scheme=upstream.scheme, keepalive_pool=upstream_keepalive)
+    # 候选载荷与发布差异预览同源（publish-diff-preview）：publish 端点不得保留
+    # 内联载荷构造，守卫见 test_publish_candidate_single_source.py
+    config_data, edge_data = await publish_preview.build_candidate(db, "upstream", upstream)
 
     return await edge_sync.publish_resource(
         db, cluster_id=cluster_id, resource=upstream, resource_type="upstream",

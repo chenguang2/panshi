@@ -25,19 +25,26 @@
 注册表条目：`{label, model, edge_attr, edge_key, mask, normalize, build_candidate(db, row) -> (config_data, edge_data)}`。build_candidate 内含子表查询（上游 targets、路由 plugins/upstream 反查），签名收 `db` 会话。前四项直接引用 `DRIFT_TYPE_REGISTRY` 对应条目（单一事实源，不复制）；仅 build_candidate 是本变更新增。发布端点改为：`config_data, edge_data = await PUBLISH_PREVIEW_REGISTRY["upstream"].build_candidate(db, upstream)`——注意上游 publish 端点构造 config_data 与 edge_data 正是两段内联代码的全部内容，行为零变化（既有 publish 响应测试回归兜底）。
 
 **D2 预览端点 `GET /clusters/{cluster_id}/publish-preview/{resource_type}/{resource_id}`，单文件 `cluster_publish_preview.py`。**
-router 级 `Depends(get_current_user)` 同 cluster_drift；404 语义：集群/资源不存在；400：resource_type 不在注册表（明示「尚未接入」）。响应形状：
+router 级 `Depends(get_current_user)` 同 cluster_drift；404 语义：集群/资源不存在；400：resource_type 不在注册表（明示「尚未接入」）。响应形状（实施定稿）：
 ```json
 {
   "cluster_id": 1, "resource_type": "upstream", "resource_id": 5, "name": "user-service",
-  "checked_at": "...", "has_baseline": true,
-  "platform_change": {"added": [...], "changed": [...], "removed": [...], "baseline_missing_reason": null},
+  "checked_at": "...", "cluster_error": null,
+  "has_baseline": true, "baseline_missing_reason": null,
+  "platform_change": {"changed": [{"path","baseline","candidate"}], "added": {path: value}, "removed": {path: value}},
   "nodes": [
-    {"label": "192.168.0.13", "status": "ok|diff|missing|unreachable",
-     "reason": null, "diff": {"changed": [{"path","baseline","edge"}], "added": {path: value}, "missing_paths": [...]}}
+    {"label": "192.168.0.13", "status": "ok|diff|missing|unreachable", "reason": null,
+     "diff_count": 2, "behind": false, "behind_reason": null}
   ],
+  "matrix": {
+    "node_labels": ["192.168.0.13", ...],
+    "diff_rows": [{"path": "...", "candidate": v, "values": {label: v|null}}],
+    "same_rows": ["同形，节点级不可达/缺失列渲染为「—」"]
+  },
   "summary": {"diff_count": 3, "same_count": 6, "behind_nodes": ["192.168.0.15"]}
 }
 ```
+差异行不从候选按路径反查节点值（dict 键含 `.`/`[` 时路径不可解析），行值直接取自各节点 diff 贡献条目（changed.edge / removed→null），与候选一致的节点回填候选值。
 
 **D3 diff 方向与新增「added」类别。**
 候选为基线调 `diff_edge_payload(candidate, edge_entry)`：`changed`（两侧都有不等）、`removed`（候选字段节点缺失 → 语义为「发布将新增」，响应层转译为 `added`）；Edge 独有字段沿用「不报」。矩阵行集 = 各节点 changed ∪ added 路径的并集；某路径该节点与候选一致时该格显示节点当前值（弱色）。

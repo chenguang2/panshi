@@ -74,6 +74,11 @@
               :pending="record.pending_publish === true"
               :last-publish-status="record.last_publish_status"
             />
+            <PublishDiffButton
+              :pending="record.pending_publish === true"
+              :last-publish-status="record.last_publish_status"
+              @click="openPublishPreview(record)"
+            />
           </template>
 
           <template v-if="column.key === 'actions'">
@@ -149,6 +154,15 @@
       @confirm="onPublishConfirm"
       @cancel="onPublishCancel"
     />
+
+    <PublishPreviewModal
+      v-model:open="previewVisible"
+      :cluster-id="previewRecord?.cluster_id ?? null"
+      :resource-type="'upstream'"
+      :resource-id="previewRecord?.id ?? null"
+      :resource-name="previewRecord?.name"
+      @publish="onPreviewPublish"
+    />
   </div>
 </template>
 
@@ -166,6 +180,8 @@ import UpstreamFormModal from '@/components/UpstreamFormModal.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import PublishStatusTag from '@/components/PublishStatusTag.vue'
+import PublishDiffButton from '@/components/PublishDiffButton.vue'
+import PublishPreviewModal from '@/components/PublishPreviewModal.vue'
 import { executePublish } from '@/composables/useClusterUtils'
 import { showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
 import { paginationProps } from '@/composables/usePagination'
@@ -267,6 +283,21 @@ function openPublishModal(record: any) {
   // 行内发布默认只刷新列表；版本弹窗出口条发布用「刷新 + 重开版本弹窗」覆盖此默认（组3 A2）
   publishRefreshFn.value = loadUpstreams
   publishModalVisible.value = true
+}
+
+// 发布差异预览（publish-diff-preview）：预览弹窗自持拉取；「去发布」接既有发布确认流程
+const previewVisible = ref(false)
+const previewRecord = ref<any>(null)
+
+function openPublishPreview(record: any) {
+  previewRecord.value = record
+  previewVisible.value = true
+}
+
+function onPreviewPublish() {
+  const record = previewRecord.value
+  previewVisible.value = false
+  if (record) openPublishModal(record)
 }
 
 // 本次发布完成后的刷新动作（组3 A2）：发布确认弹窗是行内发布与版本弹窗出口条共用的单入口，

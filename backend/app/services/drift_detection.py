@@ -224,13 +224,20 @@ def _parse_entries(raw) -> list:
     return entries
 
 
-def _collect_edge_lists_for_node(cluster_id: int, node_ip: str, node_port: int) -> dict:
+def _collect_edge_lists_for_node(cluster_id: int, node_ip: str, node_port: int,
+                                 only_edge_keys: list | None = None) -> dict:
     """单节点全类型列表采集。阻塞网络 IO——只在 to_thread 内调用，
-    线程闭包内不触碰请求级 db 会话（事件循环纯度黑名单 #190）。"""
+    线程闭包内不触碰请求级 db 会话（事件循环纯度黑名单 #190）。
+
+    only_edge_keys：可选目标类型过滤（publish-diff-preview 单资源预览用，
+    每节点只发目标类型的 Edge 请求）；None = 全类型（漂移检测默认，行为不变）。
+    """
     client = EdgeClient(cluster_id, node_ip=node_ip, node_port=node_port)
     result: dict = {}
     for conf in DRIFT_TYPE_REGISTRY.values():
         edge_key = conf["edge_key"]
+        if only_edge_keys is not None and edge_key not in only_edge_keys:
+            continue
         try:
             if edge_key == "route":
                 raw = client.list_routes()

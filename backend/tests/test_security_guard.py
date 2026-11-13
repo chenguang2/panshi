@@ -105,6 +105,9 @@ UNAUTHENTICATED_SAMPLES = [
     ("get", "/api/v1/relay/health-check"),
     # 漂移检测（config-drift-detection）：只读但须鉴权
     ("get", "/api/v1/clusters/1/drift"),
+    # 发布差异预览（publish-diff-preview）：只读但须鉴权
+    ("get", "/api/v1/clusters/1/publish-preview/upstream/1"),
+    ("get", "/api/v1/clusters/1/publish-preview/route/1"),
     # 自助改密（default-password-guard-switch）：须鉴权（凭当前 token 定位用户）
     ("post", "/api/v1/auth/change-password"),
 ]

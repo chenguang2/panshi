@@ -237,6 +237,8 @@ openspec/        # 变更工件；openspec/specs/ = main specs
 
 76. **ClusterSelect（值先于事件）消费方的 `@change` 禁止与 v-model 状态做去重比较** — ClusterSelect 契约是 `update:modelValue` 先行、`change` 后到：`@change` 到达时 v-model 已更新为新值，任何「`next === selectedXxx` 则 early-return」的守卫恒真 → 加载副作用永不触发；dirty 确认取消的「`:value` 回弹」也随之失效（v-model 已先行，取消需显式回弹到已加载集群）。2026-11-12 实测：EdgeEnv 换装后选集群恒不加载节点（`/clusters/{id}/nodes` 请求根本不发、API 正常，纯前端守卫吞掉 change）。排查口诀：换装后「选了没反应」而 API 手调正常，先查 `@change` 处理器是否拿 v-model 已更新值做比较；全站清扫确认仅 EdgeEnv 一处此模式。**EdgeEnv 已统一为全站同构模式**：`:value="activeClusterId"` 受控（显示值=已加载集群，取消切换=不动它，结构性回滚零代码）+ `@change` 只做「dirty 确认 → 重载」，无 v-model、无去重守卫、无回弹赋值——源码守卫 `EdgeEnv.test.ts` 末尾 describe 钉住（禁 v-model / 必须 `:value="activeClusterId"` / 处理器禁 `if (next === …) return`）；改动 EdgeEnv 集群切换逻辑时勿退回 v-model + 去重。
 
+77. **发布差异预览与发布载荷同源单点（publish-diff-preview）** — 发布差异预览（`GET /clusters/{id}/publish-preview/{type}/{id}`）展示的「待发布值」与 publish 端点实发载荷必须出自同一构造单点 `publish_preview.build_candidate`（PUBLISH_PREVIEW_REGISTRY，label/edge_attr/edge_key/mask/normalize 引用 DRIFT_TYPE_REGISTRY 单一事实源）；publish 端点**禁止恢复内联 convert_* 载荷构造**（守卫 `tests/test_publish_candidate_single_source.py`，模式同 test_publish_response.py）。新增资源类型接入预览 = 注册表加 build_candidate 一条（publish 端点同步改调）。**预览与漂移检测的语义分叉勿混淆**：预览以「候选载荷」为基线、**不做漂移的全节点均匀性过滤**（正常待发布态本就是全节点同差，套用漂移过滤会把真实差异全滤掉）；「落后节点」= 在其余节点与候选一致的路径上仍不同的节点（含整资源缺失）。矩阵行值取自各节点 diff 贡献条目（勿按路径反查 Edge 条目——dict 键含 `.`/`[` 时路径不可解析）。对比口径（白名单/脱敏/数值归一/Edge 独有字段不报）复用 `diff_edge_payload` 单点，勿另写第二套 diff。
+
 ## 新增功能步骤
 
 1. 在 `backend/app/schemas/` 定义 Pydantic 模型
