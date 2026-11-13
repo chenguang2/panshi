@@ -489,7 +489,7 @@ async function onPublishConfirm(nodeIds: number[]) {
         addLog('══════ 节点同步结果 ══════')
         for (const r of data.results) {
           const icon = r.status === 'success' ? '✅' : r.status === 'skipped' ? '⏭️' : '❌'
-          const rl = routeLabel(r.route)
+          const rl = routeLabel(r.route, r)
           addLog(`${icon} 节点: ${r.node || r.scope || '-'}${rl ? `（${rl}）` : ''}`)
           addLog(`   状态: ${r.status}`)
           if (r.message) addLog(`   消息: ${r.message}`)

@@ -46,6 +46,10 @@ export interface TestConnectionResponse {
   route?: 'relay' | 'direct'
   /** 经中继时的网关基址 */
   relay_via?: string
+  /** 直连原因状态（仅区域禁用/IP 歧义时提供） */
+  route_state?: string
+  /** 直连原因明细 */
+  route_detail?: string
 }
 
 export interface PluginSummary {

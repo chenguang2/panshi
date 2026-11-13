@@ -33,7 +33,7 @@ async def _seed(test_db):
 def relay_active(monkeypatch):
     route = RelayRoute(code="luju", http_base_url=GW, ssh_jump=None, status="enabled")
     monkeypatch.setattr(relay_registry, "relay_enabled", lambda: True)
-    monkeypatch.setattr(relay_registry, "route_for_ip", lambda ip: (route, "active"))
+    monkeypatch.setattr(relay_registry, "route_for_cluster", lambda cid: (route, "active"))
 
 
 @pytest.fixture

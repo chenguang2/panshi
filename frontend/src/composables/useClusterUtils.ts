@@ -8,10 +8,25 @@ import { PAGE_SIZE_DROPDOWN } from '@/constants'
 import { showOverlayModal } from './useOverlayModal'
 import { getPluginConfigReferences, type PluginConfigReferences } from '@/api/pluginConfigs'
 
-/** 节点执行路径：经中继（经区域网关跳板/HTTP 腿）或直连。字段缺失时返回空串（向后兼容）。 */
-export function routeLabel(route?: 'relay' | 'direct'): string {
+/** 节点路由结果的最小形状（发布/删除/安装/导入等逐节点结果共有的路由字段）。 */
+export interface NodeRouteInfo {
+  route?: 'relay' | 'direct'
+  /** 直连原因状态（后端仅区域禁用/IP 歧义时提供；缺失 = 常态直连，不附原因） */
+  route_state?: string
+  /** 直连原因明细（如「区域 luju 已禁用」「IP 属于多个挂区域集群：a/x、b/y」） */
+  route_detail?: string
+}
+
+/** 节点执行路径：经中继（经区域网关跳板/HTTP 腿）或直连；直连且后端给出原因
+ * （route_state/route_detail，2026-11-13 C②）时内联原因，字段缺失时向后兼容只显示「直连」。 */
+export function routeLabel(route?: 'relay' | 'direct', r?: NodeRouteInfo): string {
   if (route === 'relay') return '经中继'
-  if (route === 'direct') return '直连'
+  if (route === 'direct') {
+    if (r?.route_detail) return `直连·${r.route_detail}`
+    if (r?.route_state === 'disabled') return '直连·区域已禁用'
+    if (r?.route_state === 'ambiguous') return '直连·IP 属于多个挂区域集群'
+    return '直连'
+  }
   return ''
 }
 
@@ -841,6 +856,10 @@ interface PublishResultData {
     rc?: number
     /** 节点执行路径（后端提供；缺失时不显示标签） */
     route?: 'relay' | 'direct'
+    /** 直连原因状态（仅区域禁用/IP 歧义时提供） */
+    route_state?: string
+    /** 直连原因明细 */
+    route_detail?: string
     [key: string]: unknown
   }>
   [key: string]: unknown
@@ -934,7 +953,7 @@ export async function executePublish(opts: PublishOptions): Promise<void> {
           addLog('')
           addLog('节点同步结果:')
           for (const r of data.results) {
-            const rl = routeLabel(r.route)
+            const rl = routeLabel(r.route, r)
             addLog(
               `  ${r.node}: ${resultStatusLabel(r.status)}${r.error ? ' - ' + r.error : ''}${rl ? `（${rl}）` : ''}`,
             )
@@ -1236,7 +1255,7 @@ function logSingleDeleteResults(
         const parts: string[] = Object.entries(labels).map(([k, label]) => `${label}:${r.details?.[k] ?? 0}`)
         detail = ` (${parts.join(' ')})`
       }
-      const rl = routeLabel(r.route)
+      const rl = routeLabel(r.route, r)
       addLog(
         `  ${r.node ?? '未知节点'}: ${r.status === 'success' ? '✅' : '❌'}${detail}${r.error ? ' - ' + r.error : ''}${rl ? ` （${rl}）` : ''}`,
       )

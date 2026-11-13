@@ -384,7 +384,10 @@ def test_disabled_region_falls_back_direct(test_db, test_db_factory, relay_env):
     assert c.relay_state == "disabled"
 
 
-def test_ambiguous_ip_falls_back_direct(test_db, test_db_factory, relay_env):
+def test_ambiguous_ip_cluster_context_routes_relay(test_db, test_db_factory, relay_env):
+    """集群上下文优先：集群挂接区域时按集群区域路由，全局 ip→区域 映射的同 IP 异区域
+    歧义不再误伤带集群上下文的调用（2026-11-13 实测：test 与 test-2 共用节点但分挂
+    qqq/bj 两个区域，发布恒直连）。歧义防护仅保留给无集群上下文路径（Edge 直连页）。"""
     import asyncio
 
     async def _seed():
@@ -396,9 +399,48 @@ def test_ambiguous_ip_falls_back_direct(test_db, test_db_factory, relay_env):
     from app.services.edge_client import EdgeClient
 
     c = EdgeClient(1, node_ip=NODE_IP, node_port=NODE_PORT)
+    assert c.relay_state == "active"
+    assert c.relay_target == f"{NODE_IP}:{NODE_PORT}"
+    assert c.edge_url == GW
+
+
+def test_ambiguous_ip_contextless_falls_back_direct(test_db, test_db_factory, relay_env):
+    """无集群上下文（cluster_id=0，Edge 直连页）：同 IP 异区域歧义防护保留，
+    回退直连且携带冲突明细（relay_detail）供展示。"""
+    import asyncio
+
+    async def _seed():
+        await _seed_routing(test_db, cluster2_region="tianjin")
+        test_db.add(RelayGateway(id=2, code="tianjin", name="路局B"))
+        await test_db.commit()
+        await relay_registry.ensure_fresh(session_factory=test_db_factory)
+    asyncio.run(_seed())
+    from app.services.edge_client import EdgeClient
+
+    c = EdgeClient(0, node_ip=NODE_IP, node_port=NODE_PORT)
     assert c.relay_state == "ambiguous"
     assert c.relay_target is None
     assert c.edge_url == f"http://{NODE_IP}:{NODE_PORT}"
+    assert c.relay_detail == "IP 属于多个挂区域集群：seed-cluster-1/luju、seed-cluster-2/tianjin"
+
+
+def test_ambiguous_ip_snapshot_build_warns(test_db, test_db_factory, relay_env, caplog):
+    """快照构建发现同 IP 异区域时打 warning（模块 docstring 承诺的告警，2026-11-13 补齐）。"""
+    import asyncio
+
+    async def _seed():
+        await _seed_routing(test_db, cluster2_region="tianjin")
+        test_db.add(RelayGateway(id=2, code="tianjin", name="路局B"))
+        await test_db.commit()
+    asyncio.run(_seed())
+
+    import logging
+    with caplog.at_level(logging.WARNING, logger="app.services.relay_registry"):
+        asyncio.run(relay_registry.ensure_fresh(session_factory=test_db_factory, force=True))
+    warns = [r for r in caplog.records if "多个挂区域集群" in r.getMessage()]
+    assert warns, "歧义 IP 未触发快照构建告警"
+    assert "seed-cluster-1/luju" in warns[-1].getMessage()
+    assert "seed-cluster-2/tianjin" in warns[-1].getMessage()
 
 
 def test_request_carries_x_edge_target(test_db, test_db_factory, relay_env, monkeypatch):

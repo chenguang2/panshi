@@ -45,6 +45,8 @@ class RelaySnapshot:
     routes: dict[str, RelayRoute] = field(default_factory=dict)
     cluster_region: dict[int, str] = field(default_factory=dict)
     node_region: dict[str, str] = field(default_factory=dict)  # ip -> code | AMBIGUOUS
+    # 同 IP 异区域的冲突明细：ip -> ["集群名/区域码", ...]（歧义回退直连时供展示）
+    ip_conflicts: dict[str, list[str]] = field(default_factory=dict)
 
     def route_for_ip(self, ip: str) -> tuple[RelayRoute | None, State]:
         code = self.node_region.get(ip)
@@ -136,26 +138,41 @@ async def ensure_fresh(session_factory=None, force: bool = False) -> RelaySnapsh
         snapshot = RelaySnapshot()
         async with session_factory() as s:
             gateways = (await s.execute(select(_RelayGateway))).scalars().all()
-            clusters = (await s.execute(select(_Cluster.id, _Cluster.region_code))).all()
+            clusters = (
+                await s.execute(select(_Cluster.id, _Cluster.region_code, _Cluster.name))
+            ).all()
             nodes = (await s.execute(select(_Node.ip, _Node.cluster_id))).all()
         for g in gateways:
             snapshot.routes[g.code] = RelayRoute(
                 code=g.code, http_base_url=g.http_base_url, ssh_jump=g.ssh_jump, status=g.status
             )
-        for cid, code in clusters:
+        cluster_names: dict[int, str] = {}
+        for cid, code, name in clusters:
+            cluster_names[cid] = name or str(cid)
             if code:
                 snapshot.cluster_region[cid] = code
-        ip_codes: dict[str, str] = {}
+        # 同 ip 多集群挂接区域时收集归属（歧义判定 + 冲突明细）
+        ip_owners: dict[str, list[tuple[int, str]]] = {}
         for ip, cid in nodes:
             code = snapshot.cluster_region.get(cid)
             if not code:
                 continue
-            prev = ip_codes.get(ip)
-            if prev is None:
-                ip_codes[ip] = code
-            elif prev != code:
-                ip_codes[ip] = AMBIGUOUS
-        snapshot.node_region = ip_codes
+            owners = ip_owners.setdefault(ip, [])
+            if all(c != cid for c, _ in owners):
+                owners.append((cid, code))
+        for ip, owners in ip_owners.items():
+            codes = {code for _, code in owners}
+            if len(codes) > 1:
+                snapshot.node_region[ip] = AMBIGUOUS
+                pairs = sorted({f"{cluster_names.get(cid, str(cid))}/{code}" for cid, code in owners})
+                snapshot.ip_conflicts[ip] = pairs
+                logger.warning(
+                    "relay: IP %s 属于多个挂区域集群(%s)，经中继 IP 判定将回退直连",
+                    ip,
+                    "、".join(pairs),
+                )
+            else:
+                snapshot.node_region[ip] = owners[0][1]
         _snapshot = snapshot
         _loaded_at = time.monotonic()
         return _snapshot
@@ -181,6 +198,15 @@ def route_for_cluster(cluster_id: int) -> tuple[RelayRoute | None, State]:
     if snap is None:
         return None, "off"
     return snap.route_for_cluster(cluster_id)
+
+
+def route_conflict_for_ip(ip: str) -> str | None:
+    """同 IP 异区域冲突明细（如 ``test/qqq、test-2/bj``）；无冲突返回 None。"""
+    snap = _require_snapshot()
+    if snap is None:
+        return None
+    pairs = snap.ip_conflicts.get(ip)
+    return "、".join(pairs) if pairs else None
 
 
 def _jump_host(ssh_jump: str) -> str:

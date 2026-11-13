@@ -87,6 +87,7 @@ class EdgeClient:
         # 总开关关闭时保持现状直连；开启时按注册快照改写 edge_url 并记录目标头。
         self.relay_target: str | None = None
         self.relay_state: str = "off"
+        self.relay_detail: str | None = None
         self._apply_relay(node_ip=node_ip, node_port=node_port)
 
         self._resolve_api_key()
@@ -94,18 +95,24 @@ class EdgeClient:
     def _apply_relay(self, node_ip: str | None, node_port: int | None) -> None:
         """按区域注册快照应用网关路由。
 
-        解析源：显式 node_ip 优先（Edge 直连页/逐节点发布），无显式目标时回退
-        集群挂接区域。disabled/ambiguous/无路由 → 保持直连（disabled 时连接类
-        失败会附"中继已禁用"提示）。
+        解析优先级（2026-11-13 集群上下文优先）：带集群上下文（cluster_id>0）时按
+        **集群挂接区域**路由——发布/删除/连接测试/edge.env 等逐节点调用天然知道所属
+        集群，不受全局 ip→区域 映射的跨集群同 IP 歧义误伤（实测：test 与 test-2
+        共用节点分挂 qqq/bj，发布恒直连）。歧义防护保留给无集群上下文路径
+        （Edge 直连页 cluster_id=0）：按显式 node_ip 解析，歧义/无路由 → 保持直连；
+        disabled 保持直连（连接类失败会附"中继已禁用"提示），并记录 relay_detail
+        供逐节点结果展示直连原因。
         """
         from app.services import relay_registry
 
         if not relay_registry.relay_enabled():
             return
-        if node_ip:
+        if self.cluster_id:
+            route, state = relay_registry.route_for_cluster(self.cluster_id)
+        elif node_ip:
             route, state = relay_registry.route_for_ip(node_ip)
         else:
-            route, state = relay_registry.route_for_cluster(self.cluster_id)
+            route, state = None, "none"
         self.relay_state = state
         if state == "active" and route and route.http_base_url:
             target_ip = node_ip or getattr(self, "_resolved_node_ip", None)
@@ -113,6 +120,13 @@ class EdgeClient:
             if target_ip and target_port:
                 self.edge_url = route.http_base_url
                 self.relay_target = f"{target_ip}:{target_port}"
+        elif state == "disabled" and route:
+            self.relay_detail = f"区域 {route.code} 已禁用"
+        elif state == "ambiguous":
+            conflict = relay_registry.route_conflict_for_ip(node_ip) if node_ip else None
+            self.relay_detail = (
+                f"IP 属于多个挂区域集群：{conflict}" if conflict else "IP 属于多个挂区域集群"
+            )
 
     def _conn_error_msg(self, msg: str) -> str:
         """连接类失败：区域被禁用时附可解释提示（G2，不 fail-fast）。"""

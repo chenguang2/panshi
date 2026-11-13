@@ -591,7 +591,7 @@ async function startReadTemplate() {
           readNode.value.status = 'success'
         }
         readStreaming.value = false
-        const via = routeLabel(data.route)
+        const via = routeLabel(data.route, data)
         message.success(`已载入 ${readNode.value?.ip ?? ''} 的当前配置${via ? `（${via}）` : ''}`)
         closeReadModal()
       }
@@ -706,8 +706,8 @@ function clearAllPublishNodes() {
 }
 
 /** 节点行尾的路径标注，如「（经中继）」；无 route 字段时返回空串（不渲染） */
-function routeTag(nr: { route?: 'relay' | 'direct' }): string {
-  const label = routeLabel(nr.route)
+function routeTag(nr: { route?: 'relay' | 'direct'; route_state?: string; route_detail?: string }): string {
+  const label = routeLabel(nr.route, nr)
   return label ? `（${label}）` : ''
 }
 

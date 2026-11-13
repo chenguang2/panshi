@@ -340,7 +340,7 @@ const connectionTested = ref(false)
 
 /** 与节点同行的路径标注，如「（经中继）」；无 route 字段时为空串（不渲染） */
 const connectionRouteText = computed(() => {
-  const label = routeLabel(connectionResult.value?.route)
+  const label = routeLabel(connectionResult.value?.route, connectionResult.value ?? undefined)
   return label ? `（${label}）` : ''
 })
 

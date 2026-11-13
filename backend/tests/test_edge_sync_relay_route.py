@@ -21,10 +21,14 @@ def _node(ip: str, port: int = 9180) -> Node:
 
 @pytest.fixture
 def relay_active(monkeypatch):
-    """总开关开 + 该 IP 解析到 active 区域（真实 EdgeClient 会改写 edge_url）。"""
+    """总开关开 + 集群 1 挂接 active 区域（真实 EdgeClient 会改写 edge_url）。
+
+    发布/删除走集群上下文解析（route_for_cluster），IP 歧义不再参与判定
+    （2026-11-13 集群上下文优先）。
+    """
     route = RelayRoute(code="luju", http_base_url=GW, ssh_jump=None, status="enabled")
     monkeypatch.setattr(relay_registry, "relay_enabled", lambda: True)
-    monkeypatch.setattr(relay_registry, "route_for_ip", lambda ip: (route, "active"))
+    monkeypatch.setattr(relay_registry, "route_for_cluster", lambda cid: (route, "active"))
     return route
 
 
@@ -32,13 +36,13 @@ def relay_active(monkeypatch):
 def relay_disabled(monkeypatch):
     route = RelayRoute(code="luju", http_base_url=GW, ssh_jump=None, status="disabled")
     monkeypatch.setattr(relay_registry, "relay_enabled", lambda: True)
-    monkeypatch.setattr(relay_registry, "route_for_ip", lambda ip: (route, "disabled"))
+    monkeypatch.setattr(relay_registry, "route_for_cluster", lambda cid: (route, "disabled"))
 
 
 @pytest.fixture
 def relay_none(monkeypatch):
     monkeypatch.setattr(relay_registry, "relay_enabled", lambda: True)
-    monkeypatch.setattr(relay_registry, "route_for_ip", lambda ip: (None, "none"))
+    monkeypatch.setattr(relay_registry, "route_for_cluster", lambda cid: (None, "none"))
 
 
 # ── publish_to_nodes ──────────────────────────────────────────
@@ -50,6 +54,7 @@ async def test_publish_success_marks_relay(relay_active):
     assert (ok, fail) == (1, 0)
     assert results[0]["route"] == "relay"
     assert results[0]["relay_via"] == GW
+    assert "route_state" not in results[0]
 
 
 async def test_publish_success_marks_direct_when_no_region(relay_none):
@@ -59,6 +64,8 @@ async def test_publish_success_marks_direct_when_no_region(relay_none):
     assert (ok, fail) == (1, 0)
     assert results[0]["route"] == "direct"
     assert "relay_via" not in results[0]
+    # 未挂区域属常态，不附直连原因（仅 ambiguous/disabled 才带）
+    assert "route_state" not in results[0]
 
 
 async def test_publish_success_marks_direct_when_region_disabled(relay_disabled):
@@ -68,6 +75,9 @@ async def test_publish_success_marks_direct_when_region_disabled(relay_disabled)
     assert (ok, fail) == (1, 0)
     assert results[0]["route"] == "direct"
     assert "relay_via" not in results[0]
+    # 直连原因（2026-11-13 C②）：区域禁用时逐节点结果带 state + 明细
+    assert results[0]["route_state"] == "disabled"
+    assert results[0]["route_detail"] == "区域 luju 已禁用"
 
 
 async def test_publish_failed_node_still_carries_relay(relay_active):
@@ -94,24 +104,23 @@ async def test_publish_failed_node_still_carries_direct(relay_none):
     assert "relay_via" not in results[0]
 
 
-async def test_publish_route_is_per_node(monkeypatch):
-    """同一请求内不同节点可分别判定（按各自 EdgeClient 实际路径）。"""
+async def test_publish_route_uniform_for_cluster_context(monkeypatch):
+    """集群上下文解析（2026-11-13）：一次发布内的节点同属一个集群，路由按集群区域
+    统一判定——同请求内逐节点 route 不再随 IP 各自解析（原 per-node 变体前提失效），
+    但每个节点的 route 仍由各自 EdgeClient 实例盖章（失败节点也带）。"""
     gw_route = RelayRoute(code="luju", http_base_url=GW, ssh_jump=None, status="enabled")
-
-    def _route_for_ip(ip):
-        return (gw_route, "active") if ip == "10.1.1.1" else (None, "none")
-
     monkeypatch.setattr(relay_registry, "relay_enabled", lambda: True)
-    monkeypatch.setattr(relay_registry, "route_for_ip", _route_for_ip)
+    monkeypatch.setattr(relay_registry, "route_for_cluster", lambda cid: (gw_route, "active"))
 
     results, ok, fail = await publish_to_nodes(
         1, [_node("10.1.1.1"), _node("10.2.2.2")], {"a": 1}, publish_fn=lambda c: {"ok": True}
     )
     by_ip = {r["node"].split(":")[0]: r for r in results}
+    assert (ok, fail) == (2, 0)
     assert by_ip["10.1.1.1"]["route"] == "relay"
     assert by_ip["10.1.1.1"]["relay_via"] == GW
-    assert by_ip["10.2.2.2"]["route"] == "direct"
-    assert "relay_via" not in by_ip["10.2.2.2"]
+    assert by_ip["10.2.2.2"]["route"] == "relay"
+    assert by_ip["10.2.2.2"]["relay_via"] == GW
 
 
 # ── delete_on_nodes ───────────────────────────────────────────

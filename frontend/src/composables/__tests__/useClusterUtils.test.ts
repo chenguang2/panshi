@@ -546,6 +546,56 @@ describe('经中继 / 直连 路径标签（发布进度）', () => {
     expect(text).not.toContain('经中继')
     expect(text).not.toContain('直连')
   })
+
+  it('executePublish: route=direct + route_state/route_detail → 标签内联直连原因', async () => {
+    const { executePublish } = await import('../useClusterUtils')
+    mockApiPost.mockResolvedValue({
+      data: {
+        status: 'ok',
+        message: '发布完成',
+        results: [
+          {
+            node: '10.0.0.2:9180',
+            status: 'success',
+            route: 'direct',
+            route_state: 'disabled',
+            route_detail: '区域 luju 已禁用',
+          },
+        ],
+      },
+    })
+
+    await executePublish({
+      title: '发布上游',
+      apiEndpoint: '/clusters/1/upstreams/publish',
+      nodeIds: [2],
+      refreshFn: vi.fn(),
+    })
+
+    const text = document.body.textContent || ''
+    expect(text).toContain('直连·区域 luju 已禁用')
+  })
+
+  it('executePublish: route=direct + 仅 route_state（无明细）→ 退化文案', async () => {
+    const { executePublish } = await import('../useClusterUtils')
+    mockApiPost.mockResolvedValue({
+      data: {
+        status: 'ok',
+        message: '发布完成',
+        results: [{ node: '10.0.0.3:9180', status: 'success', route: 'direct', route_state: 'ambiguous' }],
+      },
+    })
+
+    await executePublish({
+      title: '发布上游',
+      apiEndpoint: '/clusters/1/upstreams/publish',
+      nodeIds: [3],
+      refreshFn: vi.fn(),
+    })
+
+    const text = document.body.textContent || ''
+    expect(text).toContain('直连·IP 属于多个挂区域集群')
+  })
 })
 
 // ── 发布进度诚实化（route-management-ux-batch1 7.8，裁决 A）──────────────────

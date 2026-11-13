@@ -413,13 +413,18 @@ def mark_route(node_result: dict, client: EdgeClient) -> None:
 
     判定源必须是该实例（_apply_relay 改写后的 relay_target / edge_url），
     而非另行查注册表，避免与实际请求路径分歧。失败节点也要带 route，
-    故调用点须在请求发起前。
+    故调用点须在请求发起前。直连且原因可解释（区域禁用/IP 歧义）时附
+    route_state/route_detail（2026-11-13 C②），未挂区域等常态不带。
     """
     if client.relay_target:
         node_result["route"] = "relay"
         node_result["relay_via"] = client.edge_url
     else:
         node_result["route"] = "direct"
+        if client.relay_state in ("ambiguous", "disabled"):
+            node_result["route_state"] = client.relay_state
+            if client.relay_detail:
+                node_result["route_detail"] = client.relay_detail
 
 
 async def delete_on_nodes(

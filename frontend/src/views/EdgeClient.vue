@@ -1022,12 +1022,14 @@ const manualNode = ref('')
 const activeTab = ref('upstreams')
 const loading = ref(false)
 const loadedNode = ref('')
-const routeInfo = ref<{ route?: 'relay' | 'direct'; relay_via?: string }>({})
+const routeInfo = ref<{ route?: 'relay' | 'direct'; relay_via?: string; route_state?: string; route_detail?: string }>(
+  {},
+)
 const currentSignal = ref<AbortSignal | undefined>(undefined)
 
 /** 与 loadedNode 同行的路径标注，如「（经中继）」；无 route 字段时为空串（不渲染） */
 const loadedNodeRouteText = computed(() => {
-  const label = routeLabel(routeInfo.value.route)
+  const label = routeLabel(routeInfo.value.route, routeInfo.value)
   return label ? `（${label}）` : ''
 })
 

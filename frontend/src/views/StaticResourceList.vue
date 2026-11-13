@@ -629,7 +629,7 @@ async function onPublishConfirm(nodeIds: number[]) {
         addLog('')
         addLog('节点同步结果:')
         for (const r of data.results) {
-          const rl = routeLabel(r.route)
+          const rl = routeLabel(r.route, r)
           // static-resources-ux-close-loop 2.2：状态经 resultStatusLabel 出中文
           addLog(`  ${r.node}: ${resultStatusLabel(r.status)}${r.error ? ' - ' + r.error : ''}${rl ? `（${rl}）` : ''}`)
         }
