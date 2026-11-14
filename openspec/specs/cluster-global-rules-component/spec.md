@@ -1,8 +1,9 @@
 ## Purpose
 
-
 集群全局规则 Vue 组件（ClusterGlobalRules）：承载全局规则列表、编辑与删除交互，供集群详情页复用。
+
 ## Requirements
+
 ### Requirement: ClusterGlobalRules component
 The system SHALL provide a `ClusterGlobalRules` component that renders the global rules tab content.
 
@@ -18,7 +19,7 @@ The system SHALL provide a `ClusterGlobalRules` component that renders the globa
 #### Scenario: 表单收敛
 - **WHEN** 用户在集群子页创建或编辑全局规则
 - **THEN** 表单 SHALL 渲染 `PluginEntityFormModal`（`clusters=[当前集群]`，编辑态禁用集群选择）
-- **AND** 误关 dirty 保护、跨 Tab 校验、统一保存 toast SHALL 随共享组件自动继承，MUST NOT 在子页重写
+- **AND** 误关 dirty 保护、跨 Tab 校验、保存反馈通道（save-publish-guidance-rollout 起：共享组件开启发布引导后为「保存成功」引导弹窗，未开启域为统一保存 toast）SHALL 随共享组件自动继承，MUST NOT 在子页重写
 - **AND** 手写 modal 及其死代码 SHALL 移除
 
 ### Requirement: 集群子页加载失败与空态区分
