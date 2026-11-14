@@ -31,6 +31,20 @@ try {
   await page.waitForLoadState('networkidle')
   await page.waitForTimeout(800)
 
+  // ── ⓪ 宽视口无溢出：默认档列宽足够时不得出现横向滚动条（握把线不得露出表格右缘撑出滚动） ──
+  await page.setViewportSize({ width: 1920, height: 1000 })
+  for (const p of ['/nodes', '/upstreams', '/routes']) {
+    await page.goto(base + p, { waitUntil: 'networkidle' })
+    await page.waitForSelector('.ant-table-thead th', { timeout: 15000 })
+    await page.waitForTimeout(400)
+    const ov = await page.evaluate(() => {
+      const el = document.querySelector('.ant-table-content')
+      return el ? el.scrollWidth - el.clientWidth : 0
+    })
+    check(`${p} 宽视口默认档无横向溢出`, ov <= 0, `overflow=${ov}`)
+  }
+  await page.setViewportSize({ width: 1100, height: 800 })
+
   // ── ① 窄视口：横向滚动出现，固定列生效 ──
   await page.goto(base + '/nodes', { waitUntil: 'networkidle' })
   await page.waitForSelector('.ant-table-thead th', { timeout: 15000 })
