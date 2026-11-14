@@ -1625,21 +1625,24 @@ describe('NodeList 列宽个性化（node-list-column-resize）', () => {
     await flushPromises()
     const table = wrapper.findComponent({ name: 'ATableStub' })
     const keySeq = () => (table.props('columns') as Array<{ key: unknown }>).map((c) => String(c.key))
-    // jsdom 无布局：按默认列序为每个 th 注入 100px 宽矩形
+    // jsdom 无布局：gBCR 桩按「元素在父容器内的动态序号」返回位置——换位后 DOM 移动，桩跟随新位置（FLIP 可测）
     const ths = () => wrapper.findAll('th[data-col]')
-    ths().forEach((th, i) => {
-      th.element.getBoundingClientRect = () =>
-        ({
-          left: i * 100,
-          right: i * 100 + 100,
+    ths().forEach((th) => {
+      th.element.getBoundingClientRect = function (this: HTMLElement) {
+        const parent = this.parentElement as HTMLElement
+        const idx = [...parent.children].indexOf(this)
+        return {
+          left: idx * 100,
+          right: idx * 100 + 100,
           width: 100,
           top: 0,
           bottom: 40,
           height: 40,
-          x: i * 100,
+          x: idx * 100,
           y: 0,
           toJSON: () => {},
-        }) as DOMRect
+        } as DOMRect
+      }
     })
     // 光标提示：可拖列 wrap 带 movable 类；固定列（#/ip/actions）不带
     expect(
@@ -1674,10 +1677,15 @@ describe('NodeList 列宽个性化（node-list-column-resize）', () => {
       .find('.th-resize-wrap')!
     await edgeWrap.trigger('mousedown', { clientX: 550 })
     expect(edgeWrap.classes()).toContain('dragging-source')
+    // 拖拽全程抓取光标：body 挂类（CSS 对所有元素强制 grabbing）
+    expect(document.body.classList.contains('col-move-dragging')).toBe(true)
     document.dispatchEvent(new MouseEvent('mousemove', { clientX: 720 }))
     await flushPromises()
     const LIVE_SEQ = [...DEFAULT_SEQ.slice(0, 5), 'openresty_path', 'edge_path', ...DEFAULT_SEQ.slice(7)]
     expect(keySeq()).toEqual(LIVE_SEQ)
+    // FLIP 换位动画：换位后表头单元格带位移 transform（150ms 补间回正）
+    const flipped = [...document.querySelectorAll('.node-table thead th')].some((el) => (el as HTMLElement).style.transform !== '')
+    expect(flipped, '换位应触发 FLIP 位移动画').toBe(true)
     // 松手确认当前位次（无跳变）
     document.dispatchEvent(new MouseEvent('mouseup', { clientX: 720 }))
     await flushPromises()

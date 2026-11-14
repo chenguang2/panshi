@@ -537,7 +537,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
 import { formatDateTime as formatDate, formatRelativeTime } from '@/utils/format'
 import ClusterSelect from '@/components/ClusterSelect.vue'
@@ -983,6 +983,7 @@ function startColumnMove(e: MouseEvent, col: { key?: unknown }): void {
   })
   colMove = { key, startOrder: orderedColumns.value.map((c) => String(c.key)), rects, lastHint: key }
   dragSourceKey.value = key
+  document.body.classList.add('col-move-dragging')
   document.addEventListener('mousemove', onColumnMoveMove)
   document.addEventListener('mouseup', endColumnMove)
   document.addEventListener('keydown', onColumnMoveCancel)
@@ -1009,7 +1010,10 @@ function onColumnMoveMove(e: MouseEvent): void {
   const idx = next.indexOf(hint)
   if (idx === -1) return
   next.splice(idx, 0, mv.key)
+  // FLIP：记录换位前位置，DOM 更新后让列平滑滑动到位（方案 A：无瞬跳）
+  const before = captureColumnRects()
   setNodeColumnOrder(next)
+  void nextTick(() => playColumnMoveFlip(before))
 }
 
 function onColumnMoveCancel(e: KeyboardEvent): void {
@@ -1018,10 +1022,50 @@ function onColumnMoveCancel(e: KeyboardEvent): void {
   endColumnMove()
 }
 
+function captureColumnRects(): Map<HTMLElement, number> {
+  return new Map(
+    [...document.querySelectorAll<HTMLElement>('.node-table thead th, .node-table tbody td')].map((el) => [
+      el,
+      el.getBoundingClientRect().left,
+    ]),
+  )
+}
+
+function playColumnMoveFlip(before: Map<HTMLElement, number>): void {
+  const cells = [...document.querySelectorAll<HTMLElement>('.node-table thead th, .node-table tbody td')]
+  cells.forEach((el) => {
+    const oldLeft = before.get(el)
+    if (oldLeft === undefined) return
+    const dx = Math.round(oldLeft - el.getBoundingClientRect().left)
+    if (!dx) return
+    el.style.transition = 'none'
+    el.style.transform = `translateX(${dx}px)`
+  })
+  requestAnimationFrame(() => {
+    cells.forEach((el) => {
+      if (!el.style.transform) return
+      el.style.transition = 'transform 150ms ease'
+      el.style.transform = ''
+    })
+    window.setTimeout(() => {
+      cells.forEach((el) => {
+        el.style.transition = ''
+      })
+    }, 220)
+  })
+}
+
 function endColumnMove(): void {
   document.removeEventListener('mousemove', onColumnMoveMove)
   document.removeEventListener('mouseup', endColumnMove)
   document.removeEventListener('keydown', onColumnMoveCancel)
+  document.body.classList.remove('col-move-dragging')
+  document
+    .querySelectorAll<HTMLElement>('.node-table thead th, .node-table tbody td')
+    .forEach((el) => {
+      el.style.transition = ''
+      el.style.transform = ''
+    })
   dragSourceKey.value = ''
   colMove = null
 }
@@ -1980,5 +2024,13 @@ function onEdgePackRebase(e: Event) {
   font-weight: 600;
   border-radius: 4px;
   padding: 2px 6px;
+}
+</style>
+
+<style>
+/* 列移动拖拽全程抓取光标（node-list-column-resize 方案 A）：覆盖所有元素默认 cursor */
+body.col-move-dragging,
+body.col-move-dragging * {
+  cursor: grabbing !important;
 }
 </style>

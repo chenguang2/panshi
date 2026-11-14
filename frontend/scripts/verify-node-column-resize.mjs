@@ -131,6 +131,10 @@ try {
   // 起始点必须在标题文字上（避开固定列覆盖带与插槽死区）
   await page.mouse.move(db.x + 40, db.y + db.height / 2)
   await page.mouse.down()
+  // 拖拽全程抓取光标：body 挂类，指针所指任意元素 cursor 均为 grabbing
+  const cursorOk = await page.evaluate(() => document.body.classList.contains('col-move-dragging'))
+  const bodyCursor = await page.evaluate(() => getComputedStyle(document.body).cursor)
+  check('拖拽全程抓取光标（body 类 + 计算光标）', cursorOk && bodyCursor === 'grabbing', `cursor=${bodyCursor}`)
   // 落点取「状态」列实际位置左半（左半 = 插入状态前）
   const thStatus = page.locator('.ant-table-thead th', { hasText: '状态' }).first()
   const sb = await thStatus.boundingBox()
