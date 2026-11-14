@@ -44,7 +44,7 @@
           </div>
           <div class="panel-actions">
             <a-button type="primary" @click="handleLuaEncode">转换为字符串 →</a-button>
-            <a-button @click="handleLuaDecode">→ 转换为函数</a-button>
+            <a-button @click="handleLuaDecode">← 转换为函数</a-button>
           </div>
           <div class="panel-right">
             <div class="panel-label">配置字符串</div>

@@ -407,11 +407,11 @@ describe('Tools 新工具（tools-new-utilities）', () => {
 })
 
 describe('Tools 批 3：文案', () => {
-  it('Lua 按钮新文案「转换为字符串 →」/「→ 转换为函数」', async () => {
+  it('Lua 按钮文案「转换为字符串 →」/「← 转换为函数」（tools-two-way-panels 方向箭头）', async () => {
     const wrapper = await mountTools()
     const texts = wrapper.findAll('.panel-actions .a-btn').map((b) => b.text())
     expect(texts).toContain('转换为字符串 →')
-    expect(texts).toContain('→ 转换为函数')
+    expect(texts).toContain('← 转换为函数')
   })
 
   it('JSON 错误文案含中文修复指引', async () => {

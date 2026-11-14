@@ -2,6 +2,24 @@
 
 ## MODIFIED Requirements
 
+### Requirement: Lua 函数转配置字符串
+
+<!-- 2026-11-14 tools-two-way-panels：反向按钮箭头改「← 转换为函数」（两框对等方向约定，读右写左），原「→ 转换为函数」箭头方向与行为相反 -->
+
+系统 SHALL 提供 Lua 函数代码转 `pre_functions` 插件配置字符串的功能，采用左右双栏对等布局。左侧输入 Lua 函数体代码，右侧显示转换后的配置字符串。点击按钮触发双向转换。按钮文案 SHALL 使用方向明确的「转换为字符串 →」（读左写右）与「← 转换为函数」（读右写左）（避免「还原」一词的歧义）。
+
+#### Scenario: 基本 Lua 函数转换
+- **WHEN** 用户在左侧输入 `ngx.log(ngx.ERR, "hello")` 并点击「转换为字符串 →」
+- **THEN** 右侧显示 `"return function(conf, ctx)\nngx.log(ngx.ERR, \"hello\")\nend"` 格式的字符串
+
+#### Scenario: 配置字符串反向解析
+- **WHEN** 用户在右侧粘贴 `"return function(conf, ctx)\nngx.log(ngx.ERR, \"hello\")\nend"` 并点击「← 转换为函数」
+- **THEN** 左侧显示 `ngx.log(ngx.ERR, "hello")` 函数体代码
+
+#### Scenario: 用途说明
+- **WHEN** Lua 工具面板展示时
+- **THEN** 工具头部 SHALL 显示一行用途说明（用于插件 pre_functions 配置与 Lua 函数体的双向转换）
+
 ### Requirement: URL 编解码
 系统 SHALL 提供 URL 编码和解码功能，采用左右双栏对等布局：左框为原文、右框为编码串，两框均可输入，转换发生在两框之间。按钮文案 SHALL 标示方向：「编码 →」读左框写右框、「← 解码」读右框写左框。每个面板提供复制和粘贴按钮。
 

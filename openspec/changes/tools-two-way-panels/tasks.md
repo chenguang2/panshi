@@ -11,6 +11,8 @@
 - [x] 2.3 `Tools.vue` 互转工具：panel-label 左「YAML」右「JSON」，右框去 readonly，按钮「转 JSON →」读左写右、「← 转 YAML」读右写左，placeholder 同步。验证：1.1 convert 用例绿。
 - [x] 2.4 `toolHelp.ts` url/base64/convert 三条目文案改两框对等表述。验证：toolHelp.source.test.ts 守卫仍绿；定向 vitest 全绿。
 
+- [x] 2.5 Lua 反向按钮箭头修正：「→ 转换为函数」→「← 转换为函数」（用户真机反馈），toolHelp lua 条目与测试同步；dev-tools Lua 需求 MODIFIED 入 delta。验证：Tools.test.ts Lua 文案用例绿 + openspec validate 过。
+
 ## 3. 回归与真机验收
 
 - [x] 3.1 `npx vue-tsc -b` 零错误 + 全量 `npx vitest run --maxWorkers=4` 无新增失败。验证：两命令输出。
