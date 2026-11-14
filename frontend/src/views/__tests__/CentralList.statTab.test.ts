@@ -5,6 +5,9 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 import { createRouter, createWebHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
+// 静态导入（替代 mountPage 内动态 import）：首个用例曾因承担整图编译成本稳定超 5s 超时（2026-11-14），
+// vi.mock 会被提升到静态导入之前，mock 语义不变。
+import CentralList from '@/views/CentralList.vue'
 
 const mockApiGet = vi.fn()
 const mockApiPost = vi.fn()
@@ -70,7 +73,6 @@ async function mountPage(): Promise<VueWrapper> {
     return Promise.resolve({ data: {} })
   })
 
-  const CentralList = (await import('@/views/CentralList.vue')).default
   const router = createRouter({
     history: createWebHistory(),
     routes: [{ path: '/', component: { template: '<div />' } }],
