@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>发布差异预览 · 多节点规模化 — 方案演示页</title>
+<style>
+  :root {
+    --bg: oklch(97% 0.005 250);
+    --surface: oklch(100% 0 0);
+    --fg: oklch(20% 0.02 240);
+    --muted: oklch(50% 0.018 240);
+    --border: oklch(88% 0.008 240);
+    --border-strong: oklch(74% 0.02 240);
+    --accent: oklch(56% 0.16 210);
+    --accent-bg: oklch(56% 0.16 210 / 10%);
+    --mono: ui-monospace, "SF Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 14px; line-height: 1.6; }
+  .page { max-width: 1180px; margin: 0 auto; padding: 24px 28px 80px; display: flex; flex-direction: column; gap: 16px; }
+  h1 { font-size: 20px; margin: 0; }
+  h2.sec { font-size: 15px; margin: 8px 0 0; }
+  .desc { color: var(--muted); font-size: 13px; max-width: 840px; }
+  .note { font-size: 12px; color: var(--accent); background: var(--accent-bg);
+    border: 1px solid oklch(56% 0.16 210 / 28%); border-radius: 6px; padding: 8px 12px; display: inline-block; }
+
+  .plan-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .plan-card.recommended { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .pc-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--bg); }
+  .pc-head h2 { margin: 0; font-size: 15px; }
+  .badge { font-size: 11px; background: var(--accent); color: #fff; padding: 1px 8px; border-radius: 10px; }
+  .badge.gray { background: var(--muted); }
+  .pc-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+
+  /* PublishStatusTag / chips 风格 */
+  .chip { font-size: 12px; padding: 1px 10px; border-radius: 10px; border: 1px solid; display: inline-block; }
+  .chip.ok { color: #52c41a; border-color: #52c41a; background: #f6ffed; }
+  .chip.warn { color: #fa8c16; border-color: #fa8c16; background: #fff7e6; }
+  .chip.danger { color: #fa541c; border-color: #fa541c; background: #fff2e8; }
+  .chip.plain { color: var(--muted); border-color: var(--border-strong); background: var(--surface); }
+  .ps-tag { display: inline-block; font-size: 12px; line-height: 18px; padding: 0 6px; border-radius: 3px; font-weight: 500; }
+  .ps-pending { border: 1px solid #fa8c16; color: #fa8c16; background: #fff7e6; }
+
+  table.matrix { width: 100%; border-collapse: collapse; font-size: 12.5px; background: var(--surface); }
+  table.matrix th { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border-strong); background: var(--bg); font-size: 12px; color: var(--muted); white-space: nowrap; }
+  table.matrix td { padding: 6px 10px; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: 12px; vertical-align: top; word-break: break-all; }
+  table.matrix td.cand { font-weight: 600; }
+  table.matrix td.diff { background: #fff2e8; color: #fa541c; font-weight: 600; }
+  table.matrix tr.same td { color: var(--muted); }
+
+  .group-block { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 10px; }
+  .group-head { display: flex; align-items: center; justify-content: space-between; padding: 9px 14px; background: var(--bg); border-bottom: 1px solid var(--border); font-size: 13px; font-weight: 700; }
+  .group-head .g-count { font-weight: 400; font-size: 12px; color: var(--muted); }
+  .group-body { padding: 10px 14px; }
+  .ip-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .ip-chip { font-family: var(--mono); font-size: 11.5px; padding: 1px 8px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg); color: var(--fg); }
+  .ip-chip.small { font-size: 11px; padding: 0 6px; opacity: .85; }
+  .toggle-line { font-size: 12px; color: var(--muted); }
+
+  .selector-row { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
+  .node-select { border: 1px solid var(--border-strong); border-radius: 6px; padding: 5px 10px; font-size: 13px; background: var(--surface); }
+
+  table.decide { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; font-size: 13px; }
+  table.decide th { text-align: left; padding: 9px 14px; background: var(--bg); border-bottom: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+  table.decide td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  table.decide tr:last-child td { border-bottom: none; }
+  .rec { color: var(--accent); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>发布差异预览 · 多节点规模化方案</h1>
+  <p class="desc">现状：差异矩阵 = 字段路径 × 待发布值 × 每节点一列。3 节点时 5 列，体验良好；节点到 20/200 时变成 22/202 列宽表，横向滚动也无从对比。</p>
+  <p class="note">演示场景：某插件组待发布，集群 20 个节点——17 个与待发布一致（已同步）、2 个落后于上次发布、1 个被旁路修改。矩阵字段 12 个（其中差异 4 个）。</p>
+
+  <!-- 方案 A -->
+  <div class="plan-card recommended">
+    <div class="pc-head"><h2>方案 A · 按差异形态分组（推荐）</h2><span class="badge">推荐</span></div>
+    <div class="pc-body">
+      <p class="desc" style="margin:0">节点不再铺列，而是按「与待发布的差异形态」分组：同组节点差异完全相同 → 组内一张小差异表（字段路径 × 待发布 × 组内节点值，组内值全同）；无差异/不可达节点只列 IP。列数 = 形态组数（通常 2-4），与节点数彻底解耦。</p>
+
+      <div class="chips ip-chips" style="gap:8px">
+        <span class="chip ok">与待发布一致 17</span>
+        <span class="chip warn">落后于上次发布 2</span>
+        <span class="chip danger">被旁路修改 1</span>
+        <span class="chip plain">不可达 0</span>
+      </div>
+
+      <div class="group-block">
+        <div class="group-head"><span>与待发布一致（17 个节点）</span><span class="g-count">无差异</span></div>
+        <div class="group-body">
+          <div class="ip-chips">
+            <span class="ip-chip">10.0.0.1</span><span class="ip-chip">10.0.0.2</span><span class="ip-chip">10.0.0.3</span>
+            <span class="ip-chip">10.0.0.4</span><span class="ip-chip">10.0.0.5</span>
+            <span class="ip-chip small">+12 更多（展开）</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="group-block">
+        <div class="group-head"><span>⚠ 落后于上次发布（2 个节点）</span><span class="g-count">差异 2 项 · 组内节点差异完全相同</span></div>
+        <div class="group-body">
+          <div class="ip-chips" style="margin-bottom:8px">
+            <span class="ip-chip">10.0.0.7</span><span class="ip-chip">10.0.0.12</span>
+          </div>
+          <table class="matrix">
+            <thead><tr><th style="width:34%">字段路径</th><th style="width:26%">待发布</th><th>组内节点当前值（2 节点同值）</th></tr></thead>
+            <tbody>
+              <tr><td>targets[1].weight</td><td class="cand">70</td><td class="diff">50</td></tr>
+              <tr><td>timeout.connect</td><td class="cand">30</td><td class="diff">60</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="group-block">
+        <div class="group-head"><span style="color:#fa541c">被旁路修改（1 个节点）</span><span class="g-count">差异 3 项 · 该节点独有形态</span></div>
+        <div class="group-body">
+          <div class="ip-chips" style="margin-bottom:8px">
+            <span class="ip-chip">10.0.0.15</span>
+          </div>
+          <table class="matrix">
+            <thead><tr><th style="width:34%">字段路径</th><th style="width:26%">待发布</th><th>该节点当前值</th></tr></thead>
+            <tbody>
+              <tr><td>targets[1].weight</td><td class="cand">70</td><td class="diff">80</td></tr>
+              <tr><td>retries</td><td class="cand">3</td><td class="diff">5</td></tr>
+              <tr><td>checks.active.http_path</td><td class="cand">/status</td><td class="diff">/health</td></tr>
+            </tbody>
+          </table>
+          <p class="desc" style="margin:6px 0 0;font-size:12px">10.0.0.15 的值与其他节点都不同——真实旁路修改，发布将覆盖为待发布值。</p>
+        </div>
+      </div>
+
+      <p class="desc" style="margin:0">200 节点时：形态组通常仍是 2-5 个（大多数节点同版本同步），列数恒定。节点级明细不丢——响应仍含全量 per-node 数据，聚合在前端完成（几百节点响应仅几百 KB，无后端改动）。</p>
+    </div>
+  </div>
+
+  <!-- 方案 B -->
+  <div class="plan-card">
+    <div class="pc-head"><h2>方案 B · 节点选择器（聚焦单节点）</h2><span class="badge gray">最简单</span></div>
+    <div class="pc-body">
+      <div class="selector-row">
+        <select class="node-select"><option>10.0.0.7（落后，差 2 项）</option><option>10.0.0.12（落后，差 2 项）</option><option>10.0.0.15（旁路，差 3 项）</option><option>10.0.0.1（一致）</option></select>
+        <span class="toggle-line">默认选中第一个有差异的节点</span>
+      </div>
+      <table class="matrix">
+        <thead><tr><th style="width:40%">字段路径</th><th style="width:28%">待发布</th><th>10.0.0.7 当前值</th></tr></thead>
+        <tbody>
+          <tr><td>targets[1].weight</td><td class="cand">70</td><td class="diff">50</td></tr>
+          <tr><td>timeout.connect</td><td class="cand">30</td><td class="diff">60</td></tr>
+          <tr class="same"><td>name</td><td class="cand">user-service</td><td>user-service</td></tr>
+          <tr class="same"><td>retries</td><td class="cand">3</td><td>3</td></tr>
+        </tbody>
+      </table>
+      <p class="desc" style="margin:0">列数恒为 3，实现最简；顶部 chips 保留各节点状态汇总。缺点：横向对比消失，「17 个节点都一样」这类结论要挨个点；200 节点切换成本高。</p>
+    </div>
+  </div>
+
+  <!-- 方案 C -->
+  <div class="plan-card">
+    <div class="pc-head"><h2>方案 C · 横向滚动宽表（冻结前两列）</h2><span class="badge gray">不推荐 · 仅列出</span></div>
+    <div class="pc-body">
+      <p class="desc" style="margin:0">保持现有矩阵，字段路径 + 待发布两列冻结，节点列横向滚动（示意：→ 滚动查看 10.0.0.5 ~ 10.0.0.20 …）。信息零损失、交互不变，但 200 列时找差异如大海捞针；虚拟滚动实现有成本。列出仅为完整性。</p>
+      <div style="overflow-x: auto; border: 1px solid var(--border); border-radius: 6px;">
+        <table class="matrix" style="min-width: 900px;">
+          <thead><tr><th style="position: sticky; left: 0; background: var(--bg);">字段路径</th><th style="position: sticky; left: 88px; background: var(--bg);">待发布</th><th>10.0.0.1</th><th>10.0.0.2</th><th>…</th><th>10.0.0.15</th><th>…</th><th>10.0.0.20</th></tr></thead>
+          <tbody>
+            <tr><td style="position: sticky; left: 0; background: var(--surface);">targets[1].weight</td><td style="position: sticky; left: 88px; background: var(--surface);" class="cand">70</td><td class="diff">50</td><td class="diff">50</td><td class="diff">…</td><td class="diff">80</td><td class="diff">…</td><td class="diff">50</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 决策点 -->
+  <h2 class="sec">决策点</h2>
+  <table class="decide">
+    <thead><tr><th style="width:6%">#</th><th style="width:26%">决策点</th><th style="width:40%">选项</th><th>推荐</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>E1</td>
+        <td>规模化呈现模式</td>
+        <td class="opt">a. 分组聚合（A）　b. 节点选择器（B）　c. 横向滚动宽表（C）　d. 阈值混合：≤5 节点保持现矩阵，&gt;5 自动切分组</td>
+        <td class="rec">d — 小集群保留现有矩阵（信息全景），大集群自动分组；混合实现成本低（分组是矩阵的聚合视图）</td>
+      </tr>
+      <tr>
+        <td>E2</td>
+        <td>分组呈现粒度</td>
+        <td class="opt">a. 组内只显示代表值 + IP chips（本页演示）　b. 组内展开每节点一列（组小时）</td>
+        <td class="rec">a — 组内值全同，代表值即全部信息</td>
+      </tr>
+      <tr>
+        <td>E3</td>
+        <td>「与待发布一致」大组</td>
+        <td class="opt">a. 只列 IP chips（+N 更多折叠）　b. 也提供开关看一致字段全集</td>
+        <td class="rec">a + 保留既有「显示一致字段」开关（作用于差异组）</td>
+      </tr>
+      <tr>
+        <td>E4</td>
+        <td>实施范围</td>
+        <td class="opt">a. 纯前端聚合（响应不变，所有节点数可用）　b. 后端分组聚合（省响应体积，200+ 再说）</td>
+        <td class="rec">a — 200 节点响应仅几百 KB，后端零改动</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="desc">背景说明：当前部署规模 ≤3 节点/集群，现状矩阵完全够用——本方案是面向未来节点数的结构性储备，不紧急，可独立小批实施（纯前端 + 组件测试）。</p>
+</div>
+</body>
+</html>
