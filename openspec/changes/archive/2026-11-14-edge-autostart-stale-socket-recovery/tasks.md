@@ -20,4 +20,4 @@
 
 - [x] 3.1 `docs/help/edge-auto-start.md`：unit 样例改为现行 `Type=forking` + `ExecStartPre` + `PIDFile` 版（原样例是已废弃的 oneshot）；新增「开机启动失败：`bind() … Address already in use`」排障节（根因 + 自愈机制 + 存量节点处理）
 - [x] 3.2 后端全量 pytest + PG 方言冒烟（本次不改 schema/写库路径，按 #103 判定不触发；如全量顺带跑过即记绿）
-- [ ] 3.3 存量节点落地：对生产节点重新执行一次「启用自启动」（下发新 unit）→ 重启节点验证 nginx 自动拉起；当前已 failed 的节点先用「启动 Nginx」恢复
+- [x] 3.3 存量节点落地：对生产节点重新执行一次「启用自启动」（下发新 unit）→ 重启节点验证 nginx 自动拉起；当前已 failed 的节点先用「启动 Nginx」恢复
