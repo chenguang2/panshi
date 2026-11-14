@@ -253,6 +253,8 @@ class TestPreviewOrchestration:
         assert any(p.startswith("nodes") for p in changed_paths)
         assert "checks" in pc["added"]
         assert "upstream_host" in pc["removed"]
+        # 响应契约（design D2）：changed 条目键名为 candidate（前端按此取值渲染）
+        assert all("candidate" in c for c in pc["changed"])
 
     @pytest.mark.asyncio
     async def test_only_target_type_collected(self, isolated_session):

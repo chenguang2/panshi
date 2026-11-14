@@ -484,7 +484,12 @@ async def preview_publish_diff(db: AsyncSession, *, cluster_id: int,
             result["has_baseline"] = True
             base_diff = diff_edge_payload(baseline, candidate_edge, mask_fields=mask_fields)
             result["platform_change"] = {
-                "changed": base_diff["changed"],
+                # changed 条目对齐响应契约（design D2）：候选值键名为 candidate
+                # （diff_edge_payload 原生键为 edge，直接透传会导致前端取值落空）
+                "changed": [
+                    {"path": c["path"], "baseline": c["baseline"], "candidate": c["edge"]}
+                    for c in base_diff["changed"]
+                ],
                 "removed": base_diff["removed"],
                 "added": _diff_added(candidate_edge, baseline, BASE_WHITELIST, mask_fields),
             }
