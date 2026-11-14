@@ -51,10 +51,10 @@
             <div style="font-weight: 500; margin-bottom: 8px">搜索</div>
             <a-checkbox v-model:checked="nodeSearchVisible">显示搜索框</a-checkbox>
             <a-divider style="margin: 12px 0" />
-            <div class="text-muted" style="font-size: 12px; margin-bottom: 8px">拖动表头右缘可调整列宽</div>
-            <button class="btn btn-secondary btn-sm" style="width: 100%" @click="handleResetColumnWidths">
-              重置列宽
-            </button>
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px">
+              <span class="text-muted" style="font-size: 12px">拖动表头右缘可调整列宽</span>
+              <button class="btn btn-secondary btn-sm" @click="handleResetColumnWidths">重置列宽</button>
+            </div>
           </div>
         </template>
         <button class="btn btn-secondary btn-sm">列配置</button>
