@@ -288,25 +288,57 @@ describe('Tools 新工具（tools-new-utilities）', () => {
     expect(wrapper.find('.diff-error').text()).toContain('三段')
   })
 
-  it('YAML↔JSON 互转：双向转换与错误', async () => {
+  it('YAML↔JSON 互转：左框 YAML「转 JSON →」出右框；右框 JSON「← 转 YAML」回左框（tools-two-way-panels）', async () => {
     const wrapper = await mountTools(makeRouter(), '/tools?tool=convert')
     const tas = textareas(wrapper)
     expect(tas).toHaveLength(2)
     await tas[0].setValue('key: value')
-    const toJson = wrapper.findAll('.panel-actions .a-btn').find((b) => b.text() === 'YAML → JSON')!
+    const toJson = wrapper.findAll('.panel-actions .a-btn').find((b) => b.text() === '转 JSON →')!
     await toJson.trigger('click')
     await flushPromises()
     expect(JSON.parse(tas[1].element.value)).toEqual({ key: 'value' })
-    await tas[0].setValue('{"k2":"v2"}')
-    const toYaml = wrapper.findAll('.panel-actions .a-btn').find((b) => b.text() === 'JSON → YAML')!
+    // 反向：右框贴 JSON，「← 转 YAML」读右写左
+    await tas[1].setValue('{"k2":"v2"}')
+    const toYaml = wrapper.findAll('.panel-actions .a-btn').find((b) => b.text() === '← 转 YAML')!
     await toYaml.trigger('click')
     await flushPromises()
-    expect(tas[1].element.value).toContain('k2: v2')
-    // 错误路径
+    expect(tas[0].element.value).toContain('k2: v2')
+    // 错误路径：非法 YAML 显示在目标框
     await tas[0].setValue('a: [unclosed')
     await toJson.trigger('click')
     await flushPromises()
     expect(tas[1].element.value).toContain('YAML 解析失败')
+  })
+
+  it('URL：左框原文「编码 →」出右框；右框贴编码串「← 解码」回左框（tools-two-way-panels）', async () => {
+    const wrapper = await mountTools(makeRouter(), '/tools?tool=url')
+    const tas = textareas(wrapper)
+    expect(tas).toHaveLength(2)
+    await tas[0].setValue('https://example.com?name=张三&age=18')
+    const enc = wrapper.findAll('.panel-actions .a-btn').find((b) => b.text() === '编码 →')!
+    await enc.trigger('click')
+    await flushPromises()
+    expect(tas[1].element.value).toBe('https%3A%2F%2Fexample.com%3Fname%3D%E5%BC%A0%E4%B8%89%26age%3D18')
+    await tas[1].setValue('https%3A%2F%2Fexample.com%3Fname%3D%E5%BC%A0%E4%B8%89%26age%3D18')
+    const dec = wrapper.findAll('.panel-actions .a-btn').find((b) => b.text() === '← 解码')!
+    await dec.trigger('click')
+    await flushPromises()
+    expect(tas[0].element.value).toBe('https://example.com?name=张三&age=18')
+  })
+
+  it('Base64：左框原文「编码 →」出右框；右框贴编码串「← 解码」回左框（tools-two-way-panels）', async () => {
+    const wrapper = await mountTools(makeRouter(), '/tools?tool=base64')
+    const tas = textareas(wrapper)
+    await tas[0].setValue('Hello World')
+    const enc = wrapper.findAll('.panel-actions .a-btn').find((b) => b.text() === '编码 →')!
+    await enc.trigger('click')
+    await flushPromises()
+    expect(tas[1].element.value).toBe('SGVsbG8gV29ybGQ=')
+    await tas[1].setValue('SGVsbG8gV29ybGQ=')
+    const dec = wrapper.findAll('.panel-actions .a-btn').find((b) => b.text() === '← 解码')!
+    await dec.trigger('click')
+    await flushPromises()
+    expect(tas[0].element.value).toBe('Hello World')
   })
 
   it('深链支持新工具 key（timestamp/jwt/convert）', async () => {

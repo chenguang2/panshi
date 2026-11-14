@@ -60,17 +60,17 @@ export const TOOL_HELP: Record<string, ToolHelpDoc> = {
 
   /* ── URL 编解码 ── */
   url: {
-    what: 'URL 编码 / 解码互转（encodeURIComponent 语义）。',
+    what: 'URL 编码 / 解码互转（encodeURIComponent 语义），两框对等。',
     why: '网关场景常要把中文、特殊字符塞进 URL 参数（回调地址、跳转参数），或从日志里还原被编码过的 URL——手转容易漏掉 %、&、= 这类保留字符。',
     when: [
       '构造带中文/特殊字符的跳转或回调 URL',
       '排查 Edge 访问日志里被转义的 URL 参数',
       '核对重写插件里配置的编码值',
     ],
-    how: ['左侧粘贴原文或编码串', '点「编码 ↓」或「解码 ↓」', '复制结果'],
+    how: ['原文贴左框，点「编码 →」在右框得到编码串', '编码串贴右框，点「← 解码」在左框还原原文', '复制所需一侧的结果'],
     example: {
-      input: 'https://example.com?name=张三&age=18',
-      output: 'https%3A%2F%2Fexample.com%3Fname%3D%E5%BC%A0%E4%B8%89%26age%3D18',
+      input: 'https://example.com?name=张三&age=18（左框）',
+      output: 'https%3A%2F%2Fexample.com%3Fname%3D%E5%BC%A0%E4%B8%89%26age%3D18（右框；右框发起「← 解码」可还原）',
     },
     cautions: [
       '解码含非法 % 序列的内容会报中文错误提示',
@@ -116,10 +116,10 @@ export const TOOL_HELP: Record<string, ToolHelpDoc> = {
     what: 'Base64 编码 / 解码（UTF-8 安全）。',
     why: '平台的节点任务脚本传输走「base64 管道」（echo {b64} | base64 -d | bash），脚本分发、配置透传都经它——手工编一段或还原一段时用本工具。',
     when: ['为节点任务的脚本管道生成 base64 段', '还原日志/配置里出现的 base64 内容', '核对一段编码值是否与原文一致'],
-    how: ['左侧粘贴原文或 Base64', '点「编码 ↓」或「解码 ↓」', '复制结果'],
+    how: ['原文贴左框，点「编码 →」在右框得到编码串', '编码串贴右框，点「← 解码」在左框还原原文', '复制所需一侧的结果'],
     example: {
-      input: 'Hello World',
-      output: 'SGVsbG8gV29ybGQ=',
+      input: 'Hello World（左框）',
+      output: 'SGVsbG8gV29ybGQ=（右框；右框发起「← 解码」可还原）',
     },
     cautions: [
       '解码含非法字符的内容会报错并列出常见原因（混入空格/换行/中文）',
@@ -202,15 +202,26 @@ export const TOOL_HELP: Record<string, ToolHelpDoc> = {
 
   /* ── YAML↔JSON 互转 ── */
   convert: {
-    what: 'YAML ↔ JSON 双向转换。',
+    what: 'YAML ↔ JSON 双向转换，两框对等（左框 YAML、右框 JSON）。',
     why: '平台两域配置格式不同：Edge 的 edge.env 是 YAML、插件配置是 JSON——排查时要把一边转成另一边的形态对照，手转容易失真。',
-    when: ['把 edge.env 片段转成 JSON 贴进相关工具排查', '把插件 JSON 配置转成 YAML，对照 Edge 侧实际文件'],
-    how: ['左侧粘贴 YAML 或 JSON（自动识别）', '点「YAML → JSON」或「JSON → YAML」', '复制右侧只读结果'],
+    when: [
+      '把 edge.env 片段（左框）转成 JSON 贴进相关工具排查',
+      '把插件 JSON 配置（右框）转成 YAML，对照 Edge 侧实际文件',
+    ],
+    how: [
+      'YAML 贴左框，点「转 JSON →」在右框得到 JSON',
+      'JSON 贴右框，点「← 转 YAML」在左框得到 YAML',
+      '复制所需一侧的结果',
+    ],
     example: {
-      input: 'key: value',
-      output: '{"key":"value"}',
+      input: 'key: value（左框）',
+      output: '{"key":"value"}（右框；右框发起「← 转 YAML」可还原）',
     },
-    cautions: ['转换失败会显示解析错误详情（沿用各格式既有中文文案）', 'YAML 注释转成 JSON 后会丢失'],
+    cautions: [
+      '框位即角色：左框放 YAML、右框放 JSON——误贴时 JSON 是 YAML 子集会原样透过，先核对框位',
+      '转换失败会显示解析错误详情（沿用各格式既有中文文案）',
+      'YAML 注释转成 JSON 后会丢失',
+    ],
   },
 
   /* ── 文本 Diff ── */

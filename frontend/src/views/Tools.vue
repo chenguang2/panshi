@@ -71,7 +71,7 @@
         <div class="dual-panel">
           <div class="panel-left">
             <div class="panel-label">原文</div>
-            <a-textarea v-model:value="urlInput" :rows="textareaRows" placeholder="输入要编码或解码的内容" />
+            <a-textarea v-model:value="urlInput" :rows="textareaRows" placeholder="粘贴原文进行编码" />
             <div class="copy-row">
               <a-button size="small" class="copy-btn" @click="copyToClipboard(urlInput)">复制</a-button>
               <a-button size="small" class="copy-btn" @click="pasteFromClipboard((v) => (urlInput = v), $event)"
@@ -80,12 +80,12 @@
             </div>
           </div>
           <div class="panel-actions">
-            <a-button type="primary" @click="urlOutput = toolsUrl.encode(urlInput)">编码 ↓</a-button>
-            <a-button @click="urlOutput = toolsUrl.decode(urlInput)">解码 ↓</a-button>
+            <a-button type="primary" @click="urlOutput = toolsUrl.encode(urlInput)">编码 →</a-button>
+            <a-button @click="urlInput = toolsUrl.decode(urlOutput)">← 解码</a-button>
           </div>
           <div class="panel-right">
-            <div class="panel-label">结果</div>
-            <a-textarea v-model:value="urlOutput" :rows="textareaRows" placeholder="结果将显示在此" />
+            <div class="panel-label">编码串</div>
+            <a-textarea v-model:value="urlOutput" :rows="textareaRows" placeholder="粘贴编码串进行反向解码" />
             <div class="copy-row">
               <a-button size="small" class="copy-btn" @click="copyToClipboard(urlOutput)">复制</a-button>
               <a-button size="small" class="copy-btn" @click="pasteFromClipboard((v) => (urlOutput = v), $event)"
@@ -201,7 +201,7 @@
         <div class="dual-panel">
           <div class="panel-left">
             <div class="panel-label">原文</div>
-            <a-textarea v-model:value="base64Input" :rows="textareaRows" placeholder="输入要编码或解码的内容" />
+            <a-textarea v-model:value="base64Input" :rows="textareaRows" placeholder="粘贴原文进行编码" />
             <div class="copy-row">
               <a-button size="small" class="copy-btn" @click="copyToClipboard(base64Input)">复制</a-button>
               <a-button size="small" class="copy-btn" @click="pasteFromClipboard((v) => (base64Input = v), $event)"
@@ -210,12 +210,12 @@
             </div>
           </div>
           <div class="panel-actions">
-            <a-button type="primary" @click="base64Output = toolsBase64.encode(base64Input)">编码 ↓</a-button>
-            <a-button @click="base64Output = toolsBase64.decode(base64Input)">解码 ↓</a-button>
+            <a-button type="primary" @click="base64Output = toolsBase64.encode(base64Input)">编码 →</a-button>
+            <a-button @click="base64Input = toolsBase64.decode(base64Output)">← 解码</a-button>
           </div>
           <div class="panel-right">
-            <div class="panel-label">结果</div>
-            <a-textarea v-model:value="base64Output" :rows="textareaRows" placeholder="结果将显示在此" />
+            <div class="panel-label">编码串</div>
+            <a-textarea v-model:value="base64Output" :rows="textareaRows" placeholder="粘贴编码串进行反向解码" />
             <div class="copy-row">
               <a-button size="small" class="copy-btn" @click="copyToClipboard(base64Output)">复制</a-button>
               <a-button size="small" class="copy-btn" @click="pasteFromClipboard((v) => (base64Output = v), $event)"
@@ -396,8 +396,8 @@
         </div>
         <div class="dual-panel">
           <div class="panel-left">
-            <div class="panel-label">输入（YAML 或 JSON）</div>
-            <a-textarea v-model:value="convertInput" :rows="textareaRows" placeholder="输入 YAML 或 JSON 内容" />
+            <div class="panel-label">YAML</div>
+            <a-textarea v-model:value="convertInput" :rows="textareaRows" placeholder="在此粘贴 YAML" />
             <div class="copy-row">
               <a-button size="small" class="copy-btn" @click="copyToClipboard(convertInput)">复制</a-button>
               <a-button size="small" class="copy-btn" @click="pasteFromClipboard((v) => (convertInput = v), $event)"
@@ -406,12 +406,12 @@
             </div>
           </div>
           <div class="panel-actions">
-            <a-button type="primary" @click="convertOutput = convertGo('yamlToJson')">YAML → JSON</a-button>
-            <a-button @click="convertOutput = convertGo('jsonToYaml')">JSON → YAML</a-button>
+            <a-button type="primary" @click="convertToJson">转 JSON →</a-button>
+            <a-button @click="convertToYaml">← 转 YAML</a-button>
           </div>
           <div class="panel-right">
-            <div class="panel-label">结果</div>
-            <a-textarea v-model:value="convertOutput" :rows="textareaRows" readonly placeholder="转换结果将显示在此" />
+            <div class="panel-label">JSON</div>
+            <a-textarea v-model:value="convertOutput" :rows="textareaRows" placeholder="在此粘贴 JSON" />
             <div class="copy-row">
               <a-button size="small" class="copy-btn" @click="copyToClipboard(convertOutput)">复制</a-button>
               <a-button size="small" class="copy-btn" @click="pasteFromClipboard((v) => (convertOutput = v), $event)"
@@ -1001,14 +1001,18 @@ function pretty(v: unknown): string {
   return JSON.stringify(v, null, 2)
 }
 
-// ── YAML ↔ JSON 互转 ──
+// ── YAML ↔ JSON 互转（tools-two-way-panels）：两框对等，读哪侧由按钮方向决定 ──
 const convertInput = ref('')
 const convertOutput = ref('')
 
-function convertGo(dir: 'yamlToJson' | 'jsonToYaml'): string {
-  const fn = dir === 'yamlToJson' ? yamlToJson : jsonToYaml
-  const r = fn(convertInput.value)
-  return r.error ?? r.text ?? ''
+function convertToJson(): void {
+  const r = yamlToJson(convertInput.value)
+  convertOutput.value = r.error ?? r.text ?? ''
+}
+
+function convertToYaml(): void {
+  const r = jsonToYaml(convertOutput.value)
+  convertInput.value = r.error ?? r.text ?? ''
 }
 
 function epochToBeijing(epochMs: number): string {
