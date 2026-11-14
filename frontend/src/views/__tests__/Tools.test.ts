@@ -57,6 +57,13 @@ const stubs = {
     props: ['header'],
     template: '<div class="a-collapse-panel"><div class="a-collapse-panel-header">{{ header }}</div><slot /></div>',
   },
+  // 帮助抽屉容器（tools-help-drawer）：桩成 v-if slot，title/width 落 attr 供断言
+  'a-drawer': {
+    props: ['open', 'title', 'width'],
+    emits: ['close'],
+    template:
+      '<div class="th-drawer-stub" v-if="open"><button class="th-close" @click="$emit(\'close\')" /><slot /></div>',
+  },
 }
 
 function makeRouter(initial = '/tools') {
@@ -410,8 +417,7 @@ describe('Tools Keepalived 配置生成（tools-keepalived-generator）', () => 
     ;(inputs[0]!.element as HTMLInputElement).value = vip
     inputs[0]!.trigger('input')
     const ta = wrapper.find('.ka-form textarea')
-    ;(ta.element as HTMLTextAreaElement).value =
-      '10.128.216.160 ens7\n10.128.216.161 ens7\n10.128.216.162 ens7'
+    ;(ta.element as HTMLTextAreaElement).value = '10.128.216.160 ens7\n10.128.216.161 ens7\n10.128.216.162 ens7'
     ta.trigger('input')
   }
 
@@ -462,5 +468,50 @@ describe('Tools Keepalived 配置生成（tools-keepalived-generator）', () => 
     expect((inputs[0]!.element as HTMLInputElement).value).toBe('')
     expect((wrapper.find('.ka-form textarea').element as HTMLTextAreaElement).value).toBe('')
     expect(wrapper.find('.ka-pre').exists()).toBe(false)
+  })
+})
+
+describe('Tools 帮助抽屉（tools-help-drawer）', () => {
+  it('工具头部有「帮助」按钮，点击打开抽屉并展示六段文档', async () => {
+    const wrapper = await mountTools()
+    const helpBtn = wrapper.find('.btn-help')
+    expect(helpBtn.exists()).toBe(true)
+    expect(helpBtn.text()).toContain('帮助')
+    await helpBtn.trigger('click')
+    await flushPromises()
+    const drawer = wrapper.find('.th-drawer-stub')
+    expect(drawer.exists()).toBe(true)
+    expect(drawer.text()).toContain('这是什么')
+    expect(drawer.text()).toContain('为什么需要它')
+    expect(drawer.text()).toContain('什么时候用')
+    expect(drawer.text()).toContain('怎么用')
+    expect(drawer.text()).toContain('示例')
+    expect(drawer.text()).toContain('注意 / 坑')
+    // Lua 文档真实内容
+    expect(drawer.text()).toContain('pre_functions')
+  })
+
+  it('抽屉内容绑定 activeTool：运行态工具切换后文档跟随（组件契约；真机遮罩下经「关闭→切换→重开」呈现）', async () => {
+    const wrapper = await mountTools()
+    await wrapper.find('.btn-help').trigger('click')
+    await flushPromises()
+    await navItems(wrapper)[7].trigger('click') // 时间戳转换
+    await flushPromises()
+    const drawer = wrapper.find('.th-drawer-stub')
+    expect(drawer.exists()).toBe(true)
+    expect(drawer.text()).toContain('naive UTC')
+  })
+
+  it('关闭抽屉回到原工具现场，输入不清空', async () => {
+    const wrapper = await mountTools(makeRouter(), '/tools?tool=timestamp')
+    await textareas(wrapper)[0].setValue('1793331059')
+    await wrapper.find('.btn-help').trigger('click')
+    await flushPromises()
+    await wrapper.find('.th-close').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.th-drawer-stub').exists()).toBe(false)
+    // 关闭后仍在时间戳工具，输入保留
+    expect(textareas(wrapper)[0].element.value).toBe('1793331059')
+    expect(wrapper.find('.result-grid').exists()).toBe(true)
   })
 })

@@ -24,6 +24,7 @@
           <span>Lua 函数 ↔ 配置字符串</span>
           <span class="tool-hint">用于插件 pre_functions 配置与 Lua 函数体的双向转换</span>
           <span class="spacer"></span>
+          <button class="btn-help" @click="openHelp"><QuestionCircleOutlined /> 帮助</button>
           <button class="btn-clear" @click="clearTool('lua')">清空</button>
         </div>
         <div class="dual-panel">
@@ -64,6 +65,7 @@
           <span>URL 编解码</span>
           <span class="tool-hint">encodeURIComponent 语义，适用于 URL 参数转义与还原</span>
           <span class="spacer"></span>
+          <button class="btn-help" @click="openHelp"><QuestionCircleOutlined /> 帮助</button>
           <button class="btn-clear" @click="clearTool('url')">清空</button>
         </div>
         <div class="dual-panel">
@@ -99,6 +101,7 @@
         <div class="tool-header">
           <span>JSON 格式化</span>
           <span class="spacer"></span>
+          <button class="btn-help" @click="openHelp"><QuestionCircleOutlined /> 帮助</button>
           <button class="btn-clear" @click="clearTool('json')">清空</button>
         </div>
         <div class="dual-panel">
@@ -144,6 +147,7 @@
           <span>SM4 加解密（ECB + PKCS7）</span>
           <span class="tool-hint">用于调试平台 ↔ Edge 通道的加密链路</span>
           <span class="spacer"></span>
+          <button class="btn-help" @click="openHelp"><QuestionCircleOutlined /> 帮助</button>
           <button class="btn-clear" @click="clearTool('sm4')">清空</button>
         </div>
         <div v-if="sm4KeyWarn" class="sm4-warn">⚠ {{ sm4KeyWarn }}</div>
@@ -191,6 +195,7 @@
           <span>Base64 编解码</span>
           <span class="tool-hint">UTF-8 安全编码（btoa/unescape 链），适用于文本与密文互转</span>
           <span class="spacer"></span>
+          <button class="btn-help" @click="openHelp"><QuestionCircleOutlined /> 帮助</button>
           <button class="btn-clear" @click="clearTool('base64')">清空</button>
         </div>
         <div class="dual-panel">
@@ -227,6 +232,7 @@
           <span>YAML 格式化</span>
           <span class="tool-hint">格式化工具有序 key 但会丢弃 YAML 注释</span>
           <span class="spacer"></span>
+          <button class="btn-help" @click="openHelp"><QuestionCircleOutlined /> 帮助</button>
           <button class="btn-clear" @click="clearTool('yaml')">清空</button>
         </div>
         <div class="dual-panel">
@@ -262,6 +268,7 @@
           <span>JSON 数据对比</span>
           <span class="tool-hint">先格式化归一（键序无关）再逐行对比</span>
           <span class="spacer"></span>
+          <button class="btn-help" @click="openHelp"><QuestionCircleOutlined /> 帮助</button>
           <button class="btn-clear" @click="clearTool('diff')">清空</button>
         </div>
         <div class="dual-panel">
@@ -307,6 +314,7 @@
           <span>时间戳转换</span>
           <span class="tool-hint">无时区后缀字符串按 UTC 解析（平台存储约定）；北京时间 = UTC+8</span>
           <span class="spacer"></span>
+          <button class="btn-help" @click="openHelp"><QuestionCircleOutlined /> 帮助</button>
           <button class="btn-clear" @click="fillNow">当前时间</button>
           <button class="btn-clear" @click="clearTool('timestamp')">清空</button>
         </div>
@@ -346,6 +354,7 @@
           <span>JWT 解码</span>
           <span class="tool-hint">纯解码查看内容，不验证签名（签名校验需服务端密钥）</span>
           <span class="spacer"></span>
+          <button class="btn-help" @click="openHelp"><QuestionCircleOutlined /> 帮助</button>
           <button class="btn-clear" @click="clearTool('jwt')">清空</button>
         </div>
         <div class="single-input-row">
@@ -382,6 +391,7 @@
           <span>YAML ↔ JSON 互转</span>
           <span class="tool-hint">edge.env（YAML）与插件配置（JSON）两域配置互看互转</span>
           <span class="spacer"></span>
+          <button class="btn-help" @click="openHelp"><QuestionCircleOutlined /> 帮助</button>
           <button class="btn-clear" @click="clearTool('convert')">清空</button>
         </div>
         <div class="dual-panel">
@@ -418,6 +428,7 @@
           <span>文本 Diff</span>
           <span class="tool-hint">逐行对比纯文本（配置文件、清单等），不做键序归一化</span>
           <span class="spacer"></span>
+          <button class="btn-help" @click="openHelp"><QuestionCircleOutlined /> 帮助</button>
           <button class="btn-clear" @click="clearTool('textdiff')">清空</button>
         </div>
         <div class="dual-panel">
@@ -458,6 +469,7 @@
           <span>IPv4/CIDR 计算器</span>
           <span class="tool-hint">仅 IPv4；节点白名单、中继网段规划、子网换算</span>
           <span class="spacer"></span>
+          <button class="btn-help" @click="openHelp"><QuestionCircleOutlined /> 帮助</button>
           <button class="btn-clear" @click="clearTool('ipcalc')">清空</button>
         </div>
         <div class="single-input-row">
@@ -503,6 +515,7 @@
           <span>哈希计算</span>
           <span class="tool-hint">文件/备份校验、口令指纹比对；输出小写十六进制</span>
           <span class="spacer"></span>
+          <button class="btn-help" @click="openHelp"><QuestionCircleOutlined /> 帮助</button>
           <button class="btn-clear" @click="clearTool('hash')">清空</button>
         </div>
         <div class="single-input-row">
@@ -522,6 +535,7 @@
           <span>Keepalived 配置生成</span>
           <span class="tool-hint">多节点 VRRP 高可用（单播 + VIP）全套配置与部署命令，纯前端生成</span>
           <span class="spacer"></span>
+          <button class="btn-help" @click="openHelp"><QuestionCircleOutlined /> 帮助</button>
           <button class="btn-clear" @click="clearTool('keepalived')">清空</button>
         </div>
 
@@ -589,8 +603,8 @@
           </div>
 
           <h4 class="ka-group">
-            各节点配置（{{ kaNodes.length }} 节点；conf 差异仅五处：router_id / priority / unicast_src_ip /
-            unicast_peer / 网卡名）
+            各节点配置（{{ kaNodes.length }} 节点；conf 差异仅五处：router_id / priority / unicast_src_ip / unicast_peer
+            / 网卡名）
           </h4>
           <a-collapse>
             <a-collapse-panel
@@ -624,6 +638,9 @@
           </div>
         </template>
       </div>
+
+      <!-- 帮助抽屉（tools-help-drawer）：文档跟随 activeTool，关闭回到操作现场 -->
+      <ToolHelpDrawer :open="helpOpen" :tool-key="activeTool" :tool-label="activeToolLabel" @close="helpOpen = false" />
     </a-layout-content>
   </a-layout>
 </template>
@@ -647,6 +664,7 @@ import {
   GlobalOutlined,
   SafetyCertificateOutlined,
   ClusterOutlined,
+  QuestionCircleOutlined,
 } from '@ant-design/icons-vue'
 import { luaToConfigString, configStringToLua } from '@/utils/tools/lua'
 import * as toolsUrl from '@/utils/tools/url'
@@ -661,6 +679,7 @@ import { yamlToJson, jsonToYaml } from '@/utils/tools/convert'
 import { parseCidr, type CidrResult } from '@/utils/tools/ip'
 import { md5, shaHex } from '@/utils/tools/hash'
 import { textLineDiff } from '@/utils/tools/textdiff'
+import ToolHelpDrawer from '@/components/ToolHelpDrawer.vue'
 import {
   KEEPALIVED_DEFAULTS,
   generateKeepalivedConfig,
@@ -725,6 +744,14 @@ const stopQueryWatch = watch(
 const initialTool = route.query.tool
 if (typeof initialTool === 'string' && TOOL_KEYS.includes(initialTool)) {
   activeTool.value = initialTool
+}
+
+// ── 帮助抽屉（tools-help-drawer）：文档跟随 activeTool，开关独立于工具切换 ──
+const helpOpen = ref(false)
+const activeToolLabel = computed(() => tools.find((t) => t.key === activeTool.value)?.label ?? '工具')
+
+function openHelp(): void {
+  helpOpen.value = true
 }
 
 const textareaRows = ref(20)
@@ -902,7 +929,11 @@ const kaSharedFiles = computed(() => kaResult.value?.files.filter((f) => f.group
 const kaNodeGroups = computed(() => {
   const r = kaResult.value
   if (!r) return []
-  return kaInput.value.nodes.map((n, index) => ({ ip: n.ip, index, files: r.files.filter((f) => f.group === `node-${n.ip}`) }))
+  return kaInput.value.nodes.map((n, index) => ({
+    ip: n.ip,
+    index,
+    files: r.files.filter((f) => f.group === `node-${n.ip}`),
+  }))
 })
 
 function downloadFile(filename: string, content: string): void {
@@ -1240,6 +1271,25 @@ async function pasteFromClipboard(setter: (text: string) => void, evt?: Event): 
 .btn-clear:hover {
   color: var(--danger, #dc2626);
   border-color: var(--danger, #dc2626);
+}
+
+/* 头部帮助按钮（tools-help-drawer）：accent 弱底色，与清空按钮同尺寸族 */
+.btn-help {
+  border: 1px solid transparent;
+  background: oklch(56% 0.16 210 / 10%);
+  color: var(--accent);
+  border-radius: 6px;
+  padding: 3px 12px;
+  font-size: 12px;
+  font-weight: 400;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-help:hover {
+  background: oklch(56% 0.16 210 / 18%);
 }
 
 /* SM4 短密钥警告条（tools-ux-review-fixes 2.3） */
