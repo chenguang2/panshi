@@ -8,6 +8,7 @@ import {
   type PublishPreviewRow,
 } from '@/api/clusters'
 import { formatPublishDateTime } from '@/utils/format'
+import { groupNodesByDiffShape, shouldGroupNodes } from '@/utils/publishPreviewGroups'
 
 // 发布差异预览弹窗（publish-diff-preview）：待发布候选配置 vs 各 Edge 节点实况的
 // 逐节点字段级对比。组件自持数据（open + clusterId + 资源定位即拉取，同
@@ -133,9 +134,21 @@ function cellText(row: PublishPreviewRow, label: string, isDiffRow: boolean): st
   const n = nodeOf(label)
   // 节点级不可达/缺失与路径级缺失是两回事：前者整列置灰「—」，路径缺失才标「缺失」
   if (n && (n.status === 'unreachable' || n.status === 'missing')) return '—'
-  const v = row.values[label]
+  return valueText(row.values[label], isDiffRow)
+}
+
+function valueText(v: unknown, isDiffRow: boolean): string {
   if (v === null || v === undefined) return isDiffRow ? '缺失' : '—'
   return fmt(v)
+}
+
+/** 分组呈现（publish-diff-preview-node-groups）：>5 节点按差异形态分组，≤5 保持矩阵 */
+const useGroups = computed(() => (result.value ? shouldGroupNodes(result.value.nodes.length) : false))
+const groups = computed(() => (result.value && useGroups.value ? groupNodesByDiffShape(result.value) : []))
+
+function chipTitle(label: string): string {
+  const n = nodeOf(label)
+  return n ? n.reason || n.behind_reason || statusText(n) : ''
 }
 
 function isDiffCell(row: PublishPreviewRow, label: string): boolean {
@@ -255,7 +268,8 @@ function handlePublish() {
               <input v-model="showSame" type="checkbox" />
               <span>{{ toggleLabel }}</span>
             </label>
-            <table class="pv-matrix">
+            <!-- ≤阈值：逐节点矩阵（信息全景） -->
+            <table v-if="!useGroups" class="pv-matrix">
               <thead>
                 <tr>
                   <th style="width: 26%">字段路径</th>
@@ -293,6 +307,42 @@ function handlePublish() {
                 </tr>
               </tbody>
             </table>
+            <!-- >阈值：按差异形态分组（列数 = 形态组数，与节点数解耦） -->
+            <div v-else class="pv-groups">
+              <div v-for="g in groups" :key="g.key" class="pv-group" :class="`pv-group-${g.kind}`">
+                <div class="pv-group-head">
+                  <span class="pv-group-title" :title="g.title">{{ g.title }}</span>
+                  <span class="pv-group-count">{{ g.labels.length }} 个节点</span>
+                </div>
+                <div class="pv-group-nodes">
+                  <span v-for="label in g.labels" :key="label" class="pv-gchip" :title="chipTitle(label)">
+                    {{ label }}
+                  </span>
+                </div>
+                <div v-if="g.reasons.length" class="pv-group-reasons">{{ g.reasons.join('；') }}</div>
+                <table v-if="g.kind === 'diff'" class="pv-matrix pv-gtable">
+                  <thead>
+                    <tr>
+                      <th style="width: 34%">字段路径</th>
+                      <th style="width: 30%">待发布</th>
+                      <th>组内实况</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="row in g.diffRows" :key="`gd-${row.path}`">
+                      <td class="pv-path">{{ row.path }}</td>
+                      <td class="pv-cand">{{ fmt(row.candidate) }}</td>
+                      <td class="pv-node pv-cell-diff">{{ valueText(row.value, true) }}</td>
+                    </tr>
+                    <tr v-for="row in showSame ? g.sameRows : []" :key="`gs-${row.path}`" class="pv-same-row">
+                      <td class="pv-path">{{ row.path }}</td>
+                      <td class="pv-cand">{{ fmt(row.candidate) }}</td>
+                      <td class="pv-node">{{ valueText(row.value, false) }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
             <p class="pv-note">
               对比口径与漂移检测一致：Edge 自管理字段（id/时间戳/etcd 索引）不参与对比；数值与字符串归一；敏感字段脱敏。
             </p>
@@ -530,6 +580,64 @@ function handlePublish() {
   text-align: center;
   color: var(--muted, #999);
   padding: 16px 0;
+}
+.pv-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.pv-group {
+  border: 1px solid var(--border, #d9d9d9);
+  border-left: 3px solid #fa8c16;
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+.pv-group-missing,
+.pv-group-unreachable {
+  border-left-color: #fa541c;
+}
+.pv-group-same {
+  border-left-color: #52c41a;
+}
+.pv-group-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.pv-group-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pv-group-count {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--muted, #999);
+}
+.pv-group-nodes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.pv-gchip {
+  font-size: 12px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong, #bfbfbf);
+  background: var(--bg, #fafafa);
+  font-family: ui-monospace, 'SF Mono', Consolas, monospace;
+}
+.pv-group-reasons {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #fa541c;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .pv-note {
   margin: 8px 0 0;
