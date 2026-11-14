@@ -17,6 +17,9 @@ interface ColumnConfigOptions {
  *
  * Saves/loads user preferences (which columns to show, which action buttons,
  * whether search is visible) to localStorage, keyed by user ID.
+ *
+ * 列宽个性化（node-list-column-resize）：columnWidths 按列 key 记录用户拖拽宽度，
+ * 与列显隐同 key 同 JSON 持久化；旧存储缺 widths 字段按空档兼容。
  */
 export function useColumnConfig(options: ColumnConfigOptions) {
   const { key, defaultColumns, defaultSearchVisible = true, defaultActions = [] } = options
@@ -31,6 +34,7 @@ export function useColumnConfig(options: ColumnConfigOptions) {
         if (cfg.columns) columnsSelected.value = cfg.columns
         if (cfg.searchVisible !== undefined) searchVisible.value = cfg.searchVisible
         if (cfg.actions) actionsSelected.value = cfg.actions
+        if (cfg.widths) columnWidths.value = cfg.widths
       }
     } catch {
       /* ignore */
@@ -45,6 +49,7 @@ export function useColumnConfig(options: ColumnConfigOptions) {
           columns: columnsSelected.value,
           searchVisible: searchVisible.value,
           actions: actionsSelected.value,
+          widths: columnWidths.value,
         }),
       )
     } catch {
@@ -56,8 +61,17 @@ export function useColumnConfig(options: ColumnConfigOptions) {
   const columnsSelected = ref([...defaultColumns])
   const searchVisible = ref(defaultSearchVisible)
   const actionsSelected = ref([...defaultActions])
+  const columnWidths = ref<Record<string, number>>({})
 
-  watch([columnsSelected, searchVisible, actionsSelected], saveConfig, { deep: true })
+  function setColumnWidth(columnKey: string, width: number): void {
+    columnWidths.value = { ...columnWidths.value, [columnKey]: width }
+  }
+
+  function resetWidths(): void {
+    columnWidths.value = {}
+  }
+
+  watch([columnsSelected, searchVisible, actionsSelected, columnWidths], saveConfig, { deep: true })
   loadConfig()
 
   return {
@@ -65,5 +79,8 @@ export function useColumnConfig(options: ColumnConfigOptions) {
     columnsSelected,
     searchVisible,
     actionsSelected,
+    columnWidths,
+    setColumnWidth,
+    resetWidths,
   }
 }

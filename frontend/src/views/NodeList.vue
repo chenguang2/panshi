@@ -50,6 +50,10 @@
             <a-divider style="margin: 12px 0" />
             <div style="font-weight: 500; margin-bottom: 8px">搜索</div>
             <a-checkbox v-model:checked="nodeSearchVisible">显示搜索框</a-checkbox>
+            <a-divider style="margin: 12px 0" />
+            <button class="btn btn-secondary btn-sm" style="width: 100%" @click="handleResetColumnWidths">
+              重置列宽
+            </button>
           </div>
         </template>
         <button class="btn btn-secondary btn-sm">列配置</button>
@@ -84,10 +88,22 @@
         :row-selection="rowSelection"
         :pagination="paginationProps({ page, pageSize, total: totalCount }, '个节点')"
         :loading="loading"
+        :scroll="{ x: 'max-content' }"
+        :table-layout="'fixed'"
         size="middle"
         class="node-table"
         @change="handleTableChange"
       >
+        <template #headerCell="{ column, title }">
+          <span class="th-resize-wrap">
+            <span>{{ title }}</span>
+            <span
+              v-if="String(column.key) !== 'index'"
+              class="col-resize-handle"
+              @mousedown="startColumnResize($event, column)"
+            />
+          </span>
+        </template>
         <template #bodyCell="{ column, record, index }">
           <template v-if="column.key === 'index'">
             <span class="text-muted">{{ (page - 1) * pageSize + index + 1 }}</span>
@@ -518,7 +534,7 @@ import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
 import { formatDateTime as formatDate, formatRelativeTime } from '@/utils/format'
 import ClusterSelect from '@/components/ClusterSelect.vue'
 import { message } from 'ant-design-vue'
-import type { TablePaginationConfig } from 'ant-design-vue'
+import type { TableColumnsType, TablePaginationConfig } from 'ant-design-vue'
 import api from '@/api'
 import { showDangerConfirm } from '@/composables/useOverlayModal'
 import { PAGE_SIZE_TABLE, PAGE_SIZE_DROPDOWN } from '@/constants'
@@ -848,17 +864,19 @@ const diffNodeId = ref(0)
 
 // batch2 3.2 / D6：移除全部列客户端排序——当前页字符串比较序是错的（IP 数值序被打乱），
 // 后端 GET /nodes 已全量数值 IP 排序；≤100 节点规模下当前页排序无价值且误导。不做表头排序 UI 替代。
-const columns = [
-  { title: '#', key: 'index', width: 45 },
-  { title: 'IP', dataIndex: 'ip', key: 'ip' },
-  { title: '所属集群', dataIndex: 'cluster_name', key: 'cluster_name' },
-  { title: '服务端口', key: 'service_port' },
-  { title: '管理端口', key: 'management_port' },
-  { title: 'Edge 安装路径', key: 'edge_path' },
-  { title: 'OpenResty 安装路径', key: 'openresty_path' },
-  { title: '状态', key: 'status' },
-  { title: 'Edge 版本', key: 'edge_version' },
-  { title: '操作', key: 'actions', width: 320 },
+// 默认宽度档（node-list-column-resize D3）：≥1366px 视口下核心信息无需横向滚动即可见；
+// 用户拖拽后的宽度经 useColumnConfig('node_standalone').columnWidths 覆盖此档
+const columns: TableColumnsType = [
+  { title: '#', key: 'index', width: 45, fixed: 'left' },
+  { title: 'IP', dataIndex: 'ip', key: 'ip', width: 140, fixed: 'left' },
+  { title: '所属集群', dataIndex: 'cluster_name', key: 'cluster_name', width: 140 },
+  { title: '服务端口', key: 'service_port', width: 100 },
+  { title: '管理端口', key: 'management_port', width: 100 },
+  { title: 'Edge 安装路径', key: 'edge_path', width: 220 },
+  { title: 'OpenResty 安装路径', key: 'openresty_path', width: 220 },
+  { title: '状态', key: 'status', width: 120 },
+  { title: 'Edge 版本', key: 'edge_version', width: 110 },
+  { title: '操作', key: 'actions', width: 320, fixed: 'right' },
 ]
 
 // ── 列/按钮/搜索个性化（batch3 4.1 / D8）──
@@ -871,17 +889,60 @@ const {
   columnsSelected: nodeColumnsSelected,
   searchVisible: nodeSearchVisible,
   actionsSelected: nodeActionsSelected,
+  columnWidths: nodeColumnWidths,
+  setColumnWidth: setNodeColumnWidth,
+  resetWidths: resetNodeColumnWidths,
 } = useColumnConfig({
   key: 'node_standalone',
-  defaultColumns: columns.map((c) => c.key),
+  defaultColumns: columns.map((c) => String(c.key)),
   defaultActions: [...NODE_ROW_ACTION_KEYS],
   defaultSearchVisible: true,
 })
 const inlineNodeActionOptions = allNodeActionButtons.filter((b) => NODE_ROW_ACTION_KEYS.includes(b.key))
+// 用户拖拽宽度覆盖默认档（node-list-column-resize）
 const visibleNodeColumns = computed(() => {
   const selected = new Set(nodeColumnsSelected.value)
-  return columns.filter((c) => selected.has(c.key))
+  return columns
+    .filter((c) => selected.has(String(c.key)))
+    .map((c) => ({ ...c, width: nodeColumnWidths.value[String(c.key)] ?? c.width }))
 })
+
+// ── 表头拖拽调宽（node-list-column-resize A）：手柄 mousedown → document mousemove 实时写宽 ──
+const COL_RESIZE_MIN = 80
+let colResize: { key: string; startX: number; startWidth: number } | null = null
+
+function defaultColumnWidth(key: string): number {
+  const def = Number(columns.find((c) => String(c.key) === key)?.width ?? 100)
+  return Number.isFinite(def) ? def : 100
+}
+
+function startColumnResize(e: MouseEvent, col: { key?: unknown }): void {
+  const key = String(col.key ?? '')
+  if (!key || key === 'index') return
+  e.preventDefault()
+  e.stopPropagation()
+  colResize = { key, startX: e.clientX, startWidth: nodeColumnWidths.value[key] ?? defaultColumnWidth(key) }
+  document.addEventListener('mousemove', onColumnResizeMove)
+  document.addEventListener('mouseup', endColumnResize)
+}
+
+function onColumnResizeMove(e: MouseEvent): void {
+  if (!colResize) return
+  const width = Math.max(COL_RESIZE_MIN, colResize.startWidth + e.clientX - colResize.startX)
+  setNodeColumnWidth(colResize.key, width)
+}
+
+function endColumnResize(): void {
+  colResize = null
+  document.removeEventListener('mousemove', onColumnResizeMove)
+  document.removeEventListener('mouseup', endColumnResize)
+}
+
+function handleResetColumnWidths(): void {
+  resetNodeColumnWidths()
+  nodeColumnPopoverVisible.value = false
+  message.success('已恢复默认列宽')
+}
 // 行内常驻动作 = 勾选的 start/stop/status 子集
 const rowActionKeys = computed(() => NODE_ROW_ACTION_KEYS.filter((k) => nodeActionsSelected.value.includes(k)))
 // 更多菜单 = 恒驻四钮 + 未勾选的行内动作（非行内钮不受勾选态影响，防止残留配置吞菜单项）
@@ -1484,6 +1545,8 @@ onUnmounted(() => {
   stopElapsedTimer()
   window.removeEventListener('edge-pack-add', onEdgePackAdd)
   window.removeEventListener('edge-pack-rebase', onEdgePackRebase)
+  // 列宽拖拽的 document 级监听（node-list-column-resize）
+  endColumnResize()
 })
 
 function streamEdgeAction(record: any, title: string, url: string, body: Record<string, any>) {
@@ -1762,5 +1825,27 @@ function onEdgePackRebase(e: Event) {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   margin-top: 2px;
+}
+/* 表头拖拽调宽手柄（node-list-column-resize）：悬停表头右缘显形 */
+.th-resize-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+}
+
+.col-resize-handle {
+  position: absolute;
+  right: -9px;
+  top: -4px;
+  height: calc(100% + 8px);
+  width: 9px;
+  cursor: col-resize;
+  user-select: none;
+}
+
+.col-resize-handle:hover {
+  background: oklch(56% 0.16 210 / 30%);
+  border-radius: 2px;
 }
 </style>

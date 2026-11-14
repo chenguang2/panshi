@@ -38,11 +38,26 @@ vi.mock('ant-design-vue', async (importOriginal) => {
 
 const stubs = {
   'a-table': {
+    name: 'ATableStub',
     template:
-      '<table class="mock-a-table"><tbody><tr v-for="r in dataSource" :key="r.id"><td>{{ r.ip }}</td><td><slot name="bodyCell" :record="r" :column="{ key: \'ip\' }" /></td><td><slot name="bodyCell" :record="r" :column="{ key: \'actions\' }" /></td></tr></tbody></table>',
-    props: ['columns', 'dataSource', 'loading', 'rowKey', 'pagination', 'size', 'scroll', 'rowSelection'],
+      '<table class="mock-a-table"><thead><tr><th v-for="c in columns" :key="c.key" :data-col="c.key"><slot name="headerCell" :column="c" :title="c.title" /></th></tr></thead><tbody><tr v-for="r in dataSource" :key="r.id"><td>{{ r.ip }}</td><td><slot name="bodyCell" :record="r" :column="{ key: \'ip\' }" /></td><td><slot name="bodyCell" :record="r" :column="{ key: \'actions\' }" /></td></tr></tbody></table>',
+    props: [
+      'columns',
+      'dataSource',
+      'loading',
+      'rowKey',
+      'pagination',
+      'size',
+      'scroll',
+      'rowSelection',
+      'tableLayout',
+    ],
   },
   PageHeader: { template: '<div class="page-header"><slot name="actions" /></div>', props: ['title', 'description'] },
+  'a-popover': {
+    template: '<div class="mock-popover"><slot /><div class="mock-popover-content"><slot name="content" /></div></div>',
+    props: ['open'],
+  },
   ADrawer: {
     template: '<div class="mock-drawer" :class="{ open: open }"><slot /></div>',
     props: ['open', 'title', 'placement', 'width'],
@@ -1509,4 +1524,94 @@ describe('NodeList.vue batch3 列配置', () => {
     expect(s).toContain('状态查询')
     expect(s).toContain('allNodeActionButtons')
   })
+})
+
+describe('NodeList 列宽个性化（node-list-column-resize）', () => {
+  // 各用例独立：jsdom localStorage 在同文件内跨用例共享，上个用例的自定义宽会污染下个用例的起始值
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  it('表格横向滚动 + fixed 布局；全列默认宽；#与IP固定左、操作固定右', async () => {
+    const NodeList = (await import('../NodeList.vue')).default
+    const wrapper = mount(NodeList, { global: { stubs } })
+    await flushPromises()
+    const table = wrapper.findComponent({ name: 'ATableStub' })
+    expect(table.exists()).toBe(true)
+    expect(table.props('scroll')).toEqual({ x: 'max-content' })
+    expect(table.props('tableLayout')).toBe('fixed')
+    const cols = table.props('columns') as Array<{ key: string; width?: number; fixed?: string }>
+    const byKey = Object.fromEntries(cols.map((c) => [c.key, c]))
+    expect(byKey['index']).toMatchObject({ width: 45, fixed: 'left' })
+    expect(byKey['ip']).toMatchObject({ width: 140, fixed: 'left' })
+    expect(byKey['actions']).toMatchObject({ width: 320, fixed: 'right' })
+    for (const c of cols) expect(c.width, `列 ${c.key} 缺默认宽`).toBeGreaterThan(0)
+  }, 15_000)
+
+  it('拖拽柄：非 # 列表头右缘存在，「#」列无', async () => {
+    const NodeList = (await import('../NodeList.vue')).default
+    const wrapper = mount(NodeList, { global: { stubs } })
+    await flushPromises()
+    const handles = wrapper.findAll('.col-resize-handle')
+    expect(handles.length).toBe(9) // 10 列 - index
+    const ths = wrapper.findAll('th[data-col]')
+    const ipTh = ths.find((t) => t.attributes('data-col') === 'ip')!
+    expect(ipTh.find('.col-resize-handle').exists()).toBe(true)
+    const idxTh = ths.find((t) => t.attributes('data-col') === 'index')!
+    expect(idxTh.find('.col-resize-handle').exists()).toBe(false)
+  }, 15_000)
+
+  it('拖拽调宽：mousedown+mousemove 实时生效、松开持久化、最小 80px clamp', async () => {
+    const NodeList = (await import('../NodeList.vue')).default
+    const wrapper = mount(NodeList, { global: { stubs } })
+    await flushPromises()
+    const table = wrapper.findComponent({ name: 'ATableStub' })
+    const colWidth = (key: string): number | undefined =>
+      (table.props('columns') as Array<{ key: unknown; width?: number }>).find((c) => String(c.key) === key)?.width
+    expect(colWidth('edge_path')).toBe(220)
+    const ths = wrapper.findAll('th[data-col]')
+    const handle = ths.find((t) => t.attributes('data-col') === 'edge_path')!.find('.col-resize-handle')
+    await handle.trigger('mousedown', { clientX: 100 })
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 160 }))
+    await flushPromises()
+    expect(colWidth('edge_path')).toBe(280) // 220 + 60
+    // 松开后不再响应 mousemove
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 160 }))
+    await handle.trigger('mouseup')
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 400 }))
+    await flushPromises()
+    expect(colWidth('edge_path')).toBe(280)
+    // 持久化落盘（watch pre flush）
+    const saved = JSON.parse(localStorage.getItem('node_standalone_cfg_guest') ?? '{}')
+    expect(saved.widths?.edge_path).toBe(280)
+    // 最小宽度 clamp
+    await handle.trigger('mousedown', { clientX: 500 })
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: -600 }))
+    await flushPromises()
+    expect(colWidth('edge_path')).toBe(80)
+  }, 15_000)
+
+  it('popover「重置列宽」：一键恢复默认并清空持久化', async () => {
+    const NodeList = (await import('../NodeList.vue')).default
+    const wrapper = mount(NodeList, { global: { stubs } })
+    await flushPromises()
+    const table = wrapper.findComponent({ name: 'ATableStub' })
+    const colWidth = (key: string): number | undefined =>
+      (table.props('columns') as Array<{ key: unknown; width?: number }>).find((c) => String(c.key) === key)?.width
+    // 先制造一次自定义宽度
+    const ths = wrapper.findAll('th[data-col]')
+    const handle = ths.find((t) => t.attributes('data-col') === 'edge_path')!.find('.col-resize-handle')
+    await handle.trigger('mousedown', { clientX: 0 })
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 100 }))
+    await flushPromises()
+    expect(colWidth('edge_path')).toBe(320)
+    // popover 内点击「重置列宽」
+    const resetBtn = wrapper.findAll('.mock-popover-content button').find((b) => b.text() === '重置列宽')!
+    expect(resetBtn).toBeDefined()
+    await resetBtn.trigger('click')
+    await flushPromises()
+    expect(colWidth('edge_path')).toBe(220)
+    const saved = JSON.parse(localStorage.getItem('node_standalone_cfg_guest') ?? '{}')
+    expect(saved.widths ?? {}).toEqual({})
+  }, 15_000)
 })
