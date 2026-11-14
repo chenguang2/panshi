@@ -98,7 +98,10 @@
         <template #headerCell="{ column, title }">
           <span
             class="th-resize-wrap"
-            :class="{ 'drop-before': reorderHintBefore === String(column.key) }"
+            :class="{
+              movable: !FIXED_MOVE_KEYS.has(String(column.key)),
+              'dragging-source': dragSourceKey === String(column.key),
+            }"
             @mousedown="startColumnMove($event, column)"
           >
             <span>{{ title }}</span>
@@ -962,34 +965,36 @@ function endColumnResize(): void {
   document.removeEventListener('mouseup', endColumnResize)
 }
 
-// ── 表头拖拽移动列（node-list-column-resize D7 方案 A）：手势分区——右缘=调宽，标题=移动 ──
+// ── 表头拖拽移动列（node-list-column-resize D7 方案 1 实时预览）：手势分区——右缘=调宽，标题=移动 ──
+// 换位判定基于拖拽起始冻结的列位置（对指针抖动单调，无边界震荡）；换位即时应用，Esc 取消恢复拖前顺序
 const FIXED_MOVE_KEYS = new Set(['index', 'ip', 'actions'])
-let colMove: { key: string } | null = null
-const reorderHintBefore = ref('')
+const dragSourceKey = ref('')
+let colMove: { key: string; startOrder: string[]; rects: Map<string, DOMRect>; lastHint: string } | null = null
 
 function startColumnMove(e: MouseEvent, col: { key?: unknown }): void {
   const key = String(col.key ?? '')
-  console.log('[DBG M] start key=', key, 'clientX=', e.clientX)
   if (!key || FIXED_MOVE_KEYS.has(key)) return
   e.preventDefault()
-  colMove = { key }
+  const rects = new Map<string, DOMRect>()
+  const titleToKey = new Map(columns.map((c) => [String(c.title), String(c.key)]))
+  document.querySelectorAll('.ant-table-thead th').forEach((th) => {
+    const k = titleToKey.get((th.textContent ?? '').trim())
+    if (k) rects.set(k, th.getBoundingClientRect())
+  })
+  colMove = { key, startOrder: orderedColumns.value.map((c) => String(c.key)), rects, lastHint: key }
+  dragSourceKey.value = key
   document.addEventListener('mousemove', onColumnMoveMove)
   document.addEventListener('mouseup', endColumnMove)
+  document.addEventListener('keydown', onColumnMoveCancel)
 }
 
 function onColumnMoveMove(e: MouseEvent): void {
-  if (!colMove) return
-  // th 与列键按表头文字对齐（标题唯一；桩/真机 antd 通吃，不依赖 selection 列的存在）
-  const titleToKey = new Map(columns.map((c) => [String(c.title), String(c.key)]))
-  const rectByKey = new Map<string, DOMRect>()
-  ;[...document.querySelectorAll<HTMLElement>('.ant-table-thead th')].forEach((th) => {
-    const key = titleToKey.get((th.textContent ?? '').trim())
-    if (key) rectByKey.set(key, th.getBoundingClientRect())
-  })
-  const middleKeys = orderedColumns.value.map((c) => String(c.key)).filter((k) => !FIXED_MOVE_KEYS.has(k))
-  let hint = ''
+  const mv = colMove
+  if (!mv) return
+  const middleKeys = mv.startOrder.filter((k) => !FIXED_MOVE_KEYS.has(k))
+  let hint = mv.key // 指针在源列自身范围内 → 维持原位
   for (let i = 0; i < middleKeys.length; i++) {
-    const rect = rectByKey.get(middleKeys[i])
+    const rect = mv.rects.get(middleKeys[i])
     if (!rect) continue
     if (e.clientX >= rect.left && e.clientX <= rect.right) {
       // 指针落在目标列左半 → 插到它前面；右半 → 插到下一中间列前（末列则贴操作列前）
@@ -997,25 +1002,28 @@ function onColumnMoveMove(e: MouseEvent): void {
       break
     }
   }
-  console.log('[DBG M] hint=', JSON.stringify(hint), 'clientX=', e.clientX, 'rects=', [...rectByKey.entries()].map(([k, r]) => k + ':' + Math.round(r.left) + '-' + Math.round(r.right)).join(' '))
-  reorderHintBefore.value = hint
+  if (hint === mv.lastHint) return
+  mv.lastHint = hint
+  // 实时预览：以拖拽起始序为基线换位（冻结几何单调，无震荡）；持久化由 watch 随行
+  const next = mv.startOrder.filter((k) => k !== mv.key)
+  const idx = next.indexOf(hint)
+  if (idx === -1) return
+  next.splice(idx, 0, mv.key)
+  setNodeColumnOrder(next)
+}
+
+function onColumnMoveCancel(e: KeyboardEvent): void {
+  if (e.key !== 'Escape' || !colMove) return
+  setNodeColumnOrder(colMove.startOrder)
+  endColumnMove()
 }
 
 function endColumnMove(): void {
   document.removeEventListener('mousemove', onColumnMoveMove)
   document.removeEventListener('mouseup', endColumnMove)
-  const hint = reorderHintBefore.value
-  reorderHintBefore.value = ''
-  const source = colMove?.key
+  document.removeEventListener('keydown', onColumnMoveCancel)
+  dragSourceKey.value = ''
   colMove = null
-  if (!source || !hint || hint === source) return
-  const stored = nodeColumnOrder.value
-  const current = stored.length ? stored : orderedColumns.value.map((c) => String(c.key))
-  const next = current.filter((k) => k !== source)
-  const idx = next.indexOf(hint)
-  if (idx === -1) return
-  next.splice(idx, 0, source)
-  setNodeColumnOrder(next)
 }
 
 function handleResetColumnWidths(): void {
@@ -1956,15 +1964,21 @@ function onEdgePackRebase(e: Event) {
   height: 100%;
 }
 
-/* 列移动插入指示线（node-list-column-resize D7）：目标边界 accent 竖线，锚定表头单元格左缘 */
-.th-resize-wrap.drop-before::before {
-  content: '';
-  position: absolute;
-  left: -2px;
-  top: 0;
-  height: 100%;
-  width: 3px;
-  background: var(--accent);
-  border-radius: 1px;
+/* 可拖列表头光标提示（方案 1）：悬停 grab、按住 grabbing；固定列不显示 */
+.th-resize-wrap.movable {
+  cursor: grab;
+}
+
+.th-resize-wrap.movable:active {
+  cursor: grabbing;
+}
+
+/* 拖拽中源列表头高亮 */
+.th-resize-wrap.dragging-source {
+  background: oklch(56% 0.16 210 / 15%);
+  color: var(--accent);
+  font-weight: 600;
+  border-radius: 4px;
+  padding: 2px 6px;
 }
 </style>

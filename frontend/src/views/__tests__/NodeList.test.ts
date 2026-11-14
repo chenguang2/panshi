@@ -1619,7 +1619,7 @@ describe('NodeList 列宽个性化（node-list-column-resize）', () => {
     expect(saved.widths ?? {}).toEqual({})
   }, 15_000)
 
-  it('列拖拽移动：标题区拖拽改序并持久化、指示线、固定列豁免（方案 A）', async () => {
+  it('列拖拽实时预览：换位即时生效、源列高亮、Esc 取消、光标类与固定列豁免（方案 1）', async () => {
     const NodeList = (await import('../NodeList.vue')).default
     const wrapper = mount(NodeList, { attachTo: document.body, global: { stubs } })
     await flushPromises()
@@ -1641,47 +1641,22 @@ describe('NodeList 列宽个性化（node-list-column-resize）', () => {
           toJSON: () => {},
         }) as DOMRect
     })
-    // 拖「Edge 安装路径」（矩形 500-600）标题到「状态」（700-800）左半 → 插入 status 前
-    const edgeTh = ths().find((t) => t.attributes('data-col') === 'edge_path')!
-    await edgeTh.find('.th-resize-wrap').trigger('mousedown', { clientX: 550 })
-    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 720 }))
-    await flushPromises()
-    const statusWrap = ths()
-      .find((t) => t.attributes('data-col') === 'status')!
-      .find('.th-resize-wrap')
-    expect(statusWrap.classes()).toContain('drop-before')
-    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 720 }))
-    await flushPromises()
-    expect(keySeq()).toEqual([
-      'index',
-      'ip',
-      'cluster_name',
-      'service_port',
-      'management_port',
-      'openresty_path',
-      'edge_path',
-      'status',
-      'edge_version',
-      'actions',
-    ])
-    const saved = JSON.parse(localStorage.getItem('node_standalone_cfg_guest') ?? '{}')
-    expect(saved.order).toEqual(keySeq())
-    // 指示线已消失
-    expect(statusWrap.classes()).not.toContain('drop-before')
-    // 固定列豁免：拖 IP 标题不产生指示、不改顺序
-    const ipTh = ths().find((t) => t.attributes('data-col') === 'ip')!
-    await ipTh.find('.th-resize-wrap').trigger('mousedown', { clientX: 150 })
-    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 720 }))
-    await flushPromises()
+    // 光标提示：可拖列 wrap 带 movable 类；固定列（#/ip/actions）不带
     expect(
       ths()
-        .find((t) => t.attributes('data-col') === 'status')!
+        .find((t) => t.attributes('data-col') === 'edge_path')!
         .find('.th-resize-wrap')
         .classes(),
-    ).not.toContain('drop-before')
-    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 720 }))
-    await flushPromises()
-    expect(keySeq()).toEqual([
+    ).toContain('movable')
+    for (const fixed of ['index', 'ip', 'actions']) {
+      expect(
+        ths()
+          .find((t) => t.attributes('data-col') === fixed)!
+          .find('.th-resize-wrap')
+          .classes(),
+      ).not.toContain('movable')
+    }
+    const DEFAULT_SEQ = [
       'index',
       'ip',
       'cluster_name',
@@ -1692,7 +1667,54 @@ describe('NodeList 列宽个性化（node-list-column-resize）', () => {
       'status',
       'edge_version',
       'actions',
+    ]
+    // 拖「Edge 安装路径」（矩形 500-600）标题越过「状态」（700-800）左边界 → 实时换位（未松手即生效）
+    const edgeWrap = ths()
+      .find((t) => t.attributes('data-col') === 'edge_path')!
+      .find('.th-resize-wrap')!
+    await edgeWrap.trigger('mousedown', { clientX: 550 })
+    expect(edgeWrap.classes()).toContain('dragging-source')
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 720 }))
+    await flushPromises()
+    const LIVE_SEQ = [...DEFAULT_SEQ.slice(0, 5), 'openresty_path', 'edge_path', ...DEFAULT_SEQ.slice(7)]
+    expect(keySeq()).toEqual(LIVE_SEQ)
+    // 松手确认当前位次（无跳变）
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 720 }))
+    await flushPromises()
+    expect(keySeq()).toEqual(LIVE_SEQ)
+    expect(JSON.parse(localStorage.getItem('node_standalone_cfg_guest') ?? '{}').order).toEqual(LIVE_SEQ)
+    // 再次拖动（openresty 越过 service_port 左边界）→ Esc 取消恢复拖前顺序
+    const orWrap = ths()
+      .find((t) => t.attributes('data-col') === 'openresty_path')!
+      .find('.th-resize-wrap')!
+    await orWrap.trigger('mousedown', { clientX: 650 })
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 340 }))
+    await flushPromises()
+    expect(keySeq()).toEqual([
+      'index',
+      'ip',
+      'cluster_name',
+      'openresty_path',
+      'service_port',
+      'management_port',
+      'edge_path',
+      'status',
+      'edge_version',
+      'actions',
     ])
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+    expect(keySeq()).toEqual(LIVE_SEQ)
+    // 固定列豁免：拖 IP 标题不换位、无高亮
+    const ipWrap = ths()
+      .find((t) => t.attributes('data-col') === 'ip')!
+      .find('.th-resize-wrap')!
+    await ipWrap.trigger('mousedown', { clientX: 150 })
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 720 }))
+    await flushPromises()
+    expect(keySeq()).toEqual(LIVE_SEQ)
+    expect(ipWrap.classes()).not.toContain('dragging-source')
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 720 }))
     wrapper.unmount()
   }, 15_000)
 })

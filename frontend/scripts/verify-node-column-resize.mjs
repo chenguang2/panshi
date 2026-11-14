@@ -115,7 +115,7 @@ try {
   const reset = (await thEdge2.boundingBox()).width
   check('重置后恢复默认 220px', Math.abs(reset - 220) < 12, `reset=${reset.toFixed(0)}`)
   await page.screenshot({ path: outDir + '/03-after-reset.png' })
-  // ── ⑤ 列拖拽移动（方案 A）：真实鼠标拖「Edge 安装路径」到「状态」前，刷新保持 ──
+  // ── ⑤ 列拖拽移动（方案 1 实时预览）：拖 Edge → 状态前即时换位；Esc 取消；再次拖拽并刷新保持 ──
   const thOrder = () =>
     page.evaluate(() => [...document.querySelectorAll('.ant-table-thead th')].map((t) => (t.textContent ?? '').trim()))
   const beforeOrder = await thOrder()
@@ -128,6 +128,7 @@ try {
   await page.waitForTimeout(300)
   const thDrag = page.locator('.ant-table-thead th', { hasText: 'Edge 安装路径' }).first()
   const db = await thDrag.boundingBox()
+  // 起始点必须在标题文字上（避开固定列覆盖带与插槽死区）
   await page.mouse.move(db.x + 40, db.y + db.height / 2)
   await page.mouse.down()
   // 落点取「状态」列实际位置左半（左半 = 插入状态前）
@@ -135,8 +136,25 @@ try {
   const sb = await thStatus.boundingBox()
   await page.mouse.move(sb.x + sb.width * 0.25, db.y + db.height / 2, { steps: 10 })
   await page.waitForTimeout(200)
-  const hintTarget = await page.evaluate(() => document.querySelector('.th-resize-wrap.drop-before')?.parentElement?.textContent?.trim() ?? '')
-  check('指示线落在「状态」列边界', hintTarget === '状态', hintTarget)
+  const liveOrder = await thOrder()
+  const liveEdge = liveOrder.indexOf('Edge 安装路径')
+  const liveStatus = liveOrder.indexOf('状态')
+  check('拖拽中实时换位（未松手 Edge 已紧邻状态前）', liveEdge !== -1 && liveStatus !== -1 && liveEdge === liveStatus - 1, JSON.stringify(liveOrder))
+  const srcCls = await page.evaluate(() => document.querySelector('.th-resize-wrap.dragging-source')?.textContent?.trim() ?? '')
+  check('源列表头高亮', srcCls === 'Edge 安装路径', srcCls)
+  await page.screenshot({ path: outDir + '/05-live-preview.png' })
+  // Esc 取消恢复拖前顺序
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(400)
+  const cancelledOrder = await thOrder()
+  check('Esc 取消恢复拖前顺序', JSON.stringify(cancelledOrder) === JSON.stringify(beforeOrder))
+  await page.mouse.up()
+  await page.waitForTimeout(300)
+  // 再次拖拽（不取消）并刷新验证持久化
+  await page.mouse.move(db.x + 40, db.y + db.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(sb.x + sb.width * 0.25, db.y + db.height / 2, { steps: 10 })
+  await page.waitForTimeout(200)
   await page.mouse.up()
   await page.waitForTimeout(400)
   const afterOrder = await thOrder()
