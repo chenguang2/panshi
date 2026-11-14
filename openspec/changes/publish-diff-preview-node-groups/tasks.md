@@ -10,4 +10,4 @@
 ## 2. 真实环境回归与收口
 
 - [x] 2.1 真实环境（≤3 节点集群）回归：预览弹窗呈现与交互不变（矩阵路径），截图核对
-- [ ] 2.2 AGENTS.md #77 补一行（呈现自适应阈值与分组语义）；openspec validate --all 0 error；tasks 打勾；git commit
+- [x] 2.2 AGENTS.md #77 补一行（呈现自适应阈值与分组语义）；openspec validate --all 0 error；tasks 打勾；git commit
