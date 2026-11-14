@@ -30,7 +30,13 @@
 
 #### Scenario: 四态判定顺序
 - **WHEN** 列表渲染发布状态
-- **THEN** 判定顺序 SHALL 为：`未发布`（current_version 为空）→ `部分失败`（last_publish_status == 'partial'）→ `待发布`（pending_publish）→ `已发布`
+- **THEN** 判定顺序 SHALL 为：`未发布`（current_version 为空）→ `待发布`（pending_publish）→ `部分失败`（last_publish_status == 'partial'）→ `已发布`
+- **AND** 待发布 SHALL 优先于部分失败（publish-status-unify 裁决：内容已变后「待发布」是主导事实，重新发布成功即两态清除）
+
+#### Scenario: 部分失败后编辑保存呈现待发布
+- **GIVEN** 某全局规则上次发布存在失败节点（`last_publish_status='partial'`）
+- **WHEN** 用户编辑该全局规则任意字段并保存（不发布）
+- **THEN** 列表 SHALL 显示「待发布」态（MUST NOT 继续显示「发布未完全生效」）
 
 ### Requirement: 全局规则部分失败状态持久化
 

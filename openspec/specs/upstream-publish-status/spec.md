@@ -33,7 +33,14 @@
 
 #### Scenario: 四态判定顺序
 - **WHEN** 列表渲染发布状态
-- **THEN** 判定顺序 SHALL 为：`未发布`（current_version 为空）→ `部分失败`（last_publish_status == 'partial'）→ `待发布`（pending_publish）→ `已发布`
+- **THEN** 判定顺序 SHALL 为：`未发布`（current_version 为空）→ `待发布`（pending_publish）→ `部分失败`（last_publish_status == 'partial'）→ `已发布`
+- **AND** 待发布 SHALL 优先于部分失败（publish-status-unify 裁决：partial 描述旧内容的上次发布结果，内容已变后「待发布」是主导事实；重新发布为全量推送，成功即两态清除，无信息丢失）
+
+#### Scenario: 部分失败后编辑保存呈现待发布
+- **GIVEN** 某上游上次发布存在失败节点（`last_publish_status='partial'`，列表显示「⚠ vX · 发布未完全生效」）
+- **WHEN** 用户编辑该上游任意字段并保存（不发布）
+- **THEN** 列表 SHALL 显示「待发布」态（MUST NOT 继续显示「发布未完全生效」）
+- **AND** 再次发布全部成功后两态同时清除（`last_publish_status` 清 NULL 且 `pending_publish` 为假）；再次发布仍有失败节点时 SHALL 重新呈现「发布未完全生效」
 
 ### Requirement: 部分失败状态持久化
 
