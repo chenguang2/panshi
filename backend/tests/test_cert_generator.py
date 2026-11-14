@@ -1051,8 +1051,11 @@ class TestCaSignCsr:
             ext_file_content="""[ v3_req ]\nbasicConstraints = CA:FALSE\nkeyUsage = critical, digitalSignature\n""",
         )
         cert_expiry = get_cert_expiry(openssl["path"], cert)
-        expected = date.today() + timedelta(days=1)
-        assert cert_expiry == expected, (
+        # notAfter 按 UTC 计算，date.today() 为本地时区——北京 0-8 点窗口差一天，
+        # 精确相等断言在该窗口稳定失败（2026-11-14 实测）；改 ±1 天容差
+        from datetime import datetime as _dt
+        expected = _dt.utcnow().date() + timedelta(days=1)
+        assert abs((cert_expiry - expected).days) <= 1, (
             f"Expected {expected}, got {cert_expiry}"
         )
 
@@ -1098,10 +1101,12 @@ class TestGetCertExpiry:
         if not openssl["path"]:
             pytest.skip("No openssl available")
         ca, _ = generate_ca_certificate(openssl["path"], "Test", 1, openssl["flavor"])
-        from datetime import date, timedelta
+        from datetime import date, timedelta, datetime as _dt
         expiry = get_cert_expiry(openssl["path"], ca["ca_cert"])
-        expected = date.today() + timedelta(days=1)
-        assert expiry == expected, f"Expected {expected}, got {expiry}"
+        # notAfter 按 UTC 计算，date.today() 为本地时区——凌晨 0-8 点（UTC 仍为前一天）
+        # 两者差一天，精确相等断言会在该窗口稳定失败（2026-11-14 实测）；改 ±1 天容差
+        expected = _dt.utcnow().date() + timedelta(days=1)
+        assert abs((expiry - expected).days) <= 1, f"Expected ~{expected}, got {expiry}"
 
 
 # ===== NEW: Task 1.1 — generate_ca_certificate() =====

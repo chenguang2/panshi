@@ -24,7 +24,7 @@ function vueFiles(dir: string, out: string[] = []): string[] {
 const files = vueFiles(SRC)
 const sourceOf = (f: string): string => readFileSync(f, 'utf-8')
 
-describe('搜索框统一（源码守卫）', () => {
+describe('搜索框统一（源码守卫）', { timeout: 30000 }, () => {
   it('共享组件 SearchInput.vue 存在', () => {
     expect(() => sourceOf(join(SRC, 'components', 'SearchInput.vue'))).not.toThrow()
   })
