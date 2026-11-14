@@ -1076,6 +1076,12 @@ select.form-input {
   position: relative;
 }
 
+/* 可排序列的 antd 标题层自带 position:relative，会把 absolute 手柄的定位上下文从 th 抢走，
+   握把线因此落到标题右缘（排序箭头左侧）而非单元格右缘——回归 static，让 th 重新成为包含块 */
+.grid-table .ant-table-column-title {
+  position: static;
+}
+
 .grid-table .th-resize-wrap {
   display: inline;
 }

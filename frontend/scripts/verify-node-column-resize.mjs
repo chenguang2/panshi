@@ -199,6 +199,19 @@ try {
       return el ? { sw: el.scrollWidth, cw: el.clientWidth } : { sw: 0, cw: 0 }
     }, pageCls)
     check(`${path} 横向滚动出现`, ov.sw > ov.cw, JSON.stringify(ov))
+    // 调宽握把线必须锚定单元格右缘：可排序列的 antd 标题层 .ant-table-column-title 带
+    // position:relative，会抢走 absolute 手柄的定位上下文，把线拽到标题右缘（排序箭头左侧）
+    const badAnchor = await page.evaluate((cls) => {
+      const bad = []
+      for (const th of document.querySelectorAll('.' + cls + ' thead th')) {
+        const h = th.querySelector('.col-resize-handle')
+        if (!h) continue
+        const d = Math.round(h.getBoundingClientRect().right - th.getBoundingClientRect().right)
+        if (Math.abs(d) > 3) bad.push({ col: (th.textContent ?? '').trim().slice(0, 4), delta: d, op: String(h.offsetParent?.className ?? '').slice(0, 40) })
+      }
+      return bad
+    }, pageCls)
+    check(`${path} 握把线锚定单元格右缘`, badAnchor.length === 0, JSON.stringify(badAnchor))
     // 拖宽「目标节点/URI」+80 并刷新保持
     await scrollContent(scrollW)
     await page.waitForTimeout(300)
