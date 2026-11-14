@@ -10,6 +10,8 @@ vi.mock('@/api', () => ({
 
 vi.mock('ant-design-vue', () => ({
   message: { warning: vi.fn(), success: vi.fn(), error: vi.fn(), info: vi.fn() },
+  // AppModal（PublishPreviewModal 挂载，batch2）经 Modal 渲染：给可渲染桩，open=false 不产出内容
+  Modal: { template: '<div v-if="open"><slot /></div>', props: ['open'] },
 }))
 
 const mockPush = vi.fn()

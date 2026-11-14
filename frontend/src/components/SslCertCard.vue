@@ -2,6 +2,7 @@
 // ssl-cert-management：CA 根证书 / 服务器证书 共享卡片（单一实现，两页复用，禁止再内联拷贝）。
 // 页面差异经 variant 表达；操作全部 emit，业务（发布/删除/下载流程）留在页面。
 import PublishStatusTag from '@/components/PublishStatusTag.vue'
+import PublishDiffButton from '@/components/PublishDiffButton.vue'
 import { getGroupColorStyle, getCardBorderStyle } from '@/composables/useGroupColors'
 import { isReservedSni, splitSniString } from '@/utils/sniTags'
 import { certTypeLabel, formatSslProtocols, expireBadgeClass, expireBadgeText } from '@/utils/sslLabel'
@@ -25,6 +26,7 @@ const emit = defineEmits<{
   (e: 'version', cert: Record<string, any>): void
   (e: 'ca-click'): void
   (e: 'sync-sni', cert: Record<string, any>): void
+  (e: 'preview-diff', cert: Record<string, any>): void
 }>()
 
 // CA 临期红色警示（E4）：CA 过期 = 所有已装终端全部失效，强度高于普通证书临期徽章
@@ -67,13 +69,20 @@ const caExpiring =
       <div class="ssl-card-meta">
         <span v-if="variant === 'ca'" class="badge badge-success">CA 根证书</span>
         <!-- ssl-ux-review-fixes 组 2：单一 PublishStatusTag 呈现四态，去掉「● 已发布」双徽章冗余 -->
-        <PublishStatusTag
-          v-else
-          :version="cert.current_version"
-          :published-at="cert.published_at"
-          :pending="cert.pending_publish"
-          :last-publish-status="cert.last_publish_status ?? null"
-        />
+        <!-- publish-diff-preview-batch2（D2）：待发布/partial 旁 ▾ 差异预览，emit 上抛业务留页面 -->
+        <span v-else class="status-cell-flex">
+          <PublishStatusTag
+            :version="cert.current_version"
+            :published-at="cert.published_at"
+            :pending="cert.pending_publish"
+            :last-publish-status="cert.last_publish_status ?? null"
+          />
+          <PublishDiffButton
+            :pending="cert.pending_publish"
+            :last-publish-status="cert.last_publish_status ?? null"
+            @click.stop="emit('preview-diff', cert)"
+          />
+        </span>
       </div>
     </div>
     <div class="ssl-card-body">

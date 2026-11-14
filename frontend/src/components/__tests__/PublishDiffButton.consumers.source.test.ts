@@ -23,7 +23,15 @@ const ENTRY_FILES = [
   'src/views/clusters/ClusterPluginConfigs.vue',
   'src/views/clusters/ClusterGlobalRules.vue',
   'src/components/PluginMetadata.vue',
+  'src/views/StreamProxyList.vue',
+  'src/views/DnsUdpProxyList.vue',
 ]
+
+// 卡片形态入口：按钮在卡片组件内、经 emit 上抛业务（页面挂弹窗）
+const CARD_FILES = ['src/components/SslCertCard.vue']
+
+// SSL 服务器证书页：按钮在 SslCertCard 内（见 CARD_FILES），页面只挂弹窗并监听卡片上抛
+const SSL_PAGE = 'src/views/ServerCertList.vue'
 
 const WIDTH_FILES = [
   'src/composables/useClusterUpstreams.ts',
@@ -53,6 +61,20 @@ describe('PublishDiffButton consumers', () => {
 
   it.each(ENTRY_FILES)('%s 发布状态单元格用 status-cell-flex 防裁切', (rel) => {
     expect(read(rel)).toContain('status-cell-flex')
+  })
+
+  it.each(CARD_FILES)('%s 卡片接入 PublishDiffButton（emit preview-diff 上抛）', (rel) => {
+    const src = read(rel)
+    expect(src).toContain('<PublishDiffButton')
+    expect(src).toContain("emit('preview-diff'")
+    expect(src).toContain('status-cell-flex')
+  })
+
+  it(`${SSL_PAGE} 挂预览弹窗并监听卡片上抛`, () => {
+    const src = read(SSL_PAGE)
+    expect(src).toContain('<PublishPreviewModal')
+    expect(src).toContain('@preview-diff=')
+    expect(src).toContain('resource-type="\'ssl\'"')
   })
 
   it.each(WIDTH_FILES)('%s 发布状态列宽为 200（partial 态放得下按钮）', (rel) => {

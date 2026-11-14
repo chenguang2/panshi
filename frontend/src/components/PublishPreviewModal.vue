@@ -16,7 +16,8 @@ const props = defineProps<{
   open: boolean
   clusterId: number | null
   clusterName?: string
-  resourceType: 'upstream' | 'route' | 'plugin_config' | 'global_rule' | 'plugin_metadata'
+  resourceType:
+    'upstream' | 'route' | 'plugin_config' | 'global_rule' | 'plugin_metadata' | 'ssl' | 'stream_proxy' | 'dns_proxy'
   resourceId: number | null
   resourceName?: string
 }>()
@@ -32,6 +33,9 @@ const RESOURCE_LABELS: Record<string, string> = {
   plugin_config: '插件组',
   global_rule: '全局规则',
   plugin_metadata: '插件元数据',
+  ssl: 'SSL 证书',
+  stream_proxy: '四层代理',
+  dns_proxy: 'DNS 代理',
 }
 
 const result = ref<PublishPreviewResult | null>(null)

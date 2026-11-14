@@ -22,11 +22,12 @@ from app.schemas.ssl import (
     CaCertificateGenerateRequest, CommandLogEntry,
     SslPemPreviewRequest, SslPemPreviewResponse, SslPemCertPreview, SslPemKeyPreview,
 )
-from app.services.ssl_pem import RESERVED_SNIS, parse_cert_pem, parse_key_pem, keys_match  # noqa: F401  RESERVED_SNIS re-export
+from app.services.ssl_pem import RESERVED_SNIS, parse_cert_pem, parse_key_pem, keys_match, merge_reserved_into_sni_str  # noqa: F401  RESERVED_SNIS re-export
 from app.models.cluster import Cluster, ConfigVersion, Node
 from app.schemas.cluster import PublishRequest, DeleteClusterRequest
 from app.services import edge_sync
 from app.services.edge_client import EdgeClient
+from app.services import publish_preview
 
 from app.core.deps import require_permission
 # ConfigVersion 回查发布时间（与 dns/流代理/插件组列表同模式）
@@ -64,18 +65,6 @@ def merge_reserved_dns(dns_sans: list[str] | None) -> list[str]:
     """
     normalized = [d.strip().lower() for d in (dns_sans or []) if d.strip()]
     return list(dict.fromkeys([*RESERVED_SNIS, *normalized]))
-
-
-def merge_reserved_into_sni_str(sni_str: str | None) -> str:
-    """Ensure reserved SNIs are present in a comma-separated sni field value.
-
-    Case-insensitive dedup; reserved SNI canonicalized to lowercase and placed
-    first. Non-reserved entries are stripped but otherwise left as-is (IPs keep
-    their original case).
-    """
-    entries = [e.strip() for e in (sni_str or "").split(",") if e.strip()]
-    kept = [e for e in entries if e.lower() not in RESERVED_SNIS]
-    return ",".join([*RESERVED_SNIS, *kept])
 
 
 @router.post("/ca", status_code=status.HTTP_201_CREATED)
@@ -447,49 +436,20 @@ async def publish_ssl_certificate(
     # Edge API expects a single domain in "sni" or an array in "snis".
     # ssl-cert-rollback-consistency：匹配名单从证书 PEM SAN 推导（PEM 为唯一事实源），
     # 存量 sni 与 SAN 脱节的证书发布即自愈；解析失败（国密非标等）回退现 sni 拆分。
+    # SNI 自愈（发布期副作用，保留在端点）：与 builder 内只读推导同源逻辑，
+    # 存量 sni 与 SAN 脱节的证书发布即自愈；解析失败回退现 sni 拆分。
     cert_info = parse_cert_pem(cert.cert)
     if cert_info is not None:
         derived_sni = merge_reserved_into_sni_str(",".join(cert_info["dns_sans"] + cert_info["ip_sans"]))
     else:
         derived_sni = cert.sni
-    sni_list = [s.strip() for s in derived_sni.split(",") if s.strip()] if derived_sni else []
     if derived_sni != cert.sni:
         cert.sni = derived_sni
-    config_data: dict = {
-        "name": cert.name,
-        "cert": cert.cert, "key": cert.private_key,
-        "type": cert.cert_type,
-    }
-    if len(sni_list) == 1:
-        config_data["sni"] = sni_list[0]
-    elif len(sni_list) > 1:
-        config_data["snis"] = sni_list
-    if cert.ssl_protocols:
-        try:
-            config_data["ssl_protocols"] = json.loads(cert.ssl_protocols)
-        except (json.JSONDecodeError, TypeError):
-            pass
-    if cert.gm:
-        config_data["certs"] = [cert.sign_cert] if cert.sign_cert else []
-        config_data["keys"] = [cert.sign_key] if cert.sign_key else []
-        config_data["gm"] = True
 
-        if cert.ca_cert_id:
-            ca_record = await db.get(SslCertificate, cert.ca_cert_id)
-            if ca_record:
-                sign_pem = (cert.sign_cert or "").strip()
-                ca_pem = (ca_record.cert or "").strip()
-                if sign_pem and ca_pem:
-                    config_data["cert_chain"] = sign_pem + "\n" + ca_pem
-
-        # mTLS: add client object when client_ca is set
-        if cert.gm and cert.client_ca:
-            client = {"ca": cert.client_ca}
-            if cert.client_depth is not None:
-                client["depth"] = cert.client_depth
-            if cert.skip_mtls_uri_regex:
-                client["skip_mtls_uri_regex"] = cert.skip_mtls_uri_regex
-            config_data["client"] = client
+    # 候选载荷与发布差异预览同源（publish-diff-preview-batch2）：config_data 由共享
+    # builder 构造（拼接前形态，快照存拼接前内容保护回滚）；证书链拼接与 CA 过期
+    # 检查仍由 _apply_cert_chain 在发布期执行。守卫见 test_publish_candidate_single_source.py
+    config_data, edge_data = await publish_preview.build_candidate(db, "ssl", cert)
 
     # 证书链：由 CA 签发的证书（国密/非国密）应把 CA 证书拼接到 cert 字段一起发布，
     # 否则 nginx 只下发 server 证书，浏览器无法构建信任链（域名/IP 访问均报警）。
@@ -515,7 +475,7 @@ async def publish_ssl_certificate(
 
     return await edge_sync.publish_resource(
         db, cluster_id=cluster_id, resource=cert, resource_type="ssl",
-        config_data=config_data, edge_data=config_data,
+        config_data=config_data, edge_data=edge_data,
         publish_fn=lambda client: client.api("ssl", "update", cert.edge_uuid, config_data),
         display_name=f"SSL 证书 {cert.name} ",
         log_path=f"/edge/admin/ssl/{cert.edge_uuid}",

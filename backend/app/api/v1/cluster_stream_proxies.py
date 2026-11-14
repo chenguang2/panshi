@@ -19,6 +19,7 @@ from app.schemas.cluster import (
     BatchDeleteStreamProxiesRequest,
 )
 from app.services import edge_sync
+from app.services import publish_preview
 from app.services.edge_client import EdgeClient
 from app.services.ansible_service import AnsibleRunnerService
 
@@ -532,17 +533,8 @@ async def delete_stream_proxies_batch(
     return {"message": "四层代理批量删除完成", "results": results}
 
 
-def _edge_protocol(scheme: str | None) -> str | None:
-    """Map internal scheme to Edge's top-level `protocol` enum value.
-
-    Edge only accepts "TCP"/"UDP" for stream route protocol; TLS is expressed
-    via upstream.scheme="tls", so it publishes as "TCP" at protocol level.
-    """
-    if not scheme:
-        return None
-    if scheme == "udp":
-        return "UDP"
-    return "TCP"
+# batch2 依赖反转：protocol 映射单点移入 publish_preview（api 侧反向引用）
+from app.services.publish_preview import edge_protocol as _edge_protocol  # noqa: E402
 
 
 @router.post("/{cluster_id}/stream-proxies/{proxy_id}/publish")
@@ -554,48 +546,13 @@ async def publish_stream_proxy(
 ):
     proxy = await edge_sync.get_or_404(db, StreamProxy, id=proxy_id, cluster_id=cluster_id, detail="四层代理不存在")
 
-    _protocol = _edge_protocol(proxy.scheme)
-
-    targets = json.loads(proxy.targets) if proxy.targets else []
-    nodes_dict = {t["target"]: t.get("weight", 100) for t in targets}
-
-    lb_map = {"weighted_roundrobin": "roundrobin"}
-    lb_type = lb_map.get(proxy.load_balance, proxy.load_balance)
-
-    upstream_data: dict = {
-        "nodes": nodes_dict,
-        "type": lb_type,
-        "scheme": proxy.scheme or "tcp",
-    }
-    if proxy.hash_on and proxy.key:
-        upstream_data["hash_on"] = proxy.hash_on
-        upstream_data["key"] = proxy.key
-    if proxy.retries is not None:
-        upstream_data["retries"] = proxy.retries
-    if proxy.retry_timeout is not None:
-        upstream_data["retry_timeout"] = proxy.retry_timeout
-    if proxy.checks:
-        upstream_data["checks"] = json.loads(proxy.checks)
-
-    edge_body: dict = {
-        "server_port": proxy.listen_port,
-        "upstream": upstream_data,
-    }
-    if _protocol:
-        edge_body["protocol"] = _protocol
-    if proxy.sni:
-        edge_body["sni"] = proxy.sni
-    if proxy.remote_addr:
-        edge_body["remote_addr"] = proxy.remote_addr
-    if proxy.name:
-        edge_body["name"] = proxy.name
-
-    config_data = StreamProxyResponse.model_validate(proxy).model_dump()
+    # 候选载荷与发布差异预览同源（publish-diff-preview-batch2）：守卫见 test_publish_candidate_single_source.py
+    config_data, edge_data = await publish_preview.build_candidate(db, "stream_proxy", proxy)
 
     return await edge_sync.publish_resource(
         db, cluster_id=cluster_id, resource=proxy, resource_type="stream_proxy",
-        config_data=config_data, edge_data=edge_body,
-        publish_fn=lambda client: client.api("stream_route", "update", proxy.edge_uuid, edge_body),
+        config_data=config_data, edge_data=edge_data,
+        publish_fn=lambda client: client.api("stream_route", "update", proxy.edge_uuid, edge_data),
         display_name=f"四层代理 {proxy.name} ",
         log_path=f"/stream/edge/admin/routes/{proxy.edge_uuid}",
         log_resource_id=proxy_id, log_resource_name=proxy.name,

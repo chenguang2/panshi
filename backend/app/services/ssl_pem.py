@@ -107,3 +107,16 @@ def keys_match(cert_pem: Any, key_pem: Any) -> Optional[bool]:
         return False
     except Exception:
         return None
+
+
+def merge_reserved_into_sni_str(sni_str: str | None) -> str:
+    """Ensure reserved SNIs are present in a comma-separated sni field value.
+
+    Case-insensitive dedup; reserved SNI canonicalized to lowercase and placed
+    first. Non-reserved entries are stripped but otherwise left as-is (IPs keep
+    their original case). （2026-11-14 自 cluster_ssl.py 移入：发布差异预览候选
+    构造与发布端点共用此单点，避免 api 层循环导入。）
+    """
+    entries = [e.strip() for e in (sni_str or "").split(",") if e.strip()]
+    kept = [e for e in entries if e.lower() not in RESERVED_SNIS]
+    return ",".join([*RESERVED_SNIS, *kept])

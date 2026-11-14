@@ -25,9 +25,12 @@ from app.models.cluster import (
     PluginMetadata,
     Route,
     RoutePlugin,
+    StreamProxy,
     Upstream,
     UpstreamTarget,
 )
+from app.models.ssl import SslCertificate
+from app.schemas.stream_proxy import StreamProxyResponse
 from app.services import drift_detection
 from app.services.config_diff import expand_empty_plugin_config, expand_empty_plugin_defaults
 from app.services.drift_detection import (
@@ -37,6 +40,8 @@ from app.services.drift_detection import (
     _is_masked,
     _masked,
 )
+from app.services.dns_wan import build_dns_plugins
+from app.services.ssl_pem import merge_reserved_into_sni_str, parse_cert_pem
 from app.services.edge_client import EdgeClient
 
 
@@ -136,6 +141,141 @@ async def _build_global_rule_candidate(db: AsyncSession, rule: GlobalRule) -> tu
     return config_data, edge_data
 
 
+def edge_protocol(scheme: str | None) -> str | None:
+    """内部 scheme → Edge stream_route 顶层 protocol 枚举（TCP/UDP；TLS 经
+    upstream.scheme="tls" 表达，protocol 层发布为 TCP）。
+
+    batch2 依赖方向反转：原居 cluster_stream_proxies（api 层），builder 抽取后
+    api 侧反向引用本单点，避免 services → api 循环导入。
+    """
+    if not scheme:
+        return None
+    if scheme == "udp":
+        return "UDP"
+    return "TCP"
+
+
+async def _build_ssl_candidate(db: AsyncSession, cert: SslCertificate) -> tuple[dict, Any]:
+    """复刻 publish_ssl_certificate 的 config_data 构造（**拼接前**形态——与版本快照
+    同语义，保护回滚不被链污染）。实发形态的证书链拼接由注册表 expand_payload 钩子
+    承载（预览候选/基线与漂移基线三处消费）；不含 hook 中的 openssl 过期检查
+    （发布期守卫，非载荷构造）。"""
+    if cert.cert_type == "client":
+        raise HTTPException(status_code=400, detail="客户端证书不需要发布到 Edge 节点")
+    if cert.is_ca:
+        raise HTTPException(status_code=400, detail="CA 证书不需要发布到 Edge 节点")
+
+    # DB 存 SNI 为逗号串；Edge 期望单域 sni 或数组 snis。与发布同款：从 PEM SAN
+    # 推导匹配名单（PEM 为唯一事实源），解析失败回退现 sni 拆分。只读推导，
+    # 不回写 cert.sni（发布端点的回写属于发布动作）。
+    cert_info = parse_cert_pem(cert.cert)
+    if cert_info is not None:
+        derived_sni = merge_reserved_into_sni_str(",".join(cert_info["dns_sans"] + cert_info["ip_sans"]))
+    else:
+        derived_sni = cert.sni
+    sni_list = [s.strip() for s in derived_sni.split(",") if s.strip()] if derived_sni else []
+
+    config_data: dict = {
+        "name": cert.name,
+        "cert": cert.cert, "key": cert.private_key,
+        "type": cert.cert_type,
+    }
+    if len(sni_list) == 1:
+        config_data["sni"] = sni_list[0]
+    elif len(sni_list) > 1:
+        config_data["snis"] = sni_list
+    if cert.ssl_protocols:
+        try:
+            config_data["ssl_protocols"] = json.loads(cert.ssl_protocols)
+        except (json.JSONDecodeError, TypeError):
+            pass
+    if cert.gm:
+        config_data["certs"] = [cert.sign_cert] if cert.sign_cert else []
+        config_data["keys"] = [cert.sign_key] if cert.sign_key else []
+        config_data["gm"] = True
+
+        if cert.ca_cert_id:
+            ca_record = await db.get(SslCertificate, cert.ca_cert_id)
+            if ca_record:
+                sign_pem = (cert.sign_cert or "").strip()
+                ca_pem = (ca_record.cert or "").strip()
+                if sign_pem and ca_pem:
+                    config_data["cert_chain"] = sign_pem + "\n" + ca_pem
+
+        if cert.gm and cert.client_ca:
+            client = {"ca": cert.client_ca}
+            if cert.client_depth is not None:
+                client["depth"] = cert.client_depth
+            if cert.skip_mtls_uri_regex:
+                client["skip_mtls_uri_regex"] = cert.skip_mtls_uri_regex
+            config_data["client"] = client
+
+    # 证书链拼接属实发变换，由注册表 expand_payload 钩子承载（此处保持拼接前形态）
+    return config_data, config_data
+
+
+async def _build_stream_proxy_candidate(db: AsyncSession, proxy: StreamProxy) -> tuple[dict, Any]:
+    targets = json.loads(proxy.targets) if proxy.targets else []
+    nodes_dict = {t["target"]: t.get("weight", 100) for t in targets}
+
+    lb_map = {"weighted_roundrobin": "roundrobin"}
+    lb_type = lb_map.get(proxy.load_balance, proxy.load_balance)
+
+    upstream_data: dict = {
+        "nodes": nodes_dict,
+        "type": lb_type,
+        "scheme": proxy.scheme or "tcp",
+    }
+    if proxy.hash_on and proxy.key:
+        upstream_data["hash_on"] = proxy.hash_on
+        upstream_data["key"] = proxy.key
+    if proxy.retries is not None:
+        upstream_data["retries"] = proxy.retries
+    if proxy.retry_timeout is not None:
+        upstream_data["retry_timeout"] = proxy.retry_timeout
+    if proxy.checks:
+        upstream_data["checks"] = json.loads(proxy.checks)
+
+    edge_body: dict = {
+        "server_port": proxy.listen_port,
+        "upstream": upstream_data,
+    }
+    protocol = edge_protocol(proxy.scheme)
+    if protocol:
+        edge_body["protocol"] = protocol
+    if proxy.sni:
+        edge_body["sni"] = proxy.sni
+    if proxy.remote_addr:
+        edge_body["remote_addr"] = proxy.remote_addr
+    if proxy.name:
+        edge_body["name"] = proxy.name
+
+    config_data = StreamProxyResponse.model_validate(proxy).model_dump()
+    return config_data, edge_body
+
+
+async def _build_dns_proxy_candidate(db: AsyncSession, proxy: StreamProxy) -> tuple[dict, Any]:
+    protocol = edge_protocol(proxy.scheme)
+
+    edge_body: dict = {
+        "server_port": proxy.listen_port,
+        "name": proxy.name or "",
+    }
+    if protocol:
+        edge_body["protocol"] = protocol
+
+    dns_cfg = json.loads(proxy.dns_config) if proxy.dns_config else {}
+    dns_checks = json.loads(proxy.checks) if proxy.checks else {}
+    try:
+        plugins = build_dns_plugins(dns_cfg, dns_checks)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    edge_body["plugins"] = plugins
+
+    config_data = StreamProxyResponse.model_validate(proxy).model_dump()
+    return config_data, edge_body
+
+
 # ── 类型注册表（引用漂移检测单一事实源 + 候选构造器）────────────────
 
 PUBLISH_PREVIEW_REGISTRY: dict = {
@@ -159,6 +299,22 @@ PUBLISH_PREVIEW_REGISTRY: dict = {
         **DRIFT_TYPE_REGISTRY["plugin_metadata"],
         "build_candidate": _build_plugin_metadata_candidate,
     },
+    "ssl": {
+        **DRIFT_TYPE_REGISTRY["ssl"],
+        "build_candidate": _build_ssl_candidate,
+        "expand_payload": drift_detection.expand_ssl_cert_chain,
+    },
+    # 四层/DNS 共用 StreamProxy 表与 stream_proxy 快照类型（发布留痕同类型），
+    # 载荷形态不同 → 注册表双键，各挂各的 builder（与发布同源）
+    "stream_proxy": {
+        **DRIFT_TYPE_REGISTRY["stream_proxy"],
+        "build_candidate": _build_stream_proxy_candidate,
+    },
+    "dns_proxy": {
+        **DRIFT_TYPE_REGISTRY["stream_proxy"],
+        "build_candidate": _build_dns_proxy_candidate,
+        "snapshot_resource_type": "stream_proxy",
+    },
 }
 
 
@@ -168,7 +324,7 @@ async def build_candidate(db: AsyncSession, resource_type: str, resource: Any) -
     if conf is None:
         raise HTTPException(
             status_code=400,
-            detail=f"资源类型 {resource_type} 尚未接入发布差异预览（首批：上游、路由）",
+            detail=f"资源类型 {resource_type} 尚未接入发布差异预览（静态资源与节点不经统一发布编排）",
         )
     return await conf["build_candidate"](db, resource)
 
@@ -244,7 +400,7 @@ async def preview_publish_diff(db: AsyncSession, *, cluster_id: int,
     if conf is None:
         raise HTTPException(
             status_code=400,
-            detail=f"资源类型 {resource_type} 尚未接入发布差异预览（首批：上游、路由）",
+            detail=f"资源类型 {resource_type} 尚未接入发布差异预览（静态资源与节点不经统一发布编排）",
         )
 
     resource = await db.execute(
@@ -268,6 +424,10 @@ async def preview_publish_diff(db: AsyncSession, *, cluster_id: int,
     elif resource_type == "plugin_metadata":
         candidate_edge = expand_empty_plugin_config(
             resource_type, resource.plugin_name, candidate_edge)
+    # SSL 证书链镜像拼接：候选展开到实发形态（expand_payload，batch2）
+    expand_hook = conf.get("expand_payload")
+    if expand_hook is not None:
+        candidate_edge = await expand_hook(db, resource, candidate_edge)
     normalized_candidate = conf["normalize"](candidate_edge)
     whitelist = BASE_WHITELIST | set()
     mask_fields = conf["mask"]
@@ -288,11 +448,13 @@ async def preview_publish_diff(db: AsyncSession, *, cluster_id: int,
     }
 
     # ── 平台侧变更段（候选 vs 最新快照实发载荷；零网络请求）──
+    # 快照类型映射（batch2）：dns_proxy 与 stream_proxy 共用 stream_proxy 快照类型
+    snapshot_type = conf.get("snapshot_resource_type", resource_type)
     cv = (
         await db.execute(
             select(ConfigVersion)
             .where(ConfigVersion.cluster_id == cluster_id,
-                   ConfigVersion.resource_type == resource_type,
+                   ConfigVersion.resource_type == snapshot_type,
                    ConfigVersion.resource_id == resource_id)
             .order_by(ConfigVersion.version.desc())
         )
@@ -315,6 +477,10 @@ async def preview_publish_diff(db: AsyncSession, *, cluster_id: int,
             elif resource_type == "plugin_metadata" and isinstance(baseline, dict):
                 baseline = expand_empty_plugin_config(
                     resource_type, resource.plugin_name, baseline)
+            # SSL 证书链镜像拼接（batch2）：基线快照存拼接前内容，按当前 CA 关联
+            # 展开到实发形态后再比——拼接本身不构成「平台侧变更」
+            if expand_hook is not None and isinstance(baseline, dict):
+                baseline = await expand_hook(db, resource, baseline)
             result["has_baseline"] = True
             base_diff = diff_edge_payload(baseline, candidate_edge, mask_fields=mask_fields)
             result["platform_change"] = {

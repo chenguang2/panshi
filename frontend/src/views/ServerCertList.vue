@@ -64,6 +64,7 @@
         @version="openVersionManagement"
         @ca-click="goCaPage"
         @sync-sni="syncSni"
+        @preview-diff="openPublishPreview"
       />
     </div>
 
@@ -122,6 +123,15 @@
       @confirm="onPublishConfirm"
       @cancel="publishVisible = false"
     />
+
+    <PublishPreviewModal
+      v-model:open="previewVisible"
+      :cluster-id="previewCert?.cluster_id ?? null"
+      :resource-type="'ssl'"
+      :resource-id="previewCert?.id ?? null"
+      :resource-name="previewCert?.name"
+      @publish="onPreviewPublish"
+    />
   </div>
 </template>
 
@@ -141,6 +151,8 @@ import SslCertDownloadDialog from '@/components/SslCertDownloadDialog.vue'
 import CaCreateDialog from '@/components/CaCreateDialog.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
+import PublishDiffButton from '@/components/PublishDiffButton.vue'
+import PublishPreviewModal from '@/components/PublishPreviewModal.vue'
 import { executePublish, showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
 import { downloadCertFile, buildCertFileName } from '@/utils/download'
 import SearchInput from '@/components/SearchInput.vue'
@@ -396,6 +408,21 @@ function publishCert(cert: any) {
   publishClusterId.value = cert.cluster_id
   publishRefreshFn.value = loadCerts
   publishVisible.value = true
+}
+
+// 发布差异预览（publish-diff-preview-batch2）：弹窗自持拉取；「去发布」接既有发布流程
+const previewVisible = ref(false)
+const previewCert = ref<any | null>(null)
+
+function openPublishPreview(cert: any) {
+  previewCert.value = cert
+  previewVisible.value = true
+}
+
+function onPreviewPublish() {
+  const cert = previewCert.value
+  previewVisible.value = false
+  if (cert) publishCert(cert)
 }
 
 // publish-guide 批 5：表单保存引导「立即发布」→ 打开该证书的发布确认弹窗（与卡片发布同链路）

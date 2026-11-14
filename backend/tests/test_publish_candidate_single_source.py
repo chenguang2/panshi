@@ -30,6 +30,9 @@ ROUTES = "app/api/v1/cluster_routes.py"
 PLUGIN_CONFIGS = "app/api/v1/cluster_plugin_configs.py"
 GLOBAL_RULES = "app/api/v1/cluster_global_rules.py"
 PLUGIN_METADATA = "app/api/v1/cluster_plugin_metadata.py"
+SSL = "app/api/v1/cluster_ssl.py"
+STREAM_PROXIES = "app/api/v1/cluster_stream_proxies.py"
+DNS_PROXIES = "app/api/v1/cluster_dns_proxies.py"
 
 
 class TestPublishCandidateSingleSource:
@@ -50,3 +53,13 @@ class TestPublishCandidateSingleSource:
     def test_publish_plugin_metadata(self):
         # 内联构造标记：edge_data 直接赋值为解析后的 config 本体
         _check_publish_uses_shared_candidate(PLUGIN_METADATA, "publish_plugin_metadata", "edge_data = plugin_config")
+
+    def test_publish_ssl(self):
+        # 内联构造标记：publish_resource 的 edge_data=config_data 同体直传
+        _check_publish_uses_shared_candidate(SSL, "publish_ssl_certificate", "edge_data=config_data")
+
+    def test_publish_stream_proxy(self):
+        _check_publish_uses_shared_candidate(STREAM_PROXIES, "publish_stream_proxy", "edge_body: dict")
+
+    def test_publish_dns_proxy(self):
+        _check_publish_uses_shared_candidate(DNS_PROXIES, "publish_dns_proxy", "edge_body: dict")

@@ -11,7 +11,7 @@ const props = defineProps<{
   lastPublishStatus?: string | null
 }>()
 
-defineEmits<{ (e: 'click'): void }>()
+defineEmits<{ (e: 'click', event: Event): void }>()
 
 const visible = computed(() => props.pending === true || props.lastPublishStatus === 'partial')
 </script>

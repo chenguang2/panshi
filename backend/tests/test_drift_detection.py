@@ -425,6 +425,44 @@ class TestMultiNode:
         assert "10.0.0.15" in (pms["log_process"]["reason"] or "")
 
     @pytest.mark.asyncio
+    async def test_ssl_cert_chain_noise_not_drift(self, isolated_session):
+        """缺陷回归（batch2）：SSL 快照存拼接前 cert（设计使然），节点实况是拼接后
+        内容——历史版本无 expand_baseline 钩子时，单节点集群每次漂移检测都误报
+        cert「漂移」。基线镜像展开后：证书未变更 → 一致。"""
+        from app.models.ssl import SslCertificate
+        async with isolated_session() as s:
+            s.add(Node(cluster_id=1, ip="10.9.9.1", service_port=80,
+                       management_port=9180, edge_path="/edge", status=1))
+            ca = SslCertificate(cluster_id=1, name="root-ca", cert="CA-PEM", sni="",
+                                private_key="", cert_type="ca", is_ca=True, edge_uuid="uu-ca-x")
+            s.add(ca)
+            await s.flush()
+            srv = SslCertificate(cluster_id=1, name="qcg", cert="SERVER-PEM", sni="",
+                                 private_key="KEY-PEM", cert_type="server",
+                                 ca_cert_id=ca.id, edge_uuid="uu-ssl-x")
+            s.add(srv)
+            await s.flush()
+            pre_concat = {"name": "qcg", "cert": "SERVER-PEM", "key": "KEY-PEM", "type": "server"}
+            s.add(ConfigVersion(
+                cluster_id=1, resource_type="ssl", resource_id=srv.id,
+                version=1, config=json.dumps(pre_concat), edge_payload=json.dumps(pre_concat),
+            ))
+            await s.commit()
+
+        def _collect(cluster_id, ip, port, only_edge_keys=None):
+            entry = _entry("uu-ssl-x", {"name": "qcg", "cert": "SERVER-PEM\nCA-PEM",
+                                        "key": "KEY-PEM", "type": "server"})
+            return _node_lists() | {"ssl": _parse_entries([entry])}
+
+        with patch("app.services.drift_detection._collect_edge_lists_for_node",
+                   side_effect=_collect):
+            async with isolated_session() as s:
+                result = await detect_cluster_drift(s, 1)
+
+        ssls = _by_name(result["types"], "ssl")
+        assert ssls["qcg"]["status"] == "ok"
+
+    @pytest.mark.asyncio
     async def test_single_node_empty_plugin_default_expansion_not_drift(self, isolated_session):
         """空插件默认等效（equivalence_rules.yaml）：单节点集群无均匀性对照，
         基线 log_process {} vs 节点 lua 默认展开 → 一致（历史上会误报漂移）。"""

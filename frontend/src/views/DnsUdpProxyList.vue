@@ -90,12 +90,19 @@
             <div v-if="p.description" class="sp-card-desc">{{ p.description }}</div>
           </div>
           <div class="sp-card-meta">
-            <PublishStatusTag
-              :version="p.current_version"
-              :published-at="p.published_at"
-              :pending="p.pending_publish === true"
-              :last-publish-status="p.last_publish_status"
-            />
+            <span class="status-cell-flex">
+              <PublishStatusTag
+                :version="p.current_version"
+                :published-at="p.published_at"
+                :pending="p.pending_publish === true"
+                :last-publish-status="p.last_publish_status"
+              />
+              <PublishDiffButton
+                :pending="p.pending_publish === true"
+                :last-publish-status="p.last_publish_status"
+                @click.stop="openPublishPreview(p)"
+              />
+            </span>
           </div>
         </div>
         <div class="sp-card-details">
@@ -190,6 +197,15 @@
       @confirm="onPublishConfirm"
       @cancel="publishVisible = false"
     />
+
+    <PublishPreviewModal
+      v-model:open="previewVisible"
+      :cluster-id="previewRecord?.cluster_id ?? null"
+      :resource-type="'dns_proxy'"
+      :resource-id="previewRecord?.id ?? null"
+      :resource-name="previewRecord?.name"
+      @publish="onPreviewPublish"
+    />
   </div>
 </template>
 
@@ -210,6 +226,8 @@ import { formatDateTime as formatDate } from '@/utils/format'
 import { useStreamProxyList } from '@/composables/useStreamProxyList'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
 import PublishStatusTag from '@/components/PublishStatusTag.vue'
+import PublishDiffButton from '@/components/PublishDiffButton.vue'
+import PublishPreviewModal from '@/components/PublishPreviewModal.vue'
 import SearchInput from '@/components/SearchInput.vue'
 
 const proxyType = computed<'dns'>(() => 'dns')
@@ -438,6 +456,21 @@ function publishProxyAction(p: StreamProxy) {
   publishClusterId.value = p.cluster_id
   publishRefreshFn.value = loadProxies
   publishVisible.value = true
+}
+
+// 发布差异预览（publish-diff-preview-batch2）：弹窗自持拉取；「去发布」接既有发布流程
+const previewVisible = ref(false)
+const previewRecord = ref<StreamProxy | null>(null)
+
+function openPublishPreview(p: StreamProxy) {
+  previewRecord.value = p
+  previewVisible.value = true
+}
+
+function onPreviewPublish() {
+  const p = previewRecord.value
+  previewVisible.value = false
+  if (p) publishProxyAction(p)
 }
 
 // 版本弹窗「立即发布恢复的配置」出口：先关版本弹窗再打开发布确认弹窗（不同屏），

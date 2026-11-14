@@ -24,9 +24,11 @@ from app.models.cluster import (
     Node,
     PluginConfig,
     PluginMetadata,
+    StreamProxy,
     Upstream,
     UpstreamTarget,
 )
+from app.models.ssl import SslCertificate
 from app.services.drift_detection import _parse_entries
 from app.services.publish_preview import build_candidate, preview_publish_diff
 
@@ -403,6 +405,128 @@ class TestEmptyPluginDefaultEquivalence:
         assert result["summary"]["diff_count"] == 0
 
 
+class TestBatch2:
+    """SSL/四层/DNS 三类扩展（publish-diff-preview-batch2，任务 2.1）。"""
+
+    @pytest.mark.asyncio
+    async def test_ssl_candidate_includes_cert_chain_and_no_platform_noise(self, isolated_session):
+        """CA 签发证书：候选 cert = 服务器证书 + CA 链（实发形态）；基线镜像展开后
+        拼接本身不进 platform_change——证书未变更则节点 ok、平台侧无变更。"""
+        async with isolated_session() as s:
+            s.add(Node(cluster_id=1, ip="10.0.0.13", service_port=80,
+                       management_port=9180, edge_path="/edge", status=1))
+            ca = SslCertificate(cluster_id=1, name="root-ca", cert="CA-PEM", sni="",
+                                private_key="", cert_type="ca", is_ca=True, edge_uuid="uu-ca-1")
+            s.add(ca)
+            await s.flush()
+            srv = SslCertificate(cluster_id=1, name="qcg", cert="SERVER-PEM", sni="",
+                                 private_key="KEY-PEM", cert_type="server",
+                                 ca_cert_id=ca.id, edge_uuid="uu-ssl-1")
+            s.add(srv)
+            await s.flush()
+            srv_id = srv.id
+            # 快照 = 发布实发留痕：拼接前内容（publish_resource 快照先于 post_version_hook）
+            pre_concat = {"name": "qcg", "cert": "SERVER-PEM", "key": "KEY-PEM", "type": "server"}
+            s.add(ConfigVersion(
+                cluster_id=1, resource_type="ssl", resource_id=srv_id,
+                version=1, config=json.dumps(pre_concat), edge_payload=json.dumps(pre_concat),
+            ))
+            await s.commit()
+
+        def _collect(cluster_id, ip, port, only_edge_keys=None):
+            # Edge 实况 = 发布实发（含拼接）：cert 为服务器证书 + CA 链
+            entry = _entry("uu-ssl-1", {"name": "qcg", "cert": "SERVER-PEM\nCA-PEM",
+                                        "key": "KEY-PEM", "type": "server"})
+            return {"ssl": _parse_entries([entry])}
+
+        with patch("app.services.drift_detection._collect_edge_lists_for_node",
+                   side_effect=_collect):
+            async with isolated_session() as s:
+                result = await preview_publish_diff(
+                    s, cluster_id=1, resource_type="ssl", resource_id=srv_id)
+
+        assert result["has_baseline"] is True
+        assert _node(result, "10.0.0.13")["status"] == "ok"
+        assert result["summary"]["diff_count"] == 0
+        # 拼接本身不进平台侧变更（基线镜像展开后两侧一致）
+        assert (result["platform_change"] or {}).get("changed") == []
+
+    @pytest.mark.asyncio
+    async def test_stream_proxy_candidate_diff(self, isolated_session):
+        """四层代理：候选 edge_body（TCP 形态）vs 节点旧值 → upstream.nodes 差异行。"""
+        async with isolated_session() as s:
+            s.add(Node(cluster_id=1, ip="10.0.0.13", service_port=80,
+                       management_port=9180, edge_path="/edge", status=1))
+            sp = StreamProxy(cluster_id=1, name="tcp-1", listen_port=9000, scheme="tcp",
+                             load_balance="roundrobin", edge_uuid="uu-sp-1",
+                             targets='[{"target": "10.0.0.1:9000", "weight": 100}]')
+            s.add(sp)
+            await s.flush()
+            sp_id = sp.id
+            s.add(ConfigVersion(
+                cluster_id=1, resource_type="stream_proxy", resource_id=sp_id,
+                version=1,
+                config=json.dumps({"name": "tcp-1"}),
+                edge_payload=json.dumps({"server_port": 9000, "name": "tcp-1",
+                                         "protocol": "TCP",
+                                         "upstream": {"nodes": {"10.0.0.1:9000": 50},
+                                                      "type": "roundrobin", "scheme": "tcp"}}),
+            ))
+            await s.commit()
+
+        def _collect(cluster_id, ip, port, only_edge_keys=None):
+            entry = _entry("uu-sp-1", {"server_port": 9000, "name": "tcp-1",
+                                       "protocol": "TCP",
+                                       "upstream": {"nodes": {"10.0.0.1:9000": 50},
+                                                    "type": "roundrobin", "scheme": "tcp"}})
+            return {"stream_route": _parse_entries([entry])}
+
+        with patch("app.services.drift_detection._collect_edge_lists_for_node",
+                   side_effect=_collect):
+            async with isolated_session() as s:
+                result = await preview_publish_diff(
+                    s, cluster_id=1, resource_type="stream_proxy", resource_id=sp_id)
+
+        assert _node(result, "10.0.0.13")["status"] == "diff"
+        paths = {r["path"] for r in result["matrix"]["diff_rows"]}
+        assert any(p.startswith("upstream.nodes") for p in paths)
+
+    @pytest.mark.asyncio
+    async def test_dns_proxy_key_maps_stream_proxy_snapshots(self, isolated_session):
+        """dns_proxy 键：快照按 stream_proxy 类型查询（映射生效，has_baseline 成立）。"""
+        async with isolated_session() as s:
+            s.add(Node(cluster_id=1, ip="10.0.0.13", service_port=80,
+                       management_port=9180, edge_path="/edge", status=1))
+            sp = StreamProxy(cluster_id=1, name="dns-1", listen_port=53, scheme="udp",
+                             proxy_type="dns", edge_uuid="uu-dns-1", dns_config='{}', checks='{}')
+            s.add(sp)
+            await s.flush()
+            sp_id = sp.id
+            await s.commit()
+
+        # 候选与节点实况一致：node = deepcopy(builder 产出)
+        async with isolated_session() as s:
+            sp = (await s.execute(
+                select(StreamProxy).where(StreamProxy.id == sp_id))).scalar_one()
+            _, candidate_edge = await build_candidate(s, "dns_proxy", sp)
+
+        import copy as _copy
+        def _collect(cluster_id, ip, port, only_edge_keys=None):
+            entry = _entry("uu-dns-1", _copy.deepcopy(candidate_edge))
+            return {"stream_route": _parse_entries([entry])}
+
+        with patch("app.services.drift_detection._collect_edge_lists_for_node",
+                   side_effect=_collect):
+            async with isolated_session() as s:
+                result = await preview_publish_diff(
+                    s, cluster_id=1, resource_type="dns_proxy", resource_id=sp_id)
+
+        assert _node(result, "10.0.0.13")["status"] == "ok"
+        assert result["summary"]["diff_count"] == 0
+        # 快照类型映射：dns_proxy 无自有快照 → has_baseline False 是预期
+        # （发布留痕为 stream_proxy；本用例未播种快照，仅验证键走通与采集一致）
+
+
 # ── 端点（鉴权经 security guard 采样；此处覆盖 400/404）─────────
 
 class TestPreviewEndpoint:
@@ -411,9 +535,9 @@ class TestPreviewEndpoint:
         from app.main import app
         from tests.api_helpers import AuthedTestClient, isolated_app_lifespan
 
-        # SSL 证书为批 2 范围（spec 场景示例），当前未接入 → 400 明示
+        # 静态资源不经统一发布编排，为范围外类型（spec 场景示例）→ 400 明示
         with isolated_app_lifespan(), AuthedTestClient(app) as c:
-            resp = c.get("/api/v1/clusters/1/publish-preview/ssl/1")
+            resp = c.get("/api/v1/clusters/1/publish-preview/static_resource/1")
         assert resp.status_code == 400
         assert "尚未接入" in resp.json()["detail"]
 

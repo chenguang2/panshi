@@ -20,6 +20,7 @@ from app.schemas.stream_proxy import (
 )
 from app.schemas.cluster import ConfigVersionListResponse, PublishRequest, DeleteClusterRequest
 from app.services import edge_sync
+from app.services import publish_preview
 from app.services.dns_wan import build_dns_plugins
 from app.services.edge_client import EdgeClient
 from app.api.v1.cluster_stream_proxies import (
@@ -222,29 +223,13 @@ async def publish_dns_proxy(
 ):
     proxy = await _get_proxy_or_404(db, proxy_id, cluster_id, "DNS 代理不存在")
 
-    protocol = _edge_protocol(proxy.scheme)
-
-    edge_body: dict = {
-        "server_port": proxy.listen_port,
-        "name": proxy.name or "",
-    }
-    if protocol:
-        edge_body["protocol"] = protocol
-
-    dns_cfg = json.loads(proxy.dns_config) if proxy.dns_config else {}
-    dns_checks = json.loads(proxy.checks) if proxy.checks else {}
-    try:
-        plugins = build_dns_plugins(dns_cfg, dns_checks)
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
-    edge_body["plugins"] = plugins
-
-    config_data = StreamProxyResponse.model_validate(proxy).model_dump()
+    # 候选载荷与发布差异预览同源（publish-diff-preview-batch2）：守卫见 test_publish_candidate_single_source.py
+    config_data, edge_data = await publish_preview.build_candidate(db, "dns_proxy", proxy)
 
     return await edge_sync.publish_resource(
         db, cluster_id=cluster_id, resource=proxy, resource_type="stream_proxy",
-        config_data=config_data, edge_data=edge_body,
-        publish_fn=lambda client: client.api("stream_route", "update", proxy.edge_uuid, edge_body),
+        config_data=config_data, edge_data=edge_data,
+        publish_fn=lambda client: client.api("stream_route", "update", proxy.edge_uuid, edge_data),
         display_name=f"DNS 代理 {proxy.name} ",
         log_path=f"/stream/edge/admin/routes/{proxy.edge_uuid}",
         log_resource_id=proxy_id, log_resource_name=proxy.name,

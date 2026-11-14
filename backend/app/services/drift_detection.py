@@ -45,6 +45,20 @@ BASE_WHITELIST = {"id", "create_time", "update_time", "createdIndex", "modifiedI
 OUT_OF_SCOPE_TYPES = ["static_resource", "node"]
 
 
+async def expand_ssl_cert_chain(db: AsyncSession, cert: SslCertificate, payload: dict) -> dict:
+    """镜像发布 post_version_hook 的证书链拼接（仅载荷变换；不含 openssl 过期检查——
+    那是发布期守卫，不属于载荷构造）。快照存拼接前内容（设计使然），漂移/预览
+    基线经此展开后与实发/节点形态一致。"""
+    if cert.ca_cert_id:
+        ca_record = await db.get(SslCertificate, cert.ca_cert_id)
+        if ca_record and ca_record.cert:
+            server_pem = (payload.get("cert") or "").strip()
+            ca_pem = (ca_record.cert or "").strip()
+            if server_pem and ca_pem and server_pem != ca_pem:
+                payload["cert"] = server_pem + "\n" + ca_pem
+    return payload
+
+
 def _identity(baseline: dict) -> dict:
     return baseline
 
@@ -99,6 +113,10 @@ DRIFT_TYPE_REGISTRY: dict = {
         "label": "SSL 证书", "model": SslCertificate, "edge_attr": "edge_uuid",
         "edge_key": "ssl", "name_attr": "name",
         "mask": {"key", "private_key"}, "normalize": _normalize_ssl,
+        # 证书链镜像拼接（publish-diff-preview-batch2）：快照存拼接前内容（设计使然），
+        # 基线按当前 CA 关联展开到实发形态后再比——单节点集群拼接不再被误报为漂移，
+        # 多节点原本靠均匀性过滤兜住（同类潜伏问题，随预览批 2 一并修复）
+        "expand_payload": expand_ssl_cert_chain,
     },
     "stream_proxy": {
         "label": "四层/DNS 代理", "model": StreamProxy, "edge_attr": "edge_uuid",
@@ -425,6 +443,7 @@ async def detect_cluster_drift(db: AsyncSession, cluster_id: int) -> dict:
             )
         ).scalars().all()
         edge_map = {r.id: getattr(r, conf["edge_attr"]) for r in rows}
+        row_map = {r.id: r for r in rows}
         name_map = {
             r.id: (getattr(r, conf["name_attr"], None) or f"{conf['label']}#{r.id}")
             for r in rows
@@ -489,6 +508,14 @@ async def detect_cluster_drift(db: AsyncSession, cluster_id: int) -> dict:
 
             baseline_raw = _expand_baseline_defaults(
                 type_key, name_map.get(rid), cv.edge_payload)
+            hook = conf.get("expand_payload")
+            if hook is not None and rid in row_map:
+                try:
+                    bl = json.loads(baseline_raw)
+                    bl = await hook(db, row_map[rid], bl)
+                    baseline_raw = json.dumps(bl)
+                except (ValueError, TypeError):
+                    pass
             status, reason, diff = _merge_node_diffs(baseline_raw, conf, per_node_entries)
             items.append(_item(rid, display, status, reason=reason, diff=diff))
 
