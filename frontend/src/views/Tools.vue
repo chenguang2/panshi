@@ -120,8 +120,8 @@
             </div>
           </div>
           <div class="panel-actions">
-            <a-button type="primary" @click="jsonOutput = toolsJson.format(jsonInput)">格式化 ↓</a-button>
-            <a-button @click="jsonOutput = toolsJson.minify(jsonInput)">压缩 ↓</a-button>
+            <a-button type="primary" @click="jsonOutput = toolsJson.format(jsonInput)">格式化 →</a-button>
+            <a-button @click="jsonOutput = toolsJson.minify(jsonInput)">压缩 →</a-button>
           </div>
           <div class="panel-right">
             <div class="panel-label">结果</div>
@@ -247,7 +247,7 @@
             </div>
           </div>
           <div class="panel-actions">
-            <a-button type="primary" @click="yamlOutput = toolsYaml.format(yamlInput)">格式化 ↓</a-button>
+            <a-button type="primary" @click="yamlOutput = toolsYaml.format(yamlInput)">格式化 →</a-button>
           </div>
           <div class="panel-right">
             <div class="panel-label">结果</div>
@@ -284,7 +284,7 @@
           </div>
           <div class="panel-actions">
             <a-button @click="formatBoth">两边格式化</a-button>
-            <a-button type="primary" @click="handleDiff" :disabled="!diffInputA || !diffInputB">对比 →</a-button>
+            <a-button type="primary" @click="handleDiff" :disabled="!diffInputA || !diffInputB">对比</a-button>
           </div>
           <div class="panel-right">
             <div class="panel-label">JSON B</div>
@@ -443,7 +443,7 @@
             </div>
           </div>
           <div class="panel-actions">
-            <a-button type="primary" @click="handleTextDiff" :disabled="!textDiffA || !textDiffB">对比 →</a-button>
+            <a-button type="primary" @click="handleTextDiff" :disabled="!textDiffA || !textDiffB">对比</a-button>
           </div>
           <div class="panel-right">
             <div class="panel-label">文本 B</div>

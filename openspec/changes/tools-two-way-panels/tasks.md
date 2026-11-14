@@ -13,6 +13,8 @@
 
 - [x] 2.5 Lua 反向按钮箭头修正：「→ 转换为函数」→「← 转换为函数」（用户真机反馈），toolHelp lua 条目与测试同步；dev-tools Lua 需求 MODIFIED 入 delta。验证：Tools.test.ts Lua 文案用例绿 + openspec validate 过。
 
+- [x] 2.6 箭头语言归一（用户裁决「全部改」）：JSON「格式化 ↓/压缩 ↓」→「格式化 →/压缩 →」、YAML「格式化 ↓」→「格式化 →」（结果落右框）；diff/文本 Diff「对比 →」→「对比」（对称读两框、结果在下方，不带框方向箭头）；toolHelp 四条目同步；dev-tools 三需求 MODIFIED 入 delta（程序化取现文，#53）。验证：定向 vitest 绿 + openspec validate 过 + 真机按钮探针。
+
 ## 3. 回归与真机验收
 
 - [x] 3.1 `npx vue-tsc -b` 零错误 + 全量 `npx vitest run --maxWorkers=4` 无新增失败。验证：两命令输出。

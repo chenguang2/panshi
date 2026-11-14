@@ -83,7 +83,7 @@ export const TOOL_HELP: Record<string, ToolHelpDoc> = {
     what: 'JSON 美化（格式化）与压缩。',
     why: '排查接口返回、核对插件配置时，接口/库里常是单行压缩 JSON，肉眼对不出结构——先格式化再看，改完再压回去贴进配置。',
     when: ['查看接口返回的压缩 JSON', '粘贴发布预览 / 配置快照核对字段', '把改好的 JSON 压成单行贴进配置'],
-    how: ['左侧粘贴 JSON', '点「格式化 ↓」（美化）或「压缩 ↓」（单行）', '复制右侧只读结果'],
+    how: ['左侧粘贴 JSON', '点「格式化 →」（美化）或「压缩 →」（单行），结果落右框', '复制右侧只读结果'],
     example: {
       input: '{"name":"test","value":123}',
       output: '{\n  "name": "test",\n  "value": 123\n}',
@@ -132,7 +132,7 @@ export const TOOL_HELP: Record<string, ToolHelpDoc> = {
     what: 'YAML 美化（2 空格缩进规整）。',
     why: 'edge.env、Ansible 清单等 YAML 手改之后缩进容易乱，格式化一遍再贴回，避免缩进类解析报错。',
     when: ['手改 edge.env / 主机清单后规整缩进', '排查 YAML 缩进类报错'],
-    how: ['左侧粘贴 YAML', '点「格式化 ↓」', '复制右侧只读结果'],
+    how: ['左侧粘贴 YAML', '点「格式化 →」，结果落右框', '复制右侧只读结果'],
     example: {
       input: 'key: value\nlist:\n- a\n- b',
       output: 'key: value\nlist:\n  - a\n  - b',
@@ -151,7 +151,7 @@ export const TOOL_HELP: Record<string, ToolHelpDoc> = {
     how: [
       '两栏分别粘贴 JSON A / JSON B',
       '（可选）点「两边格式化」先把两栏美化',
-      '点「对比 →」，查看差异统计与逐行差异',
+      '点「对比」，差异统计与逐行差异展示在两框下方',
     ],
     example: {
       input: 'A：{"a":1,"b":2}　B：{"b":2,"a":1}',
@@ -229,7 +229,7 @@ export const TOOL_HELP: Record<string, ToolHelpDoc> = {
     what: '纯文本逐行对比（红=删除，绿=新增），不做键序归一化。',
     why: 'nginx/openresty 配置、Ansible 清单等非 JSON 文本，改动前后要逐行找差异，肉眼扫长文件容易漏。',
     when: ['对比两份 nginx / openresty 配置文件', '对比改动前后的主机清单 / edge.env'],
-    how: ['两栏分别粘贴文本 A / 文本 B', '点「对比 →」，查看差异统计与逐行差异'],
+    how: ['两栏分别粘贴文本 A / 文本 B', '点「对比」，差异统计与逐行差异展示在两框下方'],
     example: {
       input: 'A：listen 8443;　B：listen 9443;',
       output: '📊 共 1 处差异（~1 修改），该行红色旧值 / 绿色新值',

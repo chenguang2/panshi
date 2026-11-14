@@ -63,3 +63,82 @@
 #### Scenario: 转换失败
 - **WHEN** 用户输入非法 YAML/JSON 并点击对应转换按钮
 - **THEN** 结果框显示中文错误提示（含解析错误详情）
+
+### Requirement: JSON 数据对比
+<!-- 2026-11-14 tools-two-way-panels：「对比 →」去箭头改「对比」——箭头语义归一为两框间转换的结果去向，对比对称读两框、结果在下方差异区，不带框方向箭头 -->
+
+
+系统 SHALL 提供 JSON 对比工具：左右两栏分别输入 JSON A 与 JSON B，提供「两边格式化」按钮（两栏分别格式化）与「对比」按钮（任一栏为空时禁用）。对比结果 SHALL 展示差异统计摘要与逐行差异（红=删除/旧值，绿=新增/新值），两 JSON 一致时 SHALL 显示「完全一致」提示。
+
+#### Scenario: 两边格式化
+- **WHEN** 用户在两栏分别输入压缩 JSON 并点击「两边格式化」
+- **THEN** 两栏内容 SHALL 分别变为 2 空格缩进的美化格式（键序归一化）
+
+#### Scenario: 对比有差异
+- **WHEN** 用户输入两个存在字段差异的 JSON 并点击「对比」
+- **THEN** 下方 SHALL 显示差异统计（总差异数 + 新增/删除/修改分类计数）与逐行差异渲染
+
+#### Scenario: 对比完全一致
+- **WHEN** 用户输入两个语义相同的 JSON（键序不同）并点击「对比」
+- **THEN** SHALL 显示「两个 JSON 完全一致，无差异」
+
+#### Scenario: 空输入禁用对比
+- **WHEN** 任一输入栏为空
+- **THEN** 「对比」按钮 SHALL 处于禁用态
+
+### Requirement: 文本 Diff 工具
+<!-- 2026-11-14 tools-two-way-panels：同 JSON 对比，「对比 →」去箭头改「对比」 -->
+
+
+系统 SHALL 提供纯文本对比工具：左右两栏分别输入文本 A 与 B，点击「对比」后展示差异统计摘要与逐行差异（复用 JSON 对比的差异渲染层，不做键序归一化——按原文行序比较）。
+
+#### Scenario: 文本行差异
+- **WHEN** 用户在两栏输入存在行差异的纯文本（如两段 nginx 配置）并点击「对比」
+- **THEN** 下方展示差异统计与逐行差异渲染（红=删除，绿=新增）
+
+#### Scenario: 完全一致
+- **WHEN** 两栏文本完全相同
+- **THEN** 显示「两个文本完全一致，无差异」
+
+#### Scenario: 空输入校验
+- **WHEN** 任一栏为空时点击「对比」
+- **THEN** 显示「请输入文本 A」/「请输入文本 B」
+
+### Requirement: YAML 格式化工具
+<!-- 2026-11-14 tools-two-way-panels：「格式化 ↓」改「格式化 →」——结果落右框，箭头按「→=落右框」约定归一 -->
+
+系统 SHALL 在工具箱中提供 YAML 格式化工具，将用户输入的 YAML 文本格式化为缩进规整的输出。
+
+#### Scenario: 格式化合法 YAML
+- **WHEN** 用户在左侧输入合法 YAML 文本（如 `key: value\nlist:\n  - item1\n  - item2`）并点击「格式化 →」
+- **THEN** 右侧输出区 SHALL 显示经过 2 空格缩进格式化的 YAML，保持原始键顺序
+
+#### Scenario: 格式化非法 YAML
+- **WHEN** 用户在左侧输入非法 YAML（如语法错误或使用 Tab 缩进）并点击「格式化 →」
+- **THEN** 右侧输出区 SHALL 显示中文错误提示，包含具体的解析错误详情，例如 `YAML 解析失败: Tabs are not allowed as indentation at line 2`
+
+#### Scenario: 空输入
+- **WHEN** 用户点击「格式化 →」时输入为空
+- **THEN** 右侧输出区 SHALL 显示友好的中文提示「请输入 YAML 内容」
+
+#### Scenario: 仅空白字符输入
+- **WHEN** 用户点击「格式化 →」时输入仅为空白字符
+- **THEN** 右侧输出区 SHALL 显示友好的中文提示「请输入 YAML 内容」
+
+#### Scenario: 标量值输入
+- **WHEN** 用户输入仅包含标量值的 YAML 文档（如 `42`、`null`、`hello`）
+- **THEN** 右侧输出区 SHALL 正确显示格式化后的标量值
+
+#### Scenario: 输出只读
+- **WHEN** YAML 格式化面板展示时
+- **THEN** 输出文本框 SHALL 设置 `readonly` 属性，与 JSON 工具行为一致
+
+#### Scenario: 注释丢失提示
+- **WHEN** YAML 格式化面板展示时
+- **THEN** 工具头部或操作区附近 SHALL 显示提示，说明 YAML 注释会在格式化后被丢弃
+
+#### Scenario: 复制粘贴
+- **WHEN** 用户点击输出文本框下方的复制按钮
+- **THEN** 输出内容 SHALL 复制到剪贴板并显示成功提示
+- **WHEN** 用户点击输入文本框下方的粘贴按钮
+- **THEN** 剪贴板文本 SHALL 粘贴到输入文本框

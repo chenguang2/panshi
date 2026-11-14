@@ -354,7 +354,7 @@ describe('Tools 新工具（tools-new-utilities）', () => {
     expect(tas).toHaveLength(2)
     await tas[0].setValue('line1\nline2')
     await tas[1].setValue('line1\nline2-changed')
-    const btn = wrapper.findAll('.panel-actions .a-btn').find((b) => b.text() === '对比 →')!
+    const btn = wrapper.findAll('.panel-actions .a-btn').find((b) => b.text() === '对比')!
     await btn.trigger('click')
     await flushPromises()
     expect(wrapper.find('.diff-result-box').text()).toContain('处差异')
@@ -367,7 +367,7 @@ describe('Tools 新工具（tools-new-utilities）', () => {
 
   it('文本 Diff：空输入校验', async () => {
     const wrapper = await mountTools(makeRouter(), '/tools?tool=textdiff')
-    const btn = wrapper.findAll('.panel-actions .a-btn').find((b) => b.text() === '对比 →')!
+    const btn = wrapper.findAll('.panel-actions .a-btn').find((b) => b.text() === '对比')!
     expect(btn.attributes('disabled')).toBeDefined()
   })
 
