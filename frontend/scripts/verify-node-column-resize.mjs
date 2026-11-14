@@ -115,6 +115,41 @@ try {
   const reset = (await thEdge2.boundingBox()).width
   check('重置后恢复默认 220px', Math.abs(reset - 220) < 12, `reset=${reset.toFixed(0)}`)
   await page.screenshot({ path: outDir + '/03-after-reset.png' })
+  // ── ⑤ 列拖拽移动（方案 A）：真实鼠标拖「Edge 安装路径」到「状态」前，刷新保持 ──
+  const thOrder = () =>
+    page.evaluate(() => [...document.querySelectorAll('.ant-table-thead th')].map((t) => (t.textContent ?? '').trim()))
+  const beforeOrder = await thOrder()
+  check('移动前列序符合默认（Edge 在状态前隔列）', beforeOrder.indexOf('Edge 安装路径') < beforeOrder.indexOf('状态'), JSON.stringify(beforeOrder))
+  // 滚动 300：Edge 标题无遮挡可按下；落点按状态列几何位置取（move/up 为 document 级，指针悬在固定列覆盖层上不影响）
+  await page.evaluate(() => {
+    const el = document.querySelector('.ant-table-content')
+    if (el) el.scrollLeft = 300
+  })
+  await page.waitForTimeout(300)
+  const thDrag = page.locator('.ant-table-thead th', { hasText: 'Edge 安装路径' }).first()
+  const db = await thDrag.boundingBox()
+  await page.mouse.move(db.x + 40, db.y + db.height / 2)
+  await page.mouse.down()
+  // 落点取「状态」列实际位置左半（左半 = 插入状态前）
+  const thStatus = page.locator('.ant-table-thead th', { hasText: '状态' }).first()
+  const sb = await thStatus.boundingBox()
+  await page.mouse.move(sb.x + sb.width * 0.25, db.y + db.height / 2, { steps: 10 })
+  await page.waitForTimeout(200)
+  const hintTarget = await page.evaluate(() => document.querySelector('.th-resize-wrap.drop-before')?.parentElement?.textContent?.trim() ?? '')
+  check('指示线落在「状态」列边界', hintTarget === '状态', hintTarget)
+  await page.mouse.up()
+  await page.waitForTimeout(400)
+  const afterOrder = await thOrder()
+  const idxEdge = afterOrder.indexOf('Edge 安装路径')
+  const idxStatus = afterOrder.indexOf('状态')
+  check('拖拽后列序生效（Edge 紧邻状态前）', idxEdge !== -1 && idxStatus !== -1 && idxEdge === idxStatus - 1, JSON.stringify(afterOrder))
+  await page.screenshot({ path: outDir + '/05-after-reorder.png' })
+  // 刷新保持
+  await page.reload({ waitUntil: 'networkidle' })
+  await page.waitForSelector('.ant-table-thead th', { timeout: 15000 })
+  const persistedOrder = await thOrder()
+  check('刷新后列序保持', JSON.stringify(persistedOrder) === JSON.stringify(afterOrder))
+  await page.screenshot({ path: outDir + '/06-reorder-persisted.png' })
 } catch (e) {
   check('脚本执行', false, String(e))
   await page.screenshot({ path: outDir + '/99-error.png', fullPage: true }).catch(() => {})

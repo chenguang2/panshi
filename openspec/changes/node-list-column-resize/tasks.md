@@ -15,6 +15,12 @@
 - [x] 3.1 `npx vue-tsc -b` 零错误 + 全量 `npx vitest run --maxWorkers=4` 无新增失败。验证：两命令输出。
 - [x] 3.2 Playwright 真机验收（复用常驻服务）：窄视口出现横向滚动且 IP/操作固定；拖拽「Edge 安装路径」表头右缘列宽实时变化；刷新后宽度保持；popover「重置列宽」恢复默认。截图留档。验证：脚本断言全 PASS + 截图。
 
+## 4. 列顺序（用户评审追加：方案 A 表头拖拽）
+
+- [x] 4.1 useColumnConfig 扩展 `columnOrder` / `setColumnOrder`（存储清洗：未知 key 剔除、缺失 key 按默认序补位）。验证：单测（持久化/重载/清洗/补位）先红后绿。
+- [x] 4.2 NodeList 接入拖拽移动：标题区 mousedown 启动（`#`/IP/操作豁免）、document mousemove 按中间列边界显示 `.drop-before` 指示线、mouseup 提交新顺序并持久化；`customHeaderCell` 注入 `data-col`。验证：组件测试——模拟拖拽后列顺序变化、固定列豁免、指示线出现、持久化落盘；`vue-tsc -b` 零错误。
+- [x] 4.3 全量回归 + 真机验收：真实鼠标拖拽「Edge 安装路径」到「状态」前，顺序生效、刷新保持；截图留档。验证：脚本断言全 PASS + 截图。
+
 ## Workflow follow-up
 
 - 用户确认后归档变更，`table-column-resize` 合入主 spec，`openspec validate --all` 收口。

@@ -19,6 +19,7 @@
 ### New Capabilities
 
 - `table-column-resize`: 列表表格的列宽个性化——横向滚动与关键列固定、表头拖拽调宽、默认宽度档、个人偏好持久化与重置（首期落地节点管理列表）。
+- `table-column-order`: 列表表格的列顺序个性化——表头拖拽移动列（中间列可互移、固定列钉住）、插入指示、顺序持久化（首期落地节点管理列表）。
 
 ### Modified Capabilities
 

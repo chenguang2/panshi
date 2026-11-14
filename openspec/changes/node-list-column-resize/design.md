@@ -29,6 +29,8 @@
 
 **D6 全表内部竖线分隔（用户评审追加，方案 1 轻量版）**：常显握把线在「无竖线」的表格里是孤立特写——表头与表体的 `.ant-table-cell` 统一加 1px 内部竖线（`var(--border)`，无外框，末列不加），握把线随之成为列分隔线在表头的自然延伸。不用 antd `bordered`（连外框带圆角视觉过重）。节点页先行试点，其它列表推广另行立项。
 
+**D7 表头拖拽移动列（用户评审追加，方案 A）**：手势分区——右缘 8px 手柄 = 调宽（既有），标题区 mousedown = 移动列。固定列（`#`/IP/操作）不参与，中间 7 列只在中间序列内互移（不跨固定边界）。实现与调宽同范式：mousedown 记录源列，document mousemove 计算指针落在哪个中间列边界（`customHeaderCell` 给 th 注入 `data-col`，按 `th[data-col]` rect 判定插入位置），目标边界渲染 accent 指示线（`.drop-before`），mouseup 提交新顺序。顺序持久化并入 useColumnConfig（`columnOrder`：清洗未知 key、新列按默认序补位）；`visibleNodeColumns` 管线变为 order 排序 → 显隐过滤 → 宽度合并。
+
 ## Risks / Trade-offs
 
 - [固定列 + 滚动在 a-table 需所有列有宽] → D3 默认档先行，缺宽列在 B 步即补齐。

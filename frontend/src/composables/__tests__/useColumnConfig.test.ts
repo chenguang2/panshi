@@ -47,4 +47,20 @@ describe('useColumnConfig 列宽持久化', () => {
     expect(cfg2.columnWidths.value).toEqual({})
     expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).widths).toEqual({})
   })
+
+  it('columnOrder：持久化、重载恢复、未知 key 剔除、缺失 key 按默认序补位', async () => {
+    const defaults = ['ip', 'status', 'actions']
+    const cfg1 = useColumnConfig({ key: 'node_standalone', defaultColumns: defaults })
+    cfg1.setColumnOrder(['status', 'ip'])
+    await flushPromises()
+    // 重载：缺失的 actions 按默认序补位到末尾
+    const cfg2 = useColumnConfig({ key: 'node_standalone', defaultColumns: defaults })
+    expect(cfg2.columnOrder.value).toEqual(['status', 'ip', 'actions'])
+    // 未知 key 剔除、重复剔除
+    cfg2.setColumnOrder(['ghost', 'actions', 'ip', 'status', 'ghost2', 'ip'])
+    await flushPromises()
+    const cfg3 = useColumnConfig({ key: 'node_standalone', defaultColumns: defaults })
+    expect(cfg3.columnOrder.value).toEqual(['actions', 'ip', 'status'])
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).order).toEqual(['actions', 'ip', 'status'])
+  })
 })

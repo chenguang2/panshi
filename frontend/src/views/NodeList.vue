@@ -96,7 +96,11 @@
         @change="handleTableChange"
       >
         <template #headerCell="{ column, title }">
-          <span class="th-resize-wrap">
+          <span
+            class="th-resize-wrap"
+            :class="{ 'drop-before': reorderHintBefore === String(column.key) }"
+            @mousedown="startColumnMove($event, column)"
+          >
             <span>{{ title }}</span>
             <span
               v-if="String(column.key) !== 'index'"
@@ -893,6 +897,8 @@ const {
   columnWidths: nodeColumnWidths,
   setColumnWidth: setNodeColumnWidth,
   resetWidths: resetNodeColumnWidths,
+  columnOrder: nodeColumnOrder,
+  setColumnOrder: setNodeColumnOrder,
 } = useColumnConfig({
   key: 'node_standalone',
   defaultColumns: columns.map((c) => String(c.key)),
@@ -900,10 +906,27 @@ const {
   defaultSearchVisible: true,
 })
 const inlineNodeActionOptions = allNodeActionButtons.filter((b) => NODE_ROW_ACTION_KEYS.includes(b.key))
+// 列顺序（node-list-column-resize D7 方案 A）：用户顺序覆盖默认序，未知 key 剔除、新列补位
+const orderedColumns = computed(() => {
+  const stored = nodeColumnOrder.value
+  const seq = stored.length ? stored : columns.map((c) => String(c.key))
+  const known = new Map(columns.map((c) => [String(c.key), c]))
+  const out: TableColumnsType = []
+  const seen = new Set<string>()
+  for (const k of seq) {
+    const c = known.get(k)
+    if (c && !seen.has(k)) {
+      out.push(c)
+      seen.add(k)
+    }
+  }
+  for (const [k, c] of known) if (!seen.has(k)) out.push(c)
+  return out
+})
 // 用户拖拽宽度覆盖默认档（node-list-column-resize）
 const visibleNodeColumns = computed(() => {
   const selected = new Set(nodeColumnsSelected.value)
-  return columns
+  return orderedColumns.value
     .filter((c) => selected.has(String(c.key)))
     .map((c) => ({ ...c, width: nodeColumnWidths.value[String(c.key)] ?? c.width }))
 })
@@ -937,6 +960,62 @@ function endColumnResize(): void {
   colResize = null
   document.removeEventListener('mousemove', onColumnResizeMove)
   document.removeEventListener('mouseup', endColumnResize)
+}
+
+// ── 表头拖拽移动列（node-list-column-resize D7 方案 A）：手势分区——右缘=调宽，标题=移动 ──
+const FIXED_MOVE_KEYS = new Set(['index', 'ip', 'actions'])
+let colMove: { key: string } | null = null
+const reorderHintBefore = ref('')
+
+function startColumnMove(e: MouseEvent, col: { key?: unknown }): void {
+  const key = String(col.key ?? '')
+  console.log('[DBG M] start key=', key, 'clientX=', e.clientX)
+  if (!key || FIXED_MOVE_KEYS.has(key)) return
+  e.preventDefault()
+  colMove = { key }
+  document.addEventListener('mousemove', onColumnMoveMove)
+  document.addEventListener('mouseup', endColumnMove)
+}
+
+function onColumnMoveMove(e: MouseEvent): void {
+  if (!colMove) return
+  // th 与列键按表头文字对齐（标题唯一；桩/真机 antd 通吃，不依赖 selection 列的存在）
+  const titleToKey = new Map(columns.map((c) => [String(c.title), String(c.key)]))
+  const rectByKey = new Map<string, DOMRect>()
+  ;[...document.querySelectorAll<HTMLElement>('.ant-table-thead th')].forEach((th) => {
+    const key = titleToKey.get((th.textContent ?? '').trim())
+    if (key) rectByKey.set(key, th.getBoundingClientRect())
+  })
+  const middleKeys = orderedColumns.value.map((c) => String(c.key)).filter((k) => !FIXED_MOVE_KEYS.has(k))
+  let hint = ''
+  for (let i = 0; i < middleKeys.length; i++) {
+    const rect = rectByKey.get(middleKeys[i])
+    if (!rect) continue
+    if (e.clientX >= rect.left && e.clientX <= rect.right) {
+      // 指针落在目标列左半 → 插到它前面；右半 → 插到下一中间列前（末列则贴操作列前）
+      hint = e.clientX < rect.left + rect.width / 2 ? middleKeys[i] : (middleKeys[i + 1] ?? 'actions')
+      break
+    }
+  }
+  console.log('[DBG M] hint=', JSON.stringify(hint), 'clientX=', e.clientX, 'rects=', [...rectByKey.entries()].map(([k, r]) => k + ':' + Math.round(r.left) + '-' + Math.round(r.right)).join(' '))
+  reorderHintBefore.value = hint
+}
+
+function endColumnMove(): void {
+  document.removeEventListener('mousemove', onColumnMoveMove)
+  document.removeEventListener('mouseup', endColumnMove)
+  const hint = reorderHintBefore.value
+  reorderHintBefore.value = ''
+  const source = colMove?.key
+  colMove = null
+  if (!source || !hint || hint === source) return
+  const stored = nodeColumnOrder.value
+  const current = stored.length ? stored : orderedColumns.value.map((c) => String(c.key))
+  const next = current.filter((k) => k !== source)
+  const idx = next.indexOf(hint)
+  if (idx === -1) return
+  next.splice(idx, 0, source)
+  setNodeColumnOrder(next)
 }
 
 function handleResetColumnWidths(): void {
@@ -1548,6 +1627,8 @@ onUnmounted(() => {
   window.removeEventListener('edge-pack-rebase', onEdgePackRebase)
   // 列宽拖拽的 document 级监听（node-list-column-resize）
   endColumnResize()
+  // 列移动拖拽的 document 级监听（node-list-column-resize D7）
+  endColumnMove()
 })
 
 function streamEdgeAction(record: any, title: string, url: string, body: Record<string, any>) {
@@ -1873,5 +1954,17 @@ function onEdgePackRebase(e: Event) {
   right: 1px;
   top: 0;
   height: 100%;
+}
+
+/* 列移动插入指示线（node-list-column-resize D7）：目标边界 accent 竖线，锚定表头单元格左缘 */
+.th-resize-wrap.drop-before::before {
+  content: '';
+  position: absolute;
+  left: -2px;
+  top: 0;
+  height: 100%;
+  width: 3px;
+  background: var(--accent);
+  border-radius: 1px;
 }
 </style>

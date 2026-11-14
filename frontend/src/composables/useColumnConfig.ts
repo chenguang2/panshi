@@ -35,6 +35,7 @@ export function useColumnConfig(options: ColumnConfigOptions) {
         if (cfg.searchVisible !== undefined) searchVisible.value = cfg.searchVisible
         if (cfg.actions) actionsSelected.value = cfg.actions
         if (cfg.widths) columnWidths.value = cfg.widths
+        if (cfg.order) columnOrder.value = cfg.order
       }
     } catch {
       /* ignore */
@@ -50,6 +51,7 @@ export function useColumnConfig(options: ColumnConfigOptions) {
           searchVisible: searchVisible.value,
           actions: actionsSelected.value,
           widths: columnWidths.value,
+          order: columnOrder.value,
         }),
       )
     } catch {
@@ -62,6 +64,7 @@ export function useColumnConfig(options: ColumnConfigOptions) {
   const searchVisible = ref(defaultSearchVisible)
   const actionsSelected = ref([...defaultActions])
   const columnWidths = ref<Record<string, number>>({})
+  const columnOrder = ref<string[]>([])
 
   function setColumnWidth(columnKey: string, width: number): void {
     columnWidths.value = { ...columnWidths.value, [columnKey]: width }
@@ -71,7 +74,22 @@ export function useColumnConfig(options: ColumnConfigOptions) {
     columnWidths.value = {}
   }
 
-  watch([columnsSelected, searchVisible, actionsSelected, columnWidths], saveConfig, { deep: true })
+  /** 列顺序入库前清洗：未知/重复 key 剔除，缺失 key 按默认序补位（新列加入时自然落位） */
+  function setColumnOrder(order: string[]): void {
+    const known = new Set(defaultColumns)
+    const seen = new Set<string>()
+    const clean: string[] = []
+    for (const k of order) {
+      if (known.has(k) && !seen.has(k)) {
+        clean.push(k)
+        seen.add(k)
+      }
+    }
+    for (const k of defaultColumns) if (!seen.has(k)) clean.push(k)
+    columnOrder.value = clean
+  }
+
+  watch([columnsSelected, searchVisible, actionsSelected, columnWidths, columnOrder], saveConfig, { deep: true })
   loadConfig()
 
   return {
@@ -82,5 +100,7 @@ export function useColumnConfig(options: ColumnConfigOptions) {
     columnWidths,
     setColumnWidth,
     resetWidths,
+    columnOrder,
+    setColumnOrder,
   }
 }

@@ -40,7 +40,7 @@ const stubs = {
   'a-table': {
     name: 'ATableStub',
     template:
-      '<table class="mock-a-table"><thead><tr><th v-for="c in columns" :key="c.key" :data-col="c.key"><slot name="headerCell" :column="c" :title="c.title" /></th></tr></thead><tbody><tr v-for="r in dataSource" :key="r.id"><td>{{ r.ip }}</td><td><slot name="bodyCell" :record="r" :column="{ key: \'ip\' }" /></td><td><slot name="bodyCell" :record="r" :column="{ key: \'actions\' }" /></td></tr></tbody></table>',
+      '<table class="mock-a-table"><thead class="ant-table-thead"><tr><th v-for="c in columns" :key="c.key" :data-col="c.key"><slot name="headerCell" :column="c" :title="c.title" /></th></tr></thead><tbody><tr v-for="r in dataSource" :key="r.id"><td>{{ r.ip }}</td><td><slot name="bodyCell" :record="r" :column="{ key: \'ip\' }" /></td><td><slot name="bodyCell" :record="r" :column="{ key: \'actions\' }" /></td></tr></tbody></table>',
     props: [
       'columns',
       'dataSource',
@@ -1617,5 +1617,82 @@ describe('NodeList 列宽个性化（node-list-column-resize）', () => {
     expect(colWidth('edge_path')).toBe(220)
     const saved = JSON.parse(localStorage.getItem('node_standalone_cfg_guest') ?? '{}')
     expect(saved.widths ?? {}).toEqual({})
+  }, 15_000)
+
+  it('列拖拽移动：标题区拖拽改序并持久化、指示线、固定列豁免（方案 A）', async () => {
+    const NodeList = (await import('../NodeList.vue')).default
+    const wrapper = mount(NodeList, { attachTo: document.body, global: { stubs } })
+    await flushPromises()
+    const table = wrapper.findComponent({ name: 'ATableStub' })
+    const keySeq = () => (table.props('columns') as Array<{ key: unknown }>).map((c) => String(c.key))
+    // jsdom 无布局：按默认列序为每个 th 注入 100px 宽矩形
+    const ths = () => wrapper.findAll('th[data-col]')
+    ths().forEach((th, i) => {
+      th.element.getBoundingClientRect = () =>
+        ({
+          left: i * 100,
+          right: i * 100 + 100,
+          width: 100,
+          top: 0,
+          bottom: 40,
+          height: 40,
+          x: i * 100,
+          y: 0,
+          toJSON: () => {},
+        }) as DOMRect
+    })
+    // 拖「Edge 安装路径」（矩形 500-600）标题到「状态」（700-800）左半 → 插入 status 前
+    const edgeTh = ths().find((t) => t.attributes('data-col') === 'edge_path')!
+    await edgeTh.find('.th-resize-wrap').trigger('mousedown', { clientX: 550 })
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 720 }))
+    await flushPromises()
+    const statusWrap = ths()
+      .find((t) => t.attributes('data-col') === 'status')!
+      .find('.th-resize-wrap')
+    expect(statusWrap.classes()).toContain('drop-before')
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 720 }))
+    await flushPromises()
+    expect(keySeq()).toEqual([
+      'index',
+      'ip',
+      'cluster_name',
+      'service_port',
+      'management_port',
+      'openresty_path',
+      'edge_path',
+      'status',
+      'edge_version',
+      'actions',
+    ])
+    const saved = JSON.parse(localStorage.getItem('node_standalone_cfg_guest') ?? '{}')
+    expect(saved.order).toEqual(keySeq())
+    // 指示线已消失
+    expect(statusWrap.classes()).not.toContain('drop-before')
+    // 固定列豁免：拖 IP 标题不产生指示、不改顺序
+    const ipTh = ths().find((t) => t.attributes('data-col') === 'ip')!
+    await ipTh.find('.th-resize-wrap').trigger('mousedown', { clientX: 150 })
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 720 }))
+    await flushPromises()
+    expect(
+      ths()
+        .find((t) => t.attributes('data-col') === 'status')!
+        .find('.th-resize-wrap')
+        .classes(),
+    ).not.toContain('drop-before')
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 720 }))
+    await flushPromises()
+    expect(keySeq()).toEqual([
+      'index',
+      'ip',
+      'cluster_name',
+      'service_port',
+      'management_port',
+      'openresty_path',
+      'edge_path',
+      'status',
+      'edge_version',
+      'actions',
+    ])
+    wrapper.unmount()
   }, 15_000)
 })
