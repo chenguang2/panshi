@@ -447,8 +447,10 @@ onUnmounted(() => {
 }
 .gr-grid {
   display: grid;
-  /* 7.5：卡片网格自适应列数（中屏不再固定 3 列留大量空白） */
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  /* 与集群/插件组/插件元数据/静态资源卡片网格统一：固定 3 列，中屏 2 列、窄屏 1 列。
+     （原 7.5 自适应列数在宽屏排出 4 列、卡片明显窄于其它卡片页——2026-11-15 用户反馈统一；
+       中屏空白问题由 1200px 的 2 列断点兜住） */
+  grid-template-columns: repeat(3, 1fr);
   gap: 16px;
 }
 .gr-card {
@@ -572,6 +574,11 @@ onUnmounted(() => {
   overflow-y: auto;
   border: 1px solid var(--border);
   font-family: var(--font-mono);
+}
+@media (max-width: 1200px) {
+  .gr-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 @media (max-width: 768px) {
   .gr-grid {
