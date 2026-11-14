@@ -1827,40 +1827,50 @@ function onEdgePackRebase(e: Event) {
   letter-spacing: 0.04em;
   margin-top: 2px;
 }
-/* 表头拖拽调宽手柄（node-list-column-resize）：悬停表头右缘显形 */
-.th-resize-wrap {
+/* 表头拖拽调宽手柄（node-list-column-resize）：常显 2px 握把线锚定单元格右缘分隔线，悬停加深 */
+.node-table :deep(thead .ant-table-cell) {
   position: relative;
-  display: inline-flex;
-  align-items: center;
-  min-height: 20px;
+}
+
+.th-resize-wrap {
+  display: inline; /* 不作定位上下文：手柄锚定表头单元格右缘，与竖线分隔重合 */
 }
 
 .col-resize-handle {
   position: absolute;
-  right: -9px;
+  right: -2px;
   top: -4px;
   height: calc(100% + 8px);
-  width: 9px;
+  width: 8px;
   cursor: col-resize;
   user-select: none;
 }
 
-/* 常显 2px 握把线（方案 1 克制版）：默认融入边框色，悬停加深为 accent */
+/* 常显 2px 握把线：默认融入边框色、与竖线分隔重合，悬停加深为 accent */
 .col-resize-handle::after {
   content: '';
   position: absolute;
-  left: 50%;
+  right: 2px;
   top: 3px;
-  transform: translateX(-50%);
   width: 2px;
   height: calc(100% - 6px);
   background: var(--border);
   border-radius: 1px;
 }
 
+/* 全表内部竖线分隔（node-list-column-resize 用户裁决）：握把线 = 列分隔在表头的延伸，无外框 */
+.node-table :deep(.ant-table-cell) {
+  border-right: 1px solid var(--border);
+}
+
+.node-table :deep(.ant-table-cell:last-child) {
+  border-right: none;
+}
+
 .col-resize-handle:hover::after {
   background: var(--accent);
   width: 3px;
+  right: 1px;
   top: 0;
   height: 100%;
 }
