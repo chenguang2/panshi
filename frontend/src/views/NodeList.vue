@@ -90,18 +90,11 @@
         :scroll="{ x: 'max-content' }"
         :table-layout="'fixed'"
         size="middle"
-        class="node-table"
+        class="node-table grid-table"
         @change="handleTableChange"
       >
         <template #headerCell="{ column, title }">
-          <span
-            class="th-resize-wrap"
-            :class="{
-              movable: !FIXED_MOVE_KEYS.has(String(column.key)),
-              'dragging-source': dragSourceKey === String(column.key),
-            }"
-            @mousedown="startColumnMove($event, column)"
-          >
+          <span class="th-resize-wrap" :class="nodeWrapClass(column)" @mousedown="startColumnMove($event, column)">
             <span>{{ title }}</span>
             <span
               v-if="String(column.key) !== 'index'"
@@ -535,7 +528,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
 import { formatDateTime as formatDate, formatRelativeTime } from '@/utils/format'
 import ClusterSelect from '@/components/ClusterSelect.vue'
@@ -554,6 +547,7 @@ import EdgePackManagementDialog from '@/components/EdgePackManagementDialog.vue'
 import { useInstallStream } from '@/composables/useInstallStream'
 import { paginationProps } from '@/composables/usePagination'
 import { useColumnConfig } from '@/composables/useColumnConfig'
+import { useColumnDragColumns } from '@/composables/useColumnDragColumns'
 import { useFeaturesStore } from '@/stores/features'
 import { listNodes, createNode, updateNode } from '@/api/nodes'
 import {
@@ -932,141 +926,20 @@ const visibleNodeColumns = computed(() => {
     .map((c) => ({ ...c, width: nodeColumnWidths.value[String(c.key)] ?? c.width }))
 })
 
-// ── 表头拖拽调宽（node-list-column-resize A）：手柄 mousedown → document mousemove 实时写宽 ──
-const COL_RESIZE_MIN = 80
-let colResize: { key: string; startX: number; startWidth: number } | null = null
-
-function defaultColumnWidth(key: string): number {
-  const def = Number(columns.find((c) => String(c.key) === key)?.width ?? 100)
-  return Number.isFinite(def) ? def : 100
-}
-
-function startColumnResize(e: MouseEvent, col: { key?: unknown }): void {
-  const key = String(col.key ?? '')
-  if (!key || key === 'index') return
-  e.preventDefault()
-  e.stopPropagation()
-  colResize = { key, startX: e.clientX, startWidth: nodeColumnWidths.value[key] ?? defaultColumnWidth(key) }
-  document.addEventListener('mousemove', onColumnResizeMove)
-  document.addEventListener('mouseup', endColumnResize)
-}
-
-function onColumnResizeMove(e: MouseEvent): void {
-  if (!colResize) return
-  const width = Math.max(COL_RESIZE_MIN, colResize.startWidth + e.clientX - colResize.startX)
-  setNodeColumnWidth(colResize.key, width)
-}
-
-function endColumnResize(): void {
-  colResize = null
-  document.removeEventListener('mousemove', onColumnResizeMove)
-  document.removeEventListener('mouseup', endColumnResize)
-}
-
-// ── 表头拖拽移动列（node-list-column-resize D7 方案 1 实时预览）：手势分区——右缘=调宽，标题=移动 ──
-// 换位判定基于拖拽起始冻结的列位置（对指针抖动单调，无边界震荡）；换位即时应用，Esc 取消恢复拖前顺序
-const FIXED_MOVE_KEYS = new Set(['index', 'ip', 'actions'])
-const dragSourceKey = ref('')
-let colMove: { key: string; startOrder: string[]; rects: Map<string, DOMRect>; lastHint: string } | null = null
-
-function startColumnMove(e: MouseEvent, col: { key?: unknown }): void {
-  const key = String(col.key ?? '')
-  if (!key || FIXED_MOVE_KEYS.has(key)) return
-  e.preventDefault()
-  const rects = new Map<string, DOMRect>()
-  const titleToKey = new Map(columns.map((c) => [String(c.title), String(c.key)]))
-  document.querySelectorAll('.ant-table-thead th').forEach((th) => {
-    const k = titleToKey.get((th.textContent ?? '').trim())
-    if (k) rects.set(k, th.getBoundingClientRect())
-  })
-  colMove = { key, startOrder: orderedColumns.value.map((c) => String(c.key)), rects, lastHint: key }
-  dragSourceKey.value = key
-  document.body.classList.add('col-move-dragging')
-  document.addEventListener('mousemove', onColumnMoveMove)
-  document.addEventListener('mouseup', endColumnMove)
-  document.addEventListener('keydown', onColumnMoveCancel)
-}
-
-function onColumnMoveMove(e: MouseEvent): void {
-  const mv = colMove
-  if (!mv) return
-  const middleKeys = mv.startOrder.filter((k) => !FIXED_MOVE_KEYS.has(k))
-  let hint = mv.key // 指针在源列自身范围内 → 维持原位
-  for (let i = 0; i < middleKeys.length; i++) {
-    const rect = mv.rects.get(middleKeys[i])
-    if (!rect) continue
-    if (e.clientX >= rect.left && e.clientX <= rect.right) {
-      // 指针落在目标列左半 → 插到它前面；右半 → 插到下一中间列前（末列则贴操作列前）
-      hint = e.clientX < rect.left + rect.width / 2 ? middleKeys[i] : (middleKeys[i + 1] ?? 'actions')
-      break
-    }
-  }
-  if (hint === mv.lastHint) return
-  mv.lastHint = hint
-  // 实时预览：以拖拽起始序为基线换位（冻结几何单调，无震荡）；持久化由 watch 随行
-  const next = mv.startOrder.filter((k) => k !== mv.key)
-  const idx = next.indexOf(hint)
-  if (idx === -1) return
-  next.splice(idx, 0, mv.key)
-  // FLIP：记录换位前位置，DOM 更新后让列平滑滑动到位（方案 A：无瞬跳）
-  const before = captureColumnRects()
-  setNodeColumnOrder(next)
-  void nextTick(() => playColumnMoveFlip(before))
-}
-
-function onColumnMoveCancel(e: KeyboardEvent): void {
-  if (e.key !== 'Escape' || !colMove) return
-  setNodeColumnOrder(colMove.startOrder)
-  endColumnMove()
-}
-
-function captureColumnRects(): Map<HTMLElement, number> {
-  return new Map(
-    [...document.querySelectorAll<HTMLElement>('.node-table thead th, .node-table tbody td')].map((el) => [
-      el,
-      el.getBoundingClientRect().left,
-    ]),
-  )
-}
-
-function playColumnMoveFlip(before: Map<HTMLElement, number>): void {
-  const cells = [...document.querySelectorAll<HTMLElement>('.node-table thead th, .node-table tbody td')]
-  cells.forEach((el) => {
-    const oldLeft = before.get(el)
-    if (oldLeft === undefined) return
-    const dx = Math.round(oldLeft - el.getBoundingClientRect().left)
-    if (!dx) return
-    el.style.transition = 'none'
-    el.style.transform = `translateX(${dx}px)`
-  })
-  requestAnimationFrame(() => {
-    cells.forEach((el) => {
-      if (!el.style.transform) return
-      el.style.transition = 'transform 150ms ease'
-      el.style.transform = ''
-    })
-    window.setTimeout(() => {
-      cells.forEach((el) => {
-        el.style.transition = ''
-      })
-    }, 220)
-  })
-}
-
-function endColumnMove(): void {
-  document.removeEventListener('mousemove', onColumnMoveMove)
-  document.removeEventListener('mouseup', endColumnMove)
-  document.removeEventListener('keydown', onColumnMoveCancel)
-  document.body.classList.remove('col-move-dragging')
-  document
-    .querySelectorAll<HTMLElement>('.node-table thead th, .node-table tbody td')
-    .forEach((el) => {
-      el.style.transition = ''
-      el.style.transform = ''
-    })
-  dragSourceKey.value = ''
-  colMove = null
-}
+// ── 列拖拽手势（调宽 + 移动）共享 composable（column-personalization-rollout D1）：三页同源 ──
+const {
+  wrapClass: nodeWrapClass,
+  startColumnResize,
+  startColumnMove,
+} = useColumnDragColumns({
+  columns: () => columns,
+  orderedKeys: () => orderedColumns.value.map((c) => String(c.key)),
+  getWidth: (key) => nodeColumnWidths.value[key],
+  setColumnWidth: setNodeColumnWidth,
+  setColumnOrder: setNodeColumnOrder,
+  tableSelector: '.node-table',
+  fixedKeys: ['index', 'ip', 'actions'],
+})
 
 function handleResetColumnWidths(): void {
   resetNodeColumnWidths()
@@ -1675,10 +1548,6 @@ onUnmounted(() => {
   stopElapsedTimer()
   window.removeEventListener('edge-pack-add', onEdgePackAdd)
   window.removeEventListener('edge-pack-rebase', onEdgePackRebase)
-  // 列宽拖拽的 document 级监听（node-list-column-resize）
-  endColumnResize()
-  // 列移动拖拽的 document 级监听（node-list-column-resize D7）
-  endColumnMove()
 })
 
 function streamEdgeAction(record: any, title: string, url: string, body: Record<string, any>) {
@@ -1958,77 +1827,5 @@ function onEdgePackRebase(e: Event) {
   letter-spacing: 0.04em;
   margin-top: 2px;
 }
-/* 表头拖拽调宽手柄（node-list-column-resize）：常显 2px 握把线锚定单元格右缘分隔线，悬停加深 */
-.node-table :deep(thead .ant-table-cell) {
-  position: relative;
-}
-
-.th-resize-wrap {
-  display: inline; /* 不作定位上下文：手柄锚定表头单元格右缘，与竖线分隔重合 */
-}
-
-.col-resize-handle {
-  position: absolute;
-  right: -2px;
-  top: -4px;
-  height: calc(100% + 8px);
-  width: 8px;
-  cursor: col-resize;
-  user-select: none;
-}
-
-/* 常显 2px 握把线：默认融入边框色、与竖线分隔重合，悬停加深为 accent */
-.col-resize-handle::after {
-  content: '';
-  position: absolute;
-  right: 2px;
-  top: 3px;
-  width: 2px;
-  height: calc(100% - 6px);
-  background: var(--border);
-  border-radius: 1px;
-}
-
-/* 全表内部竖线分隔（node-list-column-resize 用户裁决）：握把线 = 列分隔在表头的延伸，无外框 */
-.node-table :deep(.ant-table-cell) {
-  border-right: 1px solid var(--border);
-}
-
-.node-table :deep(.ant-table-cell:last-child) {
-  border-right: none;
-}
-
-.col-resize-handle:hover::after {
-  background: var(--accent);
-  width: 3px;
-  right: 1px;
-  top: 0;
-  height: 100%;
-}
-
-/* 可拖列表头光标提示（方案 1）：悬停 grab、按住 grabbing；固定列不显示 */
-.th-resize-wrap.movable {
-  cursor: grab;
-}
-
-.th-resize-wrap.movable:active {
-  cursor: grabbing;
-}
-
-/* 拖拽中源列表头高亮 */
-.th-resize-wrap.dragging-source {
-  background: oklch(56% 0.16 210 / 15%);
-  color: var(--accent);
-  font-weight: 600;
-  border-radius: 4px;
-  padding: 2px 6px;
-}
-</style>
-
-<style>
-/* 列移动拖拽全程抓取光标（node-list-column-resize 方案 A）：覆盖所有元素默认 cursor */
-body.col-move-dragging,
-body.col-move-dragging * {
-  cursor: grabbing !important;
-}
+/* 列个性化表头手势/竖线样式已上移全局 .grid-table（column-personalization-rollout D5），本页仅保留页面自有样式 */
 </style>

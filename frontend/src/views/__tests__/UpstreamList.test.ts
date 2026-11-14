@@ -616,3 +616,158 @@ describe('UpstreamList.vue 行内发布按钮样式归一（方案 A：primary �
     expect(pubBtn!.classes().includes('mock-btn-primary')).toBe(false)
   })
 })
+
+// === column-personalization-rollout：上游列表列个性化（拖宽/移动/固定列/竖线/重置） ===
+describe('UpstreamList 列个性化（column-personalization-rollout）', () => {
+  // 独立桩：thead.ant-table-thead + headerCell 槽 + th[data-col]（列拖拽/握把断言用），
+  // 不复用文件级 upstreamTableStub（避免影响既有用例的 DOM 形态）
+  const colDragTableStub = {
+    name: 'ColDragTableStub',
+    props: {
+      dataSource: { type: Array, default: () => [] },
+      columns: { type: Array, default: () => [] },
+      scroll: { type: Object, default: null },
+      tableLayout: { type: String, default: undefined },
+    },
+    template: `
+      <div class="ant-table-wrapper">
+        <div class="ant-table">
+          <div class="ant-table-content">
+            <table>
+              <thead class="ant-table-thead">
+                <tr>
+                  <th v-for="col in columns" :key="col.key" :data-col="col.key" @click="$emit('change', { sorter: { field: col.key, order: 'ascend' } })">
+                    <slot name="headerCell" :column="col" :title="col.title" />
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="ant-table-tbody">
+                <tr class="ant-table-row" v-for="(r, i) in dataSource" :key="r.id">
+                  <td v-for="col in columns" :key="col.key"><slot name="bodyCell" :column="col" :record="r" :index="i" /></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    `,
+  }
+
+  beforeEach(() => {
+    localStorage.clear()
+    setActivePinia(createPinia())
+  })
+
+  async function mountUp() {
+    const UpstreamList = (await import('../UpstreamList.vue')).default
+    const wrapper = mount(UpstreamList, {
+      attachTo: document.body,
+      global: { stubs: { ...stubs, ATable: colDragTableStub } },
+    })
+    await flushPromises()
+    return wrapper
+  }
+
+  function patchRects(wrapper: ReturnType<typeof mount>) {
+    wrapper.findAll('th[data-col]').forEach((th) => {
+      th.element.getBoundingClientRect = function (this: HTMLElement) {
+        const parent = this.parentElement as HTMLElement
+        const idx = [...parent.children].indexOf(this)
+        return {
+          left: idx * 100,
+          right: idx * 100 + 100,
+          width: 100,
+          top: 0,
+          bottom: 40,
+          height: 40,
+          x: idx * 100,
+          y: 0,
+          toJSON: () => {},
+        } as DOMRect
+      }
+    })
+  }
+
+  it('表格横向滚动/fixed 布局/竖线共享类/全列默认宽/#名称固定左、操作固定右', async () => {
+    const wrapper = await mountUp()
+    const table = wrapper.findComponent({ name: 'ColDragTableStub' })
+    expect(table.props('scroll')).toEqual({ x: 'max-content' })
+    expect(table.props('tableLayout')).toBe('fixed')
+    const cols = table.props('columns') as Array<{ key: unknown; width?: number; fixed?: string }>
+    const byKey = Object.fromEntries(cols.map((c) => [String(c.key), c]))
+    expect(byKey['index']).toMatchObject({ width: 45, fixed: 'left' })
+    expect(byKey['name']).toMatchObject({ width: 140, fixed: 'left' })
+    expect(byKey['actions']).toMatchObject({ width: 150, fixed: 'right' })
+    for (const c of cols) expect(c.width, `列 ${String(c.key)} 缺默认宽`).toBeGreaterThan(0)
+    expect(wrapper.find('.upstream-table').classes()).toContain('grid-table')
+    wrapper.unmount()
+  })
+
+  it('拖宽实时生效并持久化；页头「重置列宽」恢复默认', async () => {
+    const wrapper = await mountUp()
+    patchRects(wrapper)
+    const table = wrapper.findComponent({ name: 'ColDragTableStub' })
+    const colWidth = (key: string): number | undefined =>
+      (table.props('columns') as Array<{ key: unknown; width?: number }>).find((c) => String(c.key) === key)?.width
+    const ths = () => wrapper.findAll('th[data-col]')
+    const handle = ths()
+      .find((t) => t.attributes('data-col') === 'targets')!
+      .find('.col-resize-handle')
+    expect(handle.exists()).toBe(true)
+    await handle.trigger('mousedown', { clientX: 100 })
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 180 }))
+    await flushPromises()
+    expect(colWidth('targets')).toBe(300) // 220 + 80
+    // 页头「重置列宽」
+    const resetBtn = wrapper.findAll('button').find((b) => b.text() === '重置列宽')!
+    await resetBtn.trigger('click')
+    await flushPromises()
+    expect(colWidth('targets')).toBe(220)
+    const saved = JSON.parse(localStorage.getItem('upstream_standalone_cfg_guest') ?? '{}')
+    expect(saved.widths ?? {}).toEqual({})
+    wrapper.unmount()
+  })
+
+  it('拖拽移动实时换位 + 固定列豁免 + 全程抓取光标类', async () => {
+    const wrapper = await mountUp()
+    patchRects(wrapper)
+    const table = wrapper.findComponent({ name: 'ColDragTableStub' })
+    const keySeq = () => (table.props('columns') as Array<{ key: unknown }>).map((c) => String(c.key))
+    const ths = () => wrapper.findAll('th[data-col]')
+    // 拖「目标节点」（矩形 400-500）标题到「协议」（500-600）左半 → 实时换位
+    const tgWrap = ths()
+      .find((t) => t.attributes('data-col') === 'targets')!
+      .find('.th-resize-wrap')!
+    expect(tgWrap.classes()).toContain('movable')
+    await tgWrap.trigger('mousedown', { clientX: 450 })
+    expect(document.body.classList.contains('col-move-dragging')).toBe(true)
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 520 }))
+    await flushPromises()
+    const seq = keySeq()
+    expect(seq.indexOf('targets')).toBe(seq.indexOf('scheme') - 1)
+    expect(
+      ths()
+        .find((t) => t.attributes('data-col') === 'targets')!
+        .find('.th-resize-wrap')
+        .classes(),
+    ).toContain('dragging-source')
+    // Esc 取消
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+    expect(keySeq()).not.toContain(seq.slice(0)) // 顺序已恢复（与换位后不同）
+    expect(keySeq().indexOf('targets')).toBeLessThan(keySeq().indexOf('scheme'))
+    expect(document.body.classList.contains('col-move-dragging')).toBe(false)
+    // 固定列豁免：拖名称标题不换位
+    const nameWrap = ths()
+      .find((t) => t.attributes('data-col') === 'name')!
+      .find('.th-resize-wrap')!
+    expect(nameWrap.classes()).not.toContain('movable')
+    await nameWrap.trigger('mousedown', { clientX: 150 })
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 700 }))
+    await flushPromises()
+    const seq2 = keySeq()
+    expect(seq2.indexOf('name')).toBe(1) // 名称固定在 # 之后
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 700 }))
+    wrapper.unmount()
+  }, 15_000)
+})

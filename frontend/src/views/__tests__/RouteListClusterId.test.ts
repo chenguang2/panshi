@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import { setActivePinia, createPinia } from 'pinia'
 
 const mockApiGet = vi.fn()
 
@@ -56,6 +57,8 @@ const MOCK_ROUTES = {
 
 describe('RouteList.vue - cluster_id from query', () => {
   beforeEach(() => {
+    // RouteList 经 useColumnConfig 依赖 auth store（column-personalization-rollout），挂载前需激活 Pinia
+    setActivePinia(createPinia())
     vi.clearAllMocks()
     mockRouteQuery = {}
     mockApiGet.mockImplementation((url: string) => {

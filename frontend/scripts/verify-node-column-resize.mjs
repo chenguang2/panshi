@@ -177,6 +177,98 @@ try {
   await page.screenshot({ path: outDir + '/99-error.png', fullPage: true }).catch(() => {})
 }
 
+  // ── ⑥ 上游/路由列表推广（column-personalization-rollout）──
+  for (const [path, pageCls, dragCol, targetCol, scrollW, scrollM] of [
+    // scrollW/scrollM：拖宽与拖移前的横向滚动位——源列须滚出固定列覆盖带才可命中
+    ['/upstreams', 'upstream-table', '目标节点', '协议', 350, 350],
+    ['/routes', 'route-table', '优先级', '方法', 350, 340],
+  ]) {
+    await page.goto(base + path, { waitUntil: 'networkidle' })
+    await page.waitForSelector('.ant-table-thead th', { timeout: 15000 })
+    const scrollContent = (left) =>
+      page.evaluate(
+        ([cls, v]) => {
+          const el = document.querySelector('.' + cls + ' .ant-table-content')
+          if (el) el.scrollLeft = v
+        },
+        [pageCls, left],
+      )
+    // 滚动 + 固定列：窄视口滚动容器出现溢出（真正的滚动容器 = .ant-table-content）
+    const ov = await page.evaluate((cls) => {
+      const el = document.querySelector('.' + cls + ' .ant-table-content')
+      return el ? { sw: el.scrollWidth, cw: el.clientWidth } : { sw: 0, cw: 0 }
+    }, pageCls)
+    check(`${path} 横向滚动出现`, ov.sw > ov.cw, JSON.stringify(ov))
+    // 拖宽「目标节点/URI」+80 并刷新保持
+    await scrollContent(scrollW)
+    await page.waitForTimeout(300)
+    const th0 = page.locator('.ant-table-thead th', { hasText: dragCol }).first()
+    const h0 = await th0.locator('.col-resize-handle').boundingBox()
+    const w0 = (await th0.boundingBox()).width
+    await page.mouse.move(h0.x + h0.width / 2, h0.y + h0.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(h0.x + 90, h0.y + h0.height / 2, { steps: 6 })
+    await page.mouse.up()
+    await page.waitForTimeout(300)
+    const w1 = (await th0.boundingBox()).width
+    check(`${path} 拖宽实时生效`, w1 > w0 + 50, `${w0.toFixed(0)}→${w1.toFixed(0)}`)
+    await page.reload({ waitUntil: 'networkidle' })
+    await page.waitForSelector('.ant-table-thead th', { timeout: 15000 })
+    await scrollContent(scrollM)
+    await page.waitForTimeout(300)
+    const th0b = page.locator('.ant-table-thead th', { hasText: dragCol }).first()
+    const w2 = (await th0b.boundingBox()).width
+    check(`${path} 刷新后列宽保持`, Math.abs(w2 - w1) < 12, `${w2.toFixed(0)}`)
+    // 路由页 D4 短拖守卫（在长拖移动前、源列仍在原位时做）：排序列内小幅位移后松手，
+    // 真实浏览器在 mouseup 之后才派发 click 且落在本排序列 th 上，必须被拦截（组件测试
+    // 因省略 mouseup 盖不住此序列，此处为真机回归守卫）
+    if (pageCls === 'route-table') {
+      const sortCls = (cls) =>
+        page.evaluate((c) => !!document.querySelector('.' + c + ' .ant-table-column-sort'), cls)
+      const thS = page.locator('.ant-table-thead th', { hasText: dragCol }).first()
+      const sWrap = await thS.locator('.th-resize-wrap').boundingBox()
+      const sy = sWrap.y + sWrap.height / 2
+      await page.mouse.move(sWrap.x + sWrap.width / 2, sy)
+      await page.mouse.down()
+      await page.mouse.move(sWrap.x + sWrap.width / 2 + 30, sy, { steps: 4 })
+      await page.mouse.up()
+      await page.waitForTimeout(400)
+      check(`${path} 排序列内短拖位移不触发排序`, !(await sortCls(pageCls)))
+    }
+    // 拖拽移动：dragCol → targetCol 左半（实时换位）。起点取标题 wrap 中心（短标签列 +60px 会落到 wrap 外）
+    const thT = page.locator('.ant-table-thead th', { hasText: targetCol }).first()
+    const thD = page.locator('.ant-table-thead th', { hasText: dragCol }).first()
+    const tRect = await thT.boundingBox()
+    const dWrap = await thD.locator('.th-resize-wrap').boundingBox()
+    await page.mouse.move(dWrap.x + dWrap.width / 2, dWrap.y + dWrap.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(tRect.x + tRect.width * 0.25, dWrap.y + dWrap.height / 2, { steps: 8 })
+    await page.waitForTimeout(150)
+    await page.mouse.up()
+    await page.waitForTimeout(300)
+    const orderNow = await page.evaluate(() => [...document.querySelectorAll('.ant-table-thead th')].map((t) => (t.textContent ?? '').trim()))
+    check(
+      `${path} 拖拽移动生效（${dragCol} 紧邻 ${targetCol} 前）`,
+      orderNow.indexOf(dragCol) === orderNow.indexOf(targetCol) - 1,
+      JSON.stringify(orderNow),
+    )
+    await page.screenshot({ path: outDir + `/09-${path.replace('/', '')}-reorder.png` })
+    // 路由页 sorter 手势冲突（D4）：长拖不触发排序；纯点击仍可排序（正向对照防断言恒真）
+    if (pageCls === 'route-table') {
+      const sortCls = (cls) =>
+        page.evaluate((c) => !!document.querySelector('.' + c + ' .ant-table-column-sort'), cls)
+      check(`${path} 长拖移动未触发排序`, !(await sortCls(pageCls)))
+      await page.locator('.ant-table-thead th', { hasText: dragCol }).first().click()
+      await page.waitForTimeout(600)
+      check(`${path} 纯点击表头仍触发排序`, await sortCls(pageCls))
+      await page.screenshot({ path: outDir + '/09-routes-sort-guard.png' })
+    }
+    // 重置列宽
+    await page.click('button:has-text("重置列宽")')
+    await page.waitForTimeout(300)
+    const w3 = (await th0b.boundingBox()).width
+    check(`${path} 重置列宽恢复默认`, Math.abs(w3 - w0) < 12, `${w3.toFixed(0)}`)
+  }
 await browser.close()
 check('无 console/page error', errors.length === 0, errors.slice(0, 3).join(' | '))
 console.log(results.join('\n'))

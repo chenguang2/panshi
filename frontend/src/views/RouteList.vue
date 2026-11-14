@@ -63,19 +63,32 @@
         <option v-for="m in methodOptions" :key="m" :value="m">{{ m }}</option>
       </select>
       <span class="filter-count text-muted text-sm">共 {{ totalCount }} 条路由</span>
+      <button class="btn btn-secondary btn-sm" @click="handleResetColumnWidths">重置列宽</button>
     </div>
 
     <div class="table-container">
       <a-table
         :data-source="displayedRoutes"
-        :columns="columns"
+        :columns="visibleColumns"
         :row-key="(record: any) => record.id"
         :pagination="paginationProps({ page, pageSize, total: totalCount }, '条路由')"
         :loading="loading"
+        :scroll="{ x: 'max-content' }"
+        :table-layout="'fixed'"
         size="middle"
-        class="route-table"
+        class="route-table grid-table"
         @change="handleTableChange"
       >
+        <template #headerCell="{ column, title }">
+          <span class="th-resize-wrap" :class="routeWrapClass(column)" @mousedown="startColumnMove($event, column)">
+            <span>{{ title }}</span>
+            <span
+              v-if="String(column.key) !== 'index'"
+              class="col-resize-handle"
+              @mousedown="startColumnResize($event, column)"
+            />
+          </span>
+        </template>
         <template #bodyCell="{ column, record, index }">
           <template v-if="column.key === 'index'">
             <span class="text-muted">{{ (page - 1) * pageSize + index + 1 }}</span>
@@ -243,9 +256,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
+import { useColumnConfig } from '@/composables/useColumnConfig'
+import { useColumnDragColumns } from '@/composables/useColumnDragColumns'
 import { formatDateOnly as formatDate } from '@/utils/format'
 import ClusterSelect from '@/components/ClusterSelect.vue'
 import { message } from 'ant-design-vue'
+import type { TableColumnsType } from 'ant-design-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
 import api from '@/api'
 import { PAGE_SIZE_TABLE, PAGE_SIZE_DROPDOWN } from '@/constants'
@@ -324,14 +340,15 @@ const publishVisible = ref(false)
 const publishClusterId = ref(0)
 const publishingRecord = ref<any | null>(null)
 
-const columns = [
-  { title: '#', key: 'index', width: 45 },
-  { title: '名称', dataIndex: 'name', key: 'name', sorter: true },
-  { title: 'URI', key: 'uri', sorter: true },
-  { title: '方法', key: 'methods' },
-  { title: '上游', key: 'upstream' },
-  { title: '集群', dataIndex: 'cluster_name', key: 'cluster_name' },
-  { title: '优先级', key: 'priority', sorter: true },
+// 默认宽度档 + 固定列（column-personalization-rollout：#/名称固定左、操作固定右）
+const columns: TableColumnsType = [
+  { title: '#', key: 'index', width: 45, fixed: 'left' },
+  { title: '名称', dataIndex: 'name', key: 'name', sorter: true, width: 140, fixed: 'left' },
+  { title: 'URI', key: 'uri', sorter: true, width: 220 },
+  { title: '方法', key: 'methods', width: 110 },
+  { title: '上游', key: 'upstream', width: 160 },
+  { title: '集群', dataIndex: 'cluster_name', key: 'cluster_name', width: 140 },
+  { title: '优先级', key: 'priority', sorter: true, width: 90 },
   {
     title: '发布状态',
     key: 'publish_status',
@@ -345,9 +362,59 @@ const columns = [
     dataIndex: 'created_at',
     key: 'created_at',
     sorter: true,
+    width: 160,
   },
-  { title: '操作', key: 'actions', width: 110 },
+  { title: '操作', key: 'actions', width: 110, fixed: 'right' },
 ]
+
+// ── 列个性化（column-personalization-rollout）：宽度/顺序持久化 + 拖拽手势共享 composable ──
+const {
+  columnWidths: routeColumnWidths,
+  setColumnWidth: setRouteColumnWidth,
+  resetWidths: resetRouteColumnWidths,
+  columnOrder: routeColumnOrder,
+  setColumnOrder: setRouteColumnOrder,
+} = useColumnConfig({ key: 'route_standalone', defaultColumns: columns.map((c) => String(c.key)) })
+
+const orderedColumns = computed(() => {
+  const stored = routeColumnOrder.value
+  const seq = stored.length ? stored : columns.map((c) => String(c.key))
+  const known = new Map(columns.map((c) => [String(c.key), c]))
+  const out: TableColumnsType = []
+  const seen = new Set<string>()
+  for (const k of seq) {
+    const c = known.get(k)
+    if (c && !seen.has(k)) {
+      out.push(c)
+      seen.add(k)
+    }
+  }
+  for (const [k, c] of known) if (!seen.has(k)) out.push(c)
+  return out
+})
+
+const visibleColumns = computed(() =>
+  orderedColumns.value.map((c) => ({ ...c, width: routeColumnWidths.value[String(c.key)] ?? c.width })),
+)
+
+const {
+  wrapClass: routeWrapClass,
+  startColumnResize,
+  startColumnMove,
+} = useColumnDragColumns({
+  columns: () => columns,
+  orderedKeys: () => orderedColumns.value.map((c) => String(c.key)),
+  getWidth: (key) => routeColumnWidths.value[key],
+  setColumnWidth: setRouteColumnWidth,
+  setColumnOrder: setRouteColumnOrder,
+  tableSelector: '.route-table',
+  fixedKeys: ['index', 'name', 'actions'],
+})
+
+function handleResetColumnWidths(): void {
+  resetRouteColumnWidths()
+  message.success('已恢复默认列宽')
+}
 
 // 7.3：chips 收敛为常驻高频项（全部/GET/POST/PUT/DELETE/PATCH）；全量方法入口
 // 收敛到「方法」下拉（methodOptions，与表单方法集一致）

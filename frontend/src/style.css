@@ -1060,3 +1060,75 @@ select.form-input {
   white-space: nowrap;
   max-width: 100%;
 }
+
+/* ── 列表表格列个性化共享样式（column-personalization-rollout D5：节点/上游/路由三页单点） ── */
+/* 全表内部竖线分隔：1px 边框色、无外框、末列豁免 */
+.grid-table .ant-table-cell {
+  border-right: 1px solid var(--border);
+}
+
+.grid-table .ant-table-cell:last-child {
+  border-right: none;
+}
+
+/* 表头拖拽手势（右缘手柄=调宽、标题=移动）：手柄常显握把线锚定单元格右缘分隔线 */
+.grid-table thead .ant-table-cell {
+  position: relative;
+}
+
+.grid-table .th-resize-wrap {
+  display: inline;
+}
+
+.grid-table .col-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: -4px;
+  height: calc(100% + 8px);
+  width: 8px;
+  cursor: col-resize;
+  user-select: none;
+}
+
+.grid-table .col-resize-handle::after {
+  content: '';
+  position: absolute;
+  right: 2px;
+  top: 3px;
+  width: 2px;
+  height: calc(100% - 6px);
+  background: var(--border);
+  border-radius: 1px;
+}
+
+.grid-table .col-resize-handle:hover::after {
+  background: var(--accent);
+  width: 3px;
+  right: 1px;
+  top: 0;
+  height: 100%;
+}
+
+/* 可拖列光标提示：悬停 grab、按住 grabbing；固定列无 */
+.grid-table .th-resize-wrap.movable {
+  cursor: grab;
+}
+
+.grid-table .th-resize-wrap.movable:active {
+  cursor: grabbing;
+}
+
+/* 拖拽中源列表头高亮 */
+.grid-table .th-resize-wrap.dragging-source {
+  background: oklch(56% 0.16 210 / 15%);
+  color: var(--accent);
+  font-weight: 600;
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+
+/* 列移动拖拽全程抓取光标：覆盖所有元素默认 cursor */
+body.col-move-dragging,
+body.col-move-dragging * {
+  cursor: grabbing !important;
+}

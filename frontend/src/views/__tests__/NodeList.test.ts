@@ -1540,6 +1540,8 @@ describe('NodeList 列宽个性化（node-list-column-resize）', () => {
     expect(table.exists()).toBe(true)
     expect(table.props('scroll')).toEqual({ x: 'max-content' })
     expect(table.props('tableLayout')).toBe('fixed')
+    // 竖线/手势共享样式单点：三页表格根元素均挂 .grid-table（column-personalization-rollout D5）
+    expect(wrapper.find('.node-table').classes()).toContain('grid-table')
     const cols = table.props('columns') as Array<{ key: string; width?: number; fixed?: string }>
     const byKey = Object.fromEntries(cols.map((c) => [c.key, c]))
     expect(byKey['index']).toMatchObject({ width: 45, fixed: 'left' })
@@ -1684,7 +1686,9 @@ describe('NodeList 列宽个性化（node-list-column-resize）', () => {
     const LIVE_SEQ = [...DEFAULT_SEQ.slice(0, 5), 'openresty_path', 'edge_path', ...DEFAULT_SEQ.slice(7)]
     expect(keySeq()).toEqual(LIVE_SEQ)
     // FLIP 换位动画：换位后表头单元格带位移 transform（150ms 补间回正）
-    const flipped = [...document.querySelectorAll('.node-table thead th')].some((el) => (el as HTMLElement).style.transform !== '')
+    const flipped = [...document.querySelectorAll('.node-table thead th')].some(
+      (el) => (el as HTMLElement).style.transform !== '',
+    )
     expect(flipped, '换位应触发 FLIP 位移动画').toBe(true)
     // 松手确认当前位次（无跳变）
     document.dispatchEvent(new MouseEvent('mouseup', { clientX: 720 }))

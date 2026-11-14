@@ -1361,3 +1361,156 @@ describe('RouteList.vue 表单保存后发布引导接线（route-save-publish-g
     wrapper.unmount()
   })
 })
+
+// === column-personalization-rollout：路由列表列个性化（含 sorter 手势冲突抑制） ===
+describe('RouteList 列个性化（column-personalization-rollout）', () => {
+  const colDragTableStub = {
+    name: 'ColDragTableStub',
+    props: {
+      dataSource: { type: Array, default: () => [] },
+      columns: { type: Array, default: () => [] },
+      scroll: { type: Object, default: null },
+      tableLayout: { type: String, default: undefined },
+    },
+    template: `
+      <div class="ant-table-wrapper">
+        <div class="ant-table">
+          <div class="ant-table-content">
+            <table>
+              <thead class="ant-table-thead">
+                <tr>
+                  <th v-for="col in columns" :key="col.key" :data-col="col.key" @click="$emit('change', { sorter: { field: col.key, order: 'ascend' } })">
+                    <slot name="headerCell" :column="col" :title="col.title" />
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="ant-table-tbody">
+                <tr class="ant-table-row" v-for="(r, i) in dataSource" :key="r.id">
+                  <td v-for="col in columns" :key="col.key"><slot name="bodyCell" :column="col" :record="r" :index="i" /></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    `,
+  }
+
+  beforeEach(() => {
+    localStorage.clear()
+    setActivePinia(createPinia())
+  })
+
+  async function mountRoute() {
+    const RouteList = (await import('../RouteList.vue')).default
+    const wrapper = mount(RouteList, {
+      attachTo: document.body,
+      global: { stubs: { ...stubs, ATable: colDragTableStub } },
+    })
+    await flushPromises()
+    return wrapper
+  }
+
+  function patchRects(wrapper: ReturnType<typeof mount>) {
+    wrapper.findAll('th[data-col]').forEach((th) => {
+      th.element.getBoundingClientRect = function (this: HTMLElement) {
+        const parent = this.parentElement as HTMLElement
+        const idx = [...parent.children].indexOf(this)
+        return {
+          left: idx * 100,
+          right: idx * 100 + 100,
+          width: 100,
+          top: 0,
+          bottom: 40,
+          height: 40,
+          x: idx * 100,
+          y: 0,
+          toJSON: () => {},
+        } as DOMRect
+      }
+    })
+  }
+
+  it('表格横向滚动/fixed 布局/竖线共享类/#名称固定左、操作固定右', async () => {
+    const wrapper = await mountRoute()
+    const table = wrapper.findComponent({ name: 'ColDragTableStub' })
+    expect(table.props('scroll')).toEqual({ x: 'max-content' })
+    expect(table.props('tableLayout')).toBe('fixed')
+    const cols = table.props('columns') as Array<{ key: unknown; width?: number; fixed?: string }>
+    const byKey = Object.fromEntries(cols.map((c) => [String(c.key), c]))
+    expect(byKey['index']).toMatchObject({ width: 45, fixed: 'left' })
+    expect(byKey['name']).toMatchObject({ width: 140, fixed: 'left' })
+    expect(byKey['actions']).toMatchObject({ width: 110, fixed: 'right' })
+    expect(wrapper.find('.route-table').classes()).toContain('grid-table')
+    wrapper.unmount()
+  })
+
+  it('拖拽移动实时换位；拖后点击不触发排序（sorter 手势冲突抑制）', async () => {
+    const wrapper = await mountRoute()
+    patchRects(wrapper)
+    const table = wrapper.findComponent({ name: 'ColDragTableStub' })
+    const keySeq = () => (table.props('columns') as Array<{ key: unknown }>).map((c) => String(c.key))
+    const ths = () => wrapper.findAll('th[data-col]')
+    // 拖前点击 URI 表头：change（排序入口）照常触发
+    const uriTh = ths().find((t) => t.attributes('data-col') === 'uri')!
+    await uriTh.trigger('click')
+    const emittedBefore = table.emitted('change')?.length ?? 0
+    expect(emittedBefore).toBeGreaterThan(0)
+    // 拖「URI」标题到「优先级」左半 → 实时换位
+    const uriWrap = uriTh.find('.th-resize-wrap')!
+    await uriWrap.trigger('mousedown', { clientX: 350 })
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 620 }))
+    await flushPromises()
+    const seq = keySeq()
+    expect(seq.indexOf('uri')).toBe(seq.indexOf('priority') - 1)
+    // 拖后点击：被 capture 拦截，change 不再触发（排序不被误触发）
+    await uriTh.trigger('click')
+    expect(table.emitted('change')?.length ?? 0).toBe(emittedBefore)
+    // Esc 取消
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+    expect(keySeq()).not.toEqual(seq)
+    wrapper.unmount()
+  }, 15_000)
+
+  it('真实拖拽序列（位移→mouseup→补发 click）不触发排序；纯点击不受拦截', async () => {
+    const wrapper = await mountRoute()
+    patchRects(wrapper)
+    const table = wrapper.findComponent({ name: 'ColDragTableStub' })
+    const ths = () => wrapper.findAll('th[data-col]')
+    const uriTh = ths().find((t) => t.attributes('data-col') === 'uri')!
+    const uriWrap = uriTh.find('.th-resize-wrap')!
+    // 纯点击路径：mousedown→mouseup 无位移 → endColumnMove 拆除拦截器 → click 正常触发排序入口
+    await uriWrap.trigger('mousedown', { clientX: 350 })
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 350 }))
+    await flushPromises()
+    const baseCount = table.emitted('change')?.length ?? 0
+    await uriTh.trigger('click')
+    expect(table.emitted('change')?.length ?? 0).toBe(baseCount + 1)
+    // 真实拖拽路径：位移 → mouseup（此时拦截器必须仍在位）→ 补发 click 被拦截
+    await uriWrap.trigger('mousedown', { clientX: 350 })
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 620 }))
+    await flushPromises()
+    const duringDrag = table.emitted('change')?.length ?? 0
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 620 }))
+    await flushPromises()
+    await uriTh.trigger('click')
+    expect(table.emitted('change')?.length ?? 0).toBe(duringDrag)
+    // 拦截器吃掉一次 click 后自移除：下一次点击恢复正常
+    await uriTh.trigger('click')
+    expect(table.emitted('change')?.length ?? 0).toBe(duringDrag + 1)
+    // 兜底守卫：补发 click 未到来时（拖拽换位可能替换 mousedown 目标，浏览器不派发 click），
+    // 滞留拦截器由下一次 mousedown 拆除——随后的正常点击不受影响
+    await uriWrap.trigger('mousedown', { clientX: 350 })
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 620 }))
+    await flushPromises()
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 620 }))
+    await flushPromises()
+    // 不派发补发 click，直接进入下一次交互：一次不落在拖拽起始元素上的普通按下
+    document.dispatchEvent(new MouseEvent('mousedown', { clientX: 10, clientY: 10 }))
+    const beforeGuard = table.emitted('change')?.length ?? 0
+    await uriTh.trigger('click')
+    expect(table.emitted('change')?.length ?? 0).toBe(beforeGuard + 1)
+    wrapper.unmount()
+  }, 15_000)
+})

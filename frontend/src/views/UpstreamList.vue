@@ -28,19 +28,32 @@
         <option value="least_conn">最少连接</option>
       </select>
       <span class="text-muted text-sm">共 {{ totalCount }} 个上游</span>
+      <button class="btn btn-secondary btn-sm" @click="handleResetColumnWidths">重置列宽</button>
     </div>
 
     <div class="table-container">
       <a-table
         :data-source="displayedUpstreams"
-        :columns="columns"
+        :columns="visibleColumns"
         :row-key="(record: any) => record.id"
         :pagination="paginationProps({ page, pageSize, total: totalCount }, '个上游')"
         :loading="loading"
+        :scroll="{ x: 'max-content' }"
+        :table-layout="'fixed'"
         size="middle"
-        class="upstream-table"
+        class="upstream-table grid-table"
         @change="handleTableChange"
       >
+        <template #headerCell="{ column, title }">
+          <span class="th-resize-wrap" :class="upstreamWrapClass(column)" @mousedown="startColumnMove($event, column)">
+            <span>{{ title }}</span>
+            <span
+              v-if="String(column.key) !== 'index'"
+              class="col-resize-handle"
+              @mousedown="startColumnResize($event, column)"
+            />
+          </span>
+        </template>
         <template #bodyCell="{ column, record, index }">
           <template v-if="column.key === 'index'">
             <span class="text-muted">{{ (page - 1) * pageSize + index + 1 }}</span>
@@ -171,6 +184,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
+import { useColumnConfig } from '@/composables/useColumnConfig'
+import { useColumnDragColumns } from '@/composables/useColumnDragColumns'
 import { message, Modal } from 'ant-design-vue'
 import ClusterSelect from '@/components/ClusterSelect.vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
@@ -230,16 +245,66 @@ const publishModalVisible = ref(false)
 const publishClusterId = ref(0)
 const publishingRecord = ref<any | null>(null)
 
-const columns = [
-  { title: '#', key: 'index', width: 45 },
-  { title: '名称', dataIndex: 'name', key: 'name' },
-  { title: '集群', dataIndex: 'cluster_name', key: 'cluster_name' },
-  { title: '负载均衡', key: 'load_balance' },
-  { title: '目标节点', key: 'targets' },
-  { title: '协议', key: 'scheme' },
-  { title: '发布状态', key: 'publish_status' },
-  { title: '操作', key: 'actions', width: 150 },
+// 默认宽度档 + 固定列（column-personalization-rollout：#/名称固定左、操作固定右）
+const columns: TableColumnsType = [
+  { title: '#', key: 'index', width: 45, fixed: 'left' },
+  { title: '名称', dataIndex: 'name', key: 'name', width: 140, fixed: 'left' },
+  { title: '集群', dataIndex: 'cluster_name', key: 'cluster_name', width: 140 },
+  { title: '负载均衡', key: 'load_balance', width: 120 },
+  { title: '目标节点', key: 'targets', width: 220 },
+  { title: '协议', key: 'scheme', width: 90 },
+  { title: '发布状态', key: 'publish_status', width: 160 },
+  { title: '操作', key: 'actions', width: 150, fixed: 'right' },
 ]
+
+// ── 列个性化（column-personalization-rollout）：宽度/顺序持久化 + 拖拽手势共享 composable ──
+const {
+  columnWidths: upstreamColumnWidths,
+  setColumnWidth: setUpstreamColumnWidth,
+  resetWidths: resetUpstreamColumnWidths,
+  columnOrder: upstreamColumnOrder,
+  setColumnOrder: setUpstreamColumnOrder,
+} = useColumnConfig({ key: 'upstream_standalone', defaultColumns: columns.map((c) => String(c.key)) })
+
+const orderedColumns = computed(() => {
+  const stored = upstreamColumnOrder.value
+  const seq = stored.length ? stored : columns.map((c) => String(c.key))
+  const known = new Map(columns.map((c) => [String(c.key), c]))
+  const out: TableColumnsType = []
+  const seen = new Set<string>()
+  for (const k of seq) {
+    const c = known.get(k)
+    if (c && !seen.has(k)) {
+      out.push(c)
+      seen.add(k)
+    }
+  }
+  for (const [k, c] of known) if (!seen.has(k)) out.push(c)
+  return out
+})
+
+const visibleColumns = computed(() =>
+  orderedColumns.value.map((c) => ({ ...c, width: upstreamColumnWidths.value[String(c.key)] ?? c.width })),
+)
+
+const {
+  wrapClass: upstreamWrapClass,
+  startColumnResize,
+  startColumnMove,
+} = useColumnDragColumns({
+  columns: () => columns,
+  orderedKeys: () => orderedColumns.value.map((c) => String(c.key)),
+  getWidth: (key) => upstreamColumnWidths.value[key],
+  setColumnWidth: setUpstreamColumnWidth,
+  setColumnOrder: setUpstreamColumnOrder,
+  tableSelector: '.upstream-table',
+  fixedKeys: ['index', 'name', 'actions'],
+})
+
+function handleResetColumnWidths(): void {
+  resetUpstreamColumnWidths()
+  message.success('已恢复默认列宽')
+}
 
 const lbLabels: Record<string, string> = {
   weighted_roundrobin: '加权轮询',
@@ -444,6 +509,7 @@ onMounted(() => {
 onUnmounted(() => {
   cancelSearch()
 })
+import type { TableColumnsType } from 'ant-design-vue'
 </script>
 
 <style scoped>
