@@ -19,7 +19,7 @@
 
 **D1 兜底先行（B）**：`:scroll="{ x: 'max-content' }"` + `#`/IP `fixed: 'left'`、操作 `fixed: 'right'`。固定列需要列有确定宽——与 D3 默认宽度档天然配合。此步独立可交付，小屏立即改善。
 
-**D2 拖拽实现 = 表头右缘手柄 + 文档级 mousemove（A）**：`#headerCell` 插槽渲染 4px 手柄（悬停显形），mousedown 记录起点与当前宽，document mousemove 实时写 `columns[i].width`（响应式），mouseup 结束并持久化；`tableLayout: 'fixed'` 保证列宽严格生效。备选「整表 colgroup 直改」被否：antd 内部渲染 colgroup，直改会被重渲染吞掉；备选第三方库（vue-resizable 等）被否：为单点交互加依赖不值。最小宽度 80px clamp（`#` 45 不参与）。
+**D2 拖拽实现 = 表头右缘手柄 + 文档级 mousemove（A）**：`#headerCell` 插槽渲染手柄（常显 2px 握把线——用户评审裁决方案 1 克制版：默认融入边框色保证可发现性，悬停加深为 accent），mousedown 记录起点与当前宽，document mousemove 实时写 `columns[i].width`（响应式），mouseup 结束并持久化；`tableLayout: 'fixed'` 保证列宽严格生效。备选「整表 colgroup 直改」被否：antd 内部渲染 colgroup，直改会被重渲染吞掉；备选第三方库（vue-resizable 等）被否：为单点交互加依赖不值。最小宽度 80px clamp（`#` 45 不参与）。
 
 **D3 全列默认宽度档**：`#` 45（anatomy 标准）、IP 140、所属集群 140、服务端口/管理端口 100、Edge/OpenResty 安装路径 220、状态 120、Edge 版本 110、操作 320。≥1366px 视口下核心列无需横向滚动即可见。
 

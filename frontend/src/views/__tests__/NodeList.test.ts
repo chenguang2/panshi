@@ -1608,6 +1608,10 @@ describe('NodeList 列宽个性化（node-list-column-resize）', () => {
     // popover 内点击「重置列宽」
     const resetBtn = wrapper.findAll('.mock-popover-content button').find((b) => b.text() === '重置列宽')!
     expect(resetBtn).toBeDefined()
+    // 拖拽说明一行（可发现性文字兜底，方案 1 克制版）
+    expect(wrapper.find('.mock-popover-content').text()).toContain('拖动表头右缘可调整列宽')
+    // 手柄常显线存在（.col-resize-handle::after 由样式渲染，这里断言手柄元素仍在全部非 # 列）
+    expect(wrapper.findAll('.col-resize-handle').length).toBe(9)
     await resetBtn.trigger('click')
     await flushPromises()
     expect(colWidth('edge_path')).toBe(220)

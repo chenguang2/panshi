@@ -51,6 +51,7 @@
             <div style="font-weight: 500; margin-bottom: 8px">搜索</div>
             <a-checkbox v-model:checked="nodeSearchVisible">显示搜索框</a-checkbox>
             <a-divider style="margin: 12px 0" />
+            <div class="text-muted" style="font-size: 12px; margin-bottom: 8px">拖动表头右缘可调整列宽</div>
             <button class="btn btn-secondary btn-sm" style="width: 100%" @click="handleResetColumnWidths">
               重置列宽
             </button>
@@ -1844,8 +1845,23 @@ function onEdgePackRebase(e: Event) {
   user-select: none;
 }
 
-.col-resize-handle:hover {
-  background: oklch(56% 0.16 210 / 30%);
-  border-radius: 2px;
+/* 常显 2px 握把线（方案 1 克制版）：默认融入边框色，悬停加深为 accent */
+.col-resize-handle::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 3px;
+  transform: translateX(-50%);
+  width: 2px;
+  height: calc(100% - 6px);
+  background: var(--border);
+  border-radius: 1px;
+}
+
+.col-resize-handle:hover::after {
+  background: var(--accent);
+  width: 3px;
+  top: 0;
+  height: 100%;
 }
 </style>
