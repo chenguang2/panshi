@@ -1123,6 +1123,17 @@ select.form-input {
   display: inline;
 }
 
+/* 表头整格可拖：标题层派生一层覆盖命中的覆盖层（inset:0 相对 th 定位），
+   鼠标落在单元格空白处也能发起列移动，无需精确命中文字；文字排版保持不变。
+   定位关系的两个前提：th 为 position:relative（见上），且 .ant-table-column-title
+   已被拉回 static，否则覆盖层会缩到标题层内。 */
+.grid-table .th-resize-wrap::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 4px;
+}
+
 .grid-table .col-resize-handle {
   position: absolute;
   /* right:0 而非 -2px：负偏移会让末列握把露出表格右缘 2px，列宽足够时也撑出横向滚动条 */
@@ -1132,6 +1143,9 @@ select.form-input {
   width: 8px;
   cursor: col-resize;
   user-select: none;
+  /* 覆盖层与手柄同为定位元素、按树序绘制：手柄须抬到覆盖层之上，
+     否则右缘 8px 调宽区被整格命中层抢走 */
+  z-index: 2;
 }
 
 .grid-table .col-resize-handle::after {
@@ -1154,22 +1168,24 @@ select.form-input {
   height: 100%;
 }
 
-/* 可拖列光标提示：悬停 grab、按住 grabbing；固定列无 */
-.grid-table .th-resize-wrap.movable {
+/* 可拖列光标提示：悬停 grab、按住 grabbing（挂在覆盖层上，整格生效）；固定列无 */
+.grid-table .th-resize-wrap.movable::after {
   cursor: grab;
 }
 
-.grid-table .th-resize-wrap.movable:active {
+.grid-table .th-resize-wrap.movable:active::after {
   cursor: grabbing;
 }
 
-/* 拖拽中源列表头高亮 */
+/* 拖拽中源列表头高亮：底色铺满整格（覆盖层），文字只变色不加内边距——
+   避免拖动开始瞬间文字位移 */
 .grid-table .th-resize-wrap.dragging-source {
-  background: oklch(56% 0.16 210 / 15%);
   color: var(--accent);
   font-weight: 600;
-  border-radius: 4px;
-  padding: 2px 6px;
+}
+
+.grid-table .th-resize-wrap.dragging-source::after {
+  background: oklch(56% 0.16 210 / 15%);
 }
 
 /* 列移动拖拽全程抓取光标：覆盖所有元素默认 cursor */
