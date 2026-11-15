@@ -560,7 +560,8 @@ defineExpose({ requestLeave })
 
 .plugin-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  /* 与全站资源卡片页统一固定 3 列（2026-11-15 卡片网格一致性盘点，同全局规则页） */
+  grid-template-columns: repeat(3, 1fr);
   gap: 16px;
 }
 
@@ -764,6 +765,11 @@ defineExpose({ requestLeave })
   text-decoration: underline;
 }
 
+@media (max-width: 1200px) {
+  .plugin-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
 @media (max-width: 768px) {
   .plugin-grid {
     grid-template-columns: 1fr;
