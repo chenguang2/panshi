@@ -693,4 +693,14 @@ onUnmounted(() => {
   font-size: 12px;
   font-weight: 500;
 }
+@media (max-width: 1200px) {
+  .pml-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 768px) {
+  .pml-grid {
+    grid-template-columns: 1fr;
+  }
+}
 </style>

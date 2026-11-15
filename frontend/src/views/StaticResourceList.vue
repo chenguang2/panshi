@@ -891,6 +891,11 @@ onUnmounted(() => {
   background: oklch(50% 0 0 / 4%);
 }
 
+@media (max-width: 1200px) {
+  .sr-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
 @media (max-width: 768px) {
   .sr-grid {
     grid-template-columns: 1fr;
