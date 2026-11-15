@@ -28,7 +28,7 @@
         <option value="least_conn">最少连接</option>
       </select>
       <span class="text-muted text-sm">共 {{ totalCount }} 个上游</span>
-      <button class="btn btn-secondary btn-sm" @click="handleResetColumnWidths">重置列宽</button>
+      <button class="btn btn-primary btn-sm" @click="handleResetColumnWidths">重置列宽</button>
     </div>
 
     <div class="table-container">

@@ -63,7 +63,7 @@
         <option v-for="m in methodOptions" :key="m" :value="m">{{ m }}</option>
       </select>
       <span class="filter-count text-muted text-sm">共 {{ totalCount }} 条路由</span>
-      <button class="btn btn-secondary btn-sm" @click="handleResetColumnWidths">重置列宽</button>
+      <button class="btn btn-primary btn-sm" @click="handleResetColumnWidths">重置列宽</button>
     </div>
 
     <div class="table-container">

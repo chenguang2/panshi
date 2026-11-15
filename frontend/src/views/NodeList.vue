@@ -28,9 +28,10 @@
       </select>
       <span v-if="statusFilter" class="text-muted text-sm">筛出 {{ displayedNodes.length }} 个</span>
       <a-popover v-model:open="nodeColumnPopoverVisible" trigger="click" placement="bottomLeft">
+        <template #title>选择显示列</template>
         <template #content>
           <div style="min-width: 400px">
-            <div style="font-weight: 500; margin-bottom: 8px">列选择</div>
+            <div style="font-weight: 500; margin-bottom: 8px">显示字段</div>
             <a-checkbox-group v-model:value="nodeColumnsSelected">
               <div style="display: flex; flex-wrap: wrap; gap: 8px">
                 <div v-for="col in columns" :key="col.key" style="margin-bottom: 4px">

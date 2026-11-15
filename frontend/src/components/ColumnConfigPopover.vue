@@ -26,7 +26,7 @@ const searchVisible = defineModel<boolean>('search', { required: true })
     <template #title>选择显示列</template>
     <template #content>
       <div style="min-width: 400px">
-        <div style="font-weight: 500; margin-bottom: 8px">列选择</div>
+        <div style="font-weight: 500; margin-bottom: 8px">显示字段</div>
         <a-checkbox-group v-model:value="columns">
           <div style="display: flex; flex-wrap: wrap; gap: 8px">
             <div v-for="col in allColumns" :key="col.key" style="margin-bottom: 4px">
@@ -48,7 +48,8 @@ const searchVisible = defineModel<boolean>('search', { required: true })
         <a-checkbox v-model:checked="searchVisible">显示搜索框</a-checkbox>
         <template v-if="props.widthResettable">
           <a-divider style="margin: 12px 0" />
-          <a-button size="small" block @click="$emit('reset-widths')">重置列宽</a-button>
+          <div class="text-muted" style="font-size: 12px; margin-bottom: 8px">拖动表头右缘可调整列宽</div>
+          <button type="button" class="btn btn-primary btn-sm" @click="$emit('reset-widths')">重置列宽</button>
         </template>
       </div>
     </template>
