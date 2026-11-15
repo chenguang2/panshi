@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { flushPromises } from '@vue/test-utils'
 import { useAuthStore } from '@/stores/auth'
-import { useColumnConfig } from '../useColumnConfig'
+import { useColumnConfig, resolveOrderedColumns, applyColumnWidths } from '../useColumnConfig'
 
 const STORAGE_KEY = 'node_standalone_cfg_9'
 
@@ -48,6 +48,22 @@ describe('useColumnConfig 列宽持久化', () => {
     expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).widths).toEqual({})
   })
 
+  it('不同 key 的列宽/顺序互不影响（Tab 三表按 node/upstream/route 隔离）', async () => {
+    const up = useColumnConfig({ key: 'upstream', defaultColumns: ['name'] })
+    const rt = useColumnConfig({ key: 'route', defaultColumns: ['name'] })
+    up.setColumnWidth('name', 300)
+    rt.setColumnOrder(['name'])
+    await flushPromises()
+    up.resetWidths()
+    await flushPromises()
+    const upReload = useColumnConfig({ key: 'upstream', defaultColumns: ['name'] })
+    const rtReload = useColumnConfig({ key: 'route', defaultColumns: ['name'] })
+    expect(upReload.columnWidths.value).toEqual({})
+    expect(rtReload.columnOrder.value).toEqual(['name'])
+    // upstream 的写入不落到 route 键
+    expect(JSON.parse(localStorage.getItem('route_cfg_9') ?? '{}').widths ?? {}).toEqual({})
+  })
+
   it('columnOrder：持久化、重载恢复、未知 key 剔除、缺失 key 按默认序补位', async () => {
     const defaults = ['ip', 'status', 'actions']
     const cfg1 = useColumnConfig({ key: 'node_standalone', defaultColumns: defaults })
@@ -62,5 +78,48 @@ describe('useColumnConfig 列宽持久化', () => {
     const cfg3 = useColumnConfig({ key: 'node_standalone', defaultColumns: defaults })
     expect(cfg3.columnOrder.value).toEqual(['actions', 'ip', 'status'])
     expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).order).toEqual(['actions', 'ip', 'status'])
+  })
+})
+
+/**
+ * 列重排/宽度覆盖纯函数（cluster-tab-column-personalization D3）：
+ * 新消费方（统一管理三张 Tab 子表）统一入口，避免逐表内联重排逻辑。
+ */
+describe('resolveOrderedColumns / applyColumnWidths', () => {
+  const cols = [
+    { title: 'IP', key: 'ip', width: 140 },
+    { title: '状态', key: 'status' },
+    { title: '操作', key: 'actions', width: 280 },
+  ]
+
+  it('resolveOrderedColumns：空顺序按默认序原样返回', () => {
+    expect(resolveOrderedColumns(cols, []).map((c) => c.key)).toEqual(['ip', 'status', 'actions'])
+  })
+
+  it('resolveOrderedColumns：按存储顺序重排，未知/重复 key 剔除，缺失 key 按默认序补位', () => {
+    expect(resolveOrderedColumns(cols, ['actions', 'ghost', 'ip', 'actions']).map((c) => c.key)).toEqual([
+      'actions',
+      'ip',
+      'status',
+    ])
+  })
+
+  it('resolveOrderedColumns：返回列对象引用不变且不修改入参', () => {
+    const input = [...cols]
+    const out = resolveOrderedColumns(input, ['status'])
+    expect(input.map((c) => c.key)).toEqual(['ip', 'status', 'actions'])
+    expect(out[0]).toBe(cols[1])
+  })
+
+  it('applyColumnWidths：有覆盖用覆盖值，无覆盖保持默认档', () => {
+    const out = applyColumnWidths(cols, { status: 120 })
+    expect(out.map((c) => c.width)).toEqual([140, 120, 280])
+    // 不修改入参
+    expect(cols[1].width).toBeUndefined()
+  })
+
+  it('applyColumnWidths：空覆盖表原样返回（不产生新宽度键）', () => {
+    const out = applyColumnWidths(cols, {})
+    expect(out.map((c) => c.width)).toEqual([140, undefined, 280])
   })
 })

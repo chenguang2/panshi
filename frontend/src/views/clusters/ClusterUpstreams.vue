@@ -19,6 +19,8 @@
         :all-actions="allUpstreamActionButtons"
         v-model:actions="upstreamActionsSelected"
         v-model:search="upstreamSearchVisible"
+        width-resettable
+        @reset-widths="handleResetUpstreamResetWidths"
       />
 
       <div class="toolbar-right">
@@ -69,9 +71,11 @@
       "
       :row-class-name="upstreamRowClassName"
       :showSorterTooltip="false"
+      :scroll="{ x: 'max-content' }"
+      :table-layout="'fixed'"
       size="small"
       row-key="id"
-      class="node-table"
+      class="node-table upstream-table grid-table"
       @change="(pag: any, _filters: any, sorter: any) => handleUpstreamTableChange(cluster, pag, sorter)"
     >
       <template #emptyText>
@@ -79,6 +83,16 @@
           <p style="margin: 0 0 8px">暂无上游 — 添加上游，定义后端服务的负载均衡目标</p>
           <a-button size="small" type="primary" @click="showAddUpstreamModal(cluster)">添加上游</a-button>
         </div>
+      </template>
+      <template #headerCell="{ column, title }">
+        <span
+          class="th-resize-wrap"
+          :class="upstreamColumnWrapClass(column)"
+          @mousedown="startColumnMove($event, column)"
+        >
+          <span>{{ title }}</span>
+          <span class="col-resize-handle" @mousedown="startColumnResize($event, column)" />
+        </span>
       </template>
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'targets'">
@@ -488,6 +502,8 @@ import PublishDiffButton from '@/components/PublishDiffButton.vue'
 import PublishPreviewModal from '@/components/PublishPreviewModal.vue'
 import HealthCheckForm from '@/components/HealthCheckForm.vue'
 import { useClusterUpstreams } from '@/composables/useClusterUpstreams'
+import { useColumnDragColumns } from '@/composables/useColumnDragColumns'
+import { message } from 'ant-design-vue'
 import { paginationProps } from '@/composables/usePagination'
 import ColumnConfigPopover from '@/components/ColumnConfigPopover.vue'
 import SearchInput from '@/components/SearchInput.vue'
@@ -523,6 +539,11 @@ const {
   allUpstreamActionButtons,
   upstreamActionsSelected,
   visibleUpstreamColumns,
+  upstreamColumnWidths,
+  setUpstreamColumnWidth,
+  resetUpstreamColumnWidths,
+  setUpstreamColumnOrder,
+  orderedUpstreamColumns,
   loadUpstreams,
   handleUpstreamTableChange,
   selectUpstream,
@@ -558,6 +579,28 @@ const {
   versionModalEdgeUuid,
   openPublishModal: props.openPublishModal,
 })
+
+// ── 列拖拽手势共享 composable（cluster-tab-column-personalization 3.2）──
+// 几何按拖拽起点所在表解析（D2）：统一管理页同屏可并存多张卡片；name/actions 为锚点不参与移动。
+const {
+  wrapClass: upstreamColumnWrapClass,
+  startColumnResize,
+  startColumnMove,
+} = useColumnDragColumns({
+  columns: () => allUpstreamColumns,
+  orderedKeys: () => orderedUpstreamColumns.value.map((c) => String(c.key)),
+  getWidth: (key) => upstreamColumnWidths.value[key],
+  setColumnWidth: setUpstreamColumnWidth,
+  setColumnOrder: setUpstreamColumnOrder,
+  tableSelector: '.upstream-table',
+  fixedKeys: ['name', 'actions'],
+})
+
+function handleResetUpstreamResetWidths(): void {
+  resetUpstreamColumnWidths()
+  upstreamColumnPopoverVisible.value = false
+  message.success('已恢复默认列宽')
+}
 
 // ── batch delete selection state ───────────────────────────────────
 const batchCount = computed(() => (props.cluster.selectedUpstreamKeys || []).length)

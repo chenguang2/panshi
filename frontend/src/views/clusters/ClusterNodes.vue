@@ -69,33 +69,16 @@
           </a-menu>
         </template>
       </a-dropdown>
-      <a-popover v-model:open="nodeColumnPopoverVisible" trigger="click" placement="bottomLeft">
-        <template #content>
-          <div style="min-width: 400px">
-            <div style="font-weight: 500; margin-bottom: 8px">列选择</div>
-            <a-checkbox-group v-model:value="nodeColumnsSelected">
-              <div style="display: flex; flex-wrap: wrap; gap: 8px">
-                <div v-for="col in allNodeColumns" :key="col.key" style="margin-bottom: 4px">
-                  <a-checkbox :value="col.key">{{ col.title }}</a-checkbox>
-                </div>
-              </div>
-            </a-checkbox-group>
-            <a-divider style="margin: 12px 0" />
-            <div style="font-weight: 500; margin-bottom: 8px">操作按钮</div>
-            <a-checkbox-group v-model:value="nodeActionsSelected">
-              <div style="display: flex; flex-wrap: wrap; gap: 8px">
-                <div v-for="btn in allNodeActionButtons" :key="btn.key" style="margin-bottom: 4px">
-                  <a-checkbox :value="btn.key">{{ btn.title }}</a-checkbox>
-                </div>
-              </div>
-            </a-checkbox-group>
-            <a-divider style="margin: 12px 0" />
-            <div style="font-weight: 500; margin-bottom: 8px">搜索</div>
-            <a-checkbox v-model:checked="nodeSearchVisible">显示搜索框</a-checkbox>
-          </div>
-        </template>
-        <a-button size="small">列配置</a-button>
-      </a-popover>
+      <ColumnConfigPopover
+        v-model:open="nodeColumnPopoverVisible"
+        :all-columns="allNodeColumns"
+        v-model:columns="nodeColumnsSelected"
+        :all-actions="allNodeActionButtons"
+        v-model:actions="nodeActionsSelected"
+        v-model:search="nodeSearchVisible"
+        width-resettable
+        @reset-widths="handleResetColumnWidths"
+      />
 
       <div class="toolbar-right">
         <a-button size="small" @click="loadNodes(cluster)"> <ReloadOutlined /> 刷新 </a-button>
@@ -146,14 +129,22 @@
       "
       :loading="cluster.nodesLoading"
       :showSorterTooltip="false"
+      :scroll="{ x: 'max-content' }"
+      :table-layout="'fixed'"
       size="small"
       row-key="id"
-      class="node-table"
+      class="node-table grid-table"
       @change="
         (pag: Record<string, unknown>, _filters: unknown, sorter: Record<string, unknown> | null) =>
           handleNodeTableChange(cluster, pag, sorter)
       "
     >
+      <template #headerCell="{ column, title }">
+        <span class="th-resize-wrap" :class="nodeColumnWrapClass(column)" @mousedown="startColumnMove($event, column)">
+          <span>{{ title }}</span>
+          <span class="col-resize-handle" @mousedown="startColumnResize($event, column)" />
+        </span>
+      </template>
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'edge_version'">
           {{ record.status_detail?.statistic?.edge_version || '-' }}
@@ -512,10 +503,13 @@ import {
   createCancelNodeInstallHandler,
 } from '@/composables/useClusterNodes'
 import { showDangerConfirm } from '@/composables/useOverlayModal'
+import { useColumnDragColumns } from '@/composables/useColumnDragColumns'
+import { message } from 'ant-design-vue'
 import { useInstallStream } from '@/composables/useInstallStream'
 import { paginationProps } from '@/composables/usePagination'
 import { useFeaturesStore } from '@/stores/features'
 import SearchInput from '@/components/SearchInput.vue'
+import ColumnConfigPopover from '@/components/ColumnConfigPopover.vue'
 
 const featuresStore = useFeaturesStore()
 
@@ -542,6 +536,12 @@ const {
   diffNodeId,
   nodeColumnPopoverVisible,
   nodeColumnsSelected,
+  nodeColumnWidths,
+  setNodeColumnWidth,
+  resetNodeColumnWidths,
+  nodeColumnOrder,
+  setNodeColumnOrder,
+  orderedNodeColumns,
   nodeSearchVisible,
   nodeActionsSelected,
   moreNodeActions,
@@ -590,6 +590,29 @@ const {
 } = useClusterNodes({
   clusters,
 })
+
+// ── 列拖拽手势（调宽 + 移动）共享 composable（cluster-tab-column-personalization 2.2）──
+// 几何作用域由 composable 按拖拽起点所在的表解析：统一管理页同屏可展开多张卡片，
+// 全文档选择器会跨表串扰（D2）。ip/actions 为扫描锚点，不参与移动。
+const {
+  wrapClass: nodeColumnWrapClass,
+  startColumnResize,
+  startColumnMove,
+} = useColumnDragColumns({
+  columns: () => allNodeColumns,
+  orderedKeys: () => orderedNodeColumns.value.map((c) => String(c.key)),
+  getWidth: (key) => nodeColumnWidths.value[key],
+  setColumnWidth: setNodeColumnWidth,
+  setColumnOrder: setNodeColumnOrder,
+  tableSelector: '.node-table',
+  fixedKeys: ['ip', 'actions'],
+})
+
+function handleResetColumnWidths(): void {
+  resetNodeColumnWidths()
+  nodeColumnPopoverVisible.value = false
+  message.success('已恢复默认列宽')
+}
 
 // ── batch delete selection state ─────────────────────────────
 const batchCount = computed(() => (props.cluster.selectedNodeKeys || []).length)

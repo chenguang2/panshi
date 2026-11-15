@@ -3,7 +3,7 @@ import { showOverlayModal, showDangerConfirm } from './useOverlayModal'
 import { message } from 'ant-design-vue'
 import api from '@/api'
 import type { Cluster, Node } from '@/types'
-import { useColumnConfig } from './useColumnConfig'
+import { useColumnConfig, resolveOrderedColumns, applyColumnWidths } from './useColumnConfig'
 import { getApiErrorMessage } from '@/utils/error'
 
 /** 节点命令执行结果（/clusters/{id}/nodes/{nid}/{action} 响应） */
@@ -38,13 +38,15 @@ const IP_PATTERN = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]
 // batch3 1.4 / D4：批量并发引擎（BATCH_ACTION_CONCURRENCY/runWithConcurrency/batchActionConcurrency）
 // 已收敛进 composables/useBatchNodeAction.ts，本文件只保留薄适配。
 
+// 默认列宽档（cluster-tab-column-personalization D6）：table-layout: fixed 下无宽列会被
+// 剩余空间均分、长内容列压到不可读，故逐列给默认档，用户拖拽宽度经 applyColumnWidths 覆盖。
 export const allNodeColumns = [
-  { title: 'IP', dataIndex: 'ip', key: 'ip', sorter: true },
+  { title: 'IP', dataIndex: 'ip', key: 'ip', width: 140, sorter: true },
   { title: 'Edge版本', key: 'edge_version', width: 110 },
-  { title: '服务端口', dataIndex: 'service_port', key: 'service_port', sorter: true },
-  { title: '管理端口', dataIndex: 'management_port', key: 'management_port', sorter: true },
-  { title: 'Edge安装路径', dataIndex: 'edge_path', key: 'edge_path', sorter: true },
-  { title: '状态', key: 'status', sorter: true },
+  { title: '服务端口', dataIndex: 'service_port', key: 'service_port', width: 100, sorter: true },
+  { title: '管理端口', dataIndex: 'management_port', key: 'management_port', width: 100, sorter: true },
+  { title: 'Edge安装路径', dataIndex: 'edge_path', key: 'edge_path', width: 220, sorter: true },
+  { title: '状态', key: 'status', width: 160, sorter: true },
   { title: '操作', key: 'actions', width: 280 },
 ]
 
@@ -282,12 +284,22 @@ export function useClusterNodes(options: { clusters: Ref<Cluster[]>; onRefresh?:
   const nodeColumnsSelected = nodeCfg.columnsSelected
   const nodeSearchVisible = nodeCfg.searchVisible
   const nodeActionsSelected = nodeCfg.actionsSelected
+  const nodeColumnWidths = nodeCfg.columnWidths
+  const setNodeColumnWidth = nodeCfg.setColumnWidth
+  const resetNodeColumnWidths = nodeCfg.resetWidths
+  const nodeColumnOrder = nodeCfg.columnOrder
+  const setNodeColumnOrder = nodeCfg.setColumnOrder
 
   const moreNodeActions = computed(() => allNodeActionButtons.filter((b) => !nodeActionsSelected.value.includes(b.key)))
 
+  // 顺序/宽度个性化（cluster-tab-column-personalization）：存储顺序重排全量列 → 显隐过滤 → 宽度覆盖
+  const orderedNodeColumns = computed(() => resolveOrderedColumns(allNodeColumns, nodeColumnOrder.value))
   const visibleNodeColumns = computed(() => {
     const selected = new Set(nodeColumnsSelected.value)
-    return allNodeColumns.filter((col) => selected.has(col.key))
+    return applyColumnWidths(
+      orderedNodeColumns.value.filter((col) => selected.has(col.key)),
+      nodeColumnWidths.value,
+    )
   })
 
   const nodeForm = reactive({
@@ -949,6 +961,12 @@ export function useClusterNodes(options: { clusters: Ref<Cluster[]>; onRefresh?:
     nodeColumnsSelected,
     nodeSearchVisible,
     nodeActionsSelected,
+    nodeColumnWidths,
+    setNodeColumnWidth,
+    resetNodeColumnWidths,
+    nodeColumnOrder,
+    setNodeColumnOrder,
+    orderedNodeColumns,
     moreNodeActions,
     visibleNodeColumns,
     validateIP,

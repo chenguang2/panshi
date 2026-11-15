@@ -270,3 +270,42 @@ describe('ClusterNodes.vue batch2 刷新按钮（面板局部刷新）', () => {
     wrapper.unmount()
   })
 })
+
+// ── 列顺序/列宽个性化（cluster-tab-column-personalization 2.2/2.3）─────────────
+describe('ClusterNodes.vue 列个性化', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+  })
+
+  async function mountNodes() {
+    const ClusterNodes = (await import('../ClusterNodes.vue')).default
+    return mount(ClusterNodes, {
+      props: { cluster: MOCK_CLUSTER, clusters: [MOCK_CLUSTER], openPublishModal: async () => [] },
+      global: { stubs },
+    })
+  }
+
+  it('存储中的列宽与列顺序被消费（与独立列表页同构）', async () => {
+    localStorage.setItem(
+      'node_cfg_guest',
+      JSON.stringify({ columns: ['ip', 'status', 'actions'], widths: { ip: 260 }, order: ['actions', 'ip', 'status'] }),
+    )
+    const wrapper = await mountNodes()
+    const cols = (wrapper.vm as any).visibleNodeColumns
+    expect(cols.map((c: any) => c.key)).toEqual(['actions', 'ip', 'status'])
+    expect(cols.find((c: any) => c.key === 'ip').width).toBe(260)
+  })
+
+  it('重置列宽回到默认档并关闭弹窗', async () => {
+    localStorage.setItem('node_cfg_guest', JSON.stringify({ columns: ['ip', 'status'], widths: { ip: 260 } }))
+    const wrapper = await mountNodes()
+    const vm = wrapper.vm as any
+    vm.nodeColumnPopoverVisible = true
+    vm.handleResetColumnWidths()
+    await flushPromises()
+    expect(vm.visibleNodeColumns.find((c: any) => c.key === 'ip').width).toBe(140)
+    expect(vm.nodeColumnPopoverVisible).toBe(false)
+  })
+})

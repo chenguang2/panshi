@@ -12,6 +12,48 @@ interface ColumnConfigOptions {
   defaultActions?: string[]
 }
 
+/** 列定义的最小访问面（兼容 antd ColumnType 等任意列类型） */
+interface OrderedColumnLike {
+  key?: unknown
+}
+
+/**
+ * 按用户存储顺序重排全量列定义（cluster-tab-column-personalization D3）：
+ * 未知/重复 key 剔除，缺失 key 按默认序补位（新列自然落位），返回对象引用原样保留。
+ * 存储顺序为空时按默认序原样返回。
+ */
+export function resolveOrderedColumns<T extends OrderedColumnLike>(columns: T[], order: string[]): T[] {
+  const byKey = new Map(columns.map((c) => [String(c.key), c]))
+  const out: T[] = []
+  const seen = new Set<string>()
+  for (const k of order) {
+    const col = byKey.get(k)
+    if (col && !seen.has(k)) {
+      out.push(col)
+      seen.add(k)
+    }
+  }
+  for (const c of columns) {
+    const k = String(c.key)
+    if (!seen.has(k)) {
+      out.push(c)
+      seen.add(k)
+    }
+  }
+  return out
+}
+
+/** 按用户宽度覆盖表逐列应用宽度；无覆盖列保持默认档，入参列对象不被修改 */
+export function applyColumnWidths<T extends OrderedColumnLike & { width?: unknown }>(
+  columns: T[],
+  widths: Record<string, number | undefined>,
+): T[] {
+  return columns.map((c) => {
+    const w = widths[String(c.key)]
+    return w == null ? c : { ...c, width: w }
+  })
+}
+
 /**
  * Persistent column/action/search configuration for data tables.
  *

@@ -2,7 +2,7 @@ import { ref, reactive, computed, watch, h, type Ref } from 'vue'
 import { message } from 'ant-design-vue'
 import api from '@/api'
 import type { Cluster, Upstream, Route, HealthCheckConfig } from '@/types'
-import { useColumnConfig } from './useColumnConfig'
+import { useColumnConfig, resolveOrderedColumns, applyColumnWidths } from './useColumnConfig'
 import { useClusterResource } from './useClusterResource'
 import { showDeleteConfirm, buildDeleteProgressContent, publishStatusRender } from '@/composables/useClusterUtils'
 import { showOverlayModal } from '@/composables/useOverlayModal'
@@ -349,7 +349,8 @@ export function useClusterUpstreams(options: {
   const defaultTimeout = { connect: 6, send: 6, read: 6 }
 
   const allUpstreamColumns = [
-    { title: '名称', dataIndex: 'name', key: 'name', ellipsis: true, sorter: true },
+    // 默认宽档（cluster-tab-column-personalization D6）：fixed 布局下无宽列被均分，补档保证可读
+    { title: '名称', dataIndex: 'name', key: 'name', width: 180, ellipsis: true, sorter: true },
     {
       title: '负载均衡',
       dataIndex: 'load_balance',
@@ -359,7 +360,7 @@ export function useClusterUpstreams(options: {
       customRender: ({ text }: { text: string }) => getLoadBalanceLabel(text),
     },
     { title: '目标节点', key: 'targets', width: 220 },
-    { title: '描述', dataIndex: 'description', key: 'description', ellipsis: true, sorter: true },
+    { title: '描述', dataIndex: 'description', key: 'description', width: 220, ellipsis: true, sorter: true },
     {
       title: '发布状态',
       key: 'publish_status',
@@ -388,6 +389,11 @@ export function useClusterUpstreams(options: {
   const upstreamColumnsSelected = upstreamCfg.columnsSelected
   const upstreamSearchVisible = upstreamCfg.searchVisible
   const upstreamActionsSelected = upstreamCfg.actionsSelected
+  const upstreamColumnWidths = upstreamCfg.columnWidths
+  const setUpstreamColumnWidth = upstreamCfg.setColumnWidth
+  const resetUpstreamColumnWidths = upstreamCfg.resetWidths
+  const upstreamColumnOrder = upstreamCfg.columnOrder
+  const setUpstreamColumnOrder = upstreamCfg.setColumnOrder
 
   const allUpstreamActionButtons = [
     { key: 'copy', title: '复制' },
@@ -397,9 +403,14 @@ export function useClusterUpstreams(options: {
     { key: 'version', title: '版本管理' },
   ]
 
+  // 顺序/宽度个性化（cluster-tab-column-personalization）：存储顺序重排 → 显隐过滤 → 宽度覆盖
+  const orderedUpstreamColumns = computed(() => resolveOrderedColumns(allUpstreamColumns, upstreamColumnOrder.value))
   const visibleUpstreamColumns = computed(() => {
     const selected = new Set(upstreamColumnsSelected.value)
-    return allUpstreamColumns.filter((col) => selected.has(col.key))
+    return applyColumnWidths(
+      orderedUpstreamColumns.value.filter((col) => selected.has(col.key)),
+      upstreamColumnWidths.value,
+    )
   })
 
   // ── Watchers ──
@@ -870,6 +881,12 @@ export function useClusterUpstreams(options: {
     upstreamSearchVisible,
     allUpstreamActionButtons,
     upstreamActionsSelected,
+    upstreamColumnWidths,
+    setUpstreamColumnWidth,
+    resetUpstreamColumnWidths,
+    upstreamColumnOrder,
+    setUpstreamColumnOrder,
+    orderedUpstreamColumns,
     visibleUpstreamColumns,
 
     // Core functions

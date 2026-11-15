@@ -45,14 +45,27 @@ vi.mock('@/composables/useClusterUtils', () => ({
   formatPublishDateTime: () => '',
 }))
 
-vi.mock('@/composables/useColumnConfig', () => ({
-  useColumnConfig: () => ({
-    popoverVisible: ref(false),
-    columnsSelected: ref(['name', 'load_balance', 'targets', 'version', 'actions']),
-    searchVisible: ref(true),
-    actionsSelected: ref(['copy', 'edit', 'delete', 'publish', 'version']),
-  }),
-}))
+// 列个性化桩：顺序/宽度用可写 ref 暴露，测试直接驱动（真实 localStorage 由 useColumnConfig 单测覆盖）
+const mockUpstreamColumnWidths = ref<Record<string, number>>({})
+const mockUpstreamColumnOrder = ref<string[]>([])
+
+vi.mock('@/composables/useColumnConfig', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/composables/useColumnConfig')>()
+  return {
+    ...actual, // resolveOrderedColumns / applyColumnWidths 走真实实现
+    useColumnConfig: () => ({
+      popoverVisible: ref(false),
+      columnsSelected: ref(['name', 'load_balance', 'targets', 'version', 'actions']),
+      searchVisible: ref(true),
+      actionsSelected: ref(['copy', 'edit', 'delete', 'publish', 'version']),
+      columnWidths: mockUpstreamColumnWidths,
+      setColumnWidth: vi.fn(),
+      resetWidths: vi.fn(),
+      columnOrder: mockUpstreamColumnOrder,
+      setColumnOrder: vi.fn(),
+    }),
+  }
+})
 
 function makeUpstream(overrides: Partial<Upstream> = {}): Upstream {
   return {
@@ -642,5 +655,45 @@ describe('useClusterUpstreams 权重错误文案 (4.5)', () => {
     expect(c.targetValidation.value['0'].weight).toBe('权重需为 1-100 的整数')
     expect(c.upstreamModalActiveTab.value).toBe('basic')
     expect(mockApiPost).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * 列顺序/列宽个性化（cluster-tab-column-personalization 3.1）：
+ * 存储顺序重排 → 显隐过滤 → 宽度覆盖，三段同序（与节点 Tab 同构）。
+ */
+describe('useClusterUpstreams 列顺序与列宽', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockUpstreamColumnWidths.value = {}
+    mockUpstreamColumnOrder.value = []
+    mockApiGet.mockResolvedValue({ data: { total: 0, items: [] } })
+  })
+
+  it('默认档：无偏好时按默认顺序，无宽列补默认宽度', async () => {
+    const { visibleUpstreamColumns } = await makeComposable(makeCluster())
+    const cols = visibleUpstreamColumns.value as any[]
+    // 桩内 columnsSelected 为 ['name','load_balance','targets','version','actions']（version 非真实列，被过滤）
+    expect(cols.map((c) => c.key)).toEqual(['name', 'load_balance', 'targets', 'actions'])
+    expect(cols.find((c) => c.key === 'name').width).toBe(180)
+    expect(cols.find((c) => c.key === 'actions').width).toBe(340)
+  })
+
+  it('列顺序：用户顺序优先，未知 key 剔除、缺失列按默认序补位', async () => {
+    mockUpstreamColumnOrder.value = ['actions', 'ghost', 'name', 'actions']
+    const { visibleUpstreamColumns } = await makeComposable(makeCluster())
+    expect((visibleUpstreamColumns.value as any[]).map((c) => c.key)).toEqual([
+      'actions',
+      'name',
+      'load_balance',
+      'targets',
+    ])
+  })
+
+  it('列宽：覆盖值优先于默认档', async () => {
+    mockUpstreamColumnWidths.value = { name: 320 }
+    const { visibleUpstreamColumns } = await makeComposable(makeCluster())
+    expect((visibleUpstreamColumns.value as any[]).find((c) => c.key === 'name').width).toBe(320)
   })
 })

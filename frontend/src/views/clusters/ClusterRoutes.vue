@@ -38,6 +38,8 @@
         :all-actions="allActionButtons"
         v-model:actions="routeActionsSelected"
         v-model:search="routeSearchVisible"
+        width-resettable
+        @reset-widths="handleResetRouteColumnWidths"
       />
 
       <div class="toolbar-right">
@@ -92,9 +94,11 @@
       "
       :row-class-name="routeRowClassName"
       :showSorterTooltip="false"
+      :scroll="{ x: 'max-content' }"
+      :table-layout="'fixed'"
       size="small"
       row-key="id"
-      class="node-table"
+      class="node-table route-table grid-table"
       @change="(pag: any, _filters: any, sorter: any) => handleRouteTableChange(cluster, pag, sorter)"
     >
       <template #emptyText>
@@ -102,6 +106,12 @@
           <p style="margin: 0 0 8px">暂无路由 — 添加第一条路由，将流量按规则转发到上游</p>
           <a-button size="small" type="primary" @click="showAddRouteModal(cluster)">添加路由</a-button>
         </div>
+      </template>
+      <template #headerCell="{ column, title }">
+        <span class="th-resize-wrap" :class="routeColumnWrapClass(column)" @mousedown="startColumnMove($event, column)">
+          <span>{{ title }}</span>
+          <span class="col-resize-handle" @mousedown="startColumnResize($event, column)" />
+        </span>
       </template>
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'upstream_id'">
@@ -335,6 +345,8 @@ import { ref, computed, h, type Ref } from 'vue'
 import { WarningOutlined } from '@ant-design/icons-vue'
 import type { Cluster, Route } from '@/types'
 import { useClusterRoutes } from '@/composables/useClusterRoutes'
+import { useColumnDragColumns } from '@/composables/useColumnDragColumns'
+import { message } from 'ant-design-vue'
 import { paginationProps } from '@/composables/usePagination'
 import BadgeStatus from '@/components/BadgeStatus.vue'
 import PublishStatusTag from '@/components/PublishStatusTag.vue'
@@ -399,6 +411,11 @@ const {
   allRouteColumns,
   routeColumnPopoverVisible,
   routeColumnsSelected,
+  routeColumnWidths,
+  setRouteColumnWidth,
+  resetRouteColumnWidths,
+  setRouteColumnOrder,
+  orderedRouteColumns,
   routeSearchVisible,
   routeActionsSelected,
   visibleRouteColumns,
@@ -442,6 +459,28 @@ const {
   versionModalResourceName,
   versionModalEdgeUuid,
 })
+
+// ── 列拖拽手势共享 composable（cluster-tab-column-personalization 4.2）──
+// 几何按拖拽起点所在表解析（D2）；name/actions 为锚点不参与移动（路由 name 兼作 sorter 抑制基准）。
+const {
+  wrapClass: routeColumnWrapClass,
+  startColumnResize,
+  startColumnMove,
+} = useColumnDragColumns({
+  columns: () => allRouteColumns,
+  orderedKeys: () => orderedRouteColumns.value.map((c) => String(c.key)),
+  getWidth: (key) => routeColumnWidths.value[key],
+  setColumnWidth: setRouteColumnWidth,
+  setColumnOrder: setRouteColumnOrder,
+  tableSelector: '.route-table',
+  fixedKeys: ['name', 'actions'],
+})
+
+function handleResetRouteColumnWidths(): void {
+  resetRouteColumnWidths()
+  routeColumnPopoverVisible.value = false
+  message.success('已恢复默认列宽')
+}
 
 // ── Upstream options for traffic_split plugin dropdown ────────────
 const upstreamOptions = computed(() => toUpstreamSelectOptions(getClusterUpstreams()))

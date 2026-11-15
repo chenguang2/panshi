@@ -44,7 +44,16 @@ export function useColumnDragColumns(options: ColumnDragColumnsOptions) {
 
   const dragSourceKey = ref('')
   let colResize: { key: string; startX: number; startWidth: number } | null = null
-  let colMove: { key: string; startOrder: string[]; rects: Map<string, DOMRect>; lastHint: string; startX: number; startY: number; moved: boolean } | null = null
+  let colMove: {
+    key: string
+    startOrder: string[]
+    rects: Map<string, DOMRect>
+    lastHint: string
+    startX: number
+    startY: number
+    moved: boolean
+    root: ParentNode
+  } | null = null
 
   function isMovableKey(key: string): boolean {
     return !FIXED_MOVE_KEYS.has(key)
@@ -90,17 +99,26 @@ export function useColumnDragColumns(options: ColumnDragColumnsOptions) {
 
   // ── 手势二：标题拖拽移动（实时预览） ──
 
-  function captureColumnRects(): Map<HTMLElement, number> {
+  /**
+   * 本次拖拽的几何作用域（cluster-tab-column-personalization D2）：
+   * 以拖拽起点所在的 antd 表格容器为根——统一管理页同屏可并存多张同类表格，
+   * 全文档选择器会让同名列的矩形被别的表覆盖，落点/FLIP 跨表串扰。
+   * 解析不到容器时（非表格内触发）退回 `tableSelector` 全文档兜底。
+   */
+  function resolveGestureRoot(e: MouseEvent): ParentNode {
+    const target = e.currentTarget as HTMLElement | null
+    const wrapper = typeof target?.closest === 'function' ? target.closest<HTMLElement>('.ant-table-wrapper') : null
+    return wrapper ?? document.querySelector<HTMLElement>(tableSelector) ?? document
+  }
+
+  function captureColumnRects(root: ParentNode): Map<HTMLElement, number> {
     return new Map(
-      [...document.querySelectorAll<HTMLElement>(`${tableSelector} thead th, ${tableSelector} tbody td`)].map((el) => [
-        el,
-        el.getBoundingClientRect().left,
-      ]),
+      [...root.querySelectorAll<HTMLElement>('thead th, tbody td')].map((el) => [el, el.getBoundingClientRect().left]),
     )
   }
 
-  function playColumnMoveFlip(before: Map<HTMLElement, number>): void {
-    const cells = [...document.querySelectorAll<HTMLElement>(`${tableSelector} thead th, ${tableSelector} tbody td`)]
+  function playColumnMoveFlip(before: Map<HTMLElement, number>, root: ParentNode): void {
+    const cells = [...root.querySelectorAll<HTMLElement>('thead th, tbody td')]
     cells.forEach((el) => {
       const oldLeft = before.get(el)
       if (oldLeft === undefined) return
@@ -127,13 +145,23 @@ export function useColumnDragColumns(options: ColumnDragColumnsOptions) {
     const key = String(col.key ?? '')
     if (!key || !isMovableKey(key)) return
     e.preventDefault()
+    const root = resolveGestureRoot(e)
     const rects = new Map<string, DOMRect>()
     const titleToKey = new Map(columns().map((c) => [String(asColumnLike(c).title), String(asColumnLike(c).key)]))
-    document.querySelectorAll(`${tableSelector} .ant-table-thead th`).forEach((th) => {
+    root.querySelectorAll('.ant-table-thead th').forEach((th) => {
       const k = titleToKey.get((th.textContent ?? '').trim())
       if (k) rects.set(k, th.getBoundingClientRect())
     })
-    colMove = { key, startOrder: orderedKeys(), rects, lastHint: key, startX: e.clientX, startY: e.clientY, moved: false }
+    colMove = {
+      key,
+      startOrder: orderedKeys(),
+      rects,
+      lastHint: key,
+      startX: e.clientX,
+      startY: e.clientY,
+      moved: false,
+      root,
+    }
     dragSourceKey.value = key
     document.body.classList.add('col-move-dragging')
     document.addEventListener('mousemove', onColumnMoveMove)
@@ -171,7 +199,7 @@ export function useColumnDragColumns(options: ColumnDragColumnsOptions) {
         break
       }
     }
-  if (hint === mv.lastHint) return
+    if (hint === mv.lastHint) return
     mv.lastHint = hint
     // 实时预览：以拖拽起始序为基线换位（冻结几何单调，无震荡）；持久化由 watch 随行
     const next = mv.startOrder.filter((k) => k !== mv.key)
@@ -179,9 +207,9 @@ export function useColumnDragColumns(options: ColumnDragColumnsOptions) {
     if (idx === -1) return
     next.splice(idx, 0, mv.key)
     // FLIP：记录换位前位置，DOM 更新后让列平滑滑动到位（无瞬跳）
-    const before = captureColumnRects()
+    const before = captureColumnRects(mv.root)
     setColumnOrder(next)
-    void nextTick(() => playColumnMoveFlip(before))
+    void nextTick(() => playColumnMoveFlip(before, mv.root))
   }
 
   /** 有序全序列中 key 的下一列键（可能为固定右列）；已是末列则返回 ''（no-op 标记） */
@@ -204,12 +232,14 @@ export function useColumnDragColumns(options: ColumnDragColumnsOptions) {
     document.removeEventListener('mouseup', endColumnMove)
     document.removeEventListener('keydown', onColumnMoveCancel)
     document.body.classList.remove('col-move-dragging')
-    document.querySelectorAll<HTMLElement>(`${tableSelector} thead th, ${tableSelector} tbody td`).forEach((el) => {
-      el.style.transition = ''
-      el.style.transform = ''
-    })
-    dragSourceKey.value = ''
     const mv = colMove
+    if (mv) {
+      mv.root.querySelectorAll<HTMLElement>('thead th, tbody td').forEach((el) => {
+        el.style.transition = ''
+        el.style.transform = ''
+      })
+    }
+    dragSourceKey.value = ''
     colMove = null
     // D4（sorter 手势冲突抑制）：真实浏览器在 mouseup 之后才派发 click——发生过位移的拖拽
     // 必须把 click 捕获拦截器留到那次 click 到来（其自身处理即自移除），否则排序列短拖后

@@ -37,3 +37,34 @@ describe('ClusterNodes 措辞守卫（batch2 1.4 / D9）', () => {
     expect(src()).not.toContain('>正常<')
   })
 })
+
+// ── 列个性化守卫（cluster-tab-column-personalization 2.2/2.3）──
+describe('ClusterNodes 列个性化接入守卫', () => {
+  it('表体解剖与独立列表页同构：共享竖线类 + 横向滚动 + 固定布局', () => {
+    const s = src()
+    expect(s).toContain('class="node-table grid-table"')
+    expect(s).toContain(':scroll="{ x: \'max-content\' }"')
+    expect(s).toContain(':table-layout="\'fixed\'"')
+  })
+
+  it('表头槽接入调宽手柄与移动抓手（手势共享 composable）', () => {
+    const s = src()
+    expect(s).toContain('<template #headerCell="{ column, title }">')
+    expect(s).toContain('class="th-resize-wrap"')
+    expect(s).toContain('class="col-resize-handle"')
+    expect(s).toContain('startColumnResize($event, column)')
+    expect(s).toContain('startColumnMove($event, column)')
+    expect(s).toContain('useColumnDragColumns({')
+  })
+
+  it('不可移动列 = ip 与 actions（扫描锚点）', () => {
+    expect(src()).toContain("fixedKeys: ['ip', 'actions']")
+  })
+
+  it('列配置弹窗提供重置列宽入口', () => {
+    const s = src()
+    expect(s).toContain('@reset-widths="handleResetColumnWidths"')
+    expect(s).toContain('width-resettable')
+    expect(s).toContain('resetNodeColumnWidths()')
+  })
+})

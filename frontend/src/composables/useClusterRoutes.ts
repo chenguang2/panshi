@@ -3,7 +3,7 @@ import { message } from 'ant-design-vue'
 import api from '@/api'
 import type { Cluster, Route, RoutePlugin, Plugin, PluginConfig } from '@/types'
 import { useAuthStore } from '@/stores/auth'
-import { useColumnConfig } from './useColumnConfig'
+import { useColumnConfig, resolveOrderedColumns, applyColumnWidths } from './useColumnConfig'
 import { useClusterResource } from './useClusterResource'
 import { publishStatusRender } from './useClusterUtils'
 import { showOverlayModal } from './useOverlayModal'
@@ -27,13 +27,15 @@ function getFieldName(name: string): string {
 
 // ── column / action definitions ────────────────────────────────────────
 
+// 默认列宽档（cluster-tab-column-personalization D6）：fixed 布局下无宽列被剩余空间均分，
+// 长内容列（URI/描述）会压到不可读，故逐列给档；用户拖拽宽度经 applyColumnWidths 覆盖。
 const allRouteColumns = [
-  { title: '名称', dataIndex: 'name', key: 'name', sorter: true },
-  { title: 'URI', dataIndex: 'uri', key: 'uri', sorter: true },
-  { title: '方法', dataIndex: 'methods', key: 'methods' },
-  { title: '上游', dataIndex: 'upstream_id', key: 'upstream_id' },
-  { title: '优先级', dataIndex: 'priority', key: 'priority', sorter: true },
-  { title: '状态', key: 'status', sorter: true },
+  { title: '名称', dataIndex: 'name', key: 'name', width: 160, sorter: true },
+  { title: 'URI', dataIndex: 'uri', key: 'uri', width: 200, sorter: true },
+  { title: '方法', dataIndex: 'methods', key: 'methods', width: 110 },
+  { title: '上游', dataIndex: 'upstream_id', key: 'upstream_id', width: 140 },
+  { title: '优先级', dataIndex: 'priority', key: 'priority', width: 90, sorter: true },
+  { title: '状态', key: 'status', width: 100, sorter: true },
   {
     title: '发布状态',
     key: 'publish_status',
@@ -42,8 +44,8 @@ const allRouteColumns = [
     customRender: ({ record }: { record: Route }) =>
       publishStatusRender(record.current_version ?? null, record.published_at ?? null),
   },
-  { title: '高级匹配', dataIndex: 'advanced_match_enabled', key: 'advanced_match_enabled' },
-  { title: '描述', dataIndex: 'description', key: 'description' },
+  { title: '高级匹配', dataIndex: 'advanced_match_enabled', key: 'advanced_match_enabled', width: 110 },
+  { title: '描述', dataIndex: 'description', key: 'description', width: 200 },
   { title: '操作', key: 'actions', width: 340 },
 ]
 
@@ -203,10 +205,20 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
   const routeColumnsSelected = routeCfg.columnsSelected
   const routeSearchVisible = routeCfg.searchVisible
   const routeActionsSelected = routeCfg.actionsSelected
+  const routeColumnWidths = routeCfg.columnWidths
+  const setRouteColumnWidth = routeCfg.setColumnWidth
+  const resetRouteColumnWidths = routeCfg.resetWidths
+  const routeColumnOrder = routeCfg.columnOrder
+  const setRouteColumnOrder = routeCfg.setColumnOrder
 
+  // 顺序/宽度个性化（cluster-tab-column-personalization）：存储顺序重排 → 显隐过滤 → 宽度覆盖
+  const orderedRouteColumns = computed(() => resolveOrderedColumns(allRouteColumns, routeColumnOrder.value))
   const visibleRouteColumns = computed(() => {
     const selected = new Set(routeColumnsSelected.value)
-    return allRouteColumns.filter((col) => selected.has(col.key))
+    return applyColumnWidths(
+      orderedRouteColumns.value.filter((col) => selected.has(col.key)),
+      routeColumnWidths.value,
+    )
   })
 
   // ── plugins ─────────────────────────────────────────────────────────
@@ -589,6 +601,12 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
     routeColumnsSelected,
     routeSearchVisible,
     routeActionsSelected,
+    routeColumnWidths,
+    setRouteColumnWidth,
+    resetRouteColumnWidths,
+    routeColumnOrder,
+    setRouteColumnOrder,
+    orderedRouteColumns,
     visibleRouteColumns,
     allActionButtons,
 

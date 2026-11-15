@@ -1088,3 +1088,52 @@ describe('createCancelNodeInstallHandler（batch3 1.2）', () => {
     expect(mockApiPost).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * 列顺序/列宽个性化（cluster-tab-column-personalization 2.1）：
+ * 统一管理「集群节点」页签的列重排与宽度覆盖，存储键 'node'（与独立列表页 node_standalone 隔离）。
+ */
+describe('useClusterNodes 列顺序与列宽', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    apiOk(mockApiGet, (u) => /\/nodes$/.test(u), { data: { total: 0, items: [] } })
+  })
+
+  it('默认档：无用户偏好时按默认顺序与默认宽度呈现', async () => {
+    const { nodeColumnOrder, visibleNodeColumns } = await makeComposable(makeCluster())
+    expect(nodeColumnOrder.value).toEqual([])
+    expect(visibleNodeColumns.value.map((c: any) => c.key)).toEqual([
+      'ip',
+      'edge_version',
+      'service_port',
+      'management_port',
+      'status',
+      'actions',
+    ])
+    expect(visibleNodeColumns.value.find((c: any) => c.key === 'edge_path')).toBeUndefined()
+    expect(visibleNodeColumns.value.find((c: any) => c.key === 'ip')!.width).toBe(140)
+  })
+
+  it('列顺序：按用户顺序重排，未知 key 剔除、缺失列按默认序补位', async () => {
+    const { setNodeColumnOrder, visibleNodeColumns } = await makeComposable(makeCluster())
+    setNodeColumnOrder(['actions', 'ghost', 'status', 'actions'])
+    expect(visibleNodeColumns.value.map((c: any) => c.key)).toEqual([
+      'actions',
+      'status',
+      'ip',
+      'edge_version',
+      'service_port',
+      'management_port',
+    ])
+  })
+
+  it('列宽：用户宽度覆盖默认档，重置后回到默认档', async () => {
+    const { setNodeColumnWidth, resetNodeColumnWidths, visibleNodeColumns } = await makeComposable(makeCluster())
+    setNodeColumnWidth('ip', 260)
+    expect(visibleNodeColumns.value.find((c: any) => c.key === 'ip')!.width).toBe(260)
+    resetNodeColumnWidths()
+    expect(visibleNodeColumns.value.find((c: any) => c.key === 'ip')!.width).toBe(140)
+  })
+})

@@ -29,14 +29,27 @@ vi.mock('@/composables/useClusterUtils', () => ({
   formatPublishDateTime: () => '',
 }))
 
-vi.mock('@/composables/useColumnConfig', () => ({
-  useColumnConfig: () => ({
-    popoverVisible: ref(false),
-    columnsSelected: ref(['name', 'uri', 'publish_status', 'priority', 'actions']),
-    searchVisible: ref(true),
-    actionsSelected: ref(['copy', 'edit', 'delete', 'publish', 'version']),
-  }),
-}))
+// 列个性化桩：顺序/宽度用可写 ref 暴露，测试直接驱动（真实 localStorage 由 useColumnConfig 单测覆盖）
+const mockRouteColumnWidths = ref<Record<string, number>>({})
+const mockRouteColumnOrder = ref<string[]>([])
+
+vi.mock('@/composables/useColumnConfig', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/composables/useColumnConfig')>()
+  return {
+    ...actual, // resolveOrderedColumns / applyColumnWidths 走真实实现
+    useColumnConfig: () => ({
+      popoverVisible: ref(false),
+      columnsSelected: ref(['name', 'uri', 'publish_status', 'priority', 'actions']),
+      searchVisible: ref(true),
+      actionsSelected: ref(['copy', 'edit', 'delete', 'publish', 'version']),
+      columnWidths: mockRouteColumnWidths,
+      setColumnWidth: vi.fn(),
+      resetWidths: vi.fn(),
+      columnOrder: mockRouteColumnOrder,
+      setColumnOrder: vi.fn(),
+    }),
+  }
+})
 
 function makeRoute(overrides: Partial<Route> = {}): Route {
   return {
@@ -635,5 +648,44 @@ describe('useClusterRoutes 保存后发布引导（route-save-publish-guidance /
     expect(overlay!.textContent).toContain('DNS 路由请在「DNS 代理」页管理')
     expect(bodyOverlayButtons().map((b) => b.textContent)).not.toContain('立即发布')
     expect(executePublish).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * 列顺序/列宽个性化（cluster-tab-column-personalization 4.1）：
+ * 10 列全量参与重排，无宽列补默认档（fixed 布局下限）。
+ */
+describe('useClusterRoutes 列顺序与列宽', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockRouteColumnWidths.value = {}
+    mockRouteColumnOrder.value = []
+    mockApiGet.mockResolvedValue({ data: { total: 0, items: [] } })
+  })
+
+  it('默认档：无偏好时按默认顺序，无宽列补默认宽度', async () => {
+    const { visibleRouteColumns } = await makeComposable(makeCluster())
+    const cols = visibleRouteColumns.value as any[]
+    expect(cols.map((c) => c.key)).toEqual(['name', 'uri', 'priority', 'publish_status', 'actions'])
+    expect(cols.find((c) => c.key === 'name').width).toBe(160)
+  })
+
+  it('列顺序：用户顺序优先，未知 key 剔除、缺失列按默认序补位', async () => {
+    mockRouteColumnOrder.value = ['actions', 'uri', 'ghost']
+    const { visibleRouteColumns } = await makeComposable(makeCluster())
+    expect((visibleRouteColumns.value as any[]).map((c) => c.key)).toEqual([
+      'actions',
+      'uri',
+      'name',
+      'priority',
+      'publish_status',
+    ])
+  })
+
+  it('列宽：覆盖值优先于默认档', async () => {
+    mockRouteColumnWidths.value = { uri: 360 }
+    const { visibleRouteColumns } = await makeComposable(makeCluster())
+    expect((visibleRouteColumns.value as any[]).find((c) => c.key === 'uri').width).toBe(360)
   })
 })
