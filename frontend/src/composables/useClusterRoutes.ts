@@ -198,6 +198,7 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
   const routeCfg = useColumnConfig({
     key: 'route',
     defaultColumns: ['name', 'uri', 'publish_status', 'priority', 'actions'],
+    allColumns: allRouteColumns.map((c) => String(c.key)),
     defaultSearchVisible: true,
     defaultActions: ['copy', 'edit', 'delete', 'publish', 'version'],
   })

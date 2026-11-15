@@ -382,6 +382,7 @@ export function useClusterUpstreams(options: {
   const upstreamCfg = useColumnConfig({
     key: 'upstream',
     defaultColumns: ['name', 'load_balance', 'targets', 'publish_status', 'description', 'actions'],
+    allColumns: allUpstreamColumns.map((c) => String(c.key)),
     defaultSearchVisible: true,
     defaultActions: ['copy', 'edit', 'delete', 'publish', 'version'],
   })

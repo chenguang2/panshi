@@ -680,14 +680,15 @@ describe('useClusterUpstreams 列顺序与列宽', () => {
     expect(cols.find((c) => c.key === 'actions').width).toBe(340)
   })
 
-  it('列顺序：用户顺序优先，未知 key 剔除、缺失列按默认序补位', async () => {
+  it('列顺序：用户顺序优先，未知 key 剔除，未定位列留在设计位（route-column-reorder-fix）', async () => {
+    // 存储序 [actions, name]：两列填回各自槽位（name→0、actions→末），未定位的 load_balance/targets 不动
     mockUpstreamColumnOrder.value = ['actions', 'ghost', 'name', 'actions']
     const { visibleUpstreamColumns } = await makeComposable(makeCluster())
     expect((visibleUpstreamColumns.value as any[]).map((c) => c.key)).toEqual([
       'actions',
-      'name',
       'load_balance',
       'targets',
+      'name',
     ])
   })
 

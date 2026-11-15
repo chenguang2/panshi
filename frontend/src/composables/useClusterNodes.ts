@@ -277,6 +277,7 @@ export function useClusterNodes(options: { clusters: Ref<Cluster[]>; onRefresh?:
   const nodeCfg = useColumnConfig({
     key: 'node',
     defaultColumns: ['ip', 'edge_version', 'service_port', 'management_port', 'status', 'actions'],
+    allColumns: allNodeColumns.map((c) => String(c.key)),
     defaultSearchVisible: true,
     defaultActions: ['start', 'stop', 'status'],
   })

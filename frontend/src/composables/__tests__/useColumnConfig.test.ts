@@ -79,6 +79,30 @@ describe('useColumnConfig 列宽持久化', () => {
     expect(cfg3.columnOrder.value).toEqual(['actions', 'ip', 'status'])
     expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).order).toEqual(['actions', 'ip', 'status'])
   })
+
+  it('setColumnOrder：按全量列清单清洗，非默认可见列不被丢弃', async () => {
+    // 路由 Tab：defaultColumns 只是默认可见列，方法/上游等非默认列必须能落座（route-column-reorder-fix）
+    const cfg1 = useColumnConfig({
+      key: 'route',
+      defaultColumns: ['name', 'uri', 'publish_status', 'priority', 'actions'],
+      allColumns: ['name', 'uri', 'methods', 'upstream_id', 'priority', 'status', 'publish_status', 'actions'],
+    })
+    cfg1.setColumnOrder(['name', 'methods', 'uri', 'upstream_id', 'priority', 'status', 'publish_status', 'actions'])
+    await flushPromises()
+    expect(cfg1.columnOrder.value).toEqual([
+      'name',
+      'methods',
+      'uri',
+      'upstream_id',
+      'priority',
+      'status',
+      'publish_status',
+      'actions',
+    ])
+    const saved = JSON.parse(localStorage.getItem('route_cfg_9')!)
+    expect(saved.order).toContain('methods')
+    expect(saved.order).toContain('upstream_id')
+  })
 })
 
 /**
@@ -96,19 +120,54 @@ describe('resolveOrderedColumns / applyColumnWidths', () => {
     expect(resolveOrderedColumns(cols, []).map((c) => c.key)).toEqual(['ip', 'status', 'actions'])
   })
 
-  it('resolveOrderedColumns：按存储顺序重排，未知/重复 key 剔除，缺失 key 按默认序补位', () => {
+  it('resolveOrderedColumns：未知/重复 key 剔除，已定位列按存储序填回各自槽位', () => {
+    // 存储序 [actions, ip]：两列各占自己原本的槽位（ip→0、actions→2），未定位的 status 留在槽位 1
     expect(resolveOrderedColumns(cols, ['actions', 'ghost', 'ip', 'actions']).map((c) => c.key)).toEqual([
       'actions',
-      'ip',
       'status',
+      'ip',
     ])
+  })
+
+  it('resolveOrderedColumns：残缺存储序（旧版只存默认可见列）不把启用列甩到操作列右侧', () => {
+    // 复现统一管理路由 Tab 的实况：旧 setColumnOrder 按 defaultColumns 清洗，非默认列被丢弃，
+    // 于是「方法/上游」被追加到「操作」之后且再也拖不回来（route-column-reorder-fix）
+    const full = [
+      { title: '名称', key: 'name' },
+      { title: 'URI', key: 'uri' },
+      { title: '方法', key: 'methods' },
+      { title: '上游', key: 'upstream_id' },
+      { title: '优先级', key: 'priority' },
+      { title: '状态', key: 'status' },
+      { title: '发布状态', key: 'publish_status' },
+      { title: '操作', key: 'actions' },
+    ]
+    const order = ['name', 'uri', 'priority', 'publish_status', 'actions']
+    expect(resolveOrderedColumns(full, order).map((c) => c.key)).toEqual([
+      'name',
+      'uri',
+      'methods',
+      'upstream_id',
+      'priority',
+      'status',
+      'publish_status',
+      'actions',
+    ])
+  })
+
+  it('resolveOrderedColumns：完整存储序原样生效（用户自定义顺序不被补位干扰）', () => {
+    const order = ['actions', 'status', 'ip']
+    expect(resolveOrderedColumns(cols, order).map((c) => c.key)).toEqual(order)
   })
 
   it('resolveOrderedColumns：返回列对象引用不变且不修改入参', () => {
     const input = [...cols]
     const out = resolveOrderedColumns(input, ['status'])
     expect(input.map((c) => c.key)).toEqual(['ip', 'status', 'actions'])
-    expect(out[0]).toBe(cols[1])
+    // 引用原样透传（不 clone、不改 width/顺序语义），按 key 定位以免与补位落座耦合
+    expect(out.find((c) => c.key === 'status')).toBe(cols[1])
+    expect(out).toHaveLength(cols.length)
+    expect(out.every((c) => cols.includes(c))).toBe(true)
   })
 
   it('applyColumnWidths：有覆盖用覆盖值，无覆盖保持默认档', () => {

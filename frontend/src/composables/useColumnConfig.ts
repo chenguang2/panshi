@@ -6,6 +6,12 @@ interface ColumnConfigOptions {
   key: string
   /** Default column keys */
   defaultColumns: string[]
+  /**
+   * 全量列键清单（默认序，含非默认可见列）。缺省时退化为 defaultColumns。
+   * 顺序清洗必须按此清洗——按 defaultColumns 清洗会把「非默认可见列」从顺序里剔掉，
+   * 导致启用这些列后它们被重排逻辑追加到末尾、且再也拖不回来（route-column-reorder-fix）。
+   */
+  allColumns?: string[]
   /** Default search visible state */
   defaultSearchVisible?: boolean
   /** Default action button keys */
@@ -19,28 +25,32 @@ interface OrderedColumnLike {
 
 /**
  * 按用户存储顺序重排全量列定义（cluster-tab-column-personalization D3）：
- * 未知/重复 key 剔除，缺失 key 按默认序补位（新列自然落位），返回对象引用原样保留。
- * 存储顺序为空时按默认序原样返回。
+ * 未知/重复 key 剔除；用户定位过的列**占据它们原本占用的槽位**、按用户顺序填入槽位，
+ * 从未定位过的列（默认隐藏后启用、或代码新加的列）留在自己的设计位（route-column-reorder-fix）。
+ * 旧实现把未定位列一律追加到末尾，于是路由「方法/上游」、节点「安装路径」永远排在操作列右侧，
+ * 且拖拽换位时被顺序清洗丢弃、无法左移。
+ * 存储序完整覆盖全列时等价于直接按存储序排列；存储序为空时按默认序原样返回。
+ * 返回对象引用原样保留。
  */
 export function resolveOrderedColumns<T extends OrderedColumnLike>(columns: T[], order: string[]): T[] {
   const byKey = new Map(columns.map((c) => [String(c.key), c]))
-  const out: T[] = []
+  const defaultKeys = columns.map((c) => String(c.key))
+  const defaultIndex = new Map(defaultKeys.map((k, i) => [k, i]))
+  const positioned: string[] = []
   const seen = new Set<string>()
   for (const k of order) {
-    const col = byKey.get(k)
-    if (col && !seen.has(k)) {
-      out.push(col)
-      seen.add(k)
-    }
+    if (!byKey.has(k) || seen.has(k)) continue
+    positioned.push(k)
+    seen.add(k)
   }
-  for (const c of columns) {
-    const k = String(c.key)
-    if (!seen.has(k)) {
-      out.push(c)
-      seen.add(k)
-    }
-  }
-  return out
+  if (!positioned.length) return [...columns]
+  // 已定位列原本占据的槽位（默认序升序），按用户顺序逐一填回
+  const slots = positioned.map((k) => defaultIndex.get(k) as number).sort((a, b) => a - b)
+  const out: string[] = [...defaultKeys]
+  slots.forEach((slot, i) => {
+    out[slot] = positioned[i]
+  })
+  return out.map((k) => byKey.get(k) as T)
 }
 
 /** 按用户宽度覆盖表逐列应用宽度；无覆盖列保持默认档，入参列对象不被修改 */
@@ -116,9 +126,11 @@ export function useColumnConfig(options: ColumnConfigOptions) {
     columnWidths.value = {}
   }
 
-  /** 列顺序入库前清洗：未知/重复 key 剔除，缺失 key 按默认序补位（新列加入时自然落位） */
+  /** 列顺序入库前清洗：未知/重复 key 剔除，缺失 key 按全量列默认序补位（新列加入时自然落位） */
   function setColumnOrder(order: string[]): void {
-    const known = new Set(defaultColumns)
+    // 必须按全量列清单清洗：defaultColumns 只是默认可见列，按它清洗会丢弃非默认列的顺序
+    const universe = options.allColumns ?? defaultColumns
+    const known = new Set(universe)
     const seen = new Set<string>()
     const clean: string[] = []
     for (const k of order) {
@@ -127,7 +139,7 @@ export function useColumnConfig(options: ColumnConfigOptions) {
         seen.add(k)
       }
     }
-    for (const k of defaultColumns) if (!seen.has(k)) clean.push(k)
+    for (const k of universe) if (!seen.has(k)) clean.push(k)
     columnOrder.value = clean
   }
 

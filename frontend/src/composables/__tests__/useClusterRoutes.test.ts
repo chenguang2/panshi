@@ -32,6 +32,7 @@ vi.mock('@/composables/useClusterUtils', () => ({
 // 列个性化桩：顺序/宽度用可写 ref 暴露，测试直接驱动（真实 localStorage 由 useColumnConfig 单测覆盖）
 const mockRouteColumnWidths = ref<Record<string, number>>({})
 const mockRouteColumnOrder = ref<string[]>([])
+const mockRouteColumnsSelected = ref(['name', 'uri', 'publish_status', 'priority', 'actions'])
 
 vi.mock('@/composables/useColumnConfig', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/composables/useColumnConfig')>()
@@ -39,7 +40,7 @@ vi.mock('@/composables/useColumnConfig', async (importOriginal) => {
     ...actual, // resolveOrderedColumns / applyColumnWidths 走真实实现
     useColumnConfig: () => ({
       popoverVisible: ref(false),
-      columnsSelected: ref(['name', 'uri', 'publish_status', 'priority', 'actions']),
+      columnsSelected: mockRouteColumnsSelected,
       searchVisible: ref(true),
       actionsSelected: ref(['copy', 'edit', 'delete', 'publish', 'version']),
       columnWidths: mockRouteColumnWidths,
@@ -671,15 +672,37 @@ describe('useClusterRoutes 列顺序与列宽', () => {
     expect(cols.find((c) => c.key === 'name').width).toBe(160)
   })
 
-  it('列顺序：用户顺序优先，未知 key 剔除、缺失列按默认序补位', async () => {
+  beforeEach(() => {
+    mockRouteColumnOrder.value = []
+    mockRouteColumnsSelected.value = ['name', 'uri', 'publish_status', 'priority', 'actions']
+  })
+
+  it('列顺序：用户顺序优先，未知 key 剔除，未定位列留在设计位（route-column-reorder-fix）', async () => {
+    // 存储序 [actions, uri]：两列填回各自槽位（uri→1、actions→末），未定位的 name/priority/publish_status 不动
     mockRouteColumnOrder.value = ['actions', 'uri', 'ghost']
     const { visibleRouteColumns } = await makeComposable(makeCluster())
     expect((visibleRouteColumns.value as any[]).map((c) => c.key)).toEqual([
-      'actions',
-      'uri',
       'name',
+      'actions',
       'priority',
       'publish_status',
+      'uri',
+    ])
+  })
+
+  it('列顺序：启用非默认列（方法/上游）不被甩到操作列之后', async () => {
+    // 旧版 setColumnOrder 按 defaultColumns 清洗，残缺顺序让 methods/upstream_id 追加到 actions 之后
+    mockRouteColumnOrder.value = ['name', 'uri', 'priority', 'publish_status', 'actions']
+    mockRouteColumnsSelected.value = ['name', 'uri', 'methods', 'upstream_id', 'publish_status', 'priority', 'actions']
+    const { visibleRouteColumns } = await makeComposable(makeCluster())
+    expect((visibleRouteColumns.value as any[]).map((c) => c.key)).toEqual([
+      'name',
+      'uri',
+      'methods',
+      'upstream_id',
+      'priority',
+      'publish_status',
+      'actions',
     ])
   })
 
