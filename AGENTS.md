@@ -241,6 +241,8 @@ openspec/        # 变更工件；openspec/specs/ = main specs
 
 78. **资源卡片网格/容器样式全站单点 = `style.css` 的 `.card-grid` / `.std-card`（2026-11-15 card-grid-unification）** — 10 个资源卡片页（集群/统一/全局规则/插件开关/插件组/插件元数据/静态资源/四层代理/DNS 代理/DNS 查询）与 ClusterCard 根节点均挂共享类；页面保留原语义类名（`.gr-card`/`.sp-card` 等）仅承载局部覆盖（如 `.batch-mode .sp-card`），**禁止在页面重新声明容器四件套/hover/网格断点**——新卡片页挂 `card-grid` + `std-card` 两个类即得统一观感，改阴影/圆角/断点只动 style.css 一处。断点基准：3 列 → ≤1200 两列 → ≤768 一列。范围排除：最大化弹层内定宽卡片列表（ClusterGlobalRules 等，弹层形态）、中继页部署指引正文格、仪表盘统计格（各有意自适应）。方案与验证记录见 `docs/refactoring/card-grid-unification-2026-11-15.md`。
 
+79. **统一管理页集群 Tab 三表已接入列宽/列序个性化（cluster-tab-column-personalization，2026-11-15 归档）** — 节点/上游/路由三张 Tab 子表与左侧独立列表页同构：表体挂 `node-table <x>-table grid-table` + `:scroll="{ x: 'max-content' }"` + `:table-layout="'fixed'"`，`#headerCell` 槽接 `useColumnDragColumns`（fixedKeys 分别为 `['ip','actions']` / `['name','actions']` / `['name','actions']`），列配置统一走共享 `components/ColumnConfigPopover.vue`（可选 `width-resettable` + `@reset-widths` 开启「重置列宽」，ClusterNodes 原手写 popover 已并入）。存储键刻意分立：Tab 用 `node`/`upstream`/`route`，独立页用 `node_standalone`/`upstream_standalone`/`route_standalone`。顺序/宽度纯函数单点 = `useColumnConfig.ts` 的 `resolveOrderedColumns` / `applyColumnWidths`（重排 → 显隐过滤 → 宽度覆盖），无宽列必须补默认档（`:table-layout="'fixed'"` 下无宽列被余量均分、长内容列不可读）。**同屏多表作用域**：`useColumnDragColumns` 以 `e.currentTarget.closest('.ant-table-wrapper')` 解析本次手势表格根（同文档多表几何不再串扰），但**当前 UI 只能最大化一个集群**（`CentralList.toggleExpand` 存在而模板无消费点），「非最大化展开卡片」「同屏两张展开表」两形态不可达——真机验收按最大化单表做，多表隔离靠 `useColumnDragColumns.test.ts` 单测守住。真机验收记录（19/19 断言）与截图路径见归档 tasks.md。
+
 ## 新增功能步骤
 
 1. 在 `backend/app/schemas/` 定义 Pydantic 模型
