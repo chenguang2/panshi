@@ -48,6 +48,24 @@ const stubs = {
   },
   VersionManagementModal: { template: '<div class="mock-version-modal" />' },
   PublishConfirmModal: { template: '<div class="mock-publish-modal" />' },
+  ACheckboxGroup: {
+    name: 'MockCheckboxGroup',
+    template: '<div class="mock-checkbox-group"><slot /></div>',
+    props: ['value'],
+    emits: ['update:value'],
+  },
+  ACheckbox: {
+    name: 'MockCheckbox',
+    template: '<label class="mock-checkbox"><slot /></label>',
+    props: ['value', 'checked'],
+    emits: ['update:checked'],
+  },
+  ADivider: { template: '<div class="mock-divider" />' },
+  // a-popover 桩：内联渲染 #content 槽（真实 antd 弹层走 portal，jsdom 下取不到内容）
+  APopover: {
+    template: '<div class="mock-popover"><slot /><div class="mock-popover-content"><slot name="content" /></div></div>',
+    props: ['open', 'trigger', 'placement'],
+  },
 }
 
 const MOCK_ROUTES = {
@@ -1511,6 +1529,43 @@ describe('RouteList 列个性化（column-personalization-rollout）', () => {
     const beforeGuard = table.emitted('change')?.length ?? 0
     await uriTh.trigger('click')
     expect(table.emitted('change')?.length ?? 0).toBe(beforeGuard + 1)
+    wrapper.unmount()
+  }, 15_000)
+  it('列配置弹窗：显示字段勾选、搜索开关与弹窗内「重置列宽」', async () => {
+    const wrapper = await mountRoute()
+    const table = wrapper.findComponent({ name: 'ColDragTableStub' })
+    const keys = () => (table.props('columns') as Array<{ key: unknown }>).map((c) => String(c.key))
+    const colWidth = (key: string): number | unknown =>
+      (table.props('columns') as Array<{ key: unknown; width?: number }>).find((c) => String(c.key) === key)?.width
+    expect(keys()).toContain('methods')
+    // 弹窗结构与节点管理一致：显示字段 / 搜索 / 拖宽提示 / 重置列宽
+    const content = wrapper.find('.mock-popover-content')
+    expect(content.text()).toContain('显示字段')
+    expect(content.text()).toContain('显示搜索框')
+    expect(content.text()).toContain('拖动表头右缘可调整列宽')
+    expect(content.findAll('button').some((b) => b.text() === '重置列宽')).toBe(true)
+    // 取消勾选「方法」→ 列不再渲染
+    const groups = wrapper.findAllComponents({ name: 'MockCheckboxGroup' })
+    expect(groups.length).toBe(1)
+    const all = groups[0].props('value') as string[]
+    expect(all).toContain('methods')
+    groups[0].vm.$emit('update:value', all.filter((k) => k !== 'methods'))
+    await flushPromises()
+    expect(keys()).not.toContain('methods')
+    // 拖宽后经弹窗重置恢复默认
+    const uriTh = wrapper.findAll('th[data-col]').find((t) => t.attributes('data-col') === 'uri')!
+    await uriTh.find('.col-resize-handle').trigger('mousedown', { clientX: 300 })
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 360 }))
+    await flushPromises()
+    expect(colWidth('uri')).toBe(280) // 220 + 60
+    await content.findAll('button').find((b) => b.text() === '重置列宽')!.trigger('click')
+    await flushPromises()
+    expect(colWidth('uri')).toBe(220)
+    // 搜索开关
+    const toggle = wrapper.findAllComponents({ name: 'MockCheckbox' }).find((c) => c.text().includes('显示搜索框'))!
+    toggle.vm.$emit('update:checked', false)
+    await flushPromises()
+    expect(wrapper.find('input[placeholder="搜索名称、URI、描述、域名..."]').exists()).toBe(false)
     wrapper.unmount()
   }, 15_000)
 })

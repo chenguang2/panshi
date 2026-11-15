@@ -19,7 +19,7 @@
     </div>
 
     <div class="route-filter-bar">
-      <SearchInput v-model="searchText" placeholder="搜索名称、URI、描述、域名..." @input="onSearch" />
+      <SearchInput v-if="searchVisible" v-model="searchText" placeholder="搜索名称、URI、描述、域名..." @input="onSearch" />
       <select v-model="groupFilter" class="form-input" style="width: 140px" @change="onGroupChange">
         <option value="__all__">全部分组</option>
         <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
@@ -62,8 +62,29 @@
         <option value="">全部方法</option>
         <option v-for="m in methodOptions" :key="m" :value="m">{{ m }}</option>
       </select>
-      <span class="filter-count text-muted text-sm">共 {{ totalCount }} 条路由</span>
-      <button class="btn btn-primary btn-sm" @click="handleResetColumnWidths">重置列宽</button>
+      <a-popover v-model:open="columnPopoverVisible" trigger="click" placement="bottomLeft">
+        <template #title>选择显示列</template>
+        <template #content>
+          <div style="min-width: 400px">
+            <div style="font-weight: 500; margin-bottom: 8px">显示字段</div>
+            <a-checkbox-group v-model:value="columnsSelected">
+              <div style="display: flex; flex-wrap: wrap; gap: 8px">
+                <div v-for="col in popoverColumns" :key="col.key" style="margin-bottom: 4px">
+                  <a-checkbox :value="col.key">{{ col.title }}</a-checkbox>
+                </div>
+              </div>
+            </a-checkbox-group>
+            <a-divider style="margin: 12px 0" />
+            <div style="font-weight: 500; margin-bottom: 8px">搜索</div>
+            <a-checkbox v-model:checked="searchVisible">显示搜索框</a-checkbox>
+            <a-divider style="margin: 12px 0" />
+            <div class="text-muted" style="font-size: 12px; margin-bottom: 8px">拖动表头右缘可调整列宽</div>
+            <button class="btn btn-primary btn-sm" @click="handleResetColumnWidths">重置列宽</button>
+          </div>
+        </template>
+        <button class="btn btn-secondary btn-sm">列配置</button>
+      </a-popover>
+      <span class="text-muted text-sm">共 {{ totalCount }} 条路由</span>
     </div>
 
     <div class="table-container">
@@ -256,7 +277,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
-import { useColumnConfig } from '@/composables/useColumnConfig'
+import { useColumnConfig, resolveOrderedColumns, applyColumnWidths } from '@/composables/useColumnConfig'
 import { useColumnDragColumns } from '@/composables/useColumnDragColumns'
 import { formatDateOnly as formatDate } from '@/utils/format'
 import ClusterSelect from '@/components/ClusterSelect.vue'
@@ -369,6 +390,9 @@ const columns: TableColumnsType = [
 
 // ── 列个性化（column-personalization-rollout）：宽度/顺序持久化 + 拖拽手势共享 composable ──
 const {
+  popoverVisible: columnPopoverVisible,
+  columnsSelected,
+  searchVisible,
   columnWidths: routeColumnWidths,
   setColumnWidth: setRouteColumnWidth,
   resetWidths: resetRouteColumnWidths,
@@ -376,26 +400,22 @@ const {
   setColumnOrder: setRouteColumnOrder,
 } = useColumnConfig({ key: 'route_standalone', defaultColumns: columns.map((c) => String(c.key)) })
 
-const orderedColumns = computed(() => {
-  const stored = routeColumnOrder.value
-  const seq = stored.length ? stored : columns.map((c) => String(c.key))
-  const known = new Map(columns.map((c) => [String(c.key), c]))
-  const out: TableColumnsType = []
-  const seen = new Set<string>()
-  for (const k of seq) {
-    const c = known.get(k)
-    if (c && !seen.has(k)) {
-      out.push(c)
-      seen.add(k)
-    }
-  }
-  for (const [k, c] of known) if (!seen.has(k)) out.push(c)
-  return out
-})
+// 列顺序：共享 resolveOrderedColumns 单点（未知/重复键剔除，未定位列按设计位落座）
+const orderedColumns = computed(() => resolveOrderedColumns(columns, routeColumnOrder.value))
 
-const visibleColumns = computed(() =>
-  orderedColumns.value.map((c) => ({ ...c, width: routeColumnWidths.value[String(c.key)] ?? c.width })),
-)
+// 列显隐过滤 + 用户拖拽宽度覆盖默认档（与节点管理同款）
+// 序号列恒展示、不进入列配置弹窗（upstream-list-page 规格钉定；与 table-anatomy 序号列语义一致）
+const popoverColumns = computed(() => columns.filter((c) => String(c.key) !== 'index'))
+
+const visibleColumns = computed(() => {
+  const selected = new Set(columnsSelected.value)
+  // 序号列恒展示：它不进弹窗，而 antd CheckboxGroup 交互会把它从已选集合里剔除，故此处兜底
+  const isVisible = (c: { key?: unknown }) => String(c.key) === 'index' || selected.has(String(c.key))
+  return applyColumnWidths(
+    orderedColumns.value.filter(isVisible),
+    routeColumnWidths.value,
+  )
+})
 
 const {
   wrapClass: routeWrapClass,
@@ -413,6 +433,7 @@ const {
 
 function handleResetColumnWidths(): void {
   resetRouteColumnWidths()
+  columnPopoverVisible.value = false
   message.success('已恢复默认列宽')
 }
 
@@ -756,9 +777,6 @@ onUnmounted(() => {
   color: var(--muted);
 }
 /* 7.10：计数与（后续的）刷新控制右置同组 */
-.filter-count {
-  margin-left: auto;
-}
 .text-sm {
   font-size: 12px;
 }

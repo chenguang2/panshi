@@ -57,6 +57,24 @@ const stubs = {
     props: ['type', 'size', 'loading'],
   },
   ATable: upstreamTableStub,
+  ACheckboxGroup: {
+    name: 'MockCheckboxGroup',
+    template: '<div class="mock-checkbox-group"><slot /></div>',
+    props: ['value'],
+    emits: ['update:value'],
+  },
+  ACheckbox: {
+    name: 'MockCheckbox',
+    template: '<label class="mock-checkbox"><slot /></label>',
+    props: ['value', 'checked'],
+    emits: ['update:checked'],
+  },
+  ADivider: { template: '<div class="mock-divider" />' },
+  // a-popover 桩：内联渲染 #content 槽（真实 antd 弹层走 portal，jsdom 下取不到内容）
+  APopover: {
+    template: '<div class="mock-popover"><slot /><div class="mock-popover-content"><slot name="content" /></div></div>',
+    props: ['open', 'trigger', 'placement'],
+  },
   ADropdown: { template: '<div class="mock-dropdown"><slot /><slot name="overlay" /></div>', props: ['trigger'] },
   AMenu: { template: '<div class="mock-menu"><slot /></div>' },
   AMenuItem: { template: '<div class="mock-menuitem" @click="$emit(\'click\')"><slot /></div>' },
@@ -718,8 +736,8 @@ describe('UpstreamList 列个性化（column-personalization-rollout）', () => 
     document.dispatchEvent(new MouseEvent('mousemove', { clientX: 180 }))
     await flushPromises()
     expect(colWidth('targets')).toBe(300) // 220 + 80
-    // 页头「重置列宽」
-    const resetBtn = wrapper.findAll('button').find((b) => b.text() === '重置列宽')!
+    // 列配置弹窗内「重置列宽」（入口与节点管理统一：工具条不再单列按钮）
+    const resetBtn = wrapper.findAll('.mock-popover-content button').find((b) => b.text() === '重置列宽')!
     await resetBtn.trigger('click')
     await flushPromises()
     expect(colWidth('targets')).toBe(220)
@@ -770,4 +788,34 @@ describe('UpstreamList 列个性化（column-personalization-rollout）', () => 
     document.dispatchEvent(new MouseEvent('mouseup', { clientX: 700 }))
     wrapper.unmount()
   }, 15_000)
+
+  it('列配置弹窗：取消勾选隐藏列并持久化，搜索框可隐藏', async () => {
+    const wrapper = await mountUp()
+    const table = wrapper.findComponent({ name: 'ColDragTableStub' })
+    const keys = () => (table.props('columns') as Array<{ key: unknown }>).map((c) => String(c.key))
+    expect(keys()).toContain('scheme')
+    // 弹窗内容区渲染「显示字段」勾选项（与节点管理同款）
+    const content = wrapper.find('.mock-popover-content')
+    expect(content.text()).toContain('显示字段')
+    expect(content.text()).toContain('拖动表头右缘可调整列宽')
+    expect(content.text()).toContain('协议')
+    // 序号列恒展示、不进入弹窗（upstream-list-page 规格）
+    expect(content.findAllComponents({ name: 'MockCheckbox' }).some((c) => c.text().trim() === '#')).toBe(false)
+    const groups = wrapper.findAllComponents({ name: 'MockCheckboxGroup' })
+    expect(groups.length).toBe(1)
+    const all = groups[0].props('value') as string[]
+    expect(all).toContain('scheme')
+    // 取消勾选「协议」→ 列不再渲染且持久化
+    groups[0].vm.$emit('update:value', all.filter((k) => k !== 'scheme'))
+    await flushPromises()
+    expect(keys()).not.toContain('scheme')
+    const saved = JSON.parse(localStorage.getItem('upstream_standalone_cfg_guest') ?? '{}')
+    expect(saved.columns).not.toContain('scheme')
+    // 搜索开关
+    const toggle = wrapper.findAllComponents({ name: 'MockCheckbox' }).find((c) => c.text().includes('显示搜索框'))!
+    toggle.vm.$emit('update:checked', false)
+    await flushPromises()
+    expect(wrapper.find('input[placeholder="搜索名称或描述..."]').exists()).toBe(false)
+    wrapper.unmount()
+  })
 })

@@ -1507,7 +1507,8 @@ describe('NodeList.vue batch3 列配置', () => {
     const vm = wrapper.vm as any
     vm.nodeColumnsSelected = ['ip', 'actions']
     await wrapper.vm.$nextTick()
-    expect(vm.visibleNodeColumns.map((c: { key: string }) => c.key)).toEqual(['ip', 'actions'])
+    // 序号列恒展示、不参与列显隐（不进入列配置弹窗，三张独立列表页同一解剖）
+    expect(vm.visibleNodeColumns.map((c: { key: string }) => c.key)).toEqual(['index', 'ip', 'actions'])
     // useAuthStore 无登录态 → guest 键
     const raw = localStorage.getItem('node_standalone_cfg_guest')
     expect(raw).not.toBeNull()

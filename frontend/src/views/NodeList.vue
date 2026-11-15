@@ -26,7 +26,6 @@
         <option value="stopped">已停止</option>
         <option value="unchecked">未检测</option>
       </select>
-      <span v-if="statusFilter" class="text-muted text-sm">筛出 {{ displayedNodes.length }} 个</span>
       <a-popover v-model:open="nodeColumnPopoverVisible" trigger="click" placement="bottomLeft">
         <template #title>选择显示列</template>
         <template #content>
@@ -34,7 +33,7 @@
             <div style="font-weight: 500; margin-bottom: 8px">显示字段</div>
             <a-checkbox-group v-model:value="nodeColumnsSelected">
               <div style="display: flex; flex-wrap: wrap; gap: 8px">
-                <div v-for="col in columns" :key="col.key" style="margin-bottom: 4px">
+                <div v-for="col in popoverColumns" :key="col.key" style="margin-bottom: 4px">
                   <a-checkbox :value="col.key">{{ col.title }}</a-checkbox>
                 </div>
               </div>
@@ -58,6 +57,7 @@
         </template>
         <button class="btn btn-secondary btn-sm">列配置</button>
       </a-popover>
+      <span v-if="statusFilter" class="text-muted text-sm">筛出 {{ displayedNodes.length }} 个</span>
       <button class="btn btn-secondary btn-sm refresh-btn" @click="loadNodes"><ReloadOutlined /> 刷新</button>
     </div>
 
@@ -919,11 +919,13 @@ const orderedColumns = computed(() => {
   for (const [k, c] of known) if (!seen.has(k)) out.push(c)
   return out
 })
+// 序号列恒展示、不进列配置弹窗（三张独立列表页同一解剖；antd CheckboxGroup 交互会剔除未知值，故此处兜底）
+const popoverColumns = computed(() => columns.filter((c) => String(c.key) !== 'index'))
 // 用户拖拽宽度覆盖默认档（node-list-column-resize）
 const visibleNodeColumns = computed(() => {
   const selected = new Set(nodeColumnsSelected.value)
   return orderedColumns.value
-    .filter((c) => selected.has(String(c.key)))
+    .filter((c) => String(c.key) === 'index' || selected.has(String(c.key)))
     .map((c) => ({ ...c, width: nodeColumnWidths.value[String(c.key)] ?? c.width }))
 })
 
