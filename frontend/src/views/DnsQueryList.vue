@@ -32,8 +32,8 @@
       <div class="dq-empty-text">暂无 DNS 代理路由</div>
       <button class="btn btn-primary" style="margin-top: 12px" @click="openCreateForm">+ 新建 DNS 代理路由</button>
     </div>
-    <div v-else class="dq-grid">
-      <div v-for="r in sortedRoutes" :key="r.id" class="dq-card" :style="getCardBorderStyle(r.cluster_group_name)">
+    <div v-else class="dq-grid card-grid">
+      <div v-for="r in sortedRoutes" :key="r.id" class="dq-card std-card" :style="getCardBorderStyle(r.cluster_group_name)">
         <div class="dq-card-topbar" :style="getGroupColorStyle(r.cluster_group_name)">
           <span class="dq-topbar-name">{{ r.name }}</span>
           <span class="dns-badge">DNS</span>
@@ -499,25 +499,7 @@ onMounted(async () => {
   color: var(--muted);
 }
 
-/* ── Card Grid ── */
-.dq-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-}
-.dq-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  transition: box-shadow 0.2s;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.dq-card:hover {
-  box-shadow: var(--shadow-md);
-}
+/* 网格与卡片容器样式已上移共享 .card-grid / .std-card（style.css 卡片一致性单点） */
 .dq-card-topbar {
   padding: 4px 16px;
   font-size: 11px;
@@ -834,14 +816,5 @@ onMounted(async () => {
   color: var(--muted);
 }
 
-@media (max-width: 1200px) {
-  .dq-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-@media (max-width: 768px) {
-  .dq-grid {
-    grid-template-columns: 1fr;
-  }
-}
+/* 网格/卡片容器断点已上移共享 .card-grid（style.css） */
 </style>

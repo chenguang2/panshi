@@ -28,11 +28,11 @@
       <div class="pml-empty-icon">▣</div>
       <div class="pml-empty-text">暂无插件元数据</div>
     </div>
-    <div v-else class="pml-grid">
+    <div v-else class="pml-grid card-grid">
       <div
         v-for="item in displayedItems"
         :key="item.id"
-        class="pml-card"
+        class="pml-card std-card"
         :style="getCardBorderStyle(item.cluster_group_name)"
       >
         <div class="pml-card-topbar" :style="getGroupColorStyle(item.cluster_group_name)">
@@ -551,24 +551,7 @@ onUnmounted(() => {
   font-size: 14px;
   color: var(--muted);
 }
-.pml-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-}
-.pml-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  transition: box-shadow 0.2s;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.pml-card:hover {
-  box-shadow: var(--shadow-md);
-}
+/* 网格与卡片容器样式已上移共享 .card-grid / .std-card（style.css 卡片一致性单点） */
 .pml-card-topbar {
   padding: 4px 16px;
   font-size: 11px;
@@ -693,14 +676,5 @@ onUnmounted(() => {
   font-size: 12px;
   font-weight: 500;
 }
-@media (max-width: 1200px) {
-  .pml-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-@media (max-width: 768px) {
-  .pml-grid {
-    grid-template-columns: 1fr;
-  }
-}
+/* 网格/卡片容器断点已上移共享 .card-grid（style.css） */
 </style>

@@ -57,11 +57,11 @@
     </div>
 
     <!-- Grid -->
-    <div v-else class="plugin-grid">
+    <div v-else class="plugin-grid card-grid">
       <div
         v-for="item in filteredPlugins"
         :key="item.plugin_name"
-        class="plugin-card"
+        class="plugin-card std-card"
         :class="{ 'disabled-state': !item.enabled, 'unsaved-disabled': !item.enabled && isUnsaved(item) }"
       >
         <div class="plugin-card-header">
@@ -558,29 +558,9 @@ defineExpose({ requestLeave })
   margin-bottom: 8px;
 }
 
-.plugin-grid {
-  display: grid;
-  /* 与全站资源卡片页统一固定 3 列（2026-11-15 卡片网格一致性盘点，同全局规则页） */
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-}
-
 .plugin-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  /* 容器四件套/hover 已上移共享 .std-card（style.css）；本页保留特有内边距 */
   padding: 16px 20px;
-  box-shadow: var(--shadow-sm);
-  transition:
-    box-shadow 0.2s,
-    border-color 0.2s;
-  display: flex;
-  flex-direction: column;
-}
-
-.plugin-card:hover {
-  border-color: var(--border);
-  box-shadow: var(--shadow-md);
 }
 
 /* 禁用态（批 3）：仅标题微淡，名称与描述保持可读 */
@@ -765,15 +745,7 @@ defineExpose({ requestLeave })
   text-decoration: underline;
 }
 
-@media (max-width: 1200px) {
-  .plugin-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
 @media (max-width: 768px) {
-  .plugin-grid {
-    grid-template-columns: 1fr;
-  }
   .plugin-filter-bar {
     flex-direction: column;
     align-items: stretch;

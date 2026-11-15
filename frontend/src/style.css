@@ -197,6 +197,43 @@ body {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
 }
+/* ── 资源卡片网格共享单点（2026-11-15 卡片一致性收口：布局/容器样式全站单点，页面只挂类） ──
+   用法：网格元素挂 `card-grid`（3 列 → ≤1200 两列 → ≤768 一列），卡片元素挂 `std-card`
+   （容器四件套 + hover 阴影 + flex 列布局）。页面保留原语义类名（如 .gr-card）承载页面
+   局部覆盖（如 .batch-mode .sp-card），禁止重新声明容器四件套/网格断点。 */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 1200px) {
+  .card-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .card-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.std-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.2s;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.std-card:hover {
+  box-shadow: var(--shadow-md);
+}
+
 .card-header {
   display: flex;
   align-items: center;

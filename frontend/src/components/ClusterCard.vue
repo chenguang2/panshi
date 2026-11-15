@@ -1,5 +1,5 @@
 <template>
-  <div class="cl-card">
+  <div class="cl-card std-card">
     <div class="cl-card-topbar">
       <div class="cl-topbar-ident">
         <span class="cl-topbar-name" :title="identTitle">
@@ -182,20 +182,7 @@ const visibleNodes = computed(() => props.cluster.nodes?.slice(0, 3) ?? [])
    - topbar/stats/stats 数值字号取 CentralList 版（较新）；
    - card-desc 保留两行截断（CentralList 获得描述副标题后需防长文撑高卡片）；
    - card-meta 取纵向堆叠版（路径徽章 + 状态徽章并列的结构超集）。 */
-.cl-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  transition: box-shadow 0.2s;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.cl-card:hover {
-  box-shadow: var(--shadow-md);
-}
-
+/* 卡片容器四件套/hover 已上移共享 .std-card（style.css 卡片一致性单点） */
 .cl-card-topbar {
   display: flex;
   align-items: center;

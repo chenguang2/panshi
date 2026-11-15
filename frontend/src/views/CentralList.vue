@@ -94,7 +94,7 @@
               </a-button>
             </div>
             <div v-if="expandedGroups[group.name] !== false" class="group-body">
-              <TransitionGroup name="grid" tag="div" class="cluster-grid">
+              <TransitionGroup name="grid" tag="div" class="cluster-grid card-grid">
                 <ClusterCard
                   v-for="cluster in group.clusters"
                   :key="cluster.id"
@@ -197,7 +197,7 @@
               </a-button>
             </div>
             <div v-if="expandedGroups['__ungrouped__'] !== false" class="group-body">
-              <TransitionGroup name="grid" tag="div" class="cluster-grid">
+              <TransitionGroup name="grid" tag="div" class="cluster-grid card-grid">
                 <ClusterCard
                   v-for="cluster in group.clusters"
                   :key="cluster.id"
@@ -1596,10 +1596,7 @@ onMounted(async () => {
 }
 
 .cluster-grid {
-  display: grid;
-  /* 与集群管理 .cl-grid 同规则（2026-11-05 用户裁决统一卡片大小）：固定 3 列 + 16px 间距 */
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
+  /* 网格布局/断点已上移共享 .card-grid（style.css 卡片一致性单点）；本页保留弹层堆叠特有声明 */
   position: relative;
   z-index: 1;
 }

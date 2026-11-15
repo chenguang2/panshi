@@ -33,11 +33,11 @@
       <div class="sr-empty-text">暂无静态资源</div>
       <button class="btn btn-primary" style="margin-top: 12px" @click="openAddModal">+ 添加静态资源</button>
     </div>
-    <div v-else class="sr-grid">
+    <div v-else class="sr-grid card-grid">
       <div
         v-for="sr in displayedResources"
         :key="sr.id"
-        class="sr-card"
+        class="sr-card std-card"
         :style="getCardBorderStyle(sr.cluster_group_name)"
       >
         <div class="sr-card-topbar" :style="getGroupColorStyle(sr.cluster_group_name)">
@@ -726,24 +726,7 @@ onUnmounted(() => {
   font-size: 14px;
   color: var(--muted);
 }
-.sr-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-}
-.sr-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  transition: box-shadow 0.2s;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.sr-card:hover {
-  box-shadow: var(--shadow-md);
-}
+/* 网格与卡片容器样式已上移共享 .card-grid / .std-card（style.css 卡片一致性单点） */
 .sr-card-topbar {
   padding: 4px 16px;
   font-size: 11px;
@@ -891,14 +874,5 @@ onUnmounted(() => {
   background: oklch(50% 0 0 / 4%);
 }
 
-@media (max-width: 1200px) {
-  .sr-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-@media (max-width: 768px) {
-  .sr-grid {
-    grid-template-columns: 1fr;
-  }
-}
+/* 网格/卡片容器断点已上移共享 .card-grid（style.css） */
 </style>

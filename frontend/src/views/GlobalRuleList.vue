@@ -43,8 +43,8 @@
         <button class="btn btn-primary gr-empty-action" @click="openCreateModal">+ 添加全局规则</button>
       </template>
     </div>
-    <div v-else class="gr-grid">
-      <div v-for="pc in displayedRules" :key="pc.id" class="gr-card" :style="getCardBorderStyle(pc.cluster_group_name)">
+    <div v-else class="gr-grid card-grid">
+      <div v-for="pc in displayedRules" :key="pc.id" class="gr-card std-card" :style="getCardBorderStyle(pc.cluster_group_name)">
         <div class="gr-card-topbar" :style="getGroupColorStyle(pc.cluster_group_name)">
           <span>{{ pc.cluster_name || '-' }}</span>
           <span v-if="pc.cluster_group_name" class="group-badge">{{ pc.cluster_group_name }}</span>
@@ -445,27 +445,7 @@ onUnmounted(() => {
 .gr-empty-action {
   margin-top: 12px;
 }
-.gr-grid {
-  display: grid;
-  /* 与集群/插件组/插件元数据/静态资源卡片网格统一：固定 3 列，中屏 2 列、窄屏 1 列。
-     （原 7.5 自适应列数在宽屏排出 4 列、卡片明显窄于其它卡片页——2026-11-15 用户反馈统一；
-       中屏空白问题由 1200px 的 2 列断点兜住） */
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-}
-.gr-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  transition: box-shadow 0.2s;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.gr-card:hover {
-  box-shadow: var(--shadow-md);
-}
+/* 网格与卡片容器样式已上移共享 .card-grid / .std-card（style.css 卡片一致性单点） */
 .gr-card-header {
   display: flex;
   justify-content: space-between;
@@ -575,14 +555,5 @@ onUnmounted(() => {
   border: 1px solid var(--border);
   font-family: var(--font-mono);
 }
-@media (max-width: 1200px) {
-  .gr-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-@media (max-width: 768px) {
-  .gr-grid {
-    grid-template-columns: 1fr;
-  }
-}
+/* 网格/卡片容器断点已上移共享 .card-grid（style.css） */
 </style>

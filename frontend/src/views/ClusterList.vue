@@ -58,7 +58,7 @@
             {{ expandedGroups[group.name] ? '收起' : '展开' }}
           </a-button>
         </div>
-        <div v-show="expandedGroups[group.name]" class="cl-grid">
+        <div v-show="expandedGroups[group.name]" class="cl-grid card-grid">
           <ClusterCard v-for="c in group.clusters" :key="c.id" :cluster="c" :route-badge="routeBadge(c)">
             <template #actions>
               <button class="btn btn-secondary btn-sm cl-action-btn" @click="viewCluster(c)">详情</button>
@@ -573,13 +573,7 @@ onMounted(() => {
   color: var(--muted);
 }
 
-.cl-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-}
-
-/* 卡片解剖样式（卡片容器/头部/统计条/节点区等）已收敛至
+/* 网格布局与断点已上移共享 .card-grid（style.css 卡片一致性单点）；卡片解剖样式（卡片容器/头部/统计条/节点区等）已收敛至
    components/ClusterCard.vue（档位 C 统一实现），本页仅保留页面专属规则。 */
 .cl-action-btn {
   background: none !important;
@@ -691,15 +685,7 @@ onMounted(() => {
   max-width: 700px;
 }
 
-@media (max-width: 1200px) {
-  .cl-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
 @media (max-width: 768px) {
-  .cl-grid {
-    grid-template-columns: 1fr;
-  }
   .cl-header-actions {
     flex-direction: column;
     align-items: stretch;

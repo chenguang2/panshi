@@ -40,11 +40,11 @@
         <button class="btn btn-primary pc-empty-action" @click="openCreateModal">+ 添加插件组</button>
       </template>
     </div>
-    <div v-else class="pc-grid">
+    <div v-else class="pc-grid card-grid">
       <div
         v-for="pc in displayedConfigs"
         :key="pc.id"
-        class="pc-card"
+        class="pc-card std-card"
         :style="getCardBorderStyle(pc.cluster_group_name)"
       >
         <div class="pc-card-topbar" :style="getGroupColorStyle(pc.cluster_group_name)">
@@ -433,24 +433,7 @@ onUnmounted(() => {
 .pc-empty-action {
   margin-top: 12px;
 }
-.pc-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-}
-.pc-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  transition: box-shadow 0.2s;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.pc-card:hover {
-  box-shadow: var(--shadow-md);
-}
+/* 网格与卡片容器样式已上移共享 .card-grid / .std-card（style.css 卡片一致性单点） */
 .pc-card-header {
   display: flex;
   justify-content: space-between;
@@ -560,14 +543,5 @@ onUnmounted(() => {
   border: 1px solid var(--border);
   font-family: var(--font-mono);
 }
-@media (max-width: 1200px) {
-  .pc-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-@media (max-width: 768px) {
-  .pc-grid {
-    grid-template-columns: 1fr;
-  }
-}
+/* 网格/卡片容器断点已上移共享 .card-grid（style.css） */
 </style>

@@ -68,11 +68,11 @@
       </div>
       <div v-else class="sp-empty-text">暂无 DNS 代理</div>
     </div>
-    <div v-else class="sp-grid" :class="{ 'batch-mode': batchMode }">
+    <div v-else class="sp-grid card-grid" :class="{ 'batch-mode': batchMode }">
       <div
         v-for="p in displayedProxies"
         :key="p.id"
-        class="sp-card"
+        class="sp-card std-card"
         :class="{ selected: selectedProxyIds.includes(p.id) }"
         :style="getCardBorderStyle(p.cluster_group_name)"
         @click="batchMode && toggleProxy(p.id)"
@@ -665,24 +665,9 @@ loadProxies()
   color: var(--muted);
 }
 
-.sp-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-}
+/* 网格与卡片容器样式已上移共享 .card-grid / .std-card（style.css 卡片一致性单点） */
 .sp-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  transition: box-shadow 0.2s;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
   cursor: default;
-}
-.sp-card:hover {
-  box-shadow: var(--shadow-md);
 }
 .sp-card.selected {
   border-color: var(--accent);
@@ -922,14 +907,5 @@ loadProxies()
   color: var(--muted);
 }
 
-@media (max-width: 1200px) {
-  .sp-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-@media (max-width: 768px) {
-  .sp-grid {
-    grid-template-columns: 1fr;
-  }
-}
+/* 网格/卡片容器断点已上移共享 .card-grid（style.css） */
 </style>
