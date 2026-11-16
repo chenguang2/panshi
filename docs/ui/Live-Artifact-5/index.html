@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Live-Artifact-5 · 列表页美化方案对比 — 磐石网关管理平台</title>
+<link rel="stylesheet" href="proposal-a/theme.css">
+<style>
+.idx-wrap { max-width: 1560px; margin: 0 auto; padding: 24px 24px 40px; }
+.idx-head { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
+.idx-logo { width: 42px; height: 42px; border-radius: var(--radius-md); background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 700; flex-shrink: 0; }
+.idx-head h1 { font-family: var(--font-display); font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+.idx-head p { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.idx-head .btn { margin-left: auto; }
+.idx-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.idx-controls .seg { height: 34px; }
+.idx-controls .seg-opt { padding: 0 14px; font-family: var(--font-body); font-size: 12.5px; }
+.idx-controls .seg-opt b { font-weight: 600; margin-right: 4px; }
+.idx-meta { font-size: 12.5px; color: var(--muted); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 9px 14px; margin-bottom: 14px; }
+.idx-meta b { color: var(--fg); }
+.idx-stage iframe, #singleWrap iframe { width: 100%; height: calc(100vh - 250px); min-height: 620px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg); display: block; }
+.idx-compare { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.cmp-cap { display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 600; color: var(--fg); background: var(--surface); border: 1px solid var(--border); border-bottom: none; border-radius: var(--radius-md) var(--radius-md) 0 0; padding: 7px 12px; }
+.cmp-cap a { font-size: 11px; font-weight: 500; color: var(--accent); text-decoration: none; }
+.cmp-vp { height: 660px; overflow: hidden; border: 1px solid var(--border); border-radius: 0 0 var(--radius-md) var(--radius-md); background: var(--bg); }
+.cmp-vp iframe { width: 200%; height: 200%; border: none; transform: scale(0.5); transform-origin: 0 0; pointer-events: none; }
+.idx-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 16px; }
+.idx-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; }
+.idx-card h3 { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.idx-card h3 .pill { height: 18px; font-size: 10px; }
+.idx-card p { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.6; }
+.idx-card .idx-links { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+.idx-card .idx-links a { font-size: 11px; color: var(--accent); text-decoration: none; border: 1px solid oklch(56% 0.16 210 / 30%); background: var(--accent-bg); padding: 3px 10px; border-radius: 999px; }
+.idx-card .idx-links a:hover { background: var(--accent); color: #fff; }
+@media (max-width: 1100px) { .idx-compare, .idx-cards { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<div class="idx-wrap">
+  <header class="idx-head">
+    <div class="idx-logo">磐</div>
+    <div>
+      <h1>节点 / 上游 / 路由 — 列表页美化方案对比</h1>
+      <p>三套方向 · 沿用现行主题 token（Live-Artifact-4 基调演进）· 产物目录 docs/ui/Live-Artifact-5</p>
+    </div>
+    <a class="btn btn-secondary" id="openCur" href="proposal-a/nodes.html" target="_blank">新窗口打开当前页</a>
+  </header>
+  <div class="idx-controls">
+    <div class="seg" id="segProp">
+      <span class="seg-opt all active" data-v="a"><b>方案 A</b> 秩序与密度</span>
+      <span class="seg-opt" data-v="b"><b>方案 B</b> 概览 + 列表</span>
+      <span class="seg-opt" data-v="c"><b>方案 C</b> 控制台感</span>
+    </div>
+    <div class="seg" id="segPage">
+      <span class="seg-opt all active" data-v="nodes">节点管理</span>
+      <span class="seg-opt" data-v="upstreams">上游管理</span>
+      <span class="seg-opt" data-v="routes">路由管理</span>
+    </div>
+    <label class="l5-check" style="margin-left:auto;"><input type="checkbox" id="cmpToggle">三方案并排对比</label>
+  </div>
+  <div class="idx-meta" id="metaLine"></div>
+  <div id="singleWrap"><iframe id="mainFrame" src="proposal-a/nodes.html" title="方案预览"></iframe></div>
+  <div id="cmpWrap" class="idx-compare" style="display:none;">
+    <div><div class="cmp-cap"><span>方案 A · 秩序与密度</span><a href="proposal-a/nodes.html" target="_blank" data-p="a">打开</a></div><div class="cmp-vp"><iframe data-p="a" title="方案 A"></iframe></div></div>
+    <div><div class="cmp-cap"><span>方案 B · 概览 + 列表</span><a href="proposal-b/nodes.html" target="_blank" data-p="b">打开</a></div><div class="cmp-vp"><iframe data-p="b" title="方案 B"></iframe></div></div>
+    <div><div class="cmp-cap"><span>方案 C · 网关控制台感</span><a href="proposal-c/nodes.html" target="_blank" data-p="c">打开</a></div><div class="cmp-vp"><iframe data-p="c" title="方案 C"></iframe></div></div>
+  </div>
+  <div class="idx-cards">
+    <div class="idx-card">
+      <h3>方案 A <span class="pill pill-run"><span class="dot"></span>保守 · 推荐</span></h3>
+      <p>布局骨架不变：页头一行（标题 + 统计徽标 + 主操作）、工具条收进表格卡单行整合、状态胶囊与行悬浮打磨、分页规范化。改动最小、落地最快。</p>
+      <div class="idx-links"><a href="proposal-a/nodes.html" target="_blank">节点</a><a href="proposal-a/upstreams.html" target="_blank">上游</a><a href="proposal-a/routes.html" target="_blank">路由</a></div>
+    </div>
+    <div class="idx-card">
+      <h3>方案 B <span class="pill pill-unknown"><span class="dot"></span>中度</span></h3>
+      <p>在 A 的表格基础上，页首增加一排轻量统计卡（节点在线率 / 上游发布覆盖 / 路由发布进度），列表区卡片化更强，页面更有「产品概览」气息。</p>
+      <div class="idx-links"><a href="proposal-b/nodes.html" target="_blank">节点</a><a href="proposal-b/upstreams.html" target="_blank">上游</a><a href="proposal-b/routes.html" target="_blank">路由</a></div>
+    </div>
+    <div class="idx-card">
+      <h3>方案 C <span class="pill pill-stop"><span class="dot"></span>较大改动</span></h3>
+      <p>强调网关领域结构：节点按集群分组（分组头可折叠）、上游目标芯片带权重占比条与健康点、路由呈现「优先级 → 上游 → 集群」转发链路管线。视觉最有特色。</p>
+      <div class="idx-links"><a href="proposal-c/nodes.html" target="_blank">节点</a><a href="proposal-c/upstreams.html" target="_blank">上游 · 分组</a><a href="proposal-c/routes.html" target="_blank">路由 · V2 分组</a><a href="proposal-c/routes-v1.html" target="_blank">路由 · V1 分组</a><a href="proposal-c/routes-v3.html" target="_blank">路由 · V3 分组</a><a href="proposal-c/routes-l2.html" target="_blank">路由 · 不分组对照</a><a href="proposal-c/routes-sort-demo.html" target="_blank">分组/平铺双模式演示</a></div>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  'use strict';
+  var DIR = { a: 'proposal-a/', b: 'proposal-b/', c: 'proposal-c/' };
+  var PAGE = { nodes: 'nodes.html', upstreams: 'upstreams.html', routes: 'routes.html' };
+  var META = {
+    a: '方案 A · <b>秩序与密度</b> — 布局骨架不变，页头一行式统计徽标 + 工具条收进表格卡 + 状态胶囊/行悬浮/分页打磨。推荐作为落地基线。',
+    b: '方案 B · <b>数据概览 + 列表</b> — 页首轻量统计卡（示意数据），列表区沿用 A 的表格语言，整体更有产品概览气息。信息密度略降。',
+    c: '方案 C · <b>网关控制台感</b> — 节点按集群分组（分组头可点击折叠）、上游权重占比条 + 健康点、路由「P 优先级 → 上游 → 集群」链路管线。改动最大，建议单页试点。'
+  };
+  var state = { p: 'a', pg: 'nodes' };
+  var mainFrame = document.getElementById('mainFrame');
+  var metaLine = document.getElementById('metaLine');
+  var openCur = document.getElementById('openCur');
+  var cmpToggle = document.getElementById('cmpToggle');
+  var cmpWrap = document.getElementById('cmpWrap');
+  var singleWrap = document.getElementById('singleWrap');
+  function apply() {
+    var src = DIR[state.p] + PAGE[state.pg];
+    mainFrame.src = src;
+    openCur.href = src;
+    metaLine.innerHTML = META[state.p];
+    document.querySelectorAll('#segProp .seg-opt').forEach(function (o) { o.classList.toggle('active', o.dataset.v === state.p); });
+    document.querySelectorAll('#segPage .seg-opt').forEach(function (o) { o.classList.toggle('active', o.dataset.v === state.pg); });
+    document.querySelectorAll('#cmpWrap iframe').forEach(function (f) { f.src = DIR[f.dataset.p] + PAGE[state.pg]; });
+    document.querySelectorAll('#cmpWrap .cmp-cap a').forEach(function (a) { a.href = DIR[a.dataset.p] + PAGE[state.pg]; });
+  }
+  document.querySelectorAll('#segProp .seg-opt').forEach(function (o) { o.addEventListener('click', function () { state.p = o.dataset.v; apply(); }); });
+  document.querySelectorAll('#segPage .seg-opt').forEach(function (o) { o.addEventListener('click', function () { state.pg = o.dataset.v; apply(); }); });
+  cmpToggle.addEventListener('change', function () {
+    var on = cmpToggle.checked;
+    cmpWrap.style.display = on ? 'grid' : 'none';
+    singleWrap.style.display = on ? 'none' : 'block';
+    if (on) apply();
+  });
+  apply();
+})();
+</script>
+
+</body>
+</html>
