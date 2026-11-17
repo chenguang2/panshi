@@ -126,7 +126,8 @@ function handleChangePwdSuccess(data: ChangePasswordResponse) {
   position: sticky;
   top: 0;
   z-index: 50;
-  border-bottom: 2px solid var(--accent);
+  /* 设计稿基准（mockup-parity-standard r2-1）：1px 中性灰底线，替代旧 2px 品牌色粗线 */
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
@@ -212,7 +213,8 @@ function handleChangePwdSuccess(data: ChangePasswordResponse) {
 }
 
 .app-content {
-  padding: 20px 24px;
+  /* 设计稿基准（mockup-parity-standard r2-1）：content-area padding 24px */
+  padding: 24px;
   min-height: calc(100vh - 56px);
   background: var(--bg);
 }

@@ -59,15 +59,18 @@
   display: flex;
   flex-direction: column;
   line-height: 1.4;
-  padding: 2px 0;
+  /* 无纵向内距：设计 .mi 的 7px 上下内距即全部留白；此处再加 2px 会让两行式条目高 68 → 设计 64
+     （mockup-parity-standard r5-② 实测） */
+  padding: 0;
 }
 .menu-item-stack span {
-  /* 主文案 600（方案 A）：动作词是扫读锚点，600 是 14px 中文的清晰上限；解释行保持 11px 灰 */
-  font-size: 14px;
+  /* 主文案 13px/600（mockup-parity-standard r3-2 设计稿 .mi-main 实算）；解释行 11px/400 灰 */
+  font-size: 13px;
   font-weight: 600;
 }
 .menu-item-stack small {
   color: var(--muted);
   font-size: 11px;
+  font-weight: 400;
   margin-top: 1px;
 }

@@ -325,7 +325,8 @@ describe('UpstreamList.vue', () => {
     const UpstreamList = (await import('../UpstreamList.vue')).default
     const wrapper = mount(UpstreamList, { global: { stubs } })
     await flushPromises()
-    const pubBtns = wrapper.findAll('button.mock-btn').filter((b) => b.text() === '发布')
+    // r7：发布主按钮改为设计 .op-pub（原生 button，非 a-button 桩），故按类名选取
+    const pubBtns = wrapper.findAll('button.op-pub')
     expect(pubBtns).toHaveLength(2)
     await pubBtns[0].trigger('click')
     expect((wrapper.vm as any).publishModalVisible).toBe(true)
@@ -604,7 +605,8 @@ describe('UpstreamList.vue - 序号列跨页计数（upstream-list-index-column�
     expect(rows.length).toBe(20)
     expect(rows[0].findAll('td')[1].text()).toBe('1')
 
-    const page2 = wrapper.findAll('.ant-pagination-item').find((w) => w.text() === '2')
+    // r4-④：分页条已外置（ListPager），antd 内置分页不再渲染
+    const page2 = wrapper.findAll('.l5-pager .p-btn').find((w) => w.text() === '2')
     expect(page2).toBeTruthy()
     await page2!.trigger('click')
     await flushPromises()
@@ -720,7 +722,7 @@ describe('UpstreamList 列个性化（column-personalization-rollout）', () => 
     ;(wrapper.vm as any).viewMode = 'flat'
     await wrapper.vm.$nextTick()
     const table = wrapper.findComponent({ name: 'ColDragTableStub' })
-    expect(table.props('scroll')).toEqual({ x: 'max-content' })
+    expect(table.props('scroll')).toEqual({ x: 572 })
     expect(table.props('tableLayout')).toBe('fixed')
     const cols = table.props('columns') as Array<{ key: unknown; width?: number; fixed?: string }>
     const byKey = Object.fromEntries(cols.map((c) => [String(c.key), c]))

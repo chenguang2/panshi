@@ -140,6 +140,32 @@ export function useListClusterGrouping<T extends ClusterGroupRowLike>(options: L
   /** 可选中行（平铺/分组两模式都排除标记行） */
   const selectableRows = computed<T[]>(() => options.rows())
 
+  /** 当页是否已有折叠组（工具条「全部展开/全部收起」按钮文案依据；r5-④ 方案 A） */
+  const pageHasFolded = computed(() => groups.value.some((g) => isFolded(g.groupKey)))
+
+  /**
+   * 全部展开：清空折叠记忆（含其他页遗留的 groupKey）——字面语义即「全都展开」。
+   */
+  function expandAll(): void {
+    foldedKeys.value = []
+  }
+
+  /**
+   * 全部收起：把**当页**全部组记入折叠集合（与既有跨页折叠取并集）。
+   * 翻页后新出现的组默认展开，避免「翻页即空白」；折叠状态不持久化，刷新回默认全展开。
+   */
+  function collapseAll(): void {
+    const merged = new Set(foldedKeys.value)
+    for (const g of groups.value) merged.add(g.groupKey)
+    foldedKeys.value = [...merged]
+  }
+
+  /** 工具条单按钮的上下文切换（有折叠 → 全展开；无折叠 → 全收起） */
+  function toggleFoldAll(): void {
+    if (pageHasFolded.value) expandAll()
+    else collapseAll()
+  }
+
   function isRowSelectable(row: unknown): boolean {
     return !isGroupHeaderRow(row)
   }
@@ -174,5 +200,9 @@ export function useListClusterGrouping<T extends ClusterGroupRowLike>(options: L
     foldedKeys,
     isFolded,
     toggleFold,
+    pageHasFolded,
+    expandAll,
+    collapseAll,
+    toggleFoldAll,
   }
 }

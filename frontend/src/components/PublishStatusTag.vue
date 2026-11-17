@@ -48,6 +48,9 @@ const dateText = computed(() => formatPublishDateTime(props.publishedAt ?? null)
 </template>
 
 <style scoped>
+/* mockup-parity-standard r7：对齐设计 .ps-tag / .ps-pub / .ps-unpub / .ps-partial
+   —— 无边框、实心淡底 + 同族前景色；仅「待发布」用 mono（设计 .ps-pending 在 .ps-tag
+   的 mono 基线上，未发布/部分失败两条显式改回 body 字体）。 */
 .publish-status {
   display: inline-flex;
   align-items: baseline;
@@ -60,34 +63,34 @@ const dateText = computed(() => formatPublishDateTime(props.publishedAt ?? null)
   border-radius: 999px;
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.01em;
+  font-family: var(--font-mono);
+  letter-spacing: normal;
   white-space: nowrap;
 }
 .ps-published {
-  border: 1px solid #52c41a;
-  color: #52c41a;
-  background: #f6ffed;
+  color: var(--success);
+  background: oklch(55% 0.15 145 / 12%);
 }
 .ps-unpublished {
-  border: 1px solid #d9d9d9;
-  color: #999;
-  background: #fafafa;
+  color: var(--muted);
+  background: oklch(50% 0.018 240 / 8%);
+  font-family: var(--font-body);
 }
 .ps-pending {
-  border: 1px solid #fa8c16;
-  color: #fa8c16;
-  background: #fff7e6;
+  color: var(--warning);
+  background: oklch(65% 0.15 85 / 14%);
 }
 .ps-partial {
-  border: 1px solid #fa541c;
-  color: #fa541c;
-  background: #fff2e8;
+  color: var(--danger);
+  background: oklch(55% 0.18 28 / 12%);
+  font-family: var(--font-body);
 }
 .ps-date {
   font-size: 11px;
-  color: #666;
+  color: var(--muted);
   margin-left: 4px;
   cursor: help;
   white-space: nowrap;
+  font-family: var(--font-mono);
 }
 </style>

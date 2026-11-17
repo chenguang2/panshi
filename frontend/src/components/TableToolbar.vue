@@ -17,6 +17,8 @@
       <ReloadOutlined :spin="refreshing" /> 刷新
     </button>
     <slot name="config" />
+    <!-- 分组批量折叠（r5-④ 方案 A）：由消费页注入，仅在分组模式由消费页自行 v-if 控制 -->
+    <slot name="mode-extra" />
     <div v-if="showMode" class="seg">
       <button
         type="button"
@@ -49,7 +51,7 @@ import type { ListViewMode } from '@/composables/useListClusterGrouping'
 /**
  * 列表页工具条（list-pages-console-restyle 共享层，取代 table-toolbar-ux 的「列配置靠左」旧序）。
  *
- * 顺序契约（contract §1）：`#filters（左） → 弹簧 → #extra → 计数 → 刷新 → #config → 分组|平铺（最右）`。
+ * 顺序契约（contract §1）：`#filters（左） → 弹簧 → #extra → 计数 → 刷新 → #config → #mode-extra → 分组|平铺（最右）`。
  * 视觉基准：docs/ui/Live-Artifact-5/proposal-c/{nodes,upstreams,routes}.html 的 .l5-toolbar（32px 控件高度、
  * 12px 计数、.tool-btn / .seg 解剖）。样式单一来源 src/style.css 的「列表页控制台层」段落，组件内只做结构。
  * DOM 契约（测试依赖，勿改名）：toolbar / toolbar-count / toolbar-refresh / view-mode-group / view-mode-flat。

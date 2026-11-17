@@ -52,7 +52,7 @@
               :disabled="!cluster.selectedNode"
             >
               <div class="menu-item-stack">
-                <span>关联新OpenResty</span>
+                <span>关联新 OpenResty</span>
                 <small>把本机 Edge 切换关联到新装的 OpenResty</small>
               </div>
             </a-menu-item>
@@ -62,7 +62,7 @@
               :disabled="!cluster.selectedNode"
             >
               <div class="menu-item-stack">
-                <span>升级Edge小版本</span>
+                <span>升级 Edge 小版本</span>
                 <small>版本包管理与 Edge 小版本升级</small>
               </div>
             </a-menu-item>
@@ -151,8 +151,13 @@
         </template>
         <template v-if="column.key === 'status'">
           <div class="node-status-cell">
-            <!-- 配置态徽章（管理开关，中性灰，batch2 1.3）：与运行态徽章并排，两维度互不替代 -->
-            <BadgeStatus v-if="record.status === 0" text="已禁用" status="neutral" />
+            <!-- 配置态徽章（管理开关，r5-③：空心虚线胶囊 + 无圆点，与节点独立页同形态） -->
+            <BadgeStatus
+              v-if="record.status === 0"
+              text="已禁用"
+              status="disabled"
+              title="管理开关已禁用：不承载业务流量，仍可执行节点任务与状态查询"
+            />
             <!-- 运行态三态徽章（batch2 1.2 / D1-D2）：运行中/已停止/未检测互斥，不假绿 -->
             <BadgeStatus v-if="nginxState(record) === 'running'" text="运行中" status="online" />
             <BadgeStatus v-else-if="nginxState(record) === 'stopped'" text="已停止" status="offline" />
@@ -937,24 +942,24 @@ const handleCancelInstall = createCancelNodeInstallHandler({
   installStream,
 })
 
-// ── 关联新OpenResty ──
+// ── 关联新 OpenResty ──
 
 function handleAssociateNewOpenresty() {
   const node = props.cluster.selectedNode
   if (!node) return
   const prefix = node.openresty_path || ''
   showDangerConfirm(
-    '关联新OpenResty',
+    '关联新 OpenResty',
     `即将把节点 ${node.ip} 的 Edge（${node.edge_path}）关联到新 OpenResty（${prefix}），确认开始？`,
     '确认关联',
     async () => {
       execTargetNode.value = node
       execDrawerVisible.value = true
-      execDrawerTitle.value = `关联新OpenResty - ${node.ip}`
+      execDrawerTitle.value = `关联新 OpenResty - ${node.ip}`
       execLogs.value = []
       execProgress.percent = 0
       execProgress.status = 'active'
-      // batch2 5.3 / D8：动作流（关联新OpenResty）起始形态为不确定态
+      // batch2 5.3 / D8：动作流（关联新 OpenResty）起始形态为不确定态
       execProgress.indeterminate = true
       execResult.value = { stdout: '', stderr: '', command: '', rc: null }
       execElapsed.value = 0
@@ -991,7 +996,7 @@ function handleAssociateNewOpenresty() {
   )
 }
 
-// ── 升级Edge小版本 ──
+// ── 升级 Edge 小版本 ──
 
 const edgePackDialogVisible = ref(false)
 const edgePackDialogNode = ref<any>(null)

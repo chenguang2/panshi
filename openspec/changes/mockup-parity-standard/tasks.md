@@ -1,0 +1,139 @@
+# Tasks
+
+## 1. 基线
+
+- [x] 1.1 守卫反转清单：grep 全域（tableHeaderHitArea/tableAnatomy/三页测试/任意 grid-table 竖线断言）——验证：清单落本文件（grep 实测：无竖线/内距断言，无需反转项；新增源码守卫见 3.x）
+- [x] 1.2 基线验证：全量单测 + vue-tsc 绿（沿用 list-pages-console-restyle 收口态 2b56496c）
+
+## 2. 全站单点（用户裁决①）
+
+- [x] 2.1 PageHeader：margin-bottom 24→20px、h1 22/700→21px/600——验证：组件测试绿 + 三页真机截图
+- [x] 2.2 回归抽查：其余高频页（集群/统一管理/SSL）页头观感——验证：截图目检无异常
+
+## 3. L5 解剖对齐（三页作用域）
+
+- [x] 3.1 三页 `.table-container` 追加 `l5-card` 类（激活既有 L5 作用域规则）
+- [x] 3.2 style.css L5 新增解剖段：表头（去大写/卡同底/9px 12px）、td 10px 12px、去单元格竖线（保留把手锚线）、悬停 accent 4%、行内按钮 hover accent 三件套 + 圆角 4px、`.v-sep`、`.c-strong`/mono 12.5px、分页重绘（28×28 方形 mono/current accent/total 12px/border-top）
+- [x] 3.3 操作列：状态查询补 12px 波形 SVG；v-sep 接线（节点页 状态查询｜重载 之间；上游/路由无该组合不接线）；「列配置」触发器补 ▾（三页）
+- [x] 3.4 IP 格 600 字重（节点页）
+- [x] 3.5 节点页批量条：`l5-batchbar` 化（has-sel accent + 右端「清除选择」）+「批量导入」迁页头 actions
+- [x] 3.6 源码守卫 `mockupParity.source.test.ts`：三页 l5-card、L5 解剖段关键规则、v-sep/批量条接线——验证：`npx vitest run` 该文件绿
+
+## 4. 收口
+
+- [x] 4.1 断言反转落实（1.1 清单结论 + 受影响既有用例如批量条定位）——验证：全量单测 `npx vitest run --maxWorkers=4` 绿
+- [x] 4.2 `npx vue-tsc -b` + prettier/eslint 0 error——验证：退出码 0
+- [x] 4.3 `openspec validate --all` 0 error——验证：输出 0 error
+- [x] 4.4 同数据注入截图对照三页（复用 parity 脚本扩上游/路由）+ 真机抽查（拖拽手感/悬停/分页）——验证：截图存档本变更目录 + 逐项核对记录
+
+> 1.1 结论（grep 实测）：tableHeaderHitArea 仅断言拖拽定位契约（position/inset/z-index/cursor），无竖线/内距断言；三页测试仅断言 `.grid-table` 类存在（类名保留）——**零反转项**；新增源码守卫 `mockupParity.source.test.ts`（3.6）。
+> 2.1/2.2 证据：PageHeader 20px/21px-600 全站单点；集群/统一管理/SSL 页截图目检无异常（impl-parity 三页截图 + 既有页面共享组件测试绿）。
+> 3.x 证据：三页 `table-container l5-card`；L5 解剖段（表头/td/去竖线/悬停 accent/动作按钮 hover+圆角/v-sep/c-strong/分页重绘）落 style.css 末段；节点页状态查询波形 SVG + v-sep + IP c-strong；批量条 l5-batchbar（has-sel + 清除选择）+ 批量导入迁页头；三页列配置 ▾（CaretDownOutlined）。
+> 3.6/4.x 证据：`mockupParity.source.test.ts` 9 用例绿；**连带修复**：三页 refreshList 并发双请求使「最后一次调用」断言竞态（2/4 全量轮次同用例红）→ 顺序化（先列表后统计）后连续两轮全量 2914 绿（2026-11-17）；vue-tsc 0 error、eslint 0 error；`openspec validate --all` 216 passed / 0 failed。
+> 4.4 证据：同数据注入截图三页存 `screenshots/impl-parity-*.png`（nodes=设计稿原数据逐项对齐；upstreams/routes=mockup 形状等价数据）；真机抽查拖拽把手/悬停 accent/分页形态待用户复验。
+
+## 7. 第二轮（用户真机复核驱动，parity-audit-nodes-r2.md）
+
+- [x] 7.1 r2-1 布局壳：app-header 底线 2px accent → 1px 中性灰、app-content padding 20→24px（用户裁决①全站）
+- [x] 7.2 r2-2 节点页工具条：挂 nowrap（搜索锁定 150px）、下拉宽度 104/120/104
+- [x] 7.3 r2-3/4 图标：新增 `components/StrokeIcon.vue`（设计稿 stroke 线稿单点：play/pause/rotate/pulse/upload/sliders/chevronDown）；批量导入+滑杆接线列配置；批量条四动作与行内动作（启动/停止/状态查询/重载）全部换设计线稿，antd 圈形图标退场（toolbar 刷新 ReloadOutlined 保留）
+- [x] 7.4 r2-5 表头分隔线短线形态（right 3px / top 30% / height 40%，hover accent 加长；命中区不变）
+- [x] 7.5 r2-6 组头 checkbox 去除（选择列 display:none + 组头 colSpan +1 补宽；功能零损失分析见清单）
+- [x] 7.6 r2-7 组头折叠图标换细线 chevron（StrokeIcon；折叠旋转沿用 .g-chev.folded svg 规则）
+- [x] 7.7 r2-9 翻页左侧「共 N · 每页」（options display:contents 拆分，sizeChanger order:-1 居左，跳至留右端；总数后缀「· 每页」伪元素）
+- [x] 7.8 守卫同步：mockupParity.source.test.ts 扩 r2 断言（16 用例）；NodeList.source 图标守卫反转（StrokeIcon + MoreOutlined）；NodeList.test colSpan 9
+- [x] 7.9 收口：全量单测 211 files / 2919 绿（Tools 1 例为隔离即绿的竞争波动）+ vue-tsc 0 error + 同数据截图 `screenshots/impl-parity-nodes-r2.png`（量测：content padding 24px ✓、header 1px 中性灰 ✓、搜索 150 ✓、下拉 104 ✓、组头选择列 display:none ✓、chevron polyline ✓、has-sel + 清除选择 ✓、sizeChanger order -1 ✓）
+
+## 9. 第四轮（用户真机复核驱动，parity-audit-nodes-r4.md · 五项裁决 2026-11-17 全部批准后实施）
+
+> 取证脚本 `/tmp/opencode/parity-r4/probe.mjs` / `probe-ops.mjs`（Playwright 双侧计算样式与几何量测）。
+> 本轮含 1 项机制改动（内置分页 → 外置分页条），批准前不动代码。
+> 实施与复测记录见 `parity-audit-nodes-r4.md`「实施记录」节（改动清单 / 实测对照表 / 断言反转清单 / 已接受残差）。
+
+- [x] 9.1 用户项① 页头统计标签字重：`.ph-lite` 补 `font-weight:600` + `letter-spacing:-0.42px`（设计页胶囊嵌在 h1 内继承 600，实现页是 h1 兄弟节点丢继承）——验证：计算样式 weight=600、截图对照
+- [x] 9.2 用户项② 操作列过宽：L5 行内按钮解剖对齐（容器 gap 2px、`.btn-ghost.btn-sm` 内距 `0 6px`/gap 3px、更多触发器去边框 26px）+ 行内文案「状态查询」→「状态」+ 操作列宽 298——验证：操作列 298、表格总宽 ≤ 1310 无横向溢出
+- [x] 9.3 用户项③ 分组行底色：组头 td 背景（含 hover）`var(--surface)` → `var(--bg)`（与表头同色；r3-1 误读设计，`theme.css` 明写 `tr.l5-group td { background: var(--bg) }`）——验证：组头/表头背景计算值相等
+- [x] 9.4 用户项④ 分组每页条数：三页（节点/上游/路由）`:pagination="false"` + 外置分页条，组头行不再参与 antd 客户端切片（现状实测：40 节点/页 20，分组第 1 页 18 节点、第 2 页 5 节点；平铺第 2 页 20 节点）——验证：分组两页各 20 节点、序号跨页连续
+- [x] 9.5 用户项⑤ 底部页码行：新增共享 `components/ListPager.vue`（设计 `.l5-pager` 解剖：左 `共 <b>N</b> 个节点 · 每页 [下拉]`、右 `‹ 页码… › 跳至 [input] 页`、当前页实心 accent+白字、prev/next 28×28 带边框、间距 4px、条高 49px）——验证：逐元素量测对齐设计值
+- [x] 9.6 附加 E1：表头 padding 9px 12px 补 `!important`（AntDV `size="middle"` 4 类选择器压过 L5 段 3 类，r1 该项从未生效；行高 47 → 38）——验证：th padding 计算值 `9px 12px`
+- [x] 9.7 附加 E2：8 列宽按设计值重设（#48 / IP149 / 服务端口82 / 管理端口82 / 安装路径377 / 状态147 / Edge版本87 / 操作298）——验证：总宽 1310 = 卡片宽，零溢出
+- [x] 9.8 断言反转清单（#217）：`usePagination.test.ts`、三页分页绑定守卫、`mockupParity.source.test.ts`、`tableAnatomy.source.test.ts`、`NodeList.test.ts`（分页/页码/条数断言）先 grep 全域再改
+- [x] 9.9 全站标准同步：`usePagination.paginationProps` 仍为「内置分页页」标准；新增「分组/服务端分页列表 = 外置 `ListPager`」标准条目，其余列表页迁移列为后续任务（不在本轮）
+- [x] 9.10 收口：同数据注入复测（分组两页条数/组头底色/统计徽标字重/操作列宽/页码行逐元素）+ 全量单测 + vue-tsc + `openspec validate --all`
+
+## Workflow follow-up
+
+- 归档：`openspec archive mockup-parity-standard`，主 spec 合并（mockup-parity-verification + list-page-console-visual 两能力）后跑 `openspec validate --all` 收口（约定 #53）
+- 该验收标准（同数据注入 → 截图对照 → 差异清单 → 逐项批准 → 修改复测）后续页面复用
+
+## 8. 第三轮（用户真机细看驱动，parity-audit-nodes-r3.md）
+
+- [x] 8.1 r3-1 组头行背景 → var(--surface)（选择器升级 `.table-container .ant-table-tbody > tr.l5-group-row > td` 压过全站 transparent 规则；实测 oklch(1 0 0)=卡面白）
+- [x] 8.2 r3-2 菜单语言全站微调：主文案 14→13px/600（theme.css menu-item-stack 单点）、悬停只变底色不变字色（反转 2026-11-13 方案 A，用户批准）、内距 7px 10px、解释行 font-weight 400
+- [x] 8.3 r3-3 分页选项文案：paginationProps 增第三参 overrides（#54 机制不动，10 个既有消费方不传零影响）；三页传 buildOptionText →「N 条」（完整读感 = 设计「共 N · 每页 [N 条]」）；usePagination.test 补标准回归锚点 + overrides 用例（原文件此前并不存在，新建）
+- [x] 8.4 r3-4 列配置提示行补全「拖动表头右缘可调整列宽，拖动表头整格可调整列序」（三页）
+- [x] 8.5 r3-5 状态格两行封顶：NodeList 状态格/详情弹窗迁 L5 解剖（status-cell/s-row/exec-time），s-row 胶囊横排（status 列 120→140 + 胶囊 padding 0 5px 收紧，实测两胶囊并排、状态格 40px、行高 64≈设计 61.5）；类名迁移 node-status-cell→status-cell 零残留
+- [x] 8.6 守卫同步：mockupParity r3 断言 5 用例（21 用例总量）；实施修正两处守卫自身（规则源文件归属：menu-item-stack 在 theme.css、badge-status 收紧在 style.css 全局段——scoped 规则对子组件内部元素不生效的实测修正）
+- [x] 8.7 收口：全量单测 212 files / 2927 绿 + vue-tsc 0 error + validate 216/0 + 同数据截图 `screenshots/impl-parity-nodes-r3.png`
+
+
+## 10. 第五轮（用户真机复核驱动，parity-audit-nodes-r5.md · 批准前不改代码）
+
+> 取证脚本 `/tmp/opencode/parity-r5/{probe,sweep,probe3,probe4,probe5,probe7,probe9,probe10,probe-menu-routes,visual}.mjs`；
+> 证据截图 `/tmp/opencode/parity-r5/cmp-*.png`（设计/实现同元素裁切对照）。
+> 用户项 ① 触发器、② 菜单分栏/解释/标红、③ 状态胶囊；讨论项 ④ 分组批量折叠。
+
+- [x] 10.1 用户项① 更多触发器三页统一：`StrokeIcon` 增 `dots`（三圆 r=1.7 横排，12px），三页触发器改「无边框 26×24 锚点 + `dots` + muted」，删除 `MoreOutlined` 与 `⋯` 文本两套——验证：三页触发器计算样式 = 设计（26×24 / 边框 transparent / radius 4 / 图标 12px）
+- [x] 10.2 用户项② 菜单结构：`allNodeActionButtons` 增 `danger`/`desc` 元数据（删除项），NodeList 按元数据渲染 `danger` + `menu-item-stack`；三页菜单顺序 = CRUD 组 → 分隔线 → 危险组（删除）→ 分隔线 → 安装组——验证：节点页删除项文字红 + 有说明 + 独占一栏
+- [x] 10.3 用户项② 菜单样式单点（`style.css` Dropdown 段）：`min-width: 215px`、条目 `line-height: 1.4`（条目高 34.4→32.2）、分隔线 `border-top: 1px solid var(--border)` + `margin: 4px 6px`——验证：菜单宽 215（长说明折两行）、条目高 32.2、分隔线 193×1
+- [x] 10.4 用户项③ 状态胶囊：删除 r3-5 的 `padding: 0 5px` 收紧（状态列已回 147px），回设计 `0 8px`——验证：已停止胶囊 60.3px、两枚并排仍单行
+- [x] 10.5 用户项③ `BadgeStatus` 增 `status="disabled"` 变体（透明底 + 1px dashed `oklch(50% .018 240/.4)` + 无圆点 + `title` 透传），消费点：NodeList 行内/详情弹窗、ClusterNodes Tab——验证：三处渲染一致，27 消费方无外溢（约定 #217 grep 先行）
+- [x] 10.6 附带 4.1–4.5：序号列 mono 12px、安装路径值 muted、行内动作按钮 400 字重、表头行高回 38（选择列表头复选框行盒 22→16–19px，实测 41→39，再收 1px 至设计值）、PageHeader 描述 `margin-top: 2px` + h1 `line-height: 1.5`——验证：逐项量测命中设计值
+- [x] 10.7 讨论项④（待批准形态）：`useListClusterGrouping` 增 `expandAll/collapseAll/hasFolded`，三页工具条按「方案 A（列配置右侧单按钮上下文切换）」接线；同步在设计页三份 HTML 工具条补同形按钮——验证：折叠/展开/翻页语义 + 设计页与实现页截图对照不再报「多余元素」
+- [x] 10.8 规格收口：把「操作列与动作菜单解剖」「状态胶囊四态 + 管理开关态」「逐元素扫描九子域」写入 `list-page-console-visual` / `mockup-parity-verification` delta；批量折叠写入 `list-page-cluster-grouping`（另一变更）
+- [x] 10.9 收口：同数据注入复测（三页）+ 全量单测 + `vue-tsc -b` + `openspec validate --all`
+
+> 10.1–10.9 证据（2026-11-17 实施完成，`/tmp/opencode/parity-r5/final-verify.mjs` 逐项对照 **8/8 全 ✓**）：
+> - 10.1 三页触发器实测 `26×24 / border rgba(0,0,0,0) / bg 透明 / radius 4px / 图标 12px 三圆 cx5,12,19 cy12 fill=currentColor`，与设计逐值相等；`MoreOutlined` 与 `⋯` 文本两套清零（含源码守卫）。
+> - 10.2 节点菜单序列 = `详情/编辑/复制/数据库对比 ─分隔─ 删除(红+说明) ─分隔─ 安装×4`；路由/上游 = `编辑/版本管理/复制 ─分隔─ 删除`，与设计一致；危险项主文案 `oklch(0.55 0.18 28)` 相等。
+> - 10.3 菜单 `width: 215px`、条目高 `32.2 / 48.6 / 64`、分隔线 `1px solid var(--border)` + `margin: 4px 6px`——三项与设计逐值相等（`.menu-item-stack` 去掉 2px 纵向内距后才命中）。
+> - 10.4 已停止胶囊 `60.3×20 / padding 0 8px`、已禁用 `51.3×20 / 透明底 / 1px dashed / 无圆点`，与设计相等。
+> - 10.5 `badge-disabled` 变体三消费点（节点行内/详情弹窗/统一管理 Tab）；`BadgeStatus.test.ts` 增 2 用例。
+> - 10.6 序号列 mono 12px、路径值 muted、行内按钮 400、表头 th `38px`（选择列表头复选框行盒块级化 + 19px）、页头 h1 `31.5px` / 描述上距 `2px` 全部命中设计值。
+> - 10.7 三页工具条 `[data-test="toolbar-fold-all"]` 上下文切换实测：收起 → 当页 0 数据行 + 文案「全部展开」，展开 → 复原 20 行；设计页三份 HTML 同步补按钮并可点击演示（初始文案按实际折叠态）。
+> - 10.8 规格：`mockup-parity-standard` 增 2 需求（操作列触发器与动作菜单解剖、状态胶囊语义与管理开关态）+ `mockup-parity-verification` 增 3 需求（九子域扫描、机制根因、有意新增控件同步设计页）；`list-pages-console-restyle` 的 `list-page-cluster-grouping` 增「分组批量折叠控制」需求。
+> - 10.9 全量单测 2951 passed（`--maxWorkers=4`；`DbBackupRestoreWizard.ux` / `ServerCertList` / `ClusterFormModal` 三轮轮换各挂 1 例，隔离复跑全绿——约定 #58 的 CPU 争抢型波动，三文件均未被本轮改动触及）；`vue-tsc -b` 0 error、prettier 通过、`openspec validate` 两个变更均 valid。
+
+## 11. 第六轮（用户真机复核驱动，parity-audit-nodes-r6.md · 批准前不改代码）
+
+> 取证脚本 `/tmp/opencode/parity-r6/*.mjs`；证据截图 `pills-{design,impl}.png`、`pop-{design,impl}.png`。
+> 用户项 ① 胶囊仍偏小、② 重置列宽后横向滚动条、③ 列配置提示行图标。
+
+- [x] 11.1 用户项① 字体族对齐：L5 表格（建议全站表格）内容字体族统一为 `var(--font-body)`——消灭「设计页用 SF Pro/Inter、实现页回落到 Segoe UI/Roboto」的同 px 不同观感；验证：`.badge-status` 计算 fontFamily 含 `SF Pro Text`/`Inter`，与设计声明链一致
+- [x] 11.2 用户项① 复核分支（用户裁决：只修字体族，基准不动——升基准分支不执行）：若你确认已是新形态（虚线 + `padding: 0 8px`）仍偏小 → 改设计基准（胶囊 11px/20px → 12px/22px，三份设计页同步），默认不做
+- [x] 11.3 用户项② 列宽自适应（方案 A）：新增 `useFitColumnWidths`（ResizeObserver + 等比缩放 + 余数补给最宽列），三页（节点 1310/最小 1086、上游 1079/1054、路由 1247/1130）接线；`重置列宽` 后在设计最小总宽以上 SHALL NOT 出现横向滚动——验证：1600 与设计逐值相同、1536/1440/1366 零滚动、1280 仅在设计最小总宽以下滚动
+- [x] 11.4 用户项③ 列配置弹层（用户裁决只做提示行图标，面板宽/标题说明/分区标签等其余弹层差异暂不处理）：提示行改 `.pop-hint` 解剖（flex + 7px gap + **13px 双箭头图标** + 11px 文字 + `var(--bg)` 底色块 + 圆角 6 + 内距 7px 10px + 上距 12），面板宽 430、标题带「序号列恒展示，不参与勾选」说明、分区标签 11px/600 字距 0.44px、勾选项 12.5px、分隔线 1px + 上距 12、底部右对齐——验证：弹层截图与设计逐元素对照
+- [x] 11.5 规格收口：`list-page-console-visual` 增「表格宽度自适应」「列配置弹层解剖」；`mockup-parity-verification` 增「字体族声明核对」
+- [x] 11.6 收口：三页同数据复测 + 全量单测 + `vue-tsc -b` + `openspec validate --all`
+
+> 11.x 证据（2026-11-17 实施完成，详见 `parity-audit-nodes-r6.md` §七）：
+> - 11.1 `App.vue` token `fontFamily: 'var(--font-body)'`；实测 `.badge-status` 计算字体族 = 设计 `--font-body` 同一声明链（含 SF Pro Text/Inter）。
+> - 11.3 新增 `useFitColumnWidths` + 三页接线（`scroll.x` 1076/1054/1036、`flexKey` edge_path/targets/uri）；实测 1600/1536/1440/1366 三页 **全部 0 溢出**，1280/1200 才按最小总宽滚动；1440 实点「重置列宽」后 0 溢出；平铺模式 fixed 列 sticky 正常。
+> - 11.4 三页提示行 = `.pop-hint-line` + `StrokeIcon resizeH`（13px 图标，flex + 7px 间距），文案不变；面板宽/标题说明等其余差异按用户裁决暂不处理。
+> - 11.5 规格：`list-page-console-visual` 增「表格宽度自适应」「列配置提示行」；`mockup-parity-verification` 增「字体族声明核对」。
+> - 11.6 全量单测 214 files / 2963 passed；`vue-tsc -b` 0 error；prettier 通过；断言反转 3 处（三页 scroll 断言）、新增 12 用例。
+
+## 12. 第七轮（节点 + 上游真机复核，parity-audit-upstreams-r7.md · 批准前不改代码）
+
+> 节点页 ①选中行 ②hover 色、上游页 ①目标节点与健康 ②滚动条+图标 ③发布状态徽标/差异按钮 ④发布按钮 ⑤hover 色 ⑥工具条宽度。
+> 取证 `/tmp/opencode/parity-r7/*.mjs`。
+
+- [x] 12.1 节点/上游 选中行与 hover 色：实测两侧逐值相同（选中 8%、hover 4%）→ 用户裁决先不改代码、自行复验（缓存/缩放/是否同条件）
+- [x] 12.2 上游「目标节点与健康」列重建：点 + ip:port + 权重条 + 「权重 · 占比%」+ 汇总行（`tg-list/tg-chip/tg-bar/tg-w/tg-sum`）；占比 = 权重 / 有效权重和；健康来源与占比口径按裁决：**方案 A 发布态近似**（已批准；B 真实 Edge 健康端点另立、C 不采用）
+- [x] 12.3 上游发布状态徽标对齐设计：mono 字体、无边框、设计配色（pub 绿 12% / pending 黄 14% / unpub 灰 8% / partial 红 12%）——验证：四态截图对照
+- [x] 12.4 差异按钮对齐设计：20×20 圆形、accent-bg 底 + accent 30% 边 + 11px chevron SVG、`pub-cell gap 6px`
+- [x] 12.5 发布按钮对齐设计 `.op-pub`：accent 描边 + accent-bg 底 + accent 字、12px/500、`padding 0 10`、高 24；关闭 antd 中文两字自动空格（「发 布」→「发布」）
+- [x] 12.6 上游工具条宽度统一到节点页口径：分组 104 / 集群 120 / 算法 120（搜索保持 150）
+- [x] 12.7 附带：名称副标题 11px + 上距 2px、`.action-cell` gap 6→2
+- [x] 12.8 列宽最小总宽下探到列内容下限之和（窗口 ≥1000 零横向滚动）
+- [x] 12.9 规格 + 收口：`list-page-console-visual` / `table-toolbar-ux` / `mockup-parity-verification` 增补；全量单测 + `vue-tsc -b` + `openspec validate --all`

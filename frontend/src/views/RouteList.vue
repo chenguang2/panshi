@@ -9,7 +9,7 @@
       </template>
     </PageHeader>
 
-    <div class="table-container">
+    <div ref="cardRef" class="table-container l5-card">
       <!-- V2 双行工具条（table-toolbar-ux）：第一行 = 纯筛选行（右端簇不含计数，showCount=false）；
            第二行 = 方法 chips 附属行（紧贴表头上方，「共 N 条路由」随行右置） -->
       <TableToolbar
@@ -94,12 +94,32 @@
                 <div style="font-weight: 500; margin-bottom: 8px">搜索</div>
                 <a-checkbox v-model:checked="searchVisible">显示搜索框</a-checkbox>
                 <a-divider style="margin: 12px 0" />
-                <div class="text-muted" style="font-size: 12px; margin-bottom: 8px">拖动表头右缘可调整列宽</div>
+                <div class="pop-hint-line">
+                  <StrokeIcon name="resizeH" :size="13" />
+                  <span>拖动表头右缘可调整列宽，拖动表头整格可调整列序</span>
+                </div>
                 <button class="btn btn-primary btn-sm" @click="handleResetColumnWidths">重置列宽</button>
               </div>
             </template>
-            <button class="btn btn-secondary btn-sm">列配置</button>
+            <button class="btn btn-secondary btn-sm">
+              <StrokeIcon name="sliders" :size="13" />
+              列配置
+              <CaretDownOutlined style="font-size: 10px" />
+            </button>
           </a-popover>
+        </template>
+        <template #mode-extra>
+          <button
+            v-if="viewMode === 'group'"
+            type="button"
+            class="tool-btn fold-all-btn"
+            data-test="toolbar-fold-all"
+            :title="pageHasFolded ? '展开当页全部分组' : '收起当页全部分组'"
+            @click="toggleFoldAll"
+          >
+            <StrokeIcon :name="pageHasFolded ? 'expandAll' : 'collapseAll'" :size="13" />
+            <span class="fold-all-label">{{ pageHasFolded ? '全部展开' : '全部收起' }}</span>
+          </button>
         </template>
       </TableToolbar>
 
@@ -127,9 +147,9 @@
         :columns="visibleColumns"
         :row-key="(record: any) => record.key ?? record.id"
         :custom-row="routeCustomRow"
-        :pagination="paginationProps({ page, pageSize, total: totalCount }, '条路由')"
+        :pagination="false"
         :loading="loading"
-        :scroll="{ x: 'max-content' }"
+        :scroll="{ x: minTableWidth }"
         :table-layout="'fixed'"
         size="middle"
         class="route-table grid-table"
@@ -226,21 +246,23 @@
               <!-- 7.9：DNS 路由禁用行内操作 + tooltip 指路（替代 toast 拦截）；拍平后发布与菜单一并禁用 -->
               <div class="action-cell">
                 <a-tooltip :title="DNS_ROUTE_HINT" placement="top">
-                  <a-button size="small" disabled>发布</a-button>
+                  <button type="button" class="op-pub" disabled>发布</button>
                 </a-tooltip>
                 <a-tooltip :title="DNS_ROUTE_HINT" placement="top">
-                  <a-button type="text" size="small" class="action-trigger-btn" disabled>⋯</a-button>
+                  <a-button type="text" size="small" class="action-trigger-btn" disabled
+                    ><StrokeIcon name="dots"
+                  /></a-button>
                 </a-tooltip>
               </div>
             </template>
             <template v-else>
               <div class="action-cell">
                 <!-- 列表操作统一（方案 A）：发布为高频动作行内拍平，与上游/四层/DNS 页对齐 -->
-                <a-button size="small" @click="publishRoute(record)">发布</a-button>
+                <button type="button" class="op-pub" @click="publishRoute(record)">发布</button>
                 <a-dropdown :trigger="['click']">
-                  <a-button type="text" size="small" class="action-trigger-btn">⋯</a-button>
+                  <a-button type="text" size="small" class="action-trigger-btn"><StrokeIcon name="dots" /></a-button>
                   <template #overlay>
-                    <a-menu>
+                    <a-menu class="l5-action-menu">
                       <a-menu-item @click="editRoute(record)">编辑</a-menu-item>
                       <a-menu-item @click="openVersionManagement(record)">
                         <div class="menu-item-stack">
@@ -249,6 +271,7 @@
                         </div>
                       </a-menu-item>
                       <a-menu-item @click="copyRoute(record)">复制路由</a-menu-item>
+                      <a-menu-divider />
                       <a-menu-item danger @click="deleteRoute(record)">
                         <div class="menu-item-stack">
                           <span>删除</span>
@@ -278,6 +301,7 @@
           </div>
         </template>
       </a-table>
+      <ListPager :page="page" :page-size="pageSize" :total="totalCount" unit="条路由" @change="handlePagerChange" />
     </div>
 
     <RouteFormModal
@@ -327,6 +351,8 @@ import { useColumnConfig, resolveOrderedColumns, applyColumnWidths } from '@/com
 import { useColumnDragColumns } from '@/composables/useColumnDragColumns'
 import { formatDateOnly as formatDate } from '@/utils/format'
 import ClusterSelect from '@/components/ClusterSelect.vue'
+import StrokeIcon from '@/components/StrokeIcon.vue'
+import { CaretDownOutlined } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 import type { TableColumnsType } from 'ant-design-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
@@ -345,7 +371,6 @@ import {
   executeDeleteWithProgress,
   fetchAllClusterNodes,
 } from '@/composables/useClusterUtils'
-import { paginationProps } from '@/composables/usePagination'
 import {
   useListClusterGrouping,
   isGroupHeaderRow,
@@ -354,7 +379,9 @@ import {
 } from '@/composables/useListClusterGrouping'
 import { compareRoutePriority } from '@/utils/listGroupSorters'
 import TableToolbar from '@/components/TableToolbar.vue'
+import { useFitColumnWidths, toDesignWidths } from '@/composables/useFitColumnWidths'
 import ClusterGroupRow from '@/components/ClusterGroupRow.vue'
+import ListPager from '@/components/ListPager.vue'
 import PageStatBadges from '@/components/PageStatBadges.vue'
 import { useRoute } from 'vue-router'
 import SearchInput from '@/components/SearchInput.vue'
@@ -417,7 +444,7 @@ function routeGroupChips(rows: Array<Record<string, unknown>>): ClusterGroupChip
   if (partial) chips.push({ label: `${partial} 部分失败`, tone: 'bad' })
   return chips
 }
-const { displayRows, sequenceOf, toggleFold } = useListClusterGrouping({
+const { displayRows, sequenceOf, toggleFold, pageHasFolded, toggleFoldAll } = useListClusterGrouping({
   rows: () => displayedRoutes.value,
   unit: '路由',
   mode: viewMode,
@@ -488,10 +515,11 @@ const headerStatItems = computed(() => {
   return items
 })
 
-/** 刷新语义（design D6）：重拉列表 + 徽标统计；不重置筛选/排序键/视图模式 */
+/** 刷新语义（design D6）：重拉列表 + 徽标统计；不重置筛选/排序键/视图模式。
+ *  顺序化执行（先列表后统计）：并发的两个同名端点请求会让「最后一次调用」类断言产生竞态。 */
 async function refreshList(): Promise<void> {
-  loadRoutes()
-  loadRouteStats()
+  await loadRoutes()
+  await loadRouteStats()
 }
 const activeMethod = ref('')
 
@@ -585,6 +613,25 @@ const popoverColumns = computed(() => {
   return out
 })
 
+// 列宽自适应（r6-② 方案 A）：窄于设计总宽（1247）等比收缩，下限 = 设计最小总宽 1130
+const cardRef = ref<HTMLElement | null>(null)
+const { widths: fittedColumnWidths, minTableWidth } = useFitColumnWidths({
+  designWidths: () => toDesignWidths(columns),
+  containerRef: cardRef,
+  overrides: () => routeColumnWidths.value,
+  flexKey: 'uri',
+  // 列内容下限（r7-B4）：请求匹配（uri）为弹性列不设下限；scroll.x 下限之和 = 652 → 窗口 ≥ ~1040 零横向滚动
+  minWidths: () => ({
+    index: 40,
+    name: 110,
+    upstream: 100,
+    priority: 70,
+    publish_status: 110,
+    created_at: 90,
+    actions: 100,
+  }),
+})
+
 const visibleColumns = computed(() => {
   const selected = new Set(columnsSelected.value)
   // 序号列恒展示：它不进弹窗，而 antd CheckboxGroup 交互会把它从已选集合里剔除，故此处兜底；
@@ -606,7 +653,7 @@ const visibleColumns = computed(() => {
     fixed: groupMode ? undefined : c.fixed,
     customCell: (record: unknown) => groupHeaderCellProps(record, i === 0),
   }))
-  return applyColumnWidths(cols, routeColumnWidths.value)
+  return applyColumnWidths(cols, fittedColumnWidths.value)
 })
 
 const {
@@ -713,6 +760,14 @@ interface TableSorterEvent {
   order?: 'ascend' | 'descend' | null
 }
 
+/** 分页条事件（ListPager）：表外独立分页，表格本身 `:pagination="false"`（组标记行不占页容量） */
+function handlePagerChange(nextPage: number, nextPageSize: number) {
+  page.value = nextPage
+  if (nextPageSize) pageSize.value = nextPageSize
+  loadRoutes()
+}
+
+/** 仅接列排序（`:pagination="false"` 时 antdv 传 `pagination = {}` → 排序回落第 1 页） */
 function handleTableChange(
   pagination: TablePaginationConfig,
   _filters: Record<string, unknown>,
@@ -1004,13 +1059,6 @@ defineExpose({ viewMode })
   background: oklch(0% 0 0 / 6%);
   color: var(--muted);
   border-color: transparent;
-}
-
-.action-trigger-btn {
-  border: none !important;
-  background: transparent !important;
-  font-size: 16px !important;
-  color: var(--muted) !important;
 }
 
 .action-cell {

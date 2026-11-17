@@ -160,3 +160,43 @@ describe('isGroupHeaderRow', () => {
     expect(isGroupHeaderRow(undefined)).toBe(false)
   })
 })
+
+describe('useListClusterGrouping · 分组批量折叠（r5-④ 方案 A）', () => {
+  it('collapseAll 收起当页全部组，expandAll 清空折叠记忆', () => {
+    const g = useListClusterGrouping<Row>({ rows: () => rows, unit: '节点' })
+    expect(g.pageHasFolded.value).toBe(false)
+    g.collapseAll()
+    expect(g.foldedKeys.value.sort()).toEqual(['7', '9', UNGROUPED_KEY].sort())
+    expect(g.pageHasFolded.value).toBe(true)
+    // 折叠后仅剩标记行
+    expect(g.displayRows.value.every(isGroupHeaderRow)).toBe(true)
+    g.expandAll()
+    expect(g.foldedKeys.value).toEqual([])
+    expect(g.pageHasFolded.value).toBe(false)
+  })
+
+  it('collapseAll 与既有跨页折叠取并集（其他页遗留的 groupKey 不被清掉）', () => {
+    const g = useListClusterGrouping<Row>({ rows: () => rows, unit: '节点' })
+    // 模拟其他页遗留的折叠记忆（该页 groupKey 不在当页数据内）
+    g.foldedKeys.value = ['777']
+    g.collapseAll()
+    expect(g.foldedKeys.value).toContain('777')
+    expect(g.foldedKeys.value).toContain('7')
+  })
+
+  it('pageHasFolded 只看当页组：仅其他页折叠时按钮应为「全部收起」', () => {
+    const g = useListClusterGrouping<Row>({ rows: () => rows, unit: '节点' })
+    g.foldedKeys.value = ['777']
+    expect(g.pageHasFolded.value).toBe(false)
+    g.toggleFold('7')
+    expect(g.pageHasFolded.value).toBe(true)
+  })
+
+  it('toggleFoldAll 上下文切换：无折叠→全收起，有折叠→全展开', () => {
+    const g = useListClusterGrouping<Row>({ rows: () => rows, unit: '节点' })
+    g.toggleFoldAll()
+    expect(g.pageHasFolded.value).toBe(true)
+    g.toggleFoldAll()
+    expect(g.pageHasFolded.value).toBe(false)
+  })
+})

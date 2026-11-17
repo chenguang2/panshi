@@ -110,14 +110,17 @@ describe('batch1：命令页签与命令预览（2.6）', () => {
 })
 
 describe('batch1：操作图标与筛选栏（2.7）', () => {
-  it('emoji 操作图标换 AntDV 图标组件（🔍/▶/⏹/⟳/⋯）', () => {
+  it('emoji 操作图标换组件图标（🔍/▶/⏹/⟳/⋯；mockup-parity r2 后动作为 StrokeIcon 设计线稿）', () => {
     const s = src()
     for (const emoji of ['🔍', '▶', '⏹', '⟳', '⋯']) {
       expect(s).not.toContain(emoji)
     }
-    for (const icon of ['PlayCircleOutlined', 'PauseCircleOutlined', 'ReloadOutlined', 'MoreOutlined']) {
-      expect(s).toContain(icon)
-    }
+    // 动作图标 = StrokeIcon（设计稿 stroke 线稿单点）；更多触发器的三圆横排 = StrokeIcon dots
+    // （r5-①：antd MoreOutlined 是竖排三点、且带边框白底，已退场）；
+    // toolbar 刷新图标在共享 TableToolbar（ReloadOutlined，与设计刷新同形）。
+    expect(s).toContain('StrokeIcon')
+    expect(s).toContain('<StrokeIcon name="dots" />')
+    expect(s).not.toContain('MoreOutlined')
     // 搜索框已收敛到共享组件（ux-review 搜索一致性）：放大镜图标在 SearchInput 内，页面只引用组件
     expect(s).toContain('SearchInput')
   })

@@ -1,0 +1,394 @@
+// 设计稿还原度守卫（mockup-parity-standard）：
+// 视觉对齐关键锚点全部钉在源码层，防止后续改版静默回潮到「列配置靠左」时代的解剖。
+// 视觉判定本身走同数据注入截图对照（specs/mockup-parity-verification），此处只钉结构性锚点。
+import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+
+const css = readFileSync(resolve(process.cwd(), 'src/style.css'), 'utf-8')
+const page = (f: string) => readFileSync(resolve(process.cwd(), 'src/views', f), 'utf-8')
+
+describe('mockup-parity：三页表格卡挂 l5-card 作用域', () => {
+  it.each([
+    ['NodeList.vue', '.node-table'],
+    ['UpstreamList.vue', '.upstream-table'],
+    ['RouteList.vue', '.route-table'],
+  ])('%s 表格容器 = table-container l5-card', (f) => {
+    expect(page(f)).toContain('class="table-container l5-card"')
+  })
+})
+
+describe('mockup-parity：L5 解剖段关键规则（style.css 单点）', () => {
+  const scope = css.slice(css.indexOf('设计稿还原度对齐'))
+  it('表头去大写、卡同底、9px 12px', () => {
+    expect(scope).toMatch(/\.table-container\.l5-card \.ant-table-thead > tr > th \{[^}]*text-transform: none/)
+    expect(scope).toMatch(/\.table-container\.l5-card \.ant-table-thead > tr > th \{[^}]*background: var\(--bg\)/)
+    // !important 必要：antdv size="middle" 的 4 类选择器压过本段 3 类（r4-E1 实测内距从未生效）
+    expect(scope).toMatch(/\.table-container\.l5-card \.ant-table-thead > tr > th \{[^}]*padding: 9px 12px !important/)
+  })
+  it('去单元格竖线（grid-table 覆盖），悬停 accent 4%', () => {
+    expect(scope).toMatch(/\.table-container\.l5-card \.grid-table \.ant-table-cell \{[^}]*border-right: none/)
+    expect(scope).toMatch(
+      /\.table-container\.l5-card \.ant-table-tbody > tr:hover > td \{[^}]*oklch\(56% 0\.16 210 \/ 4%\)/,
+    )
+  })
+  it('行内动作 hover accent 三件套 + 圆角 4px', () => {
+    expect(scope).toMatch(/\.table-container\.l5-card \.action-cell \.ant-btn:hover,[^}]*\{[^}]*var\(--accent-bg\)/)
+    expect(scope).toMatch(
+      /\.table-container\.l5-card \.node-actions-wrap \.btn \{[^}]*border-radius: var\(--radius-sm\)/,
+    )
+  })
+  it('分页条（ListPager）：28×28 mono 页码 + current 实心 accent + 卡内底部 border-top', () => {
+    expect(css).toMatch(/\.l5-pager \{[^}]*border-top: 1px solid var\(--border\)/)
+    expect(css).toMatch(/\.l5-pager \.p-btn \{[^}]*min-width: 28px[^}]*font-family: var\(--font-mono\)/)
+    // 设计 .p-btn.active = 实心 accent + 白字（r4-⑤；原实现 10% 淡底 + accent 字）
+    expect(css).toMatch(/\.l5-pager \.p-btn\.active,[\s\S]{0,120}background: var\(--accent\)/)
+  })
+})
+
+describe('mockup-parity：页面接线锚点', () => {
+  it('节点页：状态查询波形图标（StrokeIcon pulse）+ 操作列 v-sep', () => {
+    const s = page('NodeList.vue')
+    expect(s).toContain('class="v-sep"')
+    expect(s).toContain('<StrokeIcon v-else-if="btnKey === \'status\'" name="pulse" />')
+  })
+  it('r2：行内/批量动作图标 = StrokeIcon 设计线稿（antd 圈形图标退场）', () => {
+    const s = page('NodeList.vue')
+    for (const name of ['play', 'pause', 'rotate', 'pulse', 'upload', 'sliders']) {
+      expect(s.match(new RegExp(`name="${name}"`, 'g'))?.length ?? 0).toBeGreaterThanOrEqual(1)
+    }
+    expect(s).not.toContain('PlayCircleOutlined')
+    expect(s).not.toContain('PauseCircleOutlined')
+    // toolbar 刷新保留 ReloadOutlined（与设计刷新图标同形）
+    expect(page('NodeList.vue')).toBeTruthy()
+  })
+  it('r2：组头行 checkbox 隐藏（选择列 display:none + colSpan +1）', () => {
+    expect(css).toMatch(
+      /\.table-container\.l5-card \.ant-table-tbody > tr\.l5-group-row \.ant-table-selection-column \{[^}]*display: none/,
+    )
+    expect(page('NodeList.vue')).toMatch(/colSpan: visibleNodeColumns\.value\.length \+ 1/)
+  })
+  it('r2：表头分隔线短线形态（right 3px / top 30% / height 40%）', () => {
+    expect(css).toMatch(
+      /\.table-container\.l5-card \.grid-table \.col-resize-handle::after \{[^}]*right: 3px[^}]*top: 30%[^}]*height: 40%/,
+    )
+  })
+  it('r4：antd 内置分页整体退场（display:contents 重排已删；三页改外置分页条）', () => {
+    expect(css).not.toMatch(/\.table-container\.l5-card \.ant-pagination/)
+    for (const f of ['NodeList.vue', 'UpstreamList.vue', 'RouteList.vue']) {
+      const src = page(f)
+      expect(src, f).toContain(':pagination="false"')
+      expect(src, f).toContain('<ListPager')
+    }
+  })
+  it('r2：布局壳（header 1px 中性灰底线 + content 24px）', () => {
+    const layout = readFileSync(resolve(process.cwd(), 'src/views/DefaultLayout.vue'), 'utf-8')
+    expect(layout).toMatch(/border-bottom: 1px solid var\(--border\)/)
+    expect(layout).toMatch(/padding: 24px;/)
+    expect(layout).not.toContain('border-bottom: 2px solid var(--accent)')
+  })
+  it('节点页：批量条 l5-batchbar（has-sel + 清除选择），批量导入在页头（先于「+ 添加节点」）', () => {
+    const s = page('NodeList.vue')
+    expect(s).toContain('class="l5-batchbar" :class="{ \'has-sel\': selectedNodeKeys.length > 0 }"')
+    expect(s).toContain('清除选择')
+    const importPos = s.indexOf('批量导入')
+    const addPos = s.indexOf('+ 添加节点')
+    expect(importPos).toBeGreaterThan(-1)
+    expect(addPos).toBeGreaterThan(importPos)
+  })
+  it('三页：列配置触发器带 ▾（CaretDownOutlined）', () => {
+    for (const f of ['NodeList.vue', 'UpstreamList.vue', 'RouteList.vue']) {
+      const s = page(f)
+      expect(s, f).toMatch(/列配置\s*<CaretDownOutlined/)
+    }
+  })
+  it('节点页：IP 格 600 字重（text-mono c-strong）', () => {
+    expect(page('NodeList.vue')).toMatch(/column\.key === 'ip'[\s\S]{0,120}text-mono c-strong/)
+  })
+})
+
+describe('mockup-parity r3：细看轮锚点', () => {
+  it('r3-1/r4-③ 组头行背景 = --bg（与表头 th 同色，设计 tr.l5-group td）', () => {
+    expect(css).toMatch(/\.table-container \.ant-table-tbody > tr\.l5-group-row > td,[^}]*background: var\(--bg\)/)
+  })
+  it('r3-2 菜单语言：主文案 13px/600、悬停不变色、内距 7px 10px', () => {
+    expect(css).toMatch(/\.ant-dropdown-menu-item \{[^}]*font-size: 13px/)
+    expect(css).toMatch(/\.ant-dropdown-menu-item \{[^}]*padding: 7px 10px/)
+    const hover = css.slice(css.indexOf('.ant-dropdown-menu-item:hover'))
+    expect(hover.slice(0, hover.indexOf('}') + 1)).not.toContain('color:')
+    // 两行式主文案在 src/styles/theme.css（action-menu-explanations 单点）
+    const theme = readFileSync(resolve(process.cwd(), 'src/styles/theme.css'), 'utf-8')
+    expect(theme).toMatch(/\.menu-item-stack span \{[^}]*font-size: 13px/)
+    expect(theme).toMatch(/\.menu-item-stack small \{[^}]*font-weight: 400/)
+  })
+  it('r3-3/r4-⑤ 三页分页条量词（「共 N 个节点/个上游/条路由」）', () => {
+    const units: Record<string, string> = {
+      'NodeList.vue': '个节点',
+      'UpstreamList.vue': '个上游',
+      'RouteList.vue': '条路由',
+    }
+    for (const [f, unit] of Object.entries(units)) {
+      expect(page(f), f).toContain(`unit="${unit}"`)
+    }
+  })
+  it('r3-4 列配置提示全文（右缘调宽 + 整格调序）', () => {
+    for (const f of ['NodeList.vue', 'UpstreamList.vue', 'RouteList.vue']) {
+      expect(page(f)).toContain('拖动表头右缘可调整列宽，拖动表头整格可调整列序')
+    }
+  })
+  it('r3-5 状态格两行解剖（status-cell/s-row/exec-time；node-status-cell 零残留）', () => {
+    const s = page('NodeList.vue')
+    expect(s).toMatch(/class="status-cell"/)
+    expect(s).toMatch(/class="s-row"/)
+    expect(s).toContain('class="exec-time"')
+    expect(s).not.toContain('node-status-cell')
+    expect(s).not.toContain('status-exec-time')
+    // r5-③ 已撤销 r3-5 的 0 5px 收紧（状态列回 147px 后收紧前提消失，内距回设计值 0 8px）
+    expect(css).not.toMatch(/\.table-container\.l5-card \.status-cell \.badge-status \{[^}]*padding: 0 5px/)
+  })
+})
+
+describe('mockup-parity r4（parity-audit-nodes-r4 逐项批准后的锚点）', () => {
+  it('r4-① 统计胶囊字重 600 + -0.42px（设计嵌在 h1 内继承，组件化后须显式声明）', () => {
+    expect(css).toMatch(/\.ph-lite \{[^}]*font-weight: 600/)
+    expect(css).toMatch(/\.ph-lite \{[^}]*letter-spacing: -0\.42px/)
+  })
+  it('r4-② 行内动作解剖 = 设计 .ops/.op-btn（gap 2px、按钮 0 6px+3px+24 高、更多触发器 26px 无框）', () => {
+    expect(css).toMatch(/\.table-container\.l5-card \.node-actions-wrap \{[^}]*gap: 2px/)
+    expect(css).toMatch(/\.table-container\.l5-card \.node-actions-wrap \.btn-sm \{[^}]*padding: 0 6px/)
+    // r5-① 起触发器解剖为合并规则（节点 .node-actions-wrap + 路由/上游 .action-cell 共用一条：
+    // 全局 `.ant-btn:not(...):not(...)` 的 !important 特异性更高，页内 scoped 规则覆盖不掉）
+    expect(css).toMatch(
+      /\.table-container\.l5-card \.node-actions-wrap \.action-trigger-btn,\s*\.table-container\.l5-card \.action-cell \.action-trigger-btn \{[^}]*width: 26px/,
+    )
+  })
+  it('r4-② 行内状态钮文案「状态」、菜单/列配置仍「状态查询」（shortTitle 与 title 分离）', () => {
+    const nodes = readFileSync(resolve(process.cwd(), 'src/composables/useClusterNodes.ts'), 'utf-8')
+    expect(nodes).toMatch(/\{ key: 'status', title: '状态查询', shortTitle: '状态' \}/)
+    expect(page('NodeList.vue')).toContain('getActionButtonText(btnKey)')
+  })
+  it('r4-E2 节点页列宽 = 设计缩放后实测值（合计 + 选择列 40 ≈ 卡宽 1310）', () => {
+    const s = page('NodeList.vue')
+    for (const w of [48, 149, 82, 377, 147, 87, 298]) {
+      expect(s, String(w)).toContain(`width: ${w}`)
+    }
+  })
+})
+
+describe('mockup-parity r5（parity-audit-nodes-r5 逐项批准后的锚点）', () => {
+  it('r5-① 三页更多触发器 = StrokeIcon dots（无边框 26×24 锚点），antd MoreOutlined 与 ⋯ 文本两套退场', () => {
+    for (const f of ['NodeList.vue', 'UpstreamList.vue', 'RouteList.vue']) {
+      const s = page(f)
+      expect(s, f).toContain('<StrokeIcon name="dots"')
+      expect(s, f).not.toContain('MoreOutlined')
+      expect(s, f).not.toContain('>⋯<')
+    }
+    expect(page('NodeList.vue')).toContain('import StrokeIcon')
+    // 图标本体 = 设计三圆横排（r=1.7，cx 5/12/19，cy 12，实心）
+    const icon = readFileSync(resolve(process.cwd(), 'src/components/StrokeIcon.vue'), 'utf-8')
+    expect(icon).toContain('<circle cx="5" cy="12" r="1.7" />')
+    expect(icon).toContain('<circle cx="19" cy="12" r="1.7" />')
+    expect(icon).toContain("FILLED_ICONS = new Set<string>(['dots'])")
+  })
+  it('r5-① 触发器无边框白底（style.css 压掉 antd text 按钮的 1px 边与白底）', () => {
+    const triggerRule = css.match(
+      /\.table-container\.l5-card \.node-actions-wrap \.action-trigger-btn,[\s\S]*?\{[^}]*\}/,
+    )
+    expect(triggerRule, '需存在触发器合并规则').toBeTruthy()
+    expect(triggerRule![0]).toContain('border: 1px solid transparent !important')
+    expect(triggerRule![0]).toContain('background: transparent !important')
+    expect(triggerRule![0]).toContain('.action-cell .action-trigger-btn')
+  })
+  it('r5-② 三页动作菜单挂 l5-action-menu（215 固定宽 + 条目行高 1.4 的作用域）', () => {
+    for (const f of ['NodeList.vue', 'UpstreamList.vue', 'RouteList.vue']) {
+      expect(page(f), f).toContain('<a-menu class="l5-action-menu">')
+    }
+    expect(css).toMatch(/\.ant-dropdown-menu\.l5-action-menu \{[^}]*width: 215px/)
+    expect(css).toMatch(/\.ant-dropdown-menu\.l5-action-menu \.ant-dropdown-menu-item \{[^}]*line-height: 1\.4/)
+  })
+  it('r5-② 危险操作独占一栏：删除项 danger + 常驻解释，前后分隔线（三页）', () => {
+    // 节点页：菜单由配置驱动 —— danger/desc 元数据在 useClusterNodes，模板按分组渲染
+    const nodesCfg = readFileSync(resolve(process.cwd(), 'src/composables/useClusterNodes.ts'), 'utf-8')
+    expect(nodesCfg).toMatch(
+      /key: 'delete',[\s\S]*?danger: true,[\s\S]*?desc: '删平台配置，可同步删 Edge 已发布配置（弹窗可选）'/,
+    )
+    const nodePage = page('NodeList.vue')
+    expect(nodePage).toContain('menuSafeActions')
+    expect(nodePage).toContain('menuDangerActions')
+    expect(nodePage).toMatch(/<a-menu-item[\s\S]{0,200}danger/)
+    // 路由/上游：手写菜单在删除项前插入分隔线
+    for (const f of ['RouteList.vue', 'UpstreamList.vue']) {
+      expect(page(f), f).toMatch(/<a-menu-divider \/>\s*<a-menu-item danger/)
+    }
+  })
+  it('r5-② 分隔线形态单点 = 1px 边线 + 4px 6px 边距（非底色块）', () => {
+    expect(css).toMatch(
+      /\.ant-dropdown-menu \.ant-dropdown-menu-item-divider \{[^}]*border-top: 1px solid var\(--border\) !important;[^}]*margin: 4px 6px !important/,
+    )
+  })
+  it('r5-③ 已禁用 = 空心虚线胶囊（badge-disabled，无圆点 + title 语义）', () => {
+    const badge = readFileSync(resolve(process.cwd(), 'src/components/BadgeStatus.vue'), 'utf-8')
+    expect(badge).toMatch(/\.badge-disabled \{[^}]*background: transparent/)
+    expect(badge).toMatch(/\.badge-disabled \{[^}]*border: 1px dashed/)
+    expect(badge).toMatch(/v-if="status !== 'disabled'"/)
+    expect(badge).toContain("status: 'online' | 'offline' | 'warning' | 'info' | 'neutral' | 'disabled'")
+    // 三处消费点：节点行内、节点详情、统一管理 Tab
+    for (const [f, count] of [
+      ['NodeList.vue', 2],
+      ['clusters/ClusterNodes.vue', 1],
+    ]) {
+      const s = page(f)
+      expect(s, f).toContain('status="disabled"')
+      expect((s.match(/status="disabled"/g) || []).length, f).toBe(count)
+      expect(s, f).not.toContain('text="已禁用" status="neutral"')
+    }
+  })
+  it('r5-④ 逐元素微差锚点：序号 mono 12px、路径值 muted、行内按钮 400、表头行盒 19px、页头 1.5 行高/2px 上距', () => {
+    expect(css).toMatch(/\.table-container\.l5-card \.c-idx \{[^}]*font-family: var\(--font-mono\)/)
+    expect(css).toMatch(/\.table-container\.l5-card \.c-idx \{[^}]*font-size: 12px/)
+    expect(page('NodeList.vue')).toMatch(/\.path-line \.path-v \{[^}]*color: var\(--muted\)/)
+    expect(css).toMatch(/\.table-container\.l5-card \.node-actions-wrap \.btn-sm \{[^}]*font-weight: 400/)
+    expect(css).toMatch(/\.table-container\.l5-card \.ant-table-thead \.ant-table-selection \{[^}]*height: 19px/)
+    const header = readFileSync(resolve(process.cwd(), 'src/components/PageHeader.vue'), 'utf-8')
+    expect(header).toMatch(/\.page-header-info h1 \{[\s\S]*?line-height: 1\.5;/)
+    expect(header).toMatch(/\.page-header-info p \{[\s\S]*?margin: 2px 0 0;/)
+  })
+  it('r5-④ 分组批量折叠：三页工具条挂 #mode-extra 按钮，composable 提供 expandAll/collapseAll', () => {
+    for (const f of ['NodeList.vue', 'UpstreamList.vue', 'RouteList.vue']) {
+      expect(page(f), f).toContain('template #mode-extra')
+      expect(page(f), f).toContain('data-test="toolbar-fold-all"')
+      expect(page(f), f).toContain('toggleFoldAll')
+    }
+    const comp = readFileSync(resolve(process.cwd(), 'src/composables/useListClusterGrouping.ts'), 'utf-8')
+    expect(comp).toContain('pageHasFolded')
+    expect(comp).toMatch(/function expandAll\(\): void/)
+    expect(comp).toMatch(/function collapseAll\(\): void/)
+    expect(comp).toMatch(/function toggleFoldAll\(\): void/)
+  })
+})
+
+describe('mockup-parity r6（parity-audit-nodes-r6：字体族 / 列宽自适应 / 提示行图标）', () => {
+  it('r6-① antd 令牌字体族统一为 var(--font-body)（表格内容不再走 antd 默认栈）', () => {
+    const app = readFileSync(resolve(process.cwd(), 'src/App.vue'), 'utf-8')
+    expect(app).toMatch(/fontFamily: 'var\(--font-body\)'/)
+  })
+  it('r6-② 三页表格不再用 scroll.x="max-content"（否则表格宽度恒等于列宽总和、窄窗必溢）', () => {
+    // r7-⑤ 起 scroll.x 绑 minTableWidth（各列内容下限之和），不再硬编码设计最小总宽
+    for (const f of ['NodeList.vue', 'UpstreamList.vue', 'RouteList.vue']) {
+      const s = page(f)
+      expect(s, f).not.toContain("x: 'max-content'")
+      expect(s, f).toContain(':scroll="{ x: minTableWidth }"')
+    }
+  })
+  it('r6-② 三页列宽走 useFitColumnWidths（设计宽 × 可用宽等比缩放 + 拖拽覆盖 + 弹性列吸收）', () => {
+    const flexKeys: Record<string, string> = {
+      'NodeList.vue': 'edge_path',
+      'UpstreamList.vue': 'targets',
+      'RouteList.vue': 'uri',
+    }
+    for (const [f, flexKey] of Object.entries(flexKeys)) {
+      const s = page(f)
+      expect(s, f).toContain('useFitColumnWidths(')
+      expect(s, f).toContain('toDesignWidths(columns)')
+      expect(s, f).toContain(`flexKey: '${flexKey}'`)
+      expect(s, f).toContain('fittedColumnWidths')
+      // 卡片持有 ref 供 ResizeObserver 观察
+      expect(s, f).toContain('ref="cardRef"')
+    }
+    // 节点页内容不可压列兜底（r7-B4 起在多行对象里：操作列按钮组 / 状态列两枚胶囊）
+    const nodes = page('NodeList.vue')
+    expect(nodes).toContain('minWidths: () => ({')
+    expect(nodes).toContain('actions: 268')
+    expect(nodes).toContain('status: 140')
+  })
+  it('r6-③ 列配置提示行 = 图标 + 文字（三页统一 .pop-hint-line）', () => {
+    for (const f of ['NodeList.vue', 'UpstreamList.vue', 'RouteList.vue']) {
+      const s = page(f)
+      expect(s, f).toContain('class="pop-hint-line"')
+      expect(s, f).toContain('<StrokeIcon name="resizeH"')
+      expect(s, f).toContain('拖动表头右缘可调整列宽，拖动表头整格可调整列序')
+    }
+    expect(css).toMatch(/\.pop-hint-line \{[^}]*display: flex/)
+    expect(css).toMatch(/\.pop-hint-line \{[^}]*gap: 7px/)
+    const icon = readFileSync(resolve(process.cwd(), 'src/components/StrokeIcon.vue'), 'utf-8')
+    expect(icon).toContain('<polyline points="6 8 2 12 6 16" />')
+  })
+})
+
+describe('mockup-parity r7（parity-audit-upstreams-r7：目标健康列 / 发布区 / 工具条宽度 / 列宽下限）', () => {
+  it('r7-① 上游「目标节点与健康」= 设计 .tg-list 解剖（点 + 权重条 + 「权重 · 占比%」+ 汇总行）', () => {
+    const s = page('UpstreamList.vue')
+    expect(s).toContain('<div class="tg-list"')
+    expect(s).toContain(':class="targetDotFor(record).cls"')
+    expect(s).toContain('class="tg-bar"')
+    expect(s).toContain('class="tg-w"')
+    expect(s).toContain('class="tg-sum"')
+    expect(s).toContain('全部健康')
+    expect(s).toContain('项待验证')
+    // 旧的两字段退化容器已退场
+    expect(s).not.toContain('class="target-list"')
+  })
+  it('r7-① 目标健康派生走 utils/upstreamTargets（方案 A：发布态近似，平台无目标级健康）', () => {
+    const s = page('UpstreamList.vue')
+    expect(s).toContain("from '@/utils/upstreamTargets'")
+    for (const fn of ['areTargetsVerified', 'summarizeTargetHealth', 'targetDot', 'targetWeightPercents']) {
+      expect(s, fn).toContain(fn)
+    }
+  })
+  it('r7-② 发布按钮 = 设计 .op-pub（上游 + 路由两页），且 style.css 有该单点', () => {
+    for (const f of ['UpstreamList.vue', 'RouteList.vue']) {
+      expect(page(f), f).toContain('class="op-pub"')
+      expect(page(f), f).not.toMatch(/<a-button size="small"[^>]*>发布<\/a-button>/)
+    }
+    expect(css).toContain('.op-pub {')
+    expect(css).toMatch(/\.op-pub \{[^}]*background: var\(--accent-bg\)/)
+    expect(css).toMatch(/\.op-pub \{[^}]*font-size: 12px/)
+    expect(css).toMatch(/\.op-pub \{[^}]*font-weight: 500/)
+  })
+  it('r7-③ 发布状态徽标 = 设计 .ps-tag（mono、无边框、四态淡底）', () => {
+    const s = readFileSync(resolve(process.cwd(), 'src/components/PublishStatusTag.vue'), 'utf-8')
+    const tagStart = s.indexOf('.ps-tag {')
+    const tagBlock = s.slice(tagStart, s.indexOf('}', tagStart))
+    expect(tagBlock).toContain('font-family: var(--font-mono)')
+    // 无边框（`border-radius` 合法，仅禁 border/border-* 声明）
+    expect(tagBlock).not.toMatch(/\bborder(-(top|right|bottom|left))?:/)
+    for (const [cls, token] of [
+      ['.ps-published', 'var(--success)'],
+      ['.ps-pending', 'var(--warning)'],
+      ['.ps-partial', 'var(--danger)'],
+      ['.ps-unpublished', 'var(--muted)'],
+    ]) {
+      const block = s.slice(s.indexOf(`${cls} {`), s.indexOf('}', s.indexOf(`${cls} {`)))
+      expect(block, cls).toContain(token)
+      expect(block, `${cls} 不应再带 1px 边框`).not.toContain('border:')
+    }
+  })
+  it('r7-③ 差异预览按钮 = 设计 .diff-btn（20×20 圆形 + accent 30% 描边 + chevron SVG）', () => {
+    const s = readFileSync(resolve(process.cwd(), 'src/components/PublishDiffButton.vue'), 'utf-8')
+    expect(s).toContain('<polyline points="6 9 12 15 18 9" />')
+    expect(s).not.toContain('<span class="tri">▾</span>')
+    const block = s.slice(s.indexOf('.diff-preview-btn {'))
+    expect(block).toContain('width: 20px')
+    expect(block).toContain('border-radius: 999px')
+    expect(block).toContain('oklch(56% 0.16 210 / 30%)')
+    expect(block).toContain('color: var(--accent)')
+  })
+  it('r7-④ 上游工具条宽度对齐节点页（分组 104 / 集群 120 / 算法 120，搜索 150）', () => {
+    const s = page('UpstreamList.vue')
+    expect(s).toContain('style="width: 104px"')
+    expect(s).toContain('style="width: 120px"')
+    expect(s).toMatch(/<ClusterSelect[\s\S]{0,160}style="width: 120px"/)
+    // 节点页同口径（分组 104 / 集群 120）
+    const nodes = page('NodeList.vue')
+    expect(nodes).toContain('style="width: 104px"')
+    expect(nodes).toMatch(/<ClusterSelect[\s\S]{0,160}style="width: 120px"/)
+  })
+  it('r7-⑤ 三页 scroll.x 绑 minTableWidth（下限之和），不再硬编码设计最小总宽', () => {
+    for (const f of ['NodeList.vue', 'UpstreamList.vue', 'RouteList.vue']) {
+      const s = page(f)
+      expect(s, f).toContain(':scroll="{ x: minTableWidth }"')
+      expect(s, f).toContain('minTableWidth } = useFitColumnWidths(')
+      expect(s, f).toContain('minWidths: () => ({')
+    }
+  })
+})

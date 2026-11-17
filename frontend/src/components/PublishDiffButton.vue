@@ -24,34 +24,44 @@ const visible = computed(() => props.pending === true || props.lastPublishStatus
     title="查看与 Edge 节点的差异"
     @click.stop="$emit('click', $event)"
   >
-    <span class="tri">▾</span>
+    <svg
+      width="11"
+      height="11"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+    >
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
   </button>
 </template>
 
 <style scoped>
+/* mockup-parity-standard r7：对齐设计 .diff-btn —— 20×20 圆形、accent 淡底 + accent 30% 描边 +
+   11px chevron；间距由父容器 gap 6px 承担（不再自带 margin）。 */
 .diff-preview-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
-  margin-left: 5px;
+  width: 20px;
+  height: 20px;
   padding: 0;
-  border: 1px solid var(--border-strong, #bfbfbf);
-  border-radius: 4px;
-  background: var(--surface, #fff);
-  color: var(--muted, #999);
-  font-size: 10px;
+  border: 1px solid oklch(56% 0.16 210 / 30%);
+  border-radius: 999px;
+  background: var(--accent-bg, oklch(56% 0.16 210 / 10%));
+  color: var(--accent);
   cursor: pointer;
-  vertical-align: middle;
+  transition: all 0.12s;
 }
 .diff-preview-btn:hover {
-  border-color: #fa8c16;
-  color: #fa8c16;
-  background: #fff7e6;
+  background: oklch(56% 0.16 210 / 20%);
 }
-.diff-preview-btn .tri {
-  display: inline-block;
-  line-height: 1;
+.diff-preview-btn svg {
+  width: 11px;
+  height: 11px;
 }
 </style>

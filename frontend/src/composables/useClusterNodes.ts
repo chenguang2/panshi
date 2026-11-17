@@ -50,14 +50,31 @@ export const allNodeColumns = [
   { title: '操作', key: 'actions', width: 280 },
 ]
 
-export const allNodeActionButtons = [
+export interface NodeActionButton {
+  key: string
+  /** 菜单/列配置勾选项文案（设计稿勾选项写全称「状态查询」） */
+  title: string
+  /** 行内按钮文案（设计稿行内只写「状态」，tooltip 才用全称；缺省回落 title）——r4-② */
+  shortTitle?: string
+  /** 危险操作（菜单内独占一栏 + 红字，设计 .mi.danger）——r5-② */
+  danger?: boolean
+  /** 菜单常驻解释（`menu-item-stack` 第二行；后果重且点击前不可见者必填，见 action-menu-explanations） */
+  desc?: string
+}
+
+export const allNodeActionButtons: NodeActionButton[] = [
   { key: 'edit', title: '编辑' },
   { key: 'copy', title: '复制' },
-  { key: 'delete', title: '删除' },
+  {
+    key: 'delete',
+    title: '删除',
+    danger: true,
+    desc: '删平台配置，可同步删 Edge 已发布配置（弹窗可选）',
+  },
   { key: 'diff', title: '数据库对比' },
   { key: 'start', title: '启动' },
   { key: 'stop', title: '停止' },
-  { key: 'status', title: '状态查询' },
+  { key: 'status', title: '状态查询', shortTitle: '状态' },
 ]
 
 /** 节点运行态三元（node-management-ux-batch2 1.1 / design D1）：

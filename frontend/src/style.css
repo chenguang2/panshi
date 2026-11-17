@@ -1011,15 +1011,15 @@ select.form-input {
 .ant-dropdown-menu-item {
   color: var(--fg) !important;
   border-radius: var(--radius-sm) !important;
-  /* 菜单显著性分级（方案 A，2026-11-13）：基础 14px/500 建立动作锚点，hover 主文案转主题蓝（指针反馈） */
-  font-size: 14px !important;
-  font-weight: 500 !important;
-  padding: 6px 12px !important;
+  /* 设计稿（mockup-parity-standard r3-2）：主文案 13px/600、内距 7px 10px、悬停仅底色不变字色
+     （反转 2026-11-13 方案 A 的悬停变 accent——用户批准，parity-audit-nodes-r3 第 2 项） */
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  padding: 7px 10px !important;
   transition: background 0.15s !important;
 }
 .ant-dropdown-menu-item:hover {
   background: var(--bg) !important;
-  color: var(--accent) !important;
 }
 .ant-dropdown-menu-item-danger {
   color: var(--danger) !important;
@@ -1094,6 +1094,7 @@ select.form-input {
 .status-cell-flex {
   display: inline-flex;
   align-items: center;
+  gap: 6px; /* 设计 .pub-cell gap 6px（原先靠 ▾ 按钮自带 margin-left 5px） */
   white-space: nowrap;
   max-width: 100%;
 }
@@ -1792,6 +1793,41 @@ body.col-move-dragging * {
   flex-wrap: wrap;
 }
 
+/* ── 发布动作按钮（设计 .op-pub：accent 描边 + accent 淡底 + accent 字，12px/500，pad 0 10，高 24）
+     取代 antd 默认小按钮（白底灰边、14px/400 且中文两字会被插入空格「发 布」） ── */
+.op-pub {
+  height: 24px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--radius-sm);
+  border: 1px solid oklch(56% 0.16 210 / 35%);
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 500;
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+.op-pub:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.op-pub:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* 目标汇总行的「待验证」分支（设计：warning 600，数字更深） */
+.tg-sum-pending,
+.tg-sum-pending b {
+  color: var(--warning);
+  font-weight: 600;
+}
+
 /* ── 上游目标芯片（实测数据无健康字段：地址:端口 · 权重 N 单行，健康点/占比条按需） ── */
 .tg-list {
   display: flex;
@@ -2255,8 +2291,10 @@ th.sorted-desc .sort-ind::after {
 /* ── 集群组标记行（a-table 内，components/ClusterGroupRow.vue；contract §10.6） ── */
 /* 组行整行通栏：td 去掉表格内距与竖线，视觉由 .l5-group-inner 承担（accent 左条 + 浅底）
    .l5-group = mockup 原生表格的行类（colspan 通栏），.l5-group-row = a-table 行类，同一解剖 */
-.l5-group > td,
-.l5-group-row > td {
+.table-container .ant-table-tbody > tr.l5-group-row > td,
+.l5-group > td {
+  /* 设计稿：组头 td 背景 = --bg，与表头 th 同色（theme.css `tr.l5-group td { background: var(--bg) }`；
+     r4-③ 修正——r3-1 误读成「无背景 → 透出卡面白」，用户实测指出与表头不同色） */
   background: var(--bg) !important;
   padding: 0 !important;
   border-right: none !important;
@@ -2264,8 +2302,8 @@ th.sorted-desc .sort-ind::after {
   overflow: visible;
   cursor: pointer;
 }
-.l5-group:hover > td,
-.l5-group-row:hover > td {
+.table-container .ant-table-tbody > tr.l5-group-row:hover > td,
+.l5-group:hover > td {
   background: var(--bg) !important;
 }
 /* 非首列在 colspan 方案下隐藏（首列 customCell 返回 colSpan: 可见列数） */
@@ -2372,6 +2410,10 @@ th.sorted-desc .sort-ind::after {
   border: 1px solid var(--border);
   background: var(--surface);
   font-size: 11.5px;
+  /* 设计稿 .ph-inline 嵌在 <h1> 内、继承标题的 600 与 -0.42px；组件化后 PageHeader 把 #stats
+     渲染为 h1 兄弟节点，继承链断裂 → 此处显式声明（r4-①，用户实测「标签字没加粗」） */
+  font-weight: 600;
+  letter-spacing: -0.42px;
   color: var(--muted);
   white-space: nowrap;
 }
@@ -2572,4 +2614,293 @@ th.resizable {
 .p-jump input:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-bg);
+}
+
+/* ── 设计稿还原度对齐（mockup-parity-standard；基准 proposal-c/nodes.html 实算值，逐项批准见 parity-audit-nodes.md）──
+   作用域 = .table-container.l5-card（三独立列表页表格卡）；
+   级联裁决：.table-container 全站规则带 !important，本段覆盖同样 !important 且选择器更具体。 */
+/* 表头：去大写、与卡同底、9px 12px（设计 .l5-table thead th） */
+.table-container.l5-card .ant-table-thead > tr > th {
+  text-transform: none !important;
+  background: var(--bg) !important;
+  /* !important 必要：AntDV size="middle" 生成的 4 类选择器（.ant-table.ant-table-middle …）压过
+     本段 3 类选择器，r1 起该内距一直未生效（实测 12px 8px / 行高 47px，设计 38px）——r4-E1 */
+  padding: 9px 12px !important;
+  line-height: 1.5;
+}
+/* 单元格：10px 12px、行高 1.5（设计 td line-height 19.5px = 13×1.5；AntDV 默认 1.5714
+   让两行路径/状态格撑到 64.3px，设计 61.5px——r4-E3） */
+.table-container.l5-card .ant-table-tbody > tr:not(.ant-table-expanded-row) > td {
+  padding: 10px 12px;
+  line-height: 1.5;
+}
+/* 设计稿无单元格竖线；列拖拽把手右缘锚线（.col-resize-handle::after）保留 */
+.table-container.l5-card .grid-table .ant-table-cell {
+  border-right: none !important;
+}
+/* 悬停 accent 4%（覆盖全站灰 hover）；选中行 accent 8% */
+.table-container.l5-card .ant-table-tbody > tr:hover > td {
+  background: oklch(56% 0.16 210 / 4%) !important;
+}
+.table-container.l5-card .ant-table-tbody > tr.ant-table-row-selected > td {
+  background: oklch(56% 0.16 210 / 8%) !important;
+}
+/* 行内动作按钮：圆角 4px（设计 op-btn）+ hover accent 三件套 */
+.table-container.l5-card .action-cell .ant-btn,
+.table-container.l5-card .node-actions-wrap .btn {
+  border-radius: var(--radius-sm);
+}
+/* 行内动作解剖对齐设计 .ops / .op-btn（r4-②）：容器 gap 2px、按钮内距 0 6px + gap 3px + 高 24、
+   更多触发器 = 无边框 26px 图标锚点。现状 3px 10px/gap 6/32px 带框 → 每颗按钮 64px，
+   操作列内容宽反超声明列宽，整表溢出差 42px（半成因，另一半是「状态查询」文案） */
+.table-container.l5-card .node-actions-wrap {
+  gap: 2px;
+}
+.table-container.l5-card .node-actions-wrap .btn-sm {
+  height: 24px;
+  padding: 0 6px;
+  gap: 3px;
+  /* 设计 .op-btn 字重 400（全局 .btn 为 500，r5-④-4.3 实测差） */
+  font-weight: 400;
+}
+/* 更多触发器（r5-①）= 设计 .menu-anchor .op-btn：无边框透明 26×24 锚点 + 12px 三圆横排。
+   本规则同时覆盖节点页（.node-actions-wrap）与路由/上游页（.action-cell）——两页的 scoped 规则
+   特异性（.action-trigger-btn[data-v-x]）压不过全局 `.ant-btn:not(...):not(...) { border: 1px solid
+   var(--border) !important; background: var(--surface) !important }`，实测仍带 1px 边 + 白底。 */
+.table-container.l5-card .node-actions-wrap .action-trigger-btn,
+.table-container.l5-card .action-cell .action-trigger-btn {
+  width: 26px;
+  min-width: 26px;
+  height: 24px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--muted) !important;
+  border-radius: var(--radius-sm) !important;
+}
+.table-container.l5-card .action-cell .ant-btn:hover,
+.table-container.l5-card .node-actions-wrap .btn-ghost:hover {
+  background: var(--accent-bg) !important;
+  color: var(--accent) !important;
+  border-color: oklch(56% 0.16 210 / 30%) !important;
+}
+/* mono 数值格（设计 c-mono 12.5px；IP 另加 .c-strong 600） */
+.table-container.l5-card .text-mono {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+.table-container.l5-card .text-mono.c-strong {
+  font-weight: 600;
+}
+/* 操作列组间分隔（设计 .v-sep：1×14px） */
+.table-container.l5-card .v-sep {
+  display: inline-block;
+  width: 1px;
+  height: 14px;
+  background: var(--border);
+  margin: 0 3px;
+  flex-shrink: 0;
+}
+/* ── 列表分页条（components/ListPager.vue；结构取设计 .l5-pager，r4-④⑤）──
+   a-table 内置分页会对 dataSource 做客户端切片（组标记行占掉页容量），故三页改
+   `:pagination="false"` + 本分页条（表外独立，服务端分页）。样式单一来源 = 此处。 */
+.l5-pager {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+.l5-pager .p-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.l5-pager .p-info b {
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+.l5-pager .p-nav {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.l5-pager .p-btn {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.l5-pager .p-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+/* 当前页 = 实心 accent 底 + 白字（设计 .p-btn.active；r4-⑤ 原实现是 10% 淡底） */
+.l5-pager .p-btn.active,
+.l5-pager .p-btn.active:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.l5-pager .p-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.l5-pager .p-gap {
+  min-width: 20px;
+  text-align: center;
+  color: var(--muted);
+}
+.l5-pager .p-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 10px;
+}
+.l5-pager .p-jump input {
+  width: 44px;
+  height: 28px;
+  text-align: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--fg);
+  outline: none;
+}
+.l5-pager .p-jump input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-bg);
+}
+.l5-pager .pager-select {
+  height: 28px;
+  padding: 0 24px 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background-color: var(--surface);
+  font-size: 12px;
+  color: var(--fg);
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 7px center;
+  cursor: pointer;
+  outline: none;
+}
+
+/* ── 设计稿还原度第二轮（mockup-parity-standard r2；parity-audit-nodes-r2.md 逐项批准）── */
+/* 组头行选择列 checkbox 隐藏（r2-6：禁用 checkbox 为纯视觉噪音；组头 colSpan 已 +1 补宽） */
+.table-container.l5-card .ant-table-tbody > tr.l5-group-row .ant-table-selection-column {
+  display: none;
+}
+/* 表头列分隔线形态（r2-5：设计 resizable::after——右缘短线，非顶格；hover accent 加长） */
+.table-container.l5-card .grid-table .col-resize-handle::after {
+  right: 3px;
+  top: 30%;
+  height: 40%;
+}
+.table-container.l5-card .grid-table .col-resize-handle:hover::after {
+  right: 3px;
+  top: 18%;
+  height: 64%;
+}
+/* 状态格胶囊：内距回设计值 0 8px（r5-③）。r3-5 的 0 5px 收紧是为塞进 140px 状态列，
+   r4-E2 已把状态列改回设计值 147px（可用内容宽 123px，设计两枚并排只需 115.6px），
+   收紧前提消失——留着会让每枚胶囊比设计窄 6px（实测 60.3 → 54.3），观感「小一号」。 */
+/* r2-9 的 antd 分页「display:contents + order」重排已随外置分页条（ListPager）整体退场：
+   左簇「共 N · 每页 [下拉]」右簇「‹ 页码 › 跳至」是组件原生结构，不再靠 CSS 拆解 antd 的 options 节点。 */
+
+/* ── 设计稿还原度第五轮（mockup-parity-standard r5；parity-audit-nodes-r5.md 逐项批准）── */
+/* 序号列 #：设计 .c-idx——mono 12px + muted（r5-④-4.1；此前用正文 13px 比例字体） */
+.table-container.l5-card .c-idx {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--muted);
+}
+/* 表头行高回设计值 38px（r5-④-4.4）：th 内距两侧已同为 9px 12px，行高由选择列表头的
+   antd 复选框行盒（22px）撑到 41px——把选择列容器改为块级 flex + 19px 高，
+   去掉 inline 行盒的基线附加值，行高 41 → 38（实测复选框垂直居中，cbTop = 9 = 内距）。 */
+.table-container.l5-card .ant-table-thead .ant-checkbox-wrapper {
+  line-height: 1;
+  font-size: 0;
+  display: flex;
+  align-items: center;
+}
+.table-container.l5-card .ant-table-thead .ant-table-selection {
+  display: flex;
+  align-items: center;
+  height: 19px;
+  line-height: 0;
+}
+/* 动作菜单解剖（设计 .l5-menu；r5-②）：带解释的动作菜单固定 215px 宽（长说明按设计折行）、
+   条目行高 1.4（条目高 34.4 → 32.2）、分隔线为 1px 边线 + 4px 6px 边距。
+   作用域 = 显式挂 `.l5-action-menu` 的 a-menu（三独立列表页），避免波及全站下拉。 */
+.ant-dropdown-menu.l5-action-menu {
+  width: 215px;
+  min-width: 215px;
+}
+.ant-dropdown-menu.l5-action-menu .ant-dropdown-menu-item {
+  line-height: 1.4 !important;
+}
+.ant-dropdown-menu.l5-action-menu .ant-dropdown-menu-item .menu-item-stack {
+  min-width: 0;
+}
+.ant-dropdown-menu.l5-action-menu .ant-dropdown-menu-item .menu-item-stack small {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+/* 分隔线形态单点（设计 .menu-sep；全站统一：底色块 → 1px 边线 + 4px 6px 边距） */
+.ant-dropdown-menu .ant-dropdown-menu-item-divider {
+  height: 0 !important;
+  background: transparent !important;
+  border-top: 1px solid var(--border) !important;
+  margin: 4px 6px !important;
+}
+
+/* 分组批量折叠钮的窄屏收敛（r5-④）：1600（设计验收视口）保留图标 + 文字；
+   ≤1400 收成纯图标（title 提供文案）——实测 1366 宽路由页工具条原本溢出 33px，收成图标后 0 溢出；
+   ≤1299 直接隐藏：该宽度下路由页工具条在**加入本钮之前**已溢出（1280 差 23px / 1200 差 103px），
+   本钮不应成为压垮它的那一根稻草（该宽度带的工具条自适应另议）。 */
+@media (max-width: 1400px) {
+  .l5-toolbar .fold-all-label {
+    display: none;
+  }
+}
+@media (max-width: 1299px) {
+  .l5-toolbar .fold-all-btn {
+    display: none;
+  }
+}
+
+/* ── 列配置弹层提示行（r6-③：设计 .pop-hint 的图标 + 横排对齐；其余弹层解剖差异另行立项）── */
+.pop-hint-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.pop-hint-line svg {
+  flex-shrink: 0;
+  color: var(--muted);
 }

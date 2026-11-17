@@ -9,7 +9,7 @@
       </template>
     </PageHeader>
 
-    <div class="table-container">
+    <div ref="cardRef" class="table-container l5-card">
       <!-- 工具条（list-pages-console-restyle）：共享 TableToolbar，右端簇 = 计数 → 刷新 → 列配置 → 分组|平铺 -->
       <TableToolbar
         v-model:mode="viewMode"
@@ -21,7 +21,7 @@
       >
         <template #filters>
           <SearchInput v-if="searchVisible" v-model="searchText" placeholder="搜索名称或描述..." @input="onSearch" />
-          <select v-model="groupFilter" class="l5-select" style="width: 140px" @change="onGroupChange">
+          <select v-model="groupFilter" class="l5-select" style="width: 104px" @change="onGroupChange">
             <option value="__all__">全部分组</option>
             <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
             <option value="__ung__">未分组</option>
@@ -30,10 +30,10 @@
             v-model="clusterFilter"
             :clusters="filteredClusters"
             allow-all
-            style="width: 160px"
+            style="width: 120px"
             @change="onFilterChange"
           />
-          <select v-model="lbFilter" class="l5-select" style="width: 140px" @change="onFilterChange">
+          <select v-model="lbFilter" class="l5-select" style="width: 120px" @change="onFilterChange">
             <option value="">全部算法</option>
             <option value="weighted_roundrobin">加权轮询</option>
             <option value="chash">一致性哈希</option>
@@ -58,12 +58,32 @@
                 <div style="font-weight: 500; margin-bottom: 8px">搜索</div>
                 <a-checkbox v-model:checked="searchVisible">显示搜索框</a-checkbox>
                 <a-divider style="margin: 12px 0" />
-                <div class="text-muted" style="font-size: 12px; margin-bottom: 8px">拖动表头右缘可调整列宽</div>
+                <div class="pop-hint-line">
+                  <StrokeIcon name="resizeH" :size="13" />
+                  <span>拖动表头右缘可调整列宽，拖动表头整格可调整列序</span>
+                </div>
                 <button class="btn btn-primary btn-sm" @click="handleResetColumnWidths">重置列宽</button>
               </div>
             </template>
-            <button class="btn btn-secondary btn-sm">列配置</button>
+            <button class="btn btn-secondary btn-sm">
+              <StrokeIcon name="sliders" :size="13" />
+              列配置
+              <CaretDownOutlined style="font-size: 10px" />
+            </button>
           </a-popover>
+        </template>
+        <template #mode-extra>
+          <button
+            v-if="viewMode === 'group'"
+            type="button"
+            class="tool-btn fold-all-btn"
+            data-test="toolbar-fold-all"
+            :title="pageHasFolded ? '展开当页全部分组' : '收起当页全部分组'"
+            @click="toggleFoldAll"
+          >
+            <StrokeIcon :name="pageHasFolded ? 'expandAll' : 'collapseAll'" :size="13" />
+            <span class="fold-all-label">{{ pageHasFolded ? '全部展开' : '全部收起' }}</span>
+          </button>
         </template>
       </TableToolbar>
 
@@ -72,13 +92,12 @@
         :columns="visibleColumns"
         :row-key="(record: any) => record.key ?? record.id"
         :custom-row="upstreamCustomRow"
-        :pagination="paginationProps({ page, pageSize, total: totalCount }, '个上游')"
+        :pagination="false"
         :loading="loading"
-        :scroll="{ x: 'max-content' }"
+        :scroll="{ x: minTableWidth }"
         :table-layout="'fixed'"
         size="middle"
         class="upstream-table grid-table"
-        @change="handleTableChange"
       >
         <template #headerCell="{ column, title }">
           <span class="th-resize-wrap" :class="upstreamWrapClass(column)" @mousedown="startColumnMove($event, column)">
@@ -107,11 +126,22 @@
             <span class="lb-chip">{{ lbLabels[record.load_balance] || record.load_balance }}</span>
           </template>
 
-          <!-- 目标节点与健康（contract §7：真实 targets 仅 target/weight，无健康字段 → 退化 chip 渲染） -->
+          <!-- 目标节点与健康（mockup-parity-standard r7 方案 A）：点 + 地址:端口 + 权重条 + 「权重 · 占比%」
+               + 汇总行。平台无目标级健康数据 → 点颜色/汇总按上游发布态近似（utils/upstreamTargets）。 -->
           <template v-else-if="column.key === 'targets'">
-            <div class="target-list" v-if="record.targets?.length">
-              <span v-for="t in record.targets" :key="t.target" class="tg-chip">
-                {{ t.target }}<span class="tg-w">· 权重 {{ t.weight }}</span>
+            <div class="tg-list" v-if="record.targets?.length">
+              <span v-for="(t, ti) in record.targets" :key="t.target" class="tg-chip">
+                <span class="dot" :class="targetDotFor(record).cls" :title="targetDotFor(record).title"></span>
+                {{ t.target }}
+                <span class="tg-bar"><i :style="{ width: targetPercentsOf(record)[ti] + '%' }"></i></span>
+                <span class="tg-w">{{ t.weight }} · {{ targetPercentsOf(record)[ti] }}%</span>
+              </span>
+              <span class="tg-sum" :title="targetDotFor(record).title">
+                <b>{{ targetsSummaryOf(record).total }}</b> 目标 ·
+                <template v-if="targetsSummaryOf(record).ok"><b>全部健康</b></template>
+                <span v-else class="tg-sum-pending"
+                  ><b>{{ targetsSummaryOf(record).pending }}</b> 项待验证</span
+                >
               </span>
             </div>
             <span v-else class="text-muted text-sm">—</span>
@@ -139,11 +169,11 @@
 
           <template v-else-if="column.key === 'actions'">
             <div class="action-cell">
-              <a-button size="small" @click="openPublishModal(record)">发布</a-button>
+              <button type="button" class="op-pub" @click="openPublishModal(record)">发布</button>
               <a-dropdown :trigger="['click']">
-                <a-button type="text" size="small" class="action-trigger-btn">⋯</a-button>
+                <a-button type="text" size="small" class="action-trigger-btn"><StrokeIcon name="dots" /></a-button>
                 <template #overlay>
-                  <a-menu>
+                  <a-menu class="l5-action-menu">
                     <a-menu-item @click="handleAction('edit', record)">编辑</a-menu-item>
                     <a-menu-item @click="handleAction('version', record)">
                       <div class="menu-item-stack">
@@ -152,6 +182,7 @@
                       </div>
                     </a-menu-item>
                     <a-menu-item @click="handleAction('copy', record)">复制</a-menu-item>
+                    <a-menu-divider />
                     <a-menu-item danger @click="handleAction('delete', record)">
                       <div class="menu-item-stack">
                         <span>删除</span>
@@ -179,6 +210,7 @@
           </div>
         </template>
       </a-table>
+      <ListPager :page="page" :page-size="pageSize" :total="totalCount" unit="个上游" @change="handlePagerChange" />
     </div>
 
     <UpstreamFormModal
@@ -229,7 +261,8 @@ import { useColumnConfig, resolveOrderedColumns, applyColumnWidths } from '@/com
 import { useColumnDragColumns } from '@/composables/useColumnDragColumns'
 import { message, Modal } from 'ant-design-vue'
 import ClusterSelect from '@/components/ClusterSelect.vue'
-import type { TablePaginationConfig } from 'ant-design-vue'
+import StrokeIcon from '@/components/StrokeIcon.vue'
+import { CaretDownOutlined } from '@ant-design/icons-vue'
 import { listUpstreams } from '@/api/upstreams'
 import { listClusters, getClusterNodes } from '@/api/clusters'
 import { PAGE_SIZE_TABLE } from '@/constants'
@@ -242,7 +275,6 @@ import PublishDiffButton from '@/components/PublishDiffButton.vue'
 import PublishPreviewModal from '@/components/PublishPreviewModal.vue'
 import { executePublish } from '@/composables/useClusterUtils'
 import { showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
-import { paginationProps } from '@/composables/usePagination'
 import {
   useListClusterGrouping,
   isGroupHeaderRow,
@@ -250,13 +282,23 @@ import {
   type ListViewMode,
 } from '@/composables/useListClusterGrouping'
 import { compareUpstreamName } from '@/utils/listGroupSorters'
+import { areTargetsVerified, summarizeTargetHealth, targetDot, targetWeightPercents } from '@/utils/upstreamTargets'
 import TableToolbar from '@/components/TableToolbar.vue'
+import { useFitColumnWidths, toDesignWidths } from '@/composables/useFitColumnWidths'
 import ClusterGroupRow from '@/components/ClusterGroupRow.vue'
+import ListPager from '@/components/ListPager.vue'
 import PageStatBadges from '@/components/PageStatBadges.vue'
 import { useRoute } from 'vue-router'
 import SearchInput from '@/components/SearchInput.vue'
 
 const route = useRoute()
+
+// 目标节点与健康（方案 A：发布态近似，见 utils/upstreamTargets）
+const targetPercentsOf = (record: { targets?: { target: string; weight: number }[] }) =>
+  targetWeightPercents(record.targets ?? [])
+const targetsSummaryOf = (record: Record<string, unknown>) =>
+  summarizeTargetHealth((record.targets as { target: string; weight: number }[]) ?? [], areTargetsVerified(record))
+const targetDotFor = (record: Record<string, unknown>) => targetDot(areTargetsVerified(record))
 const loading = ref(false)
 const upstreams = ref<any[]>([])
 const clusters = ref<any[]>([])
@@ -301,7 +343,7 @@ function upstreamGroupChips(rows: Array<Record<string, unknown>>): ClusterGroupC
   if (pending) chips.push({ label: `${pending} 待发布`, tone: 'warn' })
   return chips
 }
-const { displayRows, sequenceOf, isRowSelectable, toggleFold } = useListClusterGrouping({
+const { displayRows, sequenceOf, isRowSelectable, toggleFold, pageHasFolded, toggleFoldAll } = useListClusterGrouping({
   rows: () => displayedUpstreams.value,
   unit: '上游',
   mode: viewMode,
@@ -349,10 +391,11 @@ const headerStatItems = computed(() => {
   return items
 })
 
-/** 刷新语义（design D6）：重拉列表 + 徽标统计；不重置筛选/视图模式 */
+/** 刷新语义（design D6）：重拉列表 + 徽标统计；不重置筛选/视图模式。
+ *  顺序化执行（先列表后统计）：并发的两个同名端点请求会让「最后一次调用」类断言产生竞态。 */
 async function refreshList(): Promise<void> {
-  loadUpstreams()
-  loadUpstreamStats()
+  await loadUpstreams()
+  await loadUpstreamStats()
 }
 const formModalVisible = ref(false)
 const editingUpstream = ref<any | null>(null)
@@ -396,6 +439,17 @@ const orderedColumns = computed(() => resolveOrderedColumns(columns, upstreamCol
 // 序号列恒展示、不进入列配置弹窗（upstream-list-page 规格钉定；与 table-anatomy 序号列语义一致）
 const popoverColumns = computed(() => columns.filter((c) => String(c.key) !== 'index'))
 
+// 列宽自适应（r6-② 方案 A）：窄于设计总宽（1079）等比收缩，下限 = 设计最小总宽 1054
+const cardRef = ref<HTMLElement | null>(null)
+const { widths: fittedColumnWidths, minTableWidth } = useFitColumnWidths({
+  designWidths: () => toDesignWidths(columns),
+  containerRef: cardRef,
+  overrides: () => upstreamColumnWidths.value,
+  flexKey: 'targets',
+  // 列内容下限（r7-B4）：目标列为弹性列不设下限；scroll.x 下限之和 = 572 → 窗口 ≥ ~960 零横向滚动
+  minWidths: () => ({ index: 40, name: 120, load_balance: 80, scheme: 70, publish_status: 110, actions: 120 }),
+})
+
 const visibleColumns = computed(() => {
   const selected = new Set(columnsSelected.value)
   // 序号列恒展示：它不进弹窗，而 antd CheckboxGroup 交互会把它从已选集合里剔除，故此处兜底
@@ -407,7 +461,7 @@ const visibleColumns = computed(() => {
     fixed: groupMode ? undefined : c.fixed,
     customCell: (record: unknown) => groupHeaderCellProps(record, i === 0),
   }))
-  return applyColumnWidths(cols, upstreamColumnWidths.value)
+  return applyColumnWidths(cols, fittedColumnWidths.value)
 })
 
 const {
@@ -528,9 +582,10 @@ function onSearch() {
   })
 }
 
-function handleTableChange(pagination: TablePaginationConfig) {
-  page.value = pagination.current || 1
-  if (pagination.pageSize) pageSize.value = pagination.pageSize
+/** 分页条事件（ListPager）：表外独立分页，表格本身 `:pagination="false"`（组标记行不占页容量） */
+function handlePagerChange(nextPage: number, nextPageSize: number) {
+  page.value = nextPage
+  if (nextPageSize) pageSize.value = nextPageSize
   loadUpstreams()
 }
 
@@ -651,27 +706,14 @@ import type { TableColumnsType } from 'ant-design-vue'
   color: var(--fg);
 }
 .cell-secondary {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--muted);
-}
-
-/* 目标节点与健康 chips（.tg-chip 为全局控制台层单点，这里只承载换行容器） */
-.target-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+  margin-top: 2px;
 }
 
 .action-cell {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-}
-
-.action-trigger-btn {
-  border: none !important;
-  background: transparent !important;
-  font-size: 16px !important;
-  color: var(--muted) !important;
+  gap: 2px;
 }
 </style>

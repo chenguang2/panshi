@@ -1,6 +1,6 @@
 <template>
-  <span class="badge-status" :class="'badge-' + status">
-    <span class="status-dot" :class="status"></span>
+  <span class="badge-status" :class="'badge-' + status" :title="title || undefined">
+    <span v-if="status !== 'disabled'" class="status-dot" :class="status"></span>
     <span class="status-text">{{ text }}</span>
   </span>
 </template>
@@ -8,14 +8,22 @@
 <script setup lang="ts">
 defineProps<{
   text: string
-  status: 'online' | 'offline' | 'warning' | 'info' | 'neutral'
+  /**
+   * 状态语义五分（mockup-parity-standard r5-③）：
+   * online/offline/warning/info/neutral = 实底胶囊 + 圆点（运行态/健康态）；
+   * disabled = **管理开关关闭**（设计 .pill-disabled：透明底 + 1px 虚线 + 无圆点），
+   * 语义上与「未检测」的中性灰不同——管理开关是配置态，不承载业务流量但仍可执行任务。
+   */
+  status: 'online' | 'offline' | 'warning' | 'info' | 'neutral' | 'disabled'
+  /** 悬停语义提示（设计 .pill-disabled 的 title） */
+  title?: string
 }>()
 </script>
 
 <style scoped>
 /* 胶囊解剖（list-pages-console-restyle contract §6；取值照抄 mockup .pill）：
    20px 高、999px 圆角、11px/600、0 8px 内距、5px 圆点。类名与 props 契约不变，
-   17 个消费方零改动（仅观感变化）。 */
+   27 个消费方零改动（仅观感变化）。 */
 .badge-status {
   display: inline-flex;
   align-items: center;
@@ -27,6 +35,7 @@ defineProps<{
   font-weight: 600;
   letter-spacing: 0.01em;
   white-space: nowrap;
+  box-sizing: border-box;
 }
 
 .badge-online {
@@ -49,6 +58,13 @@ defineProps<{
 .badge-neutral {
   color: var(--muted);
   background: oklch(50% 0.018 240 / 8%);
+}
+/* 管理开关关闭（设计 .pill-disabled）：透明底 + 1px 虚线描边 + 无圆点。
+   与 badge-neutral 的区别是「配置态 vs 未知态」，勿合并。 */
+.badge-disabled {
+  color: var(--muted);
+  background: transparent;
+  border: 1px dashed oklch(50% 0.018 240 / 40%);
 }
 
 /* 状态点：mockup .pill .dot 为 6px 实心圆、无发光；胶囊底色已承担层次，故去掉旧 glow */

@@ -19,6 +19,10 @@ const themeConfig = {
     borderRadius: 6,
     borderRadiusLG: 8,
     borderRadiusSM: 4,
+    // 字体族统一到应用 --font-body（= 设计 token 同一条声明链，含 SF Pro Text / Inter）：
+    // antd 默认把 token.fontFamily 注入到所有 [class^="ant-"] 元素，表格/弹层因此一直用
+    // 它自己的栈（缺 SF Pro Text/Inter），在装有这些字体的机器上同一 px 会比设计页小一档（r6-①）
+    fontFamily: 'var(--font-body)',
   },
 }
 

@@ -1338,7 +1338,8 @@ describe('RouteList.vue 行内发布拍平（列表操作统一·方案 A）', (
 
     const rows = wrapper.findAll('.mock-a-table tbody tr')
     const normalRow = rows[1]
-    const pubBtn = normalRow.findAll('button.mock-btn').find((b) => b.text() === '发布')
+    // r7：发布主按钮改为设计 .op-pub（原生 button），不再走 a-button 桩
+    const pubBtn = normalRow.find('button.op-pub')
     expect(pubBtn, '行内应有「发布」按钮（不再收进菜单）').toBeTruthy()
     expect(pubBtn!.attributes('disabled')).toBeUndefined()
 
@@ -1378,9 +1379,12 @@ describe('RouteList.vue 行内发布拍平（列表操作统一·方案 A）', (
 
     const rows = wrapper.findAll('.mock-a-table tbody tr')
     const dnsRow = rows[0]
-    const btns = dnsRow.findAll('button.mock-btn')
-    expect(btns.length).toBe(2) // 发布 + ⋯
-    for (const b of btns) expect(b.attributes('disabled')).toBeDefined()
+    // r7：发布改为 .op-pub（原生 button），⋯ 仍为 a-button 桩
+    const pubBtn = dnsRow.find('button.op-pub')
+    const triggerBtn = dnsRow.find('button.action-trigger-btn')
+    expect(pubBtn.exists(), 'DNS 行应有发布按钮').toBe(true)
+    expect(triggerBtn.exists(), 'DNS 行应有 ⋯ 触发器').toBe(true)
+    for (const b of [pubBtn, triggerBtn]) expect(b.attributes('disabled')).toBeDefined()
     const tips = dnsRow.findAll('.mock-tooltip')
     expect(tips.length).toBe(2)
     for (const t of tips) expect(t.attributes('title')).toBe('DNS 路由请在「DNS 代理」页管理')
@@ -1538,7 +1542,7 @@ describe('RouteList 列个性化（column-personalization-rollout）', () => {
     ;(wrapper.vm as any).viewMode = 'flat'
     await wrapper.vm.$nextTick()
     const table = wrapper.findComponent({ name: 'ColDragTableStub' })
-    expect(table.props('scroll')).toEqual({ x: 'max-content' })
+    expect(table.props('scroll')).toEqual({ x: 652 })
     expect(table.props('tableLayout')).toBe('fixed')
     const cols = table.props('columns') as Array<{ key: unknown; width?: number; fixed?: string }>
     const byKey = Object.fromEntries(cols.map((c) => [String(c.key), c]))

@@ -280,7 +280,7 @@ describe('NodeList.vue 搜索 / 清空 / 页码重置链路', () => {
     ...stubs,
     'a-table': {
       template:
-        '<table class="mock-a-table"><tbody><template v-for="r in dataSource" :key="r.key || r.id"><tr v-if="r.__groupHeader" data-test="group-header"><td><slot name="bodyCell" :record="r" :column="{ key: \'group\' }" /></td></tr><tr v-else class="ant-table-row"><td>{{ r.ip }}</td><td><slot name="bodyCell" :record="r" :column="{ key: \'ip\' }" /></td></tr></template></tbody><tfoot><button class="mock-goto-page2" @click="$emit(\'change\', { current: 2, pageSize: 20 })">去第2页</button><button class="mock-goto-page3" @click="$emit(\'change\', { current: 3, pageSize: 20 })">去第3页</button></tfoot></table>',
+        '<table class="mock-a-table"><tbody><template v-for="r in dataSource" :key="r.key || r.id"><tr v-if="r.__groupHeader" data-test="group-header"><td><slot name="bodyCell" :record="r" :column="{ key: \'group\' }" /></td></tr><tr v-else class="ant-table-row"><td>{{ r.ip }}</td><td><slot name="bodyCell" :record="r" :column="{ key: \'ip\' }" /></td></tr></template></tbody></table>',
       props: ['columns', 'dataSource', 'loading', 'rowKey', 'pagination', 'size', 'scroll', 'rowSelection'],
       emits: ['change'],
     },
@@ -334,6 +334,14 @@ describe('NodeList.vue 搜索 / 清空 / 页码重置链路', () => {
     return mockApiGet.mock.calls.filter((c: unknown[]) => c[0] === '/nodes')
   }
 
+  /** 外置分页条（ListPager）页码按钮：与真实页面同一交互入口，不再经 a-table change 事件 */
+  async function gotoPage(wrapper: Awaited<ReturnType<typeof mountPage>>, label: string) {
+    const btn = wrapper.findAll('.l5-pager .p-btn').find((b) => b.text() === label)
+    expect(btn, `分页条缺第 ${label} 页按钮`).toBeDefined()
+    await btn!.trigger('click')
+    await flushPromises()
+  }
+
   function lastParams() {
     const calls = nodesCalls()
     expect(calls.length, '应至少发起过一次 /nodes 请求').toBeGreaterThan(0)
@@ -349,7 +357,7 @@ describe('NodeList.vue 搜索 / 清空 / 页码重置链路', () => {
     // 默认视图 = 分组（组头行会插入 dataSource）；行数断言钉平铺（contract 10.2）
     ;(wrapper.vm as any).viewMode = 'flat'
     await wrapper.vm.$nextTick()
-    await wrapper.find('.mock-goto-page3').trigger('click')
+    await gotoPage(wrapper, '3')
     await flushPromises()
     expect(lastParams().page).toBe(3)
     expect(wrapper.findAll('tbody tr').length).toBe(2)
@@ -359,7 +367,7 @@ describe('NodeList.vue 搜索 / 清空 / 页码重置链路', () => {
   it('输入搜索词（防抖后）携带 search 且页码重置为 1', async () => {
     vi.useFakeTimers()
     const wrapper = await mountPage()
-    await wrapper.find('.mock-goto-page3').trigger('click')
+    await gotoPage(wrapper, '3')
     await flushPromises()
     expect(lastParams().page).toBe(3)
 
@@ -698,14 +706,16 @@ describe('NodeList.vue batch2 运行态三态徽章', () => {
     wrapper.unmount()
   })
 
-  it('「已禁用」配置徽章为中性灰（badge-neutral），与运行态徽章并排（SHALL NOT 危险红）（1.3）', async () => {
+  it('「已禁用」为空心虚线管理开关徽章（badge-disabled，r5-③），与运行态徽章并排（SHALL NOT 危险红）', async () => {
     const wrapper = await mountWithNodes([nodeWith(1, '10.0.0.1', { nginx: { nginx_running: false } }, 0)])
     const badges = wrapper.findAll('.badge-status')
     expect(badges.length).toBe(2)
     const disabled = badges.find((b) => b.text() === '已禁用')
     expect(disabled).toBeDefined()
-    expect(disabled!.classes()).toContain('badge-neutral')
+    expect(disabled!.classes()).toContain('badge-disabled')
+    expect(disabled!.classes()).not.toContain('badge-neutral')
     expect(disabled!.classes()).not.toContain('badge-danger')
+    expect(disabled!.attributes('title')).toContain('管理开关已禁用')
     const stopped = badges.find((b) => b.text() === '已停止')
     expect(stopped!.classes()).toContain('badge-offline')
     wrapper.unmount()
@@ -738,7 +748,7 @@ describe('NodeList.vue batch2 运行态三态徽章', () => {
     expect(grid2.text()).toContain('禁用')
     const disabledBadge = grid2.findAll('.badge-status').find((b) => b.text() === '已禁用')
     expect(disabledBadge).toBeDefined()
-    expect(disabledBadge!.classes()).toContain('badge-neutral')
+    expect(disabledBadge!.classes()).toContain('badge-disabled')
     wrapper.unmount()
   })
 })
@@ -797,7 +807,7 @@ describe('NodeList.vue batch2 检测时效展示', () => {
 
   it('有 last_execution → 徽章下方弱化文字「N 分钟前检测」', async () => {
     const wrapper = await mountWithNode(nodeWithLastExec(5.5))
-    const cell = wrapper.find('.node-status-cell')
+    const cell = wrapper.find('.status-cell')
     expect(cell.exists()).toBe(true)
     expect(cell.text()).toContain('运行中')
     expect(cell.text()).toMatch(/5 分钟前检测/)
@@ -806,7 +816,7 @@ describe('NodeList.vue batch2 检测时效展示', () => {
 
   it('无 last_execution → 不渲染时效文字', async () => {
     const wrapper = await mountWithNode(nodeWithLastExec(null))
-    const cell = wrapper.find('.node-status-cell')
+    const cell = wrapper.find('.status-cell')
     expect(cell.exists()).toBe(true)
     expect(cell.text()).not.toContain('分钟前')
     expect(cell.text()).not.toContain('刚刚')
@@ -1555,7 +1565,7 @@ describe('NodeList 列宽个性化（node-list-column-resize）', () => {
     await wrapper.vm.$nextTick()
     const table = wrapper.findComponent({ name: 'ATableStub' })
     expect(table.exists()).toBe(true)
-    expect(table.props('scroll')).toEqual({ x: 'max-content' })
+    expect(table.props('scroll')).toEqual({ x: 780 })
     expect(table.props('tableLayout')).toBe('fixed')
     // 竖线/手势共享样式单点：三页表格根元素均挂 .grid-table（column-personalization-rollout D5）
     expect(wrapper.find('.node-table').classes()).toContain('grid-table')
@@ -1573,9 +1583,10 @@ describe('NodeList 列宽个性化（node-list-column-resize）', () => {
     ])
     expect(cols.find((c) => c.key === 'edge_path')?.title).toBe('安装路径')
     const byKey = Object.fromEntries(cols.map((c) => [c.key, c]))
-    expect(byKey['index']).toMatchObject({ width: 45, fixed: 'left' })
-    expect(byKey['ip']).toMatchObject({ width: 140, fixed: 'left' })
-    expect(byKey['actions']).toMatchObject({ width: 320, fixed: 'right' })
+    // r4-E2：列宽 = 设计稿 colgroup 按容器等比放大后的实测值
+    expect(byKey['index']).toMatchObject({ width: 48, fixed: 'left' })
+    expect(byKey['ip']).toMatchObject({ width: 149, fixed: 'left' })
+    expect(byKey['actions']).toMatchObject({ width: 298, fixed: 'right' })
     for (const c of cols) expect(c.width, `列 ${c.key} 缺默认宽`).toBeGreaterThan(0)
   }, 15_000)
 
@@ -1589,7 +1600,8 @@ describe('NodeList 列宽个性化（node-list-column-resize）', () => {
     for (const c of cols) expect(c.fixed, `分组模式下列 ${c.key} 不应带 fixed`).toBeUndefined()
     const headerRow = (table.props('dataSource') as Array<Record<string, unknown>>).find((r) => r.__groupHeader)
     expect(headerRow).toBeDefined()
-    expect(cols[0].customCell!(headerRow)).toEqual({ colSpan: 8 })
+    // colSpan = 可见列数 + 选择列（组头 checkbox 已隐藏，r2-6）
+    expect(cols[0].customCell!(headerRow)).toEqual({ colSpan: 9 })
     expect(cols[0].customCell!({ id: 1 })).toEqual({})
     expect(cols[1].customCell!(headerRow)).toEqual({ class: 'l5-group-cell-hidden' })
     wrapper.unmount()
@@ -1615,22 +1627,22 @@ describe('NodeList 列宽个性化（node-list-column-resize）', () => {
     const table = wrapper.findComponent({ name: 'ATableStub' })
     const colWidth = (key: string): number | undefined =>
       (table.props('columns') as Array<{ key: unknown; width?: number }>).find((c) => String(c.key) === key)?.width
-    expect(colWidth('edge_path')).toBe(314)
+    expect(colWidth('edge_path')).toBe(377)
     const ths = wrapper.findAll('th[data-col]')
     const handle = ths.find((t) => t.attributes('data-col') === 'edge_path')!.find('.col-resize-handle')
     await handle.trigger('mousedown', { clientX: 100 })
     document.dispatchEvent(new MouseEvent('mousemove', { clientX: 160 }))
     await flushPromises()
-    expect(colWidth('edge_path')).toBe(374) // 314 + 60
+    expect(colWidth('edge_path')).toBe(437) // 377 + 60
     // 松开后不再响应 mousemove
     document.dispatchEvent(new MouseEvent('mouseup', { clientX: 160 }))
     await handle.trigger('mouseup')
     document.dispatchEvent(new MouseEvent('mousemove', { clientX: 400 }))
     await flushPromises()
-    expect(colWidth('edge_path')).toBe(374)
+    expect(colWidth('edge_path')).toBe(437) // 松手后停在拖拽结果（377 + 60）
     // 持久化落盘（watch pre flush）
     const saved = JSON.parse(localStorage.getItem('node_standalone_cfg_guest') ?? '{}')
-    expect(saved.widths?.edge_path).toBe(374)
+    expect(saved.widths?.edge_path).toBe(437)
     // 最小宽度 clamp
     await handle.trigger('mousedown', { clientX: 500 })
     document.dispatchEvent(new MouseEvent('mousemove', { clientX: -600 }))
@@ -1651,7 +1663,7 @@ describe('NodeList 列宽个性化（node-list-column-resize）', () => {
     await handle.trigger('mousedown', { clientX: 0 })
     document.dispatchEvent(new MouseEvent('mousemove', { clientX: 100 }))
     await flushPromises()
-    expect(colWidth('edge_path')).toBe(414)
+    expect(colWidth('edge_path')).toBe(477) // 377 + 100
     // popover 内点击「重置列宽」
     const resetBtn = wrapper.findAll('.mock-popover-content button').find((b) => b.text() === '重置列宽')!
     expect(resetBtn).toBeDefined()
@@ -1661,7 +1673,7 @@ describe('NodeList 列宽个性化（node-list-column-resize）', () => {
     expect(wrapper.findAll('.col-resize-handle').length).toBe(7)
     await resetBtn.trigger('click')
     await flushPromises()
-    expect(colWidth('edge_path')).toBe(314)
+    expect(colWidth('edge_path')).toBe(377)
     const saved = JSON.parse(localStorage.getItem('node_standalone_cfg_guest') ?? '{}')
     expect(saved.widths ?? {}).toEqual({})
   }, 15_000)

@@ -8,7 +8,7 @@
       :title="row.folded ? '展开该组' : '折叠该组'"
       @click.stop="emit('toggle')"
     >
-      <CaretDownOutlined />
+      <StrokeIcon name="chevronDown" :size="13" />
     </button>
     <span class="g-name">{{ row.label }}</span>
     <span v-if="row.chips.length" class="g-meta">
@@ -22,7 +22,7 @@
 </template>
 
 <script setup lang="ts">
-import { CaretDownOutlined } from '@ant-design/icons-vue'
+import StrokeIcon from '@/components/StrokeIcon.vue'
 import type { GroupHeaderRow } from '@/composables/useListClusterGrouping'
 
 /**

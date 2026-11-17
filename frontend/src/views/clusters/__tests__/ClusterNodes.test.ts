@@ -213,13 +213,15 @@ describe('ClusterNodes.vue batch2 运行态三态徽章', () => {
     wrapper.unmount()
   })
 
-  it('禁用节点：中性灰「已禁用」徽章与运行态徽章并排（不健康绿假底）', async () => {
+  it('禁用节点：「已禁用」为空心虚线管理开关徽章（badge-disabled，r5-③）与运行态徽章并排', async () => {
     const wrapper = await mountTabWithNodes([nodeWith(1, '10.0.0.1', { nginx: { nginx_running: false } }, 0)])
     const badges = wrapper.findAll('.badge-status')
     const disabled = badges.find((b) => b.text() === '已禁用')
     expect(disabled).toBeDefined()
-    expect(disabled!.classes()).toContain('badge-neutral')
+    expect(disabled!.classes()).toContain('badge-disabled')
+    expect(disabled!.classes()).not.toContain('badge-neutral')
     expect(disabled!.classes()).not.toContain('badge-danger')
+    expect(disabled!.attributes('title')).toContain('管理开关已禁用')
     wrapper.unmount()
   })
 
