@@ -39,8 +39,10 @@ vi.mock('ant-design-vue', async (importOriginal) => {
 const stubs = {
   'a-table': {
     name: 'ATableStub',
+    // 组标记行分流渲染（shared-contract 10.2）：组头 <tr data-test="group-header">（不带 ant-table-row 类），
+    // 数据行保持 <tr class="ant-table-row">——既有行计数断言在分组模式下自动隔离
     template:
-      '<table class="mock-a-table"><thead class="ant-table-thead"><tr><th v-for="c in columns" :key="c.key" :data-col="c.key"><slot name="headerCell" :column="c" :title="c.title" /></th></tr></thead><tbody><tr v-for="r in dataSource" :key="r.id"><td>{{ r.ip }}</td><td><slot name="bodyCell" :record="r" :column="{ key: \'ip\' }" /></td><td><slot name="bodyCell" :record="r" :column="{ key: \'actions\' }" /></td></tr></tbody></table>',
+      '<table class="mock-a-table"><thead class="ant-table-thead"><tr><th v-for="c in columns" :key="c.key" :data-col="c.key"><slot name="headerCell" :column="c" :title="c.title" /></th></tr></thead><tbody><template v-for="r in dataSource" :key="r.key || r.id"><tr v-if="r.__groupHeader" data-test="group-header"><td><slot name="bodyCell" :record="r" :column="{ key: \'group\' }" /></td></tr><tr v-else class="ant-table-row"><td>{{ r.ip }}</td><td><slot name="bodyCell" :record="r" :column="{ key: \'ip\' }" /></td><td><slot name="bodyCell" :record="r" :column="{ key: \'actions\' }" /></td></tr></template></tbody></table>',
     props: [
       'columns',
       'dataSource',
@@ -51,9 +53,13 @@ const stubs = {
       'scroll',
       'rowSelection',
       'tableLayout',
+      'customRow',
     ],
   },
-  PageHeader: { template: '<div class="page-header"><slot name="actions" /></div>', props: ['title', 'description'] },
+  PageHeader: {
+    template: '<div class="page-header"><slot name="stats" /><slot name="actions" /></div>',
+    props: ['title', 'description'],
+  },
   'a-popover': {
     template: '<div class="mock-popover"><slot /><div class="mock-popover-content"><slot name="content" /></div></div>',
     props: ['open'],
@@ -247,6 +253,7 @@ describe('NodeList.vue', () => {
     const wrapper = mount(NodeList, { global: { stubs } })
     await flushPromises()
     await wrapper.vm.$nextTick()
+    const callsBefore = mockApiGet.mock.calls.filter((c: any[]) => c[0] === '/nodes').length
     // Simulate selecting a specific group
     const selects = wrapper.findAll('select')
     const groupSelect = selects.find((s) => s.text().includes('全部分组'))
@@ -256,11 +263,10 @@ describe('NodeList.vue', () => {
     selectEl.dispatchEvent(new Event('change'))
     await flushPromises()
     await wrapper.vm.$nextTick()
-    // Should NOT use page_size=500 (loadAll) just because a group is selected
-    const calls = mockApiGet.mock.calls.filter((c: any[]) => c[0] === '/nodes')
-    const lastCall = calls[calls.length - 1]
-    // The page_size should be the default 20, not 500
-    expect(lastCall[1].params.page_size).not.toBe(500)
+    // 列表请求不因分组筛选 loadAll（页头徽标的 page_size=500 统计副本是独立请求，次序在列表之后）
+    const newCalls = mockApiGet.mock.calls.filter((c: any[]) => c[0] === '/nodes').slice(callsBefore)
+    expect(newCalls.length).toBeGreaterThanOrEqual(1)
+    expect(newCalls[0][1].params.page_size).not.toBe(500)
   })
 })
 
@@ -274,7 +280,7 @@ describe('NodeList.vue 搜索 / 清空 / 页码重置链路', () => {
     ...stubs,
     'a-table': {
       template:
-        '<table class="mock-a-table"><tbody><tr v-for="r in dataSource" :key="r.id"><td>{{ r.ip }}</td><td><slot name="bodyCell" :record="r" :column="{ key: \'ip\' }" /></td></tr></tbody><tfoot><button class="mock-goto-page2" @click="$emit(\'change\', { current: 2, pageSize: 20 })">去第2页</button><button class="mock-goto-page3" @click="$emit(\'change\', { current: 3, pageSize: 20 })">去第3页</button></tfoot></table>',
+        '<table class="mock-a-table"><tbody><template v-for="r in dataSource" :key="r.key || r.id"><tr v-if="r.__groupHeader" data-test="group-header"><td><slot name="bodyCell" :record="r" :column="{ key: \'group\' }" /></td></tr><tr v-else class="ant-table-row"><td>{{ r.ip }}</td><td><slot name="bodyCell" :record="r" :column="{ key: \'ip\' }" /></td></tr></template></tbody><tfoot><button class="mock-goto-page2" @click="$emit(\'change\', { current: 2, pageSize: 20 })">去第2页</button><button class="mock-goto-page3" @click="$emit(\'change\', { current: 3, pageSize: 20 })">去第3页</button></tfoot></table>',
       props: ['columns', 'dataSource', 'loading', 'rowKey', 'pagination', 'size', 'scroll', 'rowSelection'],
       emits: ['change'],
     },
@@ -338,8 +344,11 @@ describe('NodeList.vue 搜索 / 清空 / 页码重置链路', () => {
     return wrapper.findAll('input').find((i) => i.attributes('placeholder')?.includes('搜索'))
   }
 
-  it('翻页到第 3 页请求携带 page=3 并渲染当页行', async () => {
+  it('翻页到第 3 页请求携带 page=3 并渲染当页行（平铺钉位：行计数不含组头）', async () => {
     const wrapper = await mountPage()
+    // 默认视图 = 分组（组头行会插入 dataSource）；行数断言钉平铺（contract 10.2）
+    ;(wrapper.vm as any).viewMode = 'flat'
+    await wrapper.vm.$nextTick()
     await wrapper.find('.mock-goto-page3').trigger('click')
     await flushPromises()
     expect(lastParams().page).toBe(3)
@@ -545,7 +554,7 @@ describe('NodeList.vue batch1 快修', () => {
     errorSpy.mockRestore()
   })
 
-  it('双计数收敛：未筛选时筛选栏无计数，状态筛选时显示「筛出 X 个」（2.5）', async () => {
+  it('双计数收敛：工具条计数恒显且随筛选数据集更新，「筛出 X 个」仅状态筛选时出现（2.5 反转）', async () => {
     // batch2 3.1 后状态筛选按运行态三元判定：mock 补 nginx 真实形状（一运行一停止）
     const statusNodes = JSON.parse(JSON.stringify(MOCK_NODES))
     statusNodes.items[0].status_detail = {
@@ -566,7 +575,9 @@ describe('NodeList.vue batch1 快修', () => {
       return Promise.reject(new Error('unknown url: ' + url))
     })
     const wrapper = await mountPage()
-    expect(wrapper.text(), '未筛选时不应在筛选栏显示总数（showTotal 已有）').not.toContain('个节点')
+    // 反转（list-pages-console-restyle）：工具条右端计数恒显（共 N 个节点），不再是「未筛选无计数」
+    expect(wrapper.find('[data-test="toolbar-count"]').text()).toContain('共 2 个节点')
+    expect(wrapper.text()).not.toContain('筛出')
 
     const statusSelect = wrapper.findAll('select').find((s) => s.text().includes('全部状态'))
     expect(statusSelect).toBeDefined()
@@ -577,6 +588,8 @@ describe('NodeList.vue batch1 快修', () => {
     await wrapper.vm.$nextTick()
     expect(wrapper.text()).toContain('筛出 1 个')
     expect(wrapper.text()).not.toContain('筛出 2 个')
+    // 计数随数据集更新（状态筛选走 loadAll：totalCount = 筛选后全量）
+    expect(wrapper.find('[data-test="toolbar-count"]').text()).toContain('共 1 个节点')
     wrapper.unmount()
   })
 
@@ -614,7 +627,7 @@ describe('NodeList.vue batch2 运行态三态徽章', () => {
     ...stubs,
     'a-table': {
       template:
-        '<table class="mock-a-table"><tbody><tr v-for="r in dataSource" :key="r.id"><td><slot name="bodyCell" :record="r" :column="{ key: \'status\' }" /></td></tr></tbody></table>',
+        '<table class="mock-a-table"><tbody><template v-for="r in dataSource" :key="r.key || r.id"><tr v-if="r.__groupHeader" data-test="group-header"></tr><tr v-else class="ant-table-row"><td><slot name="bodyCell" :record="r" :column="{ key: \'status\' }" /></td></tr></template></tbody></table>',
       props: ['columns', 'dataSource', 'loading', 'rowKey', 'pagination', 'size'],
     },
   }
@@ -736,7 +749,7 @@ describe('NodeList.vue batch2 检测时效展示', () => {
     ...stubs,
     'a-table': {
       template:
-        '<table class="mock-a-table"><tbody><tr v-for="r in dataSource" :key="r.id"><td><slot name="bodyCell" :record="r" :column="{ key: \'status\' }" /></td></tr></tbody></table>',
+        '<table class="mock-a-table"><tbody><template v-for="r in dataSource" :key="r.key || r.id"><tr v-if="r.__groupHeader" data-test="group-header"></tr><tr v-else class="ant-table-row"><td><slot name="bodyCell" :record="r" :column="{ key: \'status\' }" /></td></tr></template></tbody></table>',
       props: ['columns', 'dataSource', 'loading', 'rowKey', 'pagination', 'size'],
     },
   }
@@ -1533,17 +1546,32 @@ describe('NodeList 列宽个性化（node-list-column-resize）', () => {
     localStorage.clear()
   })
 
-  it('表格横向滚动 + fixed 布局；全列默认宽；#与IP固定左、操作固定右', async () => {
+  it('表格横向滚动 + fixed 布局；全列默认宽；#与IP固定左、操作固定右（平铺钉位）', async () => {
     const NodeList = (await import('../NodeList.vue')).default
     const wrapper = mount(NodeList, { global: { stubs } })
     await flushPromises()
+    // fixed 语义仅平铺模式承载（分组模式 colSpan 通栏剥离 fixed，contract 10.6）
+    ;(wrapper.vm as any).viewMode = 'flat'
+    await wrapper.vm.$nextTick()
     const table = wrapper.findComponent({ name: 'ATableStub' })
     expect(table.exists()).toBe(true)
     expect(table.props('scroll')).toEqual({ x: 'max-content' })
     expect(table.props('tableLayout')).toBe('fixed')
     // 竖线/手势共享样式单点：三页表格根元素均挂 .grid-table（column-personalization-rollout D5）
     expect(wrapper.find('.node-table').classes()).toContain('grid-table')
-    const cols = table.props('columns') as Array<{ key: string; width?: number; fixed?: string }>
+    const cols = table.props('columns') as Array<{ key: string; title?: string; width?: number; fixed?: string }>
+    // L2 列集合：集群列移除（分组组头替代）、两路径列合并为「安装路径」（8 列）
+    expect(cols.map((c) => c.key)).toEqual([
+      'index',
+      'ip',
+      'service_port',
+      'management_port',
+      'edge_path',
+      'status',
+      'edge_version',
+      'actions',
+    ])
+    expect(cols.find((c) => c.key === 'edge_path')?.title).toBe('安装路径')
     const byKey = Object.fromEntries(cols.map((c) => [c.key, c]))
     expect(byKey['index']).toMatchObject({ width: 45, fixed: 'left' })
     expect(byKey['ip']).toMatchObject({ width: 140, fixed: 'left' })
@@ -1551,12 +1579,28 @@ describe('NodeList 列宽个性化（node-list-column-resize）', () => {
     for (const c of cols) expect(c.width, `列 ${c.key} 缺默认宽`).toBeGreaterThan(0)
   }, 15_000)
 
+  it('分组模式：列定义不带 fixed，首列 customCell 对组标记行返回整行 colSpan（contract 10.6）', async () => {
+    const NodeList = (await import('../NodeList.vue')).default
+    const wrapper = mount(NodeList, { global: { stubs } })
+    await flushPromises()
+    expect((wrapper.vm as any).viewMode).toBe('group')
+    const table = wrapper.findComponent({ name: 'ATableStub' })
+    const cols = table.props('columns') as Array<{ key: string; fixed?: string; customCell?: (r: unknown) => unknown }>
+    for (const c of cols) expect(c.fixed, `分组模式下列 ${c.key} 不应带 fixed`).toBeUndefined()
+    const headerRow = (table.props('dataSource') as Array<Record<string, unknown>>).find((r) => r.__groupHeader)
+    expect(headerRow).toBeDefined()
+    expect(cols[0].customCell!(headerRow)).toEqual({ colSpan: 8 })
+    expect(cols[0].customCell!({ id: 1 })).toEqual({})
+    expect(cols[1].customCell!(headerRow)).toEqual({ class: 'l5-group-cell-hidden' })
+    wrapper.unmount()
+  }, 15_000)
+
   it('拖拽柄：非 # 列表头右缘存在，「#」列无', async () => {
     const NodeList = (await import('../NodeList.vue')).default
     const wrapper = mount(NodeList, { global: { stubs } })
     await flushPromises()
     const handles = wrapper.findAll('.col-resize-handle')
-    expect(handles.length).toBe(9) // 10 列 - index
+    expect(handles.length).toBe(7) // 8 列 - index（合并列后集群列已移除）
     const ths = wrapper.findAll('th[data-col]')
     const ipTh = ths.find((t) => t.attributes('data-col') === 'ip')!
     expect(ipTh.find('.col-resize-handle').exists()).toBe(true)
@@ -1571,22 +1615,22 @@ describe('NodeList 列宽个性化（node-list-column-resize）', () => {
     const table = wrapper.findComponent({ name: 'ATableStub' })
     const colWidth = (key: string): number | undefined =>
       (table.props('columns') as Array<{ key: unknown; width?: number }>).find((c) => String(c.key) === key)?.width
-    expect(colWidth('edge_path')).toBe(220)
+    expect(colWidth('edge_path')).toBe(314)
     const ths = wrapper.findAll('th[data-col]')
     const handle = ths.find((t) => t.attributes('data-col') === 'edge_path')!.find('.col-resize-handle')
     await handle.trigger('mousedown', { clientX: 100 })
     document.dispatchEvent(new MouseEvent('mousemove', { clientX: 160 }))
     await flushPromises()
-    expect(colWidth('edge_path')).toBe(280) // 220 + 60
+    expect(colWidth('edge_path')).toBe(374) // 314 + 60
     // 松开后不再响应 mousemove
     document.dispatchEvent(new MouseEvent('mouseup', { clientX: 160 }))
     await handle.trigger('mouseup')
     document.dispatchEvent(new MouseEvent('mousemove', { clientX: 400 }))
     await flushPromises()
-    expect(colWidth('edge_path')).toBe(280)
+    expect(colWidth('edge_path')).toBe(374)
     // 持久化落盘（watch pre flush）
     const saved = JSON.parse(localStorage.getItem('node_standalone_cfg_guest') ?? '{}')
-    expect(saved.widths?.edge_path).toBe(280)
+    expect(saved.widths?.edge_path).toBe(374)
     // 最小宽度 clamp
     await handle.trigger('mousedown', { clientX: 500 })
     document.dispatchEvent(new MouseEvent('mousemove', { clientX: -600 }))
@@ -1607,17 +1651,17 @@ describe('NodeList 列宽个性化（node-list-column-resize）', () => {
     await handle.trigger('mousedown', { clientX: 0 })
     document.dispatchEvent(new MouseEvent('mousemove', { clientX: 100 }))
     await flushPromises()
-    expect(colWidth('edge_path')).toBe(320)
+    expect(colWidth('edge_path')).toBe(414)
     // popover 内点击「重置列宽」
     const resetBtn = wrapper.findAll('.mock-popover-content button').find((b) => b.text() === '重置列宽')!
     expect(resetBtn).toBeDefined()
     // 拖拽说明一行（可发现性文字兜底，方案 1 克制版）
     expect(wrapper.find('.mock-popover-content').text()).toContain('拖动表头右缘可调整列宽')
     // 手柄常显线存在（.col-resize-handle::after 由样式渲染，这里断言手柄元素仍在全部非 # 列）
-    expect(wrapper.findAll('.col-resize-handle').length).toBe(9)
+    expect(wrapper.findAll('.col-resize-handle').length).toBe(7)
     await resetBtn.trigger('click')
     await flushPromises()
-    expect(colWidth('edge_path')).toBe(220)
+    expect(colWidth('edge_path')).toBe(314)
     const saved = JSON.parse(localStorage.getItem('node_standalone_cfg_guest') ?? '{}')
     expect(saved.widths ?? {}).toEqual({})
   }, 15_000)
@@ -1626,6 +1670,9 @@ describe('NodeList 列宽个性化（node-list-column-resize）', () => {
     const NodeList = (await import('../NodeList.vue')).default
     const wrapper = mount(NodeList, { attachTo: document.body, global: { stubs } })
     await flushPromises()
+    // 拖拽几何按平铺列解剖（分组模式 colSpan 通栏不参与换位手势）
+    ;(wrapper.vm as any).viewMode = 'flat'
+    await wrapper.vm.$nextTick()
     const table = wrapper.findComponent({ name: 'ATableStub' })
     const keySeq = () => (table.props('columns') as Array<{ key: unknown }>).map((c) => String(c.key))
     // jsdom 无布局：gBCR 桩按「元素在父容器内的动态序号」返回位置——换位后 DOM 移动，桩跟随新位置（FLIP 可测）
@@ -1662,29 +1709,26 @@ describe('NodeList 列宽个性化（node-list-column-resize）', () => {
           .classes(),
       ).not.toContain('movable')
     }
-    const DEFAULT_SEQ = [
+    // 拖「安装路径」（矩形 400-500）标题到「服务端口」（200-300）左半区 → 实时换位（未松手即生效）
+    const edgeWrap = ths()
+      .find((t) => t.attributes('data-col') === 'edge_path')!
+      .find('.th-resize-wrap')!
+    await edgeWrap.trigger('mousedown', { clientX: 450 })
+    expect(edgeWrap.classes()).toContain('dragging-source')
+    // 拖拽全程抓取光标：body 挂类（CSS 对所有元素强制 grabbing）
+    expect(document.body.classList.contains('col-move-dragging')).toBe(true)
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 220 }))
+    await flushPromises()
+    const LIVE_SEQ = [
       'index',
       'ip',
-      'cluster_name',
+      'edge_path',
       'service_port',
       'management_port',
-      'openresty_path',
-      'edge_path',
       'status',
       'edge_version',
       'actions',
     ]
-    // 拖「Edge 安装路径」（矩形 500-600）标题越过「状态」（700-800）左边界 → 实时换位（未松手即生效）
-    const edgeWrap = ths()
-      .find((t) => t.attributes('data-col') === 'edge_path')!
-      .find('.th-resize-wrap')!
-    await edgeWrap.trigger('mousedown', { clientX: 550 })
-    expect(edgeWrap.classes()).toContain('dragging-source')
-    // 拖拽全程抓取光标：body 挂类（CSS 对所有元素强制 grabbing）
-    expect(document.body.classList.contains('col-move-dragging')).toBe(true)
-    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 720 }))
-    await flushPromises()
-    const LIVE_SEQ = [...DEFAULT_SEQ.slice(0, 5), 'openresty_path', 'edge_path', ...DEFAULT_SEQ.slice(7)]
     expect(keySeq()).toEqual(LIVE_SEQ)
     // FLIP 换位动画：换位后表头单元格带位移 transform（150ms 补间回正）
     const flipped = [...document.querySelectorAll('.node-table thead th')].some(
@@ -1692,27 +1736,29 @@ describe('NodeList 列宽个性化（node-list-column-resize）', () => {
     )
     expect(flipped, '换位应触发 FLIP 位移动画').toBe(true)
     // 松手确认当前位次（无跳变）
-    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 720 }))
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 220 }))
     await flushPromises()
     expect(keySeq()).toEqual(LIVE_SEQ)
-    expect(JSON.parse(localStorage.getItem('node_standalone_cfg_guest') ?? '{}').order).toEqual(LIVE_SEQ)
-    // 再次拖动（openresty 越过 service_port 左边界）→ Esc 取消恢复拖前顺序
-    const orWrap = ths()
-      .find((t) => t.attributes('data-col') === 'openresty_path')!
+    // 持久化按全量列键清洗补位：被合并列吞并的 openresty_path 保留在存储序末位（contract 10.1）
+    expect(JSON.parse(localStorage.getItem('node_standalone_cfg_guest') ?? '{}').order).toEqual([
+      ...LIVE_SEQ,
+      'openresty_path',
+    ])
+    // 再次拖动（「Edge 版本」越过服务端口左边界）→ Esc 取消恢复拖前顺序
+    const verWrap = ths()
+      .find((t) => t.attributes('data-col') === 'edge_version')!
       .find('.th-resize-wrap')!
-    await orWrap.trigger('mousedown', { clientX: 650 })
-    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 340 }))
+    await verWrap.trigger('mousedown', { clientX: 620 })
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 240 }))
     await flushPromises()
     expect(keySeq()).toEqual([
       'index',
       'ip',
-      'cluster_name',
-      'openresty_path',
+      'edge_version',
+      'edge_path',
       'service_port',
       'management_port',
-      'edge_path',
       'status',
-      'edge_version',
       'actions',
     ])
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
@@ -1730,4 +1776,178 @@ describe('NodeList 列宽个性化（node-list-column-resize）', () => {
     document.dispatchEvent(new MouseEvent('mouseup', { clientX: 720 }))
     wrapper.unmount()
   }, 15_000)
+})
+
+// ── list-pages-console-restyle：集群分组 / 双模式 / 页头徽标 ──────────────────────────
+describe('NodeList.vue 集群分组与双模式（list-pages-console-restyle）', () => {
+  const nodeShape = (over: Record<string, unknown>) => ({
+    id: 0,
+    cluster_id: 1,
+    cluster_name: '生产集群',
+    ip: '10.0.0.1',
+    service_port: 80,
+    management_port: 9180,
+    edge_path: '/edge',
+    openresty_path: '/usr/local/nginx',
+    status: 1,
+    status_detail: {} as Record<string, unknown>,
+    created_at: '2024-01-01T00:00:00Z',
+    ...over,
+  })
+  const groupNodes = {
+    total: 3,
+    page: 1,
+    page_size: 20,
+    items: [
+      nodeShape({ id: 1, ip: '10.0.0.11', status_detail: { nginx: { nginx_running: true } } }),
+      nodeShape({ id: 2, ip: '10.0.0.12', status_detail: { nginx: { nginx_running: false } } }),
+      nodeShape({ id: 3, cluster_id: 2, cluster_name: '预发集群', ip: '10.0.1.1', status_detail: {} }),
+    ],
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    localStorage.clear()
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/nodes') return Promise.resolve({ data: groupNodes })
+      if (url === '/clusters') return Promise.resolve({ data: { total: 2, items: MOCK_CLUSTERS } })
+      return Promise.reject(new Error('unknown url: ' + url))
+    })
+  })
+
+  afterEach(() => {
+    localStorage.clear()
+  })
+
+  async function mountPage() {
+    const NodeList = (await import('../NodeList.vue')).default
+    const wrapper = mount(NodeList, { global: { stubs } })
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    return wrapper
+  }
+
+  function tableProps(wrapper: Awaited<ReturnType<typeof mountPage>>) {
+    return wrapper.findComponent({ name: 'ATableStub' }).props() as unknown as {
+      dataSource: Array<Record<string, unknown>>
+      columns: Array<{ key: string }>
+    }
+  }
+
+  it('默认分组渲染：每集群一个组头行，「所属集群」列不存在（cluster-grouping）', async () => {
+    const wrapper = await mountPage()
+    const headers = wrapper.findAll('[data-test="group-header"]')
+    expect(headers).toHaveLength(2)
+    expect(headers[0].text()).toContain('生产集群')
+    expect(headers[1].text()).toContain('预发集群')
+    const colKeys = tableProps(wrapper).columns.map((c) => c.key)
+    expect(colKeys).not.toContain('cluster_name')
+    // 数据行保持 ant-table-row 类（行计数断言隔离基准）
+    expect(wrapper.findAll('tr.ant-table-row')).toHaveLength(3)
+    wrapper.unmount()
+  })
+
+  it('切换器默认「分组」；切平铺无组头、切回分组组头恢复且筛选保留', async () => {
+    const wrapper = await mountPage()
+    expect((wrapper.vm as any).viewMode).toBe('group')
+    expect(wrapper.find('[data-test="view-mode-group"]').classes()).toContain('active')
+    await wrapper.find('[data-test="view-mode-flat"]').trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findAll('[data-test="group-header"]')).toHaveLength(0)
+    expect(wrapper.findAll('tr.ant-table-row')).toHaveLength(3)
+    // 切回分组：组头恢复（单组也渲染）
+    await wrapper.find('[data-test="view-mode-group"]').trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findAll('[data-test="group-header"]')).toHaveLength(2)
+    wrapper.unmount()
+  })
+
+  it('组头统计芯片与行内徽章同源（nginxState 判定；0 项不渲染），附批量操作提示', async () => {
+    const wrapper = await mountPage()
+    const headers = wrapper.findAll('[data-test="group-header"]')
+    const prod = headers[0].text()
+    expect(prod).toContain('2 节点')
+    expect(prod).toContain('1 运行中')
+    expect(prod).toContain('1 已停止')
+    expect(prod).not.toContain('未检测')
+    expect(prod).toContain('勾选节点后可用上方批量操作')
+    const staging = headers[1].text()
+    expect(staging).toContain('1 节点')
+    expect(staging).toContain('1 未检测')
+    expect(staging).not.toContain('运行中')
+    wrapper.unmount()
+  })
+
+  it('组标记行不可勾选（getCheckboxProps disabled），数据行可勾选', async () => {
+    const wrapper = await mountPage()
+    const vm = wrapper.vm as any
+    const header = tableProps(wrapper).dataSource.find((r) => r.__groupHeader)
+    expect(vm.rowSelection.getCheckboxProps({ record: header }).disabled).toBe(true)
+    expect(vm.rowSelection.getCheckboxProps({ record: groupNodes.items[0] }).disabled).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('组头点击折叠：组内行隐藏；平铺忽略折叠；切回分组折叠记忆保留', async () => {
+    const wrapper = await mountPage()
+    expect(tableProps(wrapper).dataSource).toHaveLength(5) // 2 组头 + 3 行
+    // 折叠第一个组（生产集群）：隐藏组内 2 行
+    await wrapper.find('[data-test="group-header"] [data-test="cluster-group-row"]').trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(tableProps(wrapper).dataSource).toHaveLength(3) // 2 组头 + 1 行（预发）
+    // 平铺：折叠态被忽略，全部数据行可见
+    await wrapper.find('[data-test="view-mode-flat"]').trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(tableProps(wrapper).dataSource).toHaveLength(3)
+    // 切回分组：折叠记忆保留
+    await wrapper.find('[data-test="view-mode-group"]').trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(tableProps(wrapper).dataSource).toHaveLength(3)
+    wrapper.unmount()
+  })
+
+  it('空组不显示：状态筛选后无命中行的集群组头消失', async () => {
+    const wrapper = await mountPage()
+    const statusSelect = wrapper.findAll('select').find((s) => s.text().includes('全部状态'))
+    const selectEl = statusSelect!.element as HTMLSelectElement
+    selectEl.value = 'stopped'
+    selectEl.dispatchEvent(new Event('change'))
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    const headers = wrapper.findAll('[data-test="group-header"]')
+    expect(headers).toHaveLength(1)
+    expect(headers[0].text()).toContain('生产集群')
+    expect(wrapper.text()).not.toContain('预发集群组')
+    wrapper.unmount()
+  })
+
+  it('页头徽标 = 工具条计数同口径（共 N 个节点 ↔ N 节点），状态分布来自统计副本', async () => {
+    const wrapper = await mountPage()
+    expect(wrapper.find('[data-test="toolbar-count"]').text()).toContain('共 3 个节点')
+    const stats = wrapper.findAll('[data-test="page-stat"]').map((s) => s.text())
+    expect(stats[0]).toContain('3 节点')
+    expect(stats).toHaveLength(4) // 3 节点 · 1 运行中 · 1 已停止 · 1 未检测
+    expect(stats.join(' ')).toContain('1 运行中')
+    expect(stats.join(' ')).toContain('1 已停止')
+    expect(stats.join(' ')).toContain('1 未检测')
+    wrapper.unmount()
+  })
+
+  it('工具条刷新：重拉列表+统计副本，不重置筛选与视图模式（D6）', async () => {
+    const wrapper = await mountPage()
+    const statusSelect = wrapper.findAll('select').find((s) => s.text().includes('全部状态'))
+    const selectEl = statusSelect!.element as HTMLSelectElement
+    selectEl.value = 'stopped'
+    selectEl.dispatchEvent(new Event('change'))
+    await flushPromises()
+    const callsBefore = mockApiGet.mock.calls.filter((c: unknown[]) => c[0] === '/nodes').length
+    await wrapper.find('[data-test="toolbar-refresh"]').trigger('click')
+    await flushPromises()
+    const callsAfter = mockApiGet.mock.calls.filter((c: unknown[]) => c[0] === '/nodes').length
+    expect(callsAfter).toBeGreaterThan(callsBefore)
+    // 筛选保留
+    expect(wrapper.text()).toContain('筛出')
+    expect((wrapper.vm as any).viewMode).toBe('group')
+    wrapper.unmount()
+  })
 })

@@ -53,12 +53,15 @@ const dateText = computed(() => formatPublishDateTime(props.publishedAt ?? null)
   align-items: baseline;
 }
 .ps-tag {
-  display: inline-block;
-  font-size: 12px;
-  line-height: 18px;
-  padding: 0 6px;
-  border-radius: 3px;
-  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 .ps-published {
   border: 1px solid #52c41a;

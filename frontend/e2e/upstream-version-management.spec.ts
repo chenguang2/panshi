@@ -151,7 +151,9 @@ test.describe('Version Management (上游/路由 参数化)', () => {
 
       // UI：搜索锁定造数行 → 版本管理 → 对比模式 → 选 v1、v2 → 断言 diff 真实反映差异
       await login(page)
-      await gotoResourcePage(page, '上游')
+      // 直连造数集群深链（同 upstream-publish：首卡集群随库态漂移）
+      await page.goto(`/upstreams?cluster_id=${cluster.id}`)
+      await expect(page.locator('.upstream-table')).toBeVisible({ timeout: 15000 })
       const searchInput = page.getByPlaceholder('搜索名称或描述...')
       await searchInput.fill(name)
       await searchInput.press('Enter')

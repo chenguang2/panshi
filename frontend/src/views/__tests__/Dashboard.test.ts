@@ -45,7 +45,7 @@ const dashboardTableStub = {
       '<div class="ant-table-wrapper">',
       '<div class="ant-table-wrapper"><div v-if="loading" class="stub-table-loading">table-loading</div>',
     )
-    .replace('<tr class="ant-table-row">', '<tr class="ant-table-row" v-bind="rowAttrs(r)">'),
+    .replace('<tr v-else class="ant-table-row">', '<tr v-else class="ant-table-row" v-bind="rowAttrs(r)">'),
 }
 
 // ── mock 形状依据（约定 #43，2026-10-10 curl 实测开发后端）：

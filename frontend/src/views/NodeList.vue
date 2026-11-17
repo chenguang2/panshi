@@ -1,91 +1,106 @@
 <template>
   <div class="node-list">
     <PageHeader title="节点管理" description="管理 Edge 网关节点，监控运行状态并执行操作">
+      <template #stats>
+        <PageStatBadges :items="headerStatItems" />
+      </template>
       <template #actions>
         <button class="btn btn-primary" @click="openAddModal">+ 添加节点</button>
       </template>
     </PageHeader>
 
-    <div class="node-filter-bar">
-      <SearchInput v-if="nodeSearchVisible" v-model="searchText" placeholder="搜索 IP..." @input="onSearchInput" />
-      <select v-model="groupFilter" class="form-input" style="width: 140px" @change="onGroupChange">
-        <option value="__all__">全部分组</option>
-        <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
-        <option value="__ung__">未分组</option>
-      </select>
-      <ClusterSelect
-        v-model="clusterFilter"
-        :clusters="filteredClusters"
-        allow-all
-        style="width: 160px"
-        @change="onFilterChange"
-      />
-      <select v-model="statusFilter" class="form-input" style="width: 130px" @change="onFilterChange">
-        <option value="">全部状态</option>
-        <option value="running">运行中</option>
-        <option value="stopped">已停止</option>
-        <option value="unchecked">未检测</option>
-      </select>
-      <a-popover v-model:open="nodeColumnPopoverVisible" trigger="click" placement="bottomLeft">
-        <template #title>选择显示列</template>
-        <template #content>
-          <div style="min-width: 400px">
-            <div style="font-weight: 500; margin-bottom: 8px">显示字段</div>
-            <a-checkbox-group v-model:value="nodeColumnsSelected">
-              <div style="display: flex; flex-wrap: wrap; gap: 8px">
-                <div v-for="col in popoverColumns" :key="col.key" style="margin-bottom: 4px">
-                  <a-checkbox :value="col.key">{{ col.title }}</a-checkbox>
-                </div>
-              </div>
-            </a-checkbox-group>
-            <a-divider style="margin: 12px 0" />
-            <div style="font-weight: 500; margin-bottom: 8px">操作按钮</div>
-            <a-checkbox-group v-model:value="nodeActionsSelected">
-              <div style="display: flex; flex-wrap: wrap; gap: 8px">
-                <div v-for="btn in inlineNodeActionOptions" :key="btn.key" style="margin-bottom: 4px">
-                  <a-checkbox :value="btn.key">{{ btn.title }}</a-checkbox>
-                </div>
-              </div>
-            </a-checkbox-group>
-            <a-divider style="margin: 12px 0" />
-            <div style="font-weight: 500; margin-bottom: 8px">搜索</div>
-            <a-checkbox v-model:checked="nodeSearchVisible">显示搜索框</a-checkbox>
-            <a-divider style="margin: 12px 0" />
-            <div class="text-muted" style="font-size: 12px; margin-bottom: 8px">拖动表头右缘可调整列宽</div>
-            <button class="btn btn-primary btn-sm" @click="handleResetColumnWidths">重置列宽</button>
-          </div>
-        </template>
-        <button class="btn btn-secondary btn-sm">列配置</button>
-      </a-popover>
-      <span v-if="statusFilter" class="text-muted text-sm">筛出 {{ displayedNodes.length }} 个</span>
-      <button class="btn btn-secondary btn-sm refresh-btn" @click="loadNodes"><ReloadOutlined /> 刷新</button>
-    </div>
-
-    <!-- 批量工具栏（batch3 2.1 / D5）：动作集与 Tab 默认一致，跨集群节点勾选后按集群分组执行 -->
-    <div class="node-batch-bar">
-      <span class="batch-count">已选 {{ selectedNodeKeys.length }} 项</span>
-      <button class="btn btn-ghost btn-sm" :disabled="!selectedNodeKeys.length" @click="handleBatchStart">
-        <PlayCircleOutlined /> 批量启动
-      </button>
-      <button class="btn btn-ghost btn-sm" :disabled="!selectedNodeKeys.length" @click="handleBatchStop">
-        <PauseCircleOutlined /> 批量停止
-      </button>
-      <button class="btn btn-ghost btn-sm" :disabled="!selectedNodeKeys.length" @click="handleBatchReload">
-        <ReloadOutlined /> 批量重载
-      </button>
-      <button class="btn btn-ghost btn-sm" :disabled="!selectedNodeKeys.length" @click="handleBatchStatus">
-        批量状态查询
-      </button>
-      <span class="batch-bar-spacer"></span>
-      <button class="btn btn-secondary btn-sm" @click="openBatchImport">批量导入</button>
-    </div>
-
     <div class="table-container">
+      <!-- 工具条（list-pages-console-restyle）：共享 TableToolbar，右端簇 = 计数 → 刷新 → 列配置 → 分组|平铺 -->
+      <TableToolbar
+        v-model:mode="viewMode"
+        class="node-filter-bar"
+        :count="totalCount"
+        count-unit="个节点"
+        :refreshing="loading"
+        @refresh="refreshList"
+      >
+        <template #filters>
+          <SearchInput v-if="nodeSearchVisible" v-model="searchText" placeholder="搜索 IP..." @input="onSearchInput" />
+          <select v-model="groupFilter" class="l5-select" style="width: 140px" @change="onGroupChange">
+            <option value="__all__">全部分组</option>
+            <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
+            <option value="__ung__">未分组</option>
+          </select>
+          <ClusterSelect
+            v-model="clusterFilter"
+            :clusters="filteredClusters"
+            allow-all
+            style="width: 160px"
+            @change="onFilterChange"
+          />
+          <select v-model="statusFilter" class="l5-select" style="width: 130px" @change="onFilterChange">
+            <option value="">全部状态</option>
+            <option value="running">运行中</option>
+            <option value="stopped">已停止</option>
+            <option value="unchecked">未检测</option>
+          </select>
+          <span v-if="statusFilter" class="text-muted text-sm">筛出 {{ displayedNodes.length }} 个</span>
+        </template>
+        <template #config>
+          <a-popover v-model:open="nodeColumnPopoverVisible" trigger="click" placement="bottomLeft">
+            <template #title>选择显示列</template>
+            <template #content>
+              <div style="min-width: 400px">
+                <div style="font-weight: 500; margin-bottom: 8px">显示字段</div>
+                <a-checkbox-group v-model:value="nodeColumnsSelected">
+                  <div style="display: flex; flex-wrap: wrap; gap: 8px">
+                    <div v-for="col in popoverColumns" :key="col.key" style="margin-bottom: 4px">
+                      <a-checkbox :value="col.key">{{ col.title }}</a-checkbox>
+                    </div>
+                  </div>
+                </a-checkbox-group>
+                <a-divider style="margin: 12px 0" />
+                <div style="font-weight: 500; margin-bottom: 8px">操作按钮</div>
+                <a-checkbox-group v-model:value="nodeActionsSelected">
+                  <div style="display: flex; flex-wrap: wrap; gap: 8px">
+                    <div v-for="btn in inlineNodeActionOptions" :key="btn.key" style="margin-bottom: 4px">
+                      <a-checkbox :value="btn.key">{{ btn.title }}</a-checkbox>
+                    </div>
+                  </div>
+                </a-checkbox-group>
+                <a-divider style="margin: 12px 0" />
+                <div style="font-weight: 500; margin-bottom: 8px">搜索</div>
+                <a-checkbox v-model:checked="nodeSearchVisible">显示搜索框</a-checkbox>
+                <a-divider style="margin: 12px 0" />
+                <div class="text-muted" style="font-size: 12px; margin-bottom: 8px">拖动表头右缘可调整列宽</div>
+                <button class="btn btn-primary btn-sm" @click="handleResetColumnWidths">重置列宽</button>
+              </div>
+            </template>
+            <button class="btn btn-secondary btn-sm">列配置</button>
+          </a-popover>
+        </template>
+      </TableToolbar>
+
+      <!-- 批量工具栏（batch3 2.1 / D5）：动作集与 Tab 默认一致，跨集群节点勾选后按集群分组执行 -->
+      <div class="node-batch-bar">
+        <span class="batch-count">已选 {{ selectedNodeKeys.length }} 项</span>
+        <button class="btn btn-ghost btn-sm" :disabled="!selectedNodeKeys.length" @click="handleBatchStart">
+          <PlayCircleOutlined /> 批量启动
+        </button>
+        <button class="btn btn-ghost btn-sm" :disabled="!selectedNodeKeys.length" @click="handleBatchStop">
+          <PauseCircleOutlined /> 批量停止
+        </button>
+        <button class="btn btn-ghost btn-sm" :disabled="!selectedNodeKeys.length" @click="handleBatchReload">
+          <ReloadOutlined /> 批量重载
+        </button>
+        <button class="btn btn-ghost btn-sm" :disabled="!selectedNodeKeys.length" @click="handleBatchStatus">
+          批量状态查询
+        </button>
+        <span class="batch-bar-spacer"></span>
+        <button class="btn btn-secondary btn-sm" @click="openBatchImport">批量导入</button>
+      </div>
+
       <a-table
-        :data-source="displayedNodes"
+        :data-source="displayRows"
         :columns="visibleNodeColumns"
-        :row-key="(record: any) => record.id"
+        :row-key="(record: any) => record.key ?? record.id"
         :row-selection="rowSelection"
+        :custom-row="nodeCustomRow"
         :pagination="paginationProps({ page, pageSize, total: totalCount }, '个节点')"
         :loading="loading"
         :scroll="{ x: 'max-content' }"
@@ -104,31 +119,44 @@
             />
           </span>
         </template>
-        <template #bodyCell="{ column, record, index }">
-          <template v-if="column.key === 'index'">
-            <span class="text-muted">{{ (page - 1) * pageSize + index + 1 }}</span>
+        <template #bodyCell="{ column, record }">
+          <!-- 组标记行（list-page-cluster-grouping）：整行 colspan 由列 customCell 控制，此处只渲染内容 -->
+          <template v-if="isGroupHeaderRow(record)">
+            <ClusterGroupRow :row="record" @toggle="toggleFold(record.groupKey)">
+              <template #note>勾选节点后可用上方批量操作</template>
+            </ClusterGroupRow>
           </template>
-          <template v-if="column.key === 'ip'">
+          <template v-else-if="column.key === 'index'">
+            <!-- 行号 = 跨页偏移 + 渲染序（组合式 sequenceOf：组标记行不占号，分组/平铺两模式 1 基连续） -->
+            <span class="text-muted">{{ (page - 1) * pageSize + sequenceOf(record) }}</span>
+          </template>
+          <template v-else-if="column.key === 'ip'">
             <span class="text-mono">{{ record.ip }}</span>
           </template>
 
-          <template v-if="column.key === 'service_port'">
+          <template v-else-if="column.key === 'service_port'">
             <span class="text-mono text-sm">{{ record.service_port }}</span>
           </template>
 
-          <template v-if="column.key === 'management_port'">
+          <template v-else-if="column.key === 'management_port'">
             <span class="text-mono text-sm">{{ record.management_port }}</span>
           </template>
 
-          <template v-if="column.key === 'edge_path'">
-            <span class="text-sm">{{ record.edge_path || '-' }}</span>
+          <!-- 安装路径合并列（node-management L2 / contract 10.1）：Edge / OR 两行堆叠，显隐由两个独立勾选键控制 -->
+          <template v-else-if="column.key === 'edge_path'">
+            <div class="path-stack">
+              <div v-if="isPathSelected('edge_path')" class="path-line">
+                <span class="path-k">Edge</span>
+                <span class="text-mono path-v" :title="record.edge_path || '-'">{{ record.edge_path || '-' }}</span>
+              </div>
+              <div v-if="isPathSelected('openresty_path')" class="path-line">
+                <span class="path-k">OR</span>
+                <span class="text-mono path-v" :title="openrestyDisplay(record)">{{ openrestyDisplay(record) }}</span>
+              </div>
+            </div>
           </template>
 
-          <template v-if="column.key === 'openresty_path'">
-            <span class="text-sm">{{ record.openresty_path || '（同 Edge 安装路径）' }}</span>
-          </template>
-
-          <template v-if="column.key === 'status'">
+          <template v-else-if="column.key === 'status'">
             <div class="node-status-cell">
               <!-- 配置态徽章（管理开关，中性灰，batch2 1.3）：与运行态徽章并排，两维度互不替代 -->
               <BadgeStatus v-if="record.status === 0" text="已禁用" status="neutral" />
@@ -143,11 +171,11 @@
             </div>
           </template>
 
-          <template v-if="column.key === 'edge_version'">
+          <template v-else-if="column.key === 'edge_version'">
             <span class="text-mono text-sm">{{ record.status_detail?.statistic?.edge_version || '-' }}</span>
           </template>
 
-          <template v-if="column.key === 'actions'">
+          <template v-else-if="column.key === 'actions'">
             <div class="node-actions-wrap">
               <!-- 动作钮集（batch3 4.1 / D8）：共享 allNodeActionButtons 配置化（行内勾选 start/stop/status） -->
               <template v-for="btnKey in rowActionKeys" :key="btnKey">
@@ -205,9 +233,9 @@
         </template>
 
         <template #emptyText>
-          <div class="empty-state">
-            <div class="empty-state-icon">◎</div>
-            <p>暂无节点</p>
+          <div class="empty5">
+            <div class="e-icon">◎</div>
+            <div class="e-title">暂无节点</div>
           </div>
         </template>
       </a-table>
@@ -549,6 +577,16 @@ import { useInstallStream } from '@/composables/useInstallStream'
 import { paginationProps } from '@/composables/usePagination'
 import { useColumnConfig } from '@/composables/useColumnConfig'
 import { useColumnDragColumns } from '@/composables/useColumnDragColumns'
+import {
+  useListClusterGrouping,
+  isGroupHeaderRow,
+  type ClusterGroupChip,
+  type ListViewMode,
+} from '@/composables/useListClusterGrouping'
+import { compareNodeIp } from '@/utils/listGroupSorters'
+import TableToolbar from '@/components/TableToolbar.vue'
+import ClusterGroupRow from '@/components/ClusterGroupRow.vue'
+import PageStatBadges from '@/components/PageStatBadges.vue'
 import { useFeaturesStore } from '@/stores/features'
 import { listNodes, createNode, updateNode } from '@/api/nodes'
 import {
@@ -606,15 +644,6 @@ function onGroupChange() {
   clusterFilter.value = ''
   onFilterChange()
 }
-
-const displayedNodes = computed(() => {
-  let list = nodes.value
-  if (statusFilter.value) {
-    // 运行态三元过滤（batch2 3.1 / D5）：按 nginxState 判定，不按管理开关字段
-    list = list.filter((n) => nginxState(n) === statusFilter.value)
-  }
-  return list
-})
 
 let _elapsedTimer: ReturnType<typeof setInterval> | null = null
 
@@ -675,6 +704,8 @@ const rowSelection = computed(() => ({
   onChange: (keys: number[]) => {
     selectedNodeKeys.value = keys
   },
+  // 组标记行不可勾选（contract 10.6 / 规格 list-page-cluster-grouping）
+  getCheckboxProps: (rec: { record?: unknown }) => ({ disabled: !isRowSelectable(rec?.record) }),
 }))
 const batchSelectedNodes = computed(() => nodes.value.filter((n) => selectedNodeKeys.value.includes(n.id)))
 
@@ -709,7 +740,7 @@ async function executeBatchAction(
   })
   message.info(formatClusterBatchSummary(summary))
   clearBatchSelection()
-  await loadNodes()
+  await refreshList()
 }
 
 function confirmBatchAction(action: 'start' | 'stop' | 'reload', label: string) {
@@ -746,7 +777,7 @@ async function handleBatchStatus() {
   const rows = await runBatchNodeStatus(list, { progress: batchProgress })
   showBatchStatusModal('批量状态查询', rows)
   clearBatchSelection()
-  await loadNodes()
+  await refreshList()
 }
 
 // ── 复制节点（batch3 3.1 / D6：预填行配置、IP 清空、清 formErrors）──
@@ -852,7 +883,7 @@ async function submitImport() {
   importModalVisible.value = false
   importRows.value = []
   importText.value = ''
-  await loadNodes()
+  await refreshList()
 }
 
 // batch3 1.3 / D3：危险红确认上移为 useOverlayModal 具名导出，本视图改直接引用（原本地包装已删）。
@@ -865,20 +896,106 @@ const diffNodeId = ref(0)
 
 // batch2 3.2 / D6：移除全部列客户端排序——当前页字符串比较序是错的（IP 数值序被打乱），
 // 后端 GET /nodes 已全量数值 IP 排序；≤100 节点规模下当前页排序无价值且误导。不做表头排序 UI 替代。
-// 默认宽度档（node-list-column-resize D3）：≥1366px 视口下核心信息无需横向滚动即可见；
-// 用户拖拽后的宽度经 useColumnConfig('node_standalone').columnWidths 覆盖此档
+// 默认宽度档（node-list-column-resize D3 + list-pages-console-restyle L2）：安装路径合并列按 mockup
+// 314px 档；「所属集群」列移除（list-page-cluster-grouping：集群归属由组头行表达）。
+// Edge / OpenResty 安装路径合并为「安装路径」单列两行堆叠，列配置保持两独立键（contract 10.1，存储零迁移）。
 const columns: TableColumnsType = [
   { title: '#', key: 'index', width: 45, fixed: 'left' },
   { title: 'IP', dataIndex: 'ip', key: 'ip', width: 140, fixed: 'left' },
-  { title: '所属集群', dataIndex: 'cluster_name', key: 'cluster_name', width: 140 },
   { title: '服务端口', key: 'service_port', width: 100 },
   { title: '管理端口', key: 'management_port', width: 100 },
-  { title: 'Edge 安装路径', key: 'edge_path', width: 220 },
-  { title: 'OpenResty 安装路径', key: 'openresty_path', width: 220 },
+  { title: '安装路径', key: 'edge_path', width: 314 },
   { title: '状态', key: 'status', width: 120 },
   { title: 'Edge 版本', key: 'edge_version', width: 110 },
   { title: '操作', key: 'actions', width: 320, fixed: 'right' },
 ]
+// 全量列键（含被合并列吞并的 openresty_path——仅作列配置勾选/存储键，不单独成列，contract 10.1）
+const ALL_COLUMN_KEYS: string[] = (() => {
+  const keys = columns.map((c) => String(c.key))
+  const at = keys.indexOf('edge_path') + 1
+  return [...keys.slice(0, at), 'openresty_path', ...keys.slice(at)]
+})()
+
+// ── 集群分组 + 双模式（list-page-cluster-grouping，共享组合式单点）──
+const viewMode = ref<ListViewMode>('group')
+/** 运行态三元过滤（batch2 3.1 / D5）：按 nginxState 判定，不按管理开关字段。
+ *  抽出纯函数：displayedNodes 与 loadNodes 的 loadAll 计数共用同一口径（规格要求
+ *  「徽标/计数随筛选数据集更新」，loadAll 模式 totalCount 须为过滤后全量而非载入全量）。 */
+function applyStatusFilter<T extends Parameters<typeof nginxState>[0]>(list: T[]): T[] {
+  if (!statusFilter.value) return list
+  return list.filter((n) => nginxState(n) === statusFilter.value)
+}
+const displayedNodes = computed(() => applyStatusFilter(nodes.value))
+/** 组头统计芯片（contract 10.3）：判定复用行内徽章同源的 nginxState，为 0 的项不渲染 */
+function nodeGroupChips(rows: Array<Record<string, unknown>>): ClusterGroupChip[] {
+  let running = 0
+  let stopped = 0
+  let unchecked = 0
+  for (const n of rows) {
+    const state = nginxState(n as Parameters<typeof nginxState>[0])
+    if (state === 'running') running++
+    else if (state === 'stopped') stopped++
+    else unchecked++
+  }
+  const chips: ClusterGroupChip[] = []
+  if (running) chips.push({ label: `${running} 运行中`, tone: 'ok' })
+  if (stopped) chips.push({ label: `${stopped} 已停止`, tone: 'bad' })
+  if (unchecked) chips.push({ label: `${unchecked} 未检测`, tone: 'warn' })
+  return chips
+}
+const { displayRows, sequenceOf, isRowSelectable, toggleFold } = useListClusterGrouping({
+  rows: () => displayedNodes.value,
+  unit: '节点',
+  mode: viewMode,
+  // 组内固定序 = IP 数值序（规格 list-page-cluster-grouping）；仅分组模式生效
+  sortWithinGroup: compareNodeIp as (a: Record<string, unknown>, b: Record<string, unknown>) => number,
+  chips: nodeGroupChips,
+})
+
+// ── 页头轻统计徽标（list-page-header-stats / design D3）：大分页统计副本，仅用于徽标聚合 ──
+const statsNodes = ref<any[]>([])
+async function loadNodeStats() {
+  try {
+    const res = await listNodes({
+      groupName: groupFilter.value,
+      page: 1,
+      pageSize: 500, // MAX_PAGE_SIZE：部署规模（≤18 集群 × ≤3 节点）内恒全量（design D3）
+      search: searchText.value || undefined,
+      clusterId: clusterFilter.value ? Number(clusterFilter.value) : undefined,
+      status: undefined,
+    })
+    statsNodes.value = res.data.items || []
+  } catch {
+    // 徽标统计失败静默（保留上次分布）；列表加载失败由 loadNodes 自己提示
+  }
+}
+/** 徽标取数：状态筛选态 = 客户端过滤后的全量（loadAll）；其余 = 统计副本（design D3）。
+ *  主统计数字恒用 totalCount，保证与页脚「共 N」一致（规格一致性要求）。 */
+const headerStatItems = computed(() => {
+  const rows = statusFilter.value ? displayedNodes.value : statsNodes.value
+  let running = 0
+  let stopped = 0
+  let unchecked = 0
+  for (const n of rows) {
+    const state = nginxState(n as Parameters<typeof nginxState>[0])
+    if (state === 'running') running++
+    else if (state === 'stopped') stopped++
+    else unchecked++
+  }
+  const items: Array<{ value: number | string; label: string; tone?: 'ok' | 'warn' | 'bad' }> = [
+    { value: totalCount.value, label: '节点' },
+  ]
+  if (running) items.push({ value: running, label: '运行中', tone: 'ok' })
+  if (stopped) items.push({ value: stopped, label: '已停止', tone: 'bad' })
+  if (unchecked) items.push({ value: unchecked, label: '未检测', tone: 'warn' })
+  return items
+})
+
+/** 刷新语义（design D6）：重拉列表 + 徽标统计；不重置筛选/排序键/视图模式 */
+async function refreshList(): Promise<void> {
+  loadNodes()
+  loadNodeStats()
+}
 
 // ── 列/按钮/搜索个性化（batch3 4.1 / D8）──
 // 独立 storage key「node_standalone」，与 Tab 的 useColumnConfig('node') 互不影响。
@@ -897,12 +1014,14 @@ const {
   setColumnOrder: setNodeColumnOrder,
 } = useColumnConfig({
   key: 'node_standalone',
-  defaultColumns: columns.map((c) => String(c.key)),
+  // 默认勾选/顺序清洗均按全量列键（含被合并的 openresty_path，#79 route-column-reorder-fix）
+  defaultColumns: [...ALL_COLUMN_KEYS],
+  allColumns: [...ALL_COLUMN_KEYS],
   defaultActions: [...NODE_ROW_ACTION_KEYS],
   defaultSearchVisible: true,
 })
 const inlineNodeActionOptions = allNodeActionButtons.filter((b) => NODE_ROW_ACTION_KEYS.includes(b.key))
-// 列顺序（node-list-column-resize D7 方案 A）：用户顺序覆盖默认序，未知 key 剔除、新列补位
+// 列顺序（node-list-column-resize D7 方案 A）：用户顺序覆盖默认序，未知 key（含已移除的 cluster_name）剔除、新列补位
 const orderedColumns = computed(() => {
   const stored = nodeColumnOrder.value
   const seq = stored.length ? stored : columns.map((c) => String(c.key))
@@ -919,14 +1038,50 @@ const orderedColumns = computed(() => {
   for (const [k, c] of known) if (!seen.has(k)) out.push(c)
   return out
 })
-// 序号列恒展示、不进列配置弹窗（三张独立列表页同一解剖；antd CheckboxGroup 交互会剔除未知值，故此处兜底）
-const popoverColumns = computed(() => columns.filter((c) => String(c.key) !== 'index'))
-// 用户拖拽宽度覆盖默认档（node-list-column-resize）
+// 列配置勾选清单：合并列的「OpenResty 安装路径」为独立勾选键（contract 10.1），序号列恒不进勾选
+const popoverColumns = computed(() => {
+  const out: Array<{ key: string; title: string }> = []
+  for (const c of columns) {
+    const key = String(c.key)
+    if (key === 'index') continue
+    out.push({ key, title: key === 'edge_path' ? 'Edge 安装路径' : String(c.title) })
+    if (key === 'edge_path') out.push({ key: 'openresty_path', title: 'OpenResty 安装路径' })
+  }
+  return out
+})
+/** 合并列内部行显隐：两个独立勾选键分别控制 Edge 行 / OR 行（contract 10.1） */
+function isPathSelected(key: string): boolean {
+  return nodeColumnsSelected.value.includes(key)
+}
+function openrestyDisplay(record: { openresty_path?: string | null }): string {
+  return record.openresty_path || '（同 Edge 安装路径）'
+}
+/** 组标记行单元格协议（contract 10.6）：首列整行 colSpan，其余列隐藏 */
+function groupHeaderCellProps(record: unknown, isFirst: boolean): Record<string, unknown> {
+  if (!isGroupHeaderRow(record)) return {}
+  return isFirst ? { colSpan: visibleNodeColumns.value.length } : { class: 'l5-group-cell-hidden' }
+}
+/** 组标记行整行类（样式见 style.css .l5-group-row 段） */
+function nodeCustomRow(record: unknown): Record<string, unknown> {
+  return isGroupHeaderRow(record) ? { class: 'l5-group-row' } : {}
+}
+// 可见列 = 显隐勾选（合并列两键任一勾选即整列出现）+ 用户拖宽覆盖；
+// 分组模式剥离 fixed（colSpan 通栏与 sticky 冲突，contract 10.6），平铺保留原状
 const visibleNodeColumns = computed(() => {
   const selected = new Set(nodeColumnsSelected.value)
-  return orderedColumns.value
-    .filter((c) => String(c.key) === 'index' || selected.has(String(c.key)))
-    .map((c) => ({ ...c, width: nodeColumnWidths.value[String(c.key)] ?? c.width }))
+  const cols = orderedColumns.value.filter((c) => {
+    const k = String(c.key)
+    if (k === 'index') return true
+    if (k === 'edge_path') return selected.has('edge_path') || selected.has('openresty_path')
+    return selected.has(k)
+  })
+  const groupMode = viewMode.value === 'group'
+  return cols.map((c, i) => ({
+    ...c,
+    width: nodeColumnWidths.value[String(c.key)] ?? c.width,
+    fixed: groupMode ? undefined : c.fixed,
+    customCell: (record: unknown) => groupHeaderCellProps(record, i === 0),
+  }))
 })
 
 // ── 列拖拽手势（调宽 + 移动）共享 composable（column-personalization-rollout D1）：三页同源 ──
@@ -1002,7 +1157,8 @@ async function loadNodes() {
       status: undefined, // 全部通过 nginxRunning() 客户端过滤
     })
     nodes.value = res.data.items || []
-    totalCount.value = loadAll ? nodes.value.length : res.data.total || 0
+    // loadAll（状态筛选）模式：计数 = 过滤后全量（与「筛出 X 个」/页头徽标同口径，规格一致性）
+    totalCount.value = loadAll ? applyStatusFilter(nodes.value).length : res.data.total || 0
   } catch (error: unknown) {
     message.error('加载节点列表失败: ' + getApiErrorMessage(error))
   } finally {
@@ -1039,13 +1195,13 @@ function handleTableChange(pagination: TablePaginationConfig) {
 
 function onFilterChange() {
   page.value = 1
-  loadNodes()
+  refreshList()
 }
 
 function onSearchInput() {
   onDebouncedSearch(() => {
     page.value = 1
-    loadNodes()
+    refreshList()
   })
 }
 
@@ -1153,7 +1309,7 @@ async function handleFormSubmit() {
       message.success('节点已添加')
     }
     formModalVisible.value = false
-    loadNodes()
+    refreshList()
   } catch (error: unknown) {
     message.error(getApiErrorMessage(error))
   } finally {
@@ -1273,7 +1429,7 @@ async function executeAction(record: any, action: string, actionLabel: string) {
     execHighlights.value = []
     execStatistics.value = data.statistic ? { ...data.statistic } : null
     execResult.value = { stdout: data.stdout || '', stderr: data.stderr || '', command: finalCommand, rc: data.rc }
-    loadNodes()
+    refreshList()
   } catch (error: unknown) {
     stopElapsedTimer()
     execProgress.status = 'exception'
@@ -1515,7 +1671,7 @@ function handleDelete(record: any) {
         deleteDb: true,
         deleteEdge: false,
         nodeIds: [],
-        refreshFn: loadNodes,
+        refreshFn: refreshList,
       })
     },
   })
@@ -1539,7 +1695,7 @@ onMounted(() => {
   const clusterId = route.query.cluster_id as string | undefined
   if (clusterId) clusterFilter.value = clusterId
   loadClusters()
-  loadNodes()
+  refreshList()
 
   window.addEventListener('edge-pack-add', onEdgePackAdd)
   window.addEventListener('edge-pack-rebase', onEdgePackRebase)
@@ -1611,15 +1767,18 @@ function onEdgePackRebase(e: Event) {
     { version: detail.version },
   )
 }
+
+// 视图模式供测试/调试显式钉位（contract 10.2：组件测试用 vm.viewMode='flat' 钉平铺场景）
+defineExpose({ viewMode })
 </script>
 
 <style scoped>
-/* 批量工具栏（batch3 2.1） */
+/* 批量工具栏（batch3 2.1；list-pages-console-restyle 移入表卡内工具条之下） */
 .node-batch-bar {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 12px;
+  padding: 0 16px 10px;
 }
 .node-batch-bar .batch-count {
   color: var(--muted);
@@ -1667,12 +1826,19 @@ function onEdgePackRebase(e: Event) {
   color: var(--danger);
 }
 
+/* 工具条（list-pages-console-restyle）：结构移交共享 TableToolbar（.l5-toolbar 单点），
+   本类仅承载卡内贴合与源码守卫依赖的换行语义（NodeList.source.test.ts 断言 flex-wrap: wrap） */
 .node-filter-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 20px;
   flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+}
+
+/* 安装路径合并列的值省略（contract 10.1：完整值悬浮可见，title 已挂） */
+.path-line .path-v {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .text-mono {
@@ -1697,15 +1863,6 @@ function onEdgePackRebase(e: Event) {
   background: transparent !important;
   font-size: 16px !important;
   color: var(--muted) !important;
-}
-
-.empty-state {
-  text-align: center;
-  color: var(--muted);
-}
-.empty-state-icon {
-  font-size: 32px;
-  margin-bottom: 8px;
 }
 
 /* ── Modal ── */

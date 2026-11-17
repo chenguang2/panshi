@@ -1193,3 +1193,1383 @@ body.col-move-dragging,
 body.col-move-dragging * {
   cursor: grabbing !important;
 }
+
+/* ==========================================================
+   列表页控制台层（list-pages-console-restyle 共享层）
+   视觉基准：docs/ui/Live-Artifact-5/proposal-c/{nodes,upstreams,routes}.html 与
+   theme.css「Live-Artifact-5 增补层」段落——取值逐条照抄（字号/字重/圆角/间距/色），不做近似。
+   范式同 .card-grid / .std-card：全局单点，页面只挂类，禁止在视图内重复声明本节类名。
+   两条硬约束：
+   ① 表格类规则一律 .l5-* 前缀，不碰 .grid-table（集群 Tab 三张表与本层三页共用该族）；
+   ② 不声明 .grid-table thead 的任何定位/内距属性——守卫
+      src/__tests__/tableHeaderHitArea.source.test.ts 依赖 th 为定位上下文、标题层为 static。
+   色值：与仓库变量等值时用变量（--success-bg = 12%、--danger-bg = 10%、--accent-bg = 10%），
+   其余透明层按 mockup 原值写 oklch。
+   ========================================================== */
+
+/* ── 表格卡容器（三页表格外壳） ── */
+.l5-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ── 工具条（components/TableToolbar.vue） ── */
+.l5-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  flex-wrap: wrap;
+}
+.l5-toolbar.nowrap {
+  flex-wrap: nowrap;
+}
+.l5-toolbar .t-spacer {
+  flex: 1 1 12px;
+}
+.l5-count {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.l5-count b {
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+/* 工具条内的全站搜索框（components/SearchInput.vue）密度收敛：36px→32px、13px→12.5px，
+   与 .l5-select / .seg 的 32px 同高；nowrap 形态宽度锁定在 150px（mockup：聚焦不撑开，避免工具条抖动）。
+   仅覆盖尺寸，图标/清空按钮语义仍由 .search-input-wrap 单点提供。 */
+.l5-toolbar .search-input-wrap input {
+  height: 32px;
+  font-size: 12.5px;
+}
+.l5-toolbar.nowrap .search-input-wrap input,
+.l5-toolbar.nowrap .search-input-wrap input:focus {
+  width: 150px;
+}
+.l5-select {
+  height: 32px;
+  padding: 0 26px 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background-color: var(--surface);
+  font-size: 12.5px;
+  color: var(--fg);
+  outline: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+  cursor: pointer;
+}
+.l5-select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-bg);
+}
+.l5-select:disabled {
+  color: var(--muted);
+  background-color: var(--bg);
+  cursor: not-allowed;
+}
+/* 备用搜索形态（mockup 原生 .l5-search；现网三页统一用 SearchInput，保留供页面兜底） */
+.l5-search {
+  position: relative;
+  display: inline-flex;
+}
+.l5-search input {
+  height: 32px;
+  width: 200px;
+  padding: 0 30px 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  font-size: 12.5px;
+  color: var(--fg);
+  outline: none;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s,
+    width 0.2s;
+}
+.l5-search input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-bg);
+  width: 240px;
+}
+.l5-search .s-ico {
+  position: absolute;
+  right: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  display: flex;
+  pointer-events: none;
+}
+.l5-search .s-clear {
+  position: absolute;
+  right: 7px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  display: none;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 2px;
+}
+.l5-search.has-value .s-clear {
+  display: flex;
+}
+.l5-search.has-value .s-ico {
+  display: none;
+}
+.tool-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--fg);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+.tool-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-bg);
+}
+.tool-btn svg {
+  width: 13px;
+  height: 13px;
+}
+/* mockup 无禁用态：刷新 loading 期间需要视觉反馈，按 .op-btn:disabled 同款弱化 */
+.tool-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.tool-btn:disabled:hover {
+  border-color: var(--border);
+  color: var(--fg);
+  background: var(--surface);
+}
+
+/* ── 视图模式切换器（分组 | 平铺） ── */
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  height: 32px;
+}
+.seg-opt {
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--muted);
+  background: var(--surface);
+  border: none;
+  border-right: 1px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.1s;
+  white-space: nowrap;
+}
+.seg-opt:last-child {
+  border-right: none;
+}
+.seg-opt:hover {
+  background: var(--bg);
+  color: var(--fg);
+}
+.seg-opt.active {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+/* 中文标签用正文族（mockup .seg-opt.all 的同款口径：等宽族只给 ASCII 选项） */
+.seg-opt.all {
+  font-family: var(--font-body);
+}
+
+/* ── 列配置弹层（页面手写 popover 时用；antd a-popover 消费方无需） ── */
+.pop-anchor {
+  position: relative;
+  display: inline-flex;
+}
+.l5-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 430px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 14px 16px 16px;
+  z-index: 80;
+  display: none;
+  text-align: left;
+}
+.l5-popover.open {
+  display: block;
+}
+.l5-popover .pop-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 600;
+}
+.l5-popover .pop-note {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.l5-pop-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  margin: 12px 0 8px;
+}
+.l5-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+.l5-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--fg);
+  cursor: pointer;
+  user-select: none;
+}
+.l5-check input {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.pop-sep {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 12px 0 0;
+}
+.pop-hint {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 12px;
+  padding: 7px 10px;
+  background: var(--bg);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  font-size: 11px;
+  color: var(--muted);
+}
+.pop-hint svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+.pop-foot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+/* ── 批量条（选中后才点亮：+.has-sel） ── */
+.l5-batchbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+  flex-wrap: wrap;
+}
+.l5-batchbar.has-sel {
+  background: oklch(56% 0.16 210 / 6%);
+  border-bottom-color: oklch(56% 0.16 210 / 25%);
+}
+.l5-batchbar .b-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-right: 6px;
+  white-space: nowrap;
+}
+.l5-batchbar.has-sel .b-count {
+  color: var(--accent);
+}
+.l5-batchbar .b-sep {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  margin: 0 6px;
+}
+.l5-batchbar .b-spacer {
+  flex: 1;
+}
+.l5-batchbar .btn {
+  padding: 3px 10px;
+  font-size: 12px;
+}
+.l5-batchbar .btn svg {
+  width: 12px;
+  height: 12px;
+}
+.l5-batchbar:not(.has-sel) .need-sel {
+  opacity: 0.45;
+}
+
+/* ── 方法快捷筛选 chips（V2 附属行 / 工具条内嵌） ── */
+.l5-chiprow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  white-space: nowrap;
+}
+.l5-chiprow .chiprow-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+.l5-chiprow .f-chips {
+  flex-wrap: nowrap;
+}
+.f-chips {
+  display: inline-flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.f-chip {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  user-select: none;
+  transition: all 0.15s;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+}
+.f-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.f-chip.active {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+.f-chips.compact {
+  gap: 5px;
+}
+.f-chips.compact .f-chip {
+  padding: 3px 10px;
+  font-size: 11.5px;
+}
+.f-chip.chip-more {
+  border-style: dashed;
+}
+
+/* ── 单元格文字层级（a-table 单元格内直接用，不依赖 .l5-table 前缀） ── */
+.c-idx {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.c-mono {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+.c-dim {
+  color: var(--muted);
+}
+.c-strong {
+  font-weight: 600;
+}
+.c-sub {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cell-stack {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.nw {
+  white-space: nowrap;
+}
+.ops-cell {
+  overflow: visible;
+}
+.c-c {
+  text-align: center;
+}
+
+/* ── 状态胶囊（BadgeStatus.vue 的等价解剖；mockup .pill） ── */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+.pill .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.pill-run {
+  background: var(--success-bg);
+  color: var(--success);
+}
+.pill-run .dot {
+  background: var(--success);
+}
+.pill-stop {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+.pill-stop .dot {
+  background: var(--danger);
+}
+.pill-unknown {
+  background: oklch(50% 0.018 240 / 8%);
+  color: var(--muted);
+}
+.pill-unknown .dot {
+  background: oklch(50% 0.018 240 / 55%);
+}
+.pill-disabled {
+  background: transparent;
+  color: var(--muted);
+  border: 1px dashed oklch(50% 0.018 240 / 40%);
+}
+/* 状态单元格 = 主胶囊 + 次要检测时间（两行）。限定在 .l5-card 内：同名类在 RelayGateways
+   等既有页也出现过，避免全局波及其它页（本层三页的标记行/单元格都在 .l5-card 内）。 */
+.l5-card .status-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+.l5-card .status-cell .s-row {
+  display: inline-flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.l5-card .exec-time {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* ── 发布状态单元格（PublishStatusTag.vue 为唯一实现，胶囊解剖在组件内） ── */
+/* 只提供布局：胶囊本体（含 .ps-tag / .ps-published / .ps-date 等）由组件 scoped 样式单点负责，
+   此处不重复声明，避免与组件样式按装载顺序互相打架。mockup 的 .ps-pub / .ps-unpub 是演示简写
+   变体名，产品以组件的 ps-published / ps-unpublished 为准。 */
+.pub-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+/* 发布差异预览小圆钮（▾） */
+.diff-btn {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid oklch(56% 0.16 210 / 30%);
+  color: var(--accent);
+  background: var(--accent-bg);
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.diff-btn:hover {
+  background: oklch(56% 0.16 210 / 20%);
+}
+.diff-btn svg {
+  width: 11px;
+  height: 11px;
+}
+
+/* ── 方法标签（配色沿用产品 RouteList 派生） ── */
+.m-tag {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  line-height: 18px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+.m-tag.GET {
+  border-color: oklch(55% 0.15 145 / 30%);
+  color: var(--success);
+}
+.m-tag.POST {
+  border-color: oklch(56% 0.16 210 / 30%);
+  color: var(--accent);
+}
+.m-tag.PUT {
+  border-color: oklch(65% 0.15 85 / 30%);
+  color: var(--warning);
+}
+.m-tag.DELETE {
+  border-color: oklch(55% 0.18 28 / 30%);
+  color: var(--danger);
+}
+.m-tag.PATCH {
+  border-color: oklch(55% 0.12 240 / 30%);
+  color: var(--info);
+}
+.m-tag.HEAD,
+.m-tag.OPTIONS,
+.m-tag.CONNECT,
+.m-tag.TRACE {
+  color: var(--muted);
+}
+.m-more {
+  display: inline-block;
+  padding: 0 5px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--muted);
+  background: oklch(50% 0.018 240 / 8%);
+  line-height: 18px;
+  cursor: help;
+}
+.m-row {
+  display: inline-flex;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+
+/* ── 上游目标芯片（实测数据无健康字段：地址:端口 · 权重 N 单行，健康点/占比条按需） ── */
+.tg-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  align-items: flex-start;
+}
+.tg-row {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.tg-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  max-width: 100%;
+}
+.tg-chip .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.d-ok {
+  background: var(--success);
+}
+.d-warn {
+  background: var(--warning);
+}
+.d-off {
+  background: var(--danger);
+}
+.tg-chip .tg-w {
+  color: var(--muted);
+}
+.tg-bar {
+  width: 44px;
+  height: 4px;
+  border-radius: 2px;
+  background: oklch(50% 0.018 240 / 15%);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.tg-bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+}
+.tg-sum {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 1px;
+}
+.tg-sum b {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+/* ── 语言/协议/算法小标签 ── */
+.lb-chip {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: oklch(56% 0.16 210 / 8%);
+  color: var(--accent);
+  white-space: nowrap;
+}
+.scheme-chip {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+/* ── 路径堆叠（节点：Edge / OR 两行同列）与链路管线（路由：方法 + URI / 优先级 / 上游） ── */
+.path-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.path-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.path-k {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  background: oklch(50% 0.018 240 / 8%);
+  border-radius: 3px;
+  padding: 0 4px;
+  line-height: 15px;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+}
+.path-line .c-mono {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.match-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.pipe-uri {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 1px 8px;
+  width: fit-content;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pipe {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.pipe-seg {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  min-width: 0;
+}
+.seg-k {
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.05em;
+  line-height: 1;
+}
+.p-arrow {
+  color: oklch(50% 0.018 240 / 45%);
+  display: inline-flex;
+  flex-shrink: 0;
+}
+.p-arrow svg {
+  width: 12px;
+  height: 12px;
+}
+.prio {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent-bg);
+  color: var(--accent);
+  border: 1px solid oklch(56% 0.16 210 / 25%);
+}
+.pipe-up {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: oklch(56% 0.16 210 / 6%);
+  border: 1px solid oklch(56% 0.16 210 / 22%);
+  color: var(--accent);
+  white-space: nowrap;
+}
+.pipe-up .up-n {
+  font-family: var(--font-body);
+  font-size: 10.5px;
+  color: var(--muted);
+  margin-left: 5px;
+}
+.pipe-cl {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: oklch(50% 0.018 240 / 7%);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* ── 行内操作（文字按钮 + 主推发布 + 更多菜单） ── */
+.ops {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.op-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+.op-btn:hover {
+  background: var(--accent-bg);
+  color: var(--accent);
+  border-color: oklch(56% 0.16 210 / 30%);
+}
+.op-btn svg {
+  width: 12px;
+  height: 12px;
+}
+.op-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.op-btn:disabled:hover {
+  background: transparent;
+  color: var(--muted);
+  border-color: transparent;
+}
+.op-pub {
+  height: 24px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--radius-sm);
+  border: 1px solid oklch(56% 0.16 210 / 35%);
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+.op-pub:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.op-pub:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.v-sep {
+  width: 1px;
+  height: 14px;
+  background: var(--border);
+  margin: 0 3px;
+}
+.menu-anchor {
+  position: relative;
+  display: inline-flex;
+}
+.l5-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  min-width: 215px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 4px;
+  z-index: 70;
+  display: none;
+}
+.l5-menu.open {
+  display: block;
+}
+.mi {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s;
+}
+.mi:hover {
+  background: var(--bg);
+}
+.mi .mi-main {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+  line-height: 1.4;
+}
+.mi .mi-sub {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 1px;
+  line-height: 1.4;
+}
+.mi.danger .mi-main {
+  color: var(--danger);
+}
+.menu-sep {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 4px 6px;
+}
+
+/* ── 分页（mockup 形态；现网三页仍统一走 usePagination 的 antd 分页，保留供页面兜底） ── */
+.l5-pager {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+.l5-pager .p-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.l5-pager .p-info b {
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+.l5-pager .p-nav {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.p-btn {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.p-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.p-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.p-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.p-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* ── 空态 ── */
+.empty5 {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 44px 20px;
+  color: var(--muted);
+  text-align: center;
+}
+.empty5 .e-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--bg);
+  border: 1px dashed oklch(50% 0.018 240 / 40%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+  color: oklch(50% 0.018 240 / 60%);
+}
+.empty5 .e-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+  margin-bottom: 4px;
+}
+.empty5 .e-sub {
+  font-size: 12px;
+  margin-bottom: 14px;
+}
+.empty5 .e-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* ── 排序锁定提示条（分组模式点可排序列时一次性提示，contract §3/§10.5） ── */
+.l5-hintbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 16px;
+  background: oklch(65% 0.15 85 / 8%);
+  border-bottom: 1px solid oklch(65% 0.15 85 / 20%);
+  font-size: 12px;
+  color: var(--warning);
+}
+.l5-hintbar .sb-ico {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+/* 表头排序指示（▲/▼ 为 mockup 原样几何字形；页面也可直接用 antd 排序箭头） */
+.sort-ind {
+  display: inline-flex;
+  width: 11px;
+  margin-left: 3px;
+  color: var(--accent);
+  font-size: 9px;
+  justify-content: center;
+}
+.sort-ind.asc::after {
+  content: '▲';
+}
+.sort-ind.desc::after {
+  content: '▼';
+}
+th.sorted-asc .sort-ind::after {
+  content: '▲';
+}
+th.sorted-desc .sort-ind::after {
+  content: '▼';
+}
+
+/* ── 集群组标记行（a-table 内，components/ClusterGroupRow.vue；contract §10.6） ── */
+/* 组行整行通栏：td 去掉表格内距与竖线，视觉由 .l5-group-inner 承担（accent 左条 + 浅底）
+   .l5-group = mockup 原生表格的行类（colspan 通栏），.l5-group-row = a-table 行类，同一解剖 */
+.l5-group > td,
+.l5-group-row > td {
+  background: var(--bg) !important;
+  padding: 0 !important;
+  border-right: none !important;
+  border-bottom: 1px solid var(--border) !important;
+  overflow: visible;
+  cursor: pointer;
+}
+.l5-group:hover > td,
+.l5-group-row:hover > td {
+  background: var(--bg) !important;
+}
+/* 非首列在 colspan 方案下隐藏（首列 customCell 返回 colSpan: 可见列数） */
+.l5-group-row > td.l5-group-cell-hidden {
+  display: none;
+}
+.l5-group-inner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px 8px 16px;
+  position: relative;
+}
+/* accent 左侧条：inset 上下 6px，右端 2px 圆角 */
+.l5-group-inner::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--accent);
+}
+.g-chev {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all 0.12s;
+  padding: 0;
+}
+.g-chev:hover {
+  background: oklch(50% 0.018 240 / 10%);
+  color: var(--fg);
+}
+.g-chev svg {
+  width: 13px;
+  height: 13px;
+  transition: transform 0.15s;
+}
+/* 折叠态：箭头转向（AntDV CaretDownOutlined 旋转 -90° 即朝右） */
+.g-chev.folded svg {
+  transform: rotate(-90deg);
+}
+.g-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.g-meta {
+  display: inline-flex;
+  gap: 6px;
+}
+.g-chip {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: oklch(50% 0.018 240 / 8%);
+  color: var(--muted);
+}
+.g-chip.ok {
+  background: var(--success-bg);
+  color: var(--success);
+}
+.g-chip.bad {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+.g-chip.warn {
+  background: oklch(65% 0.15 85 / 14%);
+  color: var(--warning);
+}
+.g-spacer {
+  flex: 1;
+}
+.g-note {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* ── 页头轻统计徽标（components/PageStatBadges.vue，PageHeader 的 #stats slot 内） ── */
+.ph-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.ph-lite {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 11.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.ph-lite b {
+  font-family: var(--font-mono);
+  color: var(--fg);
+  font-weight: 600;
+}
+/* 首项 = 主统计（页面数据集总量），accent 描边 + 浅底 */
+.ph-lite.lite-accent {
+  border-color: oklch(56% 0.16 210 / 30%);
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+.ph-lite.lite-accent b {
+  color: var(--accent);
+}
+.ph-lite.lite-ok {
+  border-color: oklch(55% 0.15 145 / 30%);
+  background: oklch(55% 0.15 145 / 10%);
+  color: var(--success);
+}
+.ph-lite.lite-ok b {
+  color: var(--success);
+}
+.ph-lite.lite-warn {
+  border-color: oklch(65% 0.15 85 / 30%);
+  background: oklch(65% 0.15 85 / 12%);
+  color: var(--warning);
+}
+.ph-lite.lite-warn b {
+  color: var(--warning);
+}
+.ph-lite.lite-bad {
+  border-color: oklch(55% 0.18 28 / 30%);
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+.ph-lite.lite-bad b {
+  color: var(--danger);
+}
+
+/* ── mockup 原生表格解剖（.l5-table）── 
+   现网三页是 a-table：此块作为「表头/行密度基线」保留——页面把 l5-table 挂到表格外壳、或需要
+   原生 <table>（对照截图/未来迁移）时生效。刻意不碰 .grid-table 族（集群 Tab 与本层三页共用）。 */
+.l5-table-wrap {
+  overflow-x: auto;
+}
+.l5-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.l5-table thead th {
+  padding: 9px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  text-align: left;
+  user-select: none;
+  position: relative;
+}
+.l5-table tbody td {
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--fg);
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.l5-table tbody tr {
+  transition: background 0.1s;
+}
+.l5-table tbody tr:last-child > td {
+  border-bottom: none;
+}
+.l5-table tbody tr:hover > td {
+  background: oklch(56% 0.16 210 / 4%);
+}
+.l5-table tbody tr.row-selected > td {
+  background: oklch(56% 0.16 210 / 8%);
+}
+.l5-table td.nw {
+  white-space: nowrap;
+}
+.l5-table td.ops-cell {
+  overflow: visible;
+}
+.l5-table thead th.c-c,
+.l5-table td.c-c {
+  text-align: center;
+}
+.l5-table input[type='checkbox'] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+/* 表头右缘调宽手柄（几何手势由 useColumnDragColumns 提供，此处只画视觉暗示） */
+.l5-table thead th.resizable::after {
+  content: '';
+  position: absolute;
+  right: 3px;
+  top: 30%;
+  height: 40%;
+  width: 2px;
+  border-radius: 1px;
+  background: oklch(50% 0.018 240 / 25%);
+  transition: all 0.12s;
+}
+.l5-table thead th.resizable:hover {
+  color: var(--fg);
+  cursor: col-resize;
+}
+.l5-table thead th.resizable:hover::after {
+  background: var(--accent);
+  top: 18%;
+  height: 64%;
+}
+/* 勾选列（序号列右侧的 36px 窄列） */
+.cbx {
+  text-align: center;
+}
+.l5-table .cbx {
+  width: 36px;
+}
+.row-cb,
+.cbx input {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+  cursor: pointer;
+  vertical-align: middle;
+}
+/* 表头可排序/可拖宽的抓取暗示（几何手势本身由 useColumnDragColumns 提供） */
+th.sortable[data-sort-key] {
+  cursor: pointer;
+}
+th.resizable {
+  position: relative;
+}
+
+/* ── DNS 路由徽章（沿用产品 RouteList 的 dns-route-badge 配色派生；限定 .l5-card 内，
+   同名 .dns-badge 在 DnsQueryList / StreamProxyList / DnsUdpProxyList 各有自己的 scoped 版本） ── */
+.l5-card .dns-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: oklch(55% 0.18 280 / 15%);
+  color: oklch(42% 0.16 280);
+  border: 1px solid oklch(55% 0.18 280 / 30%);
+  line-height: 1.4;
+  margin-left: 6px;
+  vertical-align: 1px;
+  letter-spacing: 0.02em;
+}
+
+/* ── 分页补充：每页条数选择与跳页（mockup 原生分页；antd 分页消费方无需） ── */
+.pager-select {
+  height: 28px;
+  padding: 0 24px 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background-color: var(--surface);
+  font-size: 12px;
+  color: var(--fg);
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 7px center;
+  cursor: pointer;
+  outline: none;
+}
+.p-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 10px;
+}
+.p-jump input {
+  width: 44px;
+  height: 28px;
+  text-align: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--fg);
+  outline: none;
+}
+.p-jump input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-bg);
+}

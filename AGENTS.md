@@ -245,6 +245,8 @@ openspec/        # 变更工件；openspec/specs/ = main specs
 
     **三张独立列表页（节点/上游/路由）的「列配置」弹窗已统一（standalone-list-column-config，2026-11-15 归档）**：节点管理为基线形态——标题「选择显示列」→ 显示字段勾选组 → 搜索（显示搜索框开关）→「拖动表头右缘可调整列宽」提示 →「重置列宽」`btn btn-primary btn-sm`，**重置入口只在弹窗内**（工具条不再单设按钮）。上游/路由无「行动作按钮集」节（其操作列无未勾选动作可收进更多菜单）。**序号列 `#` 三页都不进勾选项且恒展示**：`visibleColumns`/`visibleNodeColumns` 的过滤谓词必须显式保留 `index`——antd CheckboxGroup 在任一勾选变化时会把不在选项列表里的已选值剔除，只从选项里删 `#` 而不兜底会让序号列在第一次勾选后静默消失（真机复现）。两页原各自 20 余行的「存储序重排」已删，统一走 `resolveOrderedColumns` + `applyColumnWidths`。**工具条顺序统一为「筛选控件 → 列配置 → 计数/刷新」**（路由页原 `.filter-count{margin-left:auto}` 把列配置顶到右端，已删该自动外边距，三页同序）。
 
+80. **造数类 E2E 三铁律（list-pages-console-restyle 验收期确立）** — ① 造数导航必须直连 `/{page}?cluster_id=<造数集群>` 深链：`gotoResourcePage` 走首卡统计链接，其集群随库态漂移（曾致搜索落错集群恒 0 行的假失败）；② 交互锚点跟随页面现状而非记忆：发布已行内拍平（⋯ 菜单仅编辑/版本管理/复制/删除）、a-button 两字按钮可访问名带空格（「发 布」，定位需 `/发\s*布/` 正则）、路由搜索 placeholder 为「搜索名称、URI、描述、域名...」；③ 断言文案与共享实现对齐（发布日志为中文「成功（经中继）/成功（直连）」）。共享实现改版时同步扫 `e2e/*.spec.ts`——baseline 只跑 vitest 不跑 e2e，存量失配不会在单测暴露。
+
 ## 新增功能步骤
 
 1. 在 `backend/app/schemas/` 定义 Pydantic 模型

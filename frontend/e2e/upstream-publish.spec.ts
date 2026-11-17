@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { login, gotoResourcePage } from './helpers/navigation'
+import { login } from './helpers/navigation'
 import {
   apiHeaders,
   apiJson,
@@ -34,7 +34,9 @@ test.describe('Upstream Publish E2E（publish 拦截：build_publish_response �
       const captured = await interceptPublish(page, `**/api/v1/clusters/${cluster.id}/upstreams/${upstream.id}/publish`)
 
       await login(page)
-      await gotoResourcePage(page, '上游')
+      // 直连造数集群深链（首卡统计链接的集群随库态漂移，曾致搜索落错集群 → 0 行）
+      await page.goto(`/upstreams?cluster_id=${cluster.id}`)
+      await expect(page.locator('.upstream-table')).toBeVisible({ timeout: 15000 })
 
       // 唯一名搜索锁定造数行（demo 库上游 170 条）
       const searchInput = page.getByPlaceholder('搜索名称或描述...')
@@ -44,11 +46,12 @@ test.describe('Upstream Publish E2E（publish 拦截：build_publish_response �
       const row = upstreamTable.locator('tr', { hasText: name }).first()
       await expect(row, `搜索后应出现造数上游 ${name}`).toBeVisible({ timeout: 10000 })
 
-      // 行内 ⋯ 下拉 → 发布
-      await row.locator('.action-trigger-btn').click({ timeout: 5000 })
-      const menu = page.locator('.ant-dropdown:not(.ant-dropdown-hidden)')
-      await expect(menu).toBeVisible({ timeout: 5000 })
-      await menu.getByText('发布', { exact: true }).click({ timeout: 5000 })
+      // 行内「发布」按钮（列表操作统一·方案 A：发布行内拍平，⋯ 菜单仅 编辑/版本管理/复制/删除）
+      await row
+        .locator('button')
+        .filter({ hasText: /发\s*布/ })
+        .first()
+        .click({ timeout: 5000 }) // a-button 两字按钮可访问名带空格（发 布）
 
       // 节点选择弹窗（PublishConfirmModal）：全选 → 确认发布
       const nodeModal = page.locator('.modal-overlay:visible').filter({ hasText: '发布上游' })
@@ -60,8 +63,8 @@ test.describe('Upstream Publish E2E（publish 拦截：build_publish_response �
       const progress = await expectAntModal(page, new RegExp(`^发布上游: ${name}$`), '发布进度弹窗')
       const body = progress.locator('.ant-modal-body')
       await expect(body).toContainText('节点同步结果')
-      await expect(body).toContainText('10.0.0.1:9180: success（经中继）')
-      await expect(body).toContainText('10.0.0.2:9180: success（直连）')
+      await expect(body).toContainText('10.0.0.1:9180: 成功（经中继）')
+      await expect(body).toContainText('10.0.0.2:9180: 成功（直连）')
       await expect(body).toContainText('版本: v1')
       await expect(body).toContainText('✅ 发布成功!')
 

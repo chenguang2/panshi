@@ -29,6 +29,10 @@ describe('L2 节点页中英文排版规范', () => {
     expect(s).not.toMatch(/Edge安装|OpenResty安装|EDGE安装|OPENRESTY安装/)
     expect(s).toContain('Edge 安装路径')
     expect(s).toContain('OpenResty 安装路径')
+    // 合并列（list-pages-console-restyle）：列头为单一「安装路径」，两路径以 Edge/OR 小标签堆叠
+    expect(s).toContain("title: '安装路径'")
+    expect(s).toContain('path-stack')
+    expect(s).toContain('path-k')
   })
 })
 

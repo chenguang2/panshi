@@ -67,9 +67,10 @@ test.describe('Route CRUD', () => {
   })
 
   test('should show pagination in route table', async ({ page }) => {
-    await gotoResourcePage(page, '路由')
+    // 直连全量列表（首卡统计深链可能落在 0 路由集群 → 无分页可断言）
+    await page.goto('/routes')
     const table = page.locator('.route-table')
-    await expect(table).toBeVisible({ timeout: 10000 })
+    await expect(table).toBeVisible({ timeout: 15000 })
 
     const pagination = page.locator('.ant-pagination')
     await expect(pagination).toBeVisible({ timeout: 15000 })
@@ -83,6 +84,8 @@ test.describe('Route CRUD', () => {
     const table = page.locator('.route-table')
     await expect(table).toBeVisible({ timeout: 10000 })
 
+    // list-pages-console-restyle：默认视图 = 分组（sorter 置 false），排序仅在平铺模式渲染
+    await page.locator('[data-test="view-mode-flat"]').click()
     const sortableHeader = page.locator('.ant-table-column-sorter').first()
     await expect(sortableHeader).toBeVisible()
   })

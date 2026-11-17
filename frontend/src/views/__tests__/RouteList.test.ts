@@ -32,7 +32,7 @@ vi.mock('ant-design-vue', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>
   return {
     ...actual,
-    message: { warning: vi.fn(), success: vi.fn(), error: vi.fn() },
+    message: { warning: vi.fn(), success: vi.fn(), error: vi.fn(), info: vi.fn() },
   }
 })
 
@@ -40,7 +40,10 @@ vi.mock('ant-design-vue', async (importOriginal) => {
 let mockRouteQuery: Record<string, string> = {}
 
 const stubs = {
-  PageHeader: { template: '<div class="page-header"><slot name="actions" /></div>', props: ['title', 'description'] },
+  PageHeader: {
+    template: '<div class="page-header"><slot name="stats" /><slot name="actions" /></div>',
+    props: ['title', 'description'],
+  },
   RouteFormModal: {
     name: 'MockRouteForm',
     template: '<div class="mock-route-form" />',
@@ -171,18 +174,19 @@ describe('RouteList.vue', () => {
     const RouteList = (await import('../RouteList.vue')).default
     const wrapper = mount(RouteList, { global: { stubs } })
     await flushPromises()
-    // After mount, count how many /routes calls we had
-    const mountRouteCalls = mockApiGet.mock.calls.filter((c: any[]) => c[0] === '/routes').length
+    // 列表请求与页头徽标统计副本（page_size=500）分流计数（design D3）
+    const listCalls = () =>
+      mockApiGet.mock.calls.filter((c: any[]) => c[0] === '/routes' && c[1]?.params?.page_size !== 500)
+    const mountRouteCalls = listCalls().length
     // Simulate user selecting a plugin via DOM
     const select = wrapper.find('select.plugin-filter').element as HTMLSelectElement
     select.value = 'limit-req'
     select.dispatchEvent(new Event('change'))
     await flushPromises()
     // There should be one more /routes call after the change
-    const totalRouteCalls = mockApiGet.mock.calls.filter((c: any[]) => c[0] === '/routes').length
-    expect(totalRouteCalls).toBe(mountRouteCalls + 1)
+    expect(listCalls().length).toBe(mountRouteCalls + 1)
     // 组件把选中插件作为 params.plugin 传给 /routes
-    const routeCalls = mockApiGet.mock.calls.filter((c: any[]) => c[0] === '/routes')
+    const routeCalls = listCalls()
     const lastCall = routeCalls[routeCalls.length - 1]
     expect(lastCall[1].params.plugin).toBe('limit-req')
   })
@@ -238,7 +242,7 @@ describe('RouteList.vue', () => {
           ...stubs,
           'a-table': {
             template:
-              '<table class="mock-a-table"><tbody><tr v-for="r in dataSource" :key="r.id"><td><slot name="bodyCell" :record="r" :column="{ key: \'name\' }" /></td></tr></tbody></table>',
+              '<table class="mock-a-table"><tbody><template v-for="r in dataSource" :key="r.key || r.id"><tr v-if="r.__groupHeader" data-test="group-header"><td><slot name="bodyCell" :record="r" :column="{ key: \'group\' }" /></td></tr><tr v-else><td><slot name="bodyCell" :record="r" :column="{ key: \'name\' }" /></td></tr></template></tbody></table>',
             props: ['columns', 'dataSource', 'loading', 'rowKey', 'pagination', 'size'],
           },
         },
@@ -290,7 +294,7 @@ describe('RouteList.vue 100 条大数据量 / 分页 / 筛选清空', () => {
     ...stubs,
     'a-table': {
       template:
-        '<div class="mock-a-table"><div v-for="r in dataSource" :key="r.id" class="mock-row"><slot name="bodyCell" :record="r" :column="{ key: \'name\' }" /></div><button class="mock-goto-page2" @click="$emit(\'change\', { current: 2, pageSize: 20 })">去第2页</button><button class="mock-goto-page3" @click="$emit(\'change\', { current: 3, pageSize: 20 })">去第3页</button></div>',
+        '<div class="mock-a-table"><template v-for="r in dataSource" :key="r.key || r.id"><div v-if="r.__groupHeader" data-test="group-header"><slot name="bodyCell" :record="r" :column="{ key: \'group\' }" /></div><div v-else class="mock-row"><slot name="bodyCell" :record="r" :column="{ key: \'name\' }" /></div></template><button class="mock-goto-page2" @click="$emit(\'change\', { current: 2, pageSize: 20 })">去第2页</button><button class="mock-goto-page3" @click="$emit(\'change\', { current: 3, pageSize: 20 })">去第3页</button></div>',
       props: ['columns', 'dataSource', 'loading', 'rowKey', 'pagination', 'size'],
       emits: ['change'],
     },
@@ -491,7 +495,7 @@ describe('RouteList.vue 服务端排序（batch1 组5）', () => {
           <button class="mock-sort" @click="sort('priority', 'descend')">sort-priority-desc</button>
           <button class="mock-sort" @click="sort('cluster_name', 'ascend')">sort-cluster-asc</button>
           <button class="mock-goto-page2" @click="$emit('change', { current: 2, pageSize: 20 }, {}, sorter)">去第2页</button>
-          <div v-for="r in dataSource" :key="r.id" class="mock-row"><slot name="bodyCell" :record="r" :column="{ key: 'name' }" /></div>
+          <template v-for="r in dataSource" :key="r.key || r.id"><div v-if="r.__groupHeader" data-test="group-header"><slot name="bodyCell" :record="r" :column="{ key: 'group' }" /></div><div v-else class="mock-row"><slot name="bodyCell" :record="r" :column="{ key: 'name' }" /></div></template>
         </div>
       `,
       props: ['columns', 'dataSource', 'loading', 'rowKey', 'pagination', 'size'],
@@ -580,8 +584,11 @@ describe('RouteList.vue 服务端排序（batch1 组5）', () => {
     wrapper.unmount()
   })
 
-  it('表头排序透传服务端参数：ascend→sort_by=name&sort_order=asc；descend→desc', async () => {
+  it('表头排序透传服务端参数：ascend→sort_by=name&sort_order=asc；descend→desc（平铺钉位）', async () => {
     const wrapper = await mountPage()
+    // 排序仅平铺生效（table-sorting）：请求携带排序参数的前提是平铺模式
+    ;(wrapper.vm as any).viewMode = 'flat'
+    await wrapper.vm.$nextTick()
     await clickSort(wrapper, 'sort-name-asc')
     expect(lastRouteParams().sort_by).toBe('name')
     expect(lastRouteParams().sort_order).toBe('asc')
@@ -593,6 +600,8 @@ describe('RouteList.vue 服务端排序（batch1 组5）', () => {
 
   it('取消排序（第三态）后请求不再携带 sort_by/sort_order', async () => {
     const wrapper = await mountPage()
+    ;(wrapper.vm as any).viewMode = 'flat'
+    await wrapper.vm.$nextTick()
     await clickSort(wrapper, 'sort-name-desc')
     await clickSort(wrapper, 'sort-name-clear')
     expect(lastRouteParams().sort_by).toBeUndefined()
@@ -602,6 +611,8 @@ describe('RouteList.vue 服务端排序（batch1 组5）', () => {
 
   it('白名单外字段（cluster_name，本地 sorter 已移除）即使误发也不产生排序参数（值域守卫）', async () => {
     const wrapper = await mountPage()
+    ;(wrapper.vm as any).viewMode = 'flat'
+    await wrapper.vm.$nextTick()
     await clickSort(wrapper, 'sort-cluster-asc')
     expect(lastRouteParams().sort_by).toBeUndefined()
     wrapper.unmount()
@@ -609,12 +620,74 @@ describe('RouteList.vue 服务端排序（batch1 组5）', () => {
 
   it('排序后翻页：page=2 且排序参数保持（同参数重发）', async () => {
     const wrapper = await mountPage()
+    ;(wrapper.vm as any).viewMode = 'flat'
+    await wrapper.vm.$nextTick()
     await clickSort(wrapper, 'sort-priority-desc')
     await wrapper.find('.mock-goto-page2').trigger('click')
     await flushPromises()
     expect(lastRouteParams().page).toBe(2)
     expect(lastRouteParams().sort_by).toBe('priority')
     expect(lastRouteParams().sort_order).toBe('desc')
+    wrapper.unmount()
+  })
+
+  it('分组模式表头点击：一次性提示、请求不带排序参数、排序键保留（跨模式休眠）', async () => {
+    const { message } = await import('ant-design-vue')
+    const wrapper = await mountPage()
+    // 平铺下建立排序键 → 切分组（键保留、请求不带排序参数）
+    ;(wrapper.vm as any).viewMode = 'flat'
+    await wrapper.vm.$nextTick()
+    await clickSort(wrapper, 'sort-priority-desc')
+    expect(lastRouteParams().sort_by).toBe('priority')
+    ;(wrapper.vm as any).viewMode = 'group'
+    await wrapper.vm.$nextTick()
+    // 分组模式下可排序列 sorter 置 false
+    const cols = wrapper.findComponent({ name: 'SortStubTable' }).props('columns') as Array<{
+      key: unknown
+      sorter?: unknown
+    }>
+    for (const k of ['name', 'uri', 'priority', 'created_at']) {
+      expect(cols.find((c) => c.key === k)?.sorter).toBe(false)
+    }
+    await clickSort(wrapper, 'sort-priority-desc')
+    expect(lastRouteParams().sort_by).toBeUndefined()
+    // 排序键跨模式保留（休眠而非清除）
+    expect((wrapper.vm as any).sortBy).toBe('priority')
+    expect((wrapper.vm as any).sortOrder).toBe('desc')
+    // 分组模式点可排列表头 → 一次性提示（message.info，数秒自动消失）
+    const mockInfo = message.info as unknown as ReturnType<typeof vi.fn>
+    mockInfo.mockClear()
+    await (wrapper.vm as any).onSortableHeaderClick({ key: 'priority' })
+    expect(mockInfo).toHaveBeenCalledTimes(1)
+    // 回平铺：原样恢复请求排序参数
+    ;(wrapper.vm as any).viewMode = 'flat'
+    await flushPromises()
+    expect(lastRouteParams().sort_by).toBe('priority')
+    expect(lastRouteParams().sort_order).toBe('desc')
+    wrapper.unmount()
+  })
+
+  it('「清除排序」：仅平铺且存在排序键时可见；点击只清排序不切模式', async () => {
+    const wrapper = await mountPage()
+    ;(wrapper.vm as any).viewMode = 'flat'
+    await wrapper.vm.$nextTick()
+    // 无排序键 → 按钮不可见
+    expect(wrapper.find('[data-test="clear-sort"]').exists()).toBe(false)
+    await clickSort(wrapper, 'sort-priority-desc')
+    expect(wrapper.find('[data-test="clear-sort"]').exists()).toBe(true)
+    // 分组模式 → 不可见（排序键保留）
+    ;(wrapper.vm as any).viewMode = 'group'
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-test="clear-sort"]').exists()).toBe(false)
+    expect((wrapper.vm as any).sortBy).toBe('priority')
+    // 回平铺 → 可见，点击清除后恢复默认序且仍为平铺
+    ;(wrapper.vm as any).viewMode = 'flat'
+    await wrapper.vm.$nextTick()
+    await wrapper.find('[data-test="clear-sort"]').trigger('click')
+    await flushPromises()
+    expect((wrapper.vm as any).sortBy).toBe('')
+    expect(lastRouteParams().sort_by).toBeUndefined()
+    expect((wrapper.vm as any).viewMode).toBe('flat')
     wrapper.unmount()
   })
 })
@@ -711,7 +784,7 @@ describe('RouteList.vue 删除确认节点清单全量拉取（route-management-
     ...stubs,
     'a-table': {
       template:
-        '<table class="mock-a-table"><tbody><tr v-for="r in dataSource" :key="r.id"><td><slot name="bodyCell" :record="r" :column="{ key: \'actions\' }" /></td></tr></tbody></table>',
+        '<table class="mock-a-table"><tbody><template v-for="r in dataSource" :key="r.key || r.id"><tr v-if="r.__groupHeader" data-test="group-header"></tr><tr v-else><td><slot name="bodyCell" :record="r" :column="{ key: \'actions\' }" /></td></tr></template></tbody></table>',
       props: ['columns', 'dataSource', 'loading', 'rowKey', 'pagination', 'size'],
     },
     'a-dropdown': { template: '<div class="mock-dropdown"><slot name="overlay" /></div>' },
@@ -891,7 +964,7 @@ describe('RouteList.vue 空态双形态与清空筛选（batch1 7.2）', () => {
     const publishSelect = wrapper.findAll('select').find((s) => s.text().includes('已发布'))
     await publishSelect!.setValue('published')
     await flushPromises()
-    const getChip = wrapper.findAll('.filter-chip').find((c) => c.text() === 'GET')
+    const getChip = wrapper.findAll('.f-chip').find((c) => c.text() === 'GET')
     await getChip!.trigger('click')
     await flushPromises()
     expect(lastRouteParams().publish_status).toBe('published')
@@ -943,12 +1016,12 @@ describe('RouteList.vue 方法筛选收敛与全量下拉（batch1 7.3）', () =
   }
 
   function activeChipLabels(wrapper: Awaited<ReturnType<typeof mountPage>>): string[] {
-    return wrapper.findAll('.filter-chip.active').map((c) => c.text().trim())
+    return wrapper.findAll('.f-chip.active').map((c) => c.text().trim())
   }
 
   it('chips 收敛为常驻 6 个：全部/GET/POST/PUT/DELETE/PATCH', async () => {
     const wrapper = await mountPage()
-    const chips = wrapper.findAll('.filter-chip').map((c) => c.text().trim())
+    const chips = wrapper.findAll('.f-chip').map((c) => c.text().trim())
     expect(chips).toEqual(['全部', 'GET', 'POST', 'PUT', 'DELETE', 'PATCH'])
     wrapper.unmount()
   })
@@ -974,7 +1047,7 @@ describe('RouteList.vue 方法筛选收敛与全量下拉（batch1 7.3）', () =
     expect(options[0].text().trim()).toBe('全部方法')
 
     // chips → 下拉：点 POST chip，下拉值同步为 POST
-    const postChip = wrapper.findAll('.filter-chip').find((c) => c.text() === 'POST')
+    const postChip = wrapper.findAll('.f-chip').find((c) => c.text() === 'POST')
     await postChip!.trigger('click')
     await flushPromises()
     expect((methodSelect.element as HTMLSelectElement).value).toBe('POST')
@@ -1101,7 +1174,7 @@ describe('RouteList.vue 独立页 DNS 行操作禁用与指路（batch1 7.9）',
     ...stubs,
     'a-table': {
       template:
-        '<table class="mock-a-table"><tbody><tr v-for="r in dataSource" :key="r.id"><td><slot name="bodyCell" :record="r" :column="{ key: \'actions\' }" /></td></tr></tbody></table>',
+        '<table class="mock-a-table"><tbody><template v-for="r in dataSource" :key="r.key || r.id"><tr v-if="r.__groupHeader" data-test="group-header"></tr><tr v-else><td><slot name="bodyCell" :record="r" :column="{ key: \'actions\' }" /></td></tr></template></tbody></table>',
       props: ['columns', 'dataSource', 'loading', 'rowKey', 'pagination', 'size'],
     },
     'a-dropdown': { template: '<div class="mock-dropdown"><slot /><slot name="overlay" /></div>' },
@@ -1165,6 +1238,9 @@ describe('RouteList.vue 独立页 DNS 行操作禁用与指路（batch1 7.9）',
     const RouteList = (await import('../RouteList.vue')).default
     const wrapper = mount(RouteList, { global: { stubs: dnsPageStubs } })
     await flushPromises()
+    // 行内动作解剖断言钉平铺（默认分组模式组头行会插入 tbody 首位，contract 10.2）
+    ;(wrapper.vm as any).viewMode = 'flat'
+    await wrapper.vm.$nextTick()
 
     const rows = wrapper.findAll('.mock-a-table tbody tr')
     expect(rows.length).toBe(2)
@@ -1190,7 +1266,7 @@ describe('RouteList.vue 行内发布拍平（列表操作统一·方案 A）', (
     ...stubs,
     'a-table': {
       template:
-        '<table class="mock-a-table"><tbody><tr v-for="r in dataSource" :key="r.id"><td><slot name="bodyCell" :record="r" :column="{ key: \'actions\' }" /></td></tr></tbody></table>',
+        '<table class="mock-a-table"><tbody><template v-for="r in dataSource" :key="r.key || r.id"><tr v-if="r.__groupHeader" data-test="group-header"></tr><tr v-else><td><slot name="bodyCell" :record="r" :column="{ key: \'actions\' }" /></td></tr></template></tbody></table>',
       props: ['columns', 'dataSource', 'loading', 'rowKey', 'pagination', 'size'],
     },
     'a-dropdown': { template: '<div class="mock-dropdown"><slot /><slot name="overlay" /></div>' },
@@ -1277,6 +1353,8 @@ describe('RouteList.vue 行内发布拍平（列表操作统一·方案 A）', (
     const RouteList = (await import('../RouteList.vue')).default
     const wrapper = mount(RouteList, { global: { stubs: flatStubs } })
     await flushPromises()
+    ;(wrapper.vm as any).viewMode = 'flat'
+    await wrapper.vm.$nextTick()
 
     const rows = wrapper.findAll('.mock-a-table tbody tr')
     // 主行文案按 menu-item-stack 主行提取（解释行是 small，不参与收敛断言）
@@ -1295,6 +1373,8 @@ describe('RouteList.vue 行内发布拍平（列表操作统一·方案 A）', (
     const RouteList = (await import('../RouteList.vue')).default
     const wrapper = mount(RouteList, { global: { stubs: flatStubs } })
     await flushPromises()
+    ;(wrapper.vm as any).viewMode = 'flat'
+    await wrapper.vm.$nextTick()
 
     const rows = wrapper.findAll('.mock-a-table tbody tr')
     const dnsRow = rows[0]
@@ -1403,9 +1483,12 @@ describe('RouteList 列个性化（column-personalization-rollout）', () => {
                 </tr>
               </thead>
               <tbody class="ant-table-tbody">
-                <tr class="ant-table-row" v-for="(r, i) in dataSource" :key="r.id">
-                  <td v-for="col in columns" :key="col.key"><slot name="bodyCell" :column="col" :record="r" :index="i" /></td>
-                </tr>
+                <template v-for="(r, i) in dataSource" :key="r.key || r.id">
+                  <tr v-if="r.__groupHeader" data-test="group-header"></tr>
+                  <tr v-else class="ant-table-row">
+                    <td v-for="col in columns" :key="col.key"><slot name="bodyCell" :column="col" :record="r" :index="i" /></td>
+                  </tr>
+                </template>
               </tbody>
             </table>
           </div>
@@ -1449,16 +1532,31 @@ describe('RouteList 列个性化（column-personalization-rollout）', () => {
     })
   }
 
-  it('表格横向滚动/fixed 布局/竖线共享类/#名称固定左、操作固定右', async () => {
+  it('表格横向滚动/fixed 布局/竖线共享类/#名称固定左、操作固定右（平铺钉位）', async () => {
     const wrapper = await mountRoute()
+    // fixed 语义仅平铺承载（分组模式 colSpan 通栏剥离 fixed，contract 10.6）
+    ;(wrapper.vm as any).viewMode = 'flat'
+    await wrapper.vm.$nextTick()
     const table = wrapper.findComponent({ name: 'ColDragTableStub' })
     expect(table.props('scroll')).toEqual({ x: 'max-content' })
     expect(table.props('tableLayout')).toBe('fixed')
     const cols = table.props('columns') as Array<{ key: unknown; width?: number; fixed?: string }>
     const byKey = Object.fromEntries(cols.map((c) => [String(c.key), c]))
     expect(byKey['index']).toMatchObject({ width: 45, fixed: 'left' })
-    expect(byKey['name']).toMatchObject({ width: 140, fixed: 'left' })
+    expect(byKey['name']).toMatchObject({ width: 170, fixed: 'left' })
     expect(byKey['actions']).toMatchObject({ width: 110, fixed: 'right' })
+    // L2 列集合：集群列移除、方法+URI 合并「请求匹配」（列键 uri）
+    expect(cols.map((c) => String(c.key))).toEqual([
+      'index',
+      'name',
+      'uri',
+      'upstream',
+      'priority',
+      'publish_status',
+      'created_at',
+      'actions',
+    ])
+    expect(byKey['uri']).toMatchObject({ title: '请求匹配' })
     expect(wrapper.find('.route-table').classes()).toContain('grid-table')
     wrapper.unmount()
   })
@@ -1474,10 +1572,10 @@ describe('RouteList 列个性化（column-personalization-rollout）', () => {
     await uriTh.trigger('click')
     const emittedBefore = table.emitted('change')?.length ?? 0
     expect(emittedBefore).toBeGreaterThan(0)
-    // 拖「URI」标题到「优先级」左半 → 实时换位
+    // 拖「请求匹配」（矩形 200-300）标题到「优先级」（400-500）左半 → 实时换位
     const uriWrap = uriTh.find('.th-resize-wrap')!
-    await uriWrap.trigger('mousedown', { clientX: 350 })
-    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 620 }))
+    await uriWrap.trigger('mousedown', { clientX: 250 })
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 420 }))
     await flushPromises()
     const seq = keySeq()
     expect(seq.indexOf('uri')).toBe(seq.indexOf('priority') - 1)
@@ -1499,18 +1597,18 @@ describe('RouteList 列个性化（column-personalization-rollout）', () => {
     const uriTh = ths().find((t) => t.attributes('data-col') === 'uri')!
     const uriWrap = uriTh.find('.th-resize-wrap')!
     // 纯点击路径：mousedown→mouseup 无位移 → endColumnMove 拆除拦截器 → click 正常触发排序入口
-    await uriWrap.trigger('mousedown', { clientX: 350 })
-    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 350 }))
+    await uriWrap.trigger('mousedown', { clientX: 250 })
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 250 }))
     await flushPromises()
     const baseCount = table.emitted('change')?.length ?? 0
     await uriTh.trigger('click')
     expect(table.emitted('change')?.length ?? 0).toBe(baseCount + 1)
     // 真实拖拽路径：位移 → mouseup（此时拦截器必须仍在位）→ 补发 click 被拦截
-    await uriWrap.trigger('mousedown', { clientX: 350 })
-    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 620 }))
+    await uriWrap.trigger('mousedown', { clientX: 250 })
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 420 }))
     await flushPromises()
     const duringDrag = table.emitted('change')?.length ?? 0
-    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 620 }))
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 420 }))
     await flushPromises()
     await uriTh.trigger('click')
     expect(table.emitted('change')?.length ?? 0).toBe(duringDrag)
@@ -1519,10 +1617,10 @@ describe('RouteList 列个性化（column-personalization-rollout）', () => {
     expect(table.emitted('change')?.length ?? 0).toBe(duringDrag + 1)
     // 兜底守卫：补发 click 未到来时（拖拽换位可能替换 mousedown 目标，浏览器不派发 click），
     // 滞留拦截器由下一次 mousedown 拆除——随后的正常点击不受影响
-    await uriWrap.trigger('mousedown', { clientX: 350 })
-    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 620 }))
+    await uriWrap.trigger('mousedown', { clientX: 250 })
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 420 }))
     await flushPromises()
-    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 620 }))
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 420 }))
     await flushPromises()
     // 不派发补发 click，直接进入下一次交互：一次不落在拖拽起始元素上的普通按下
     document.dispatchEvent(new MouseEvent('mousedown', { clientX: 10, clientY: 10 }))
@@ -1531,36 +1629,54 @@ describe('RouteList 列个性化（column-personalization-rollout）', () => {
     expect(table.emitted('change')?.length ?? 0).toBe(beforeGuard + 1)
     wrapper.unmount()
   }, 15_000)
-  it('列配置弹窗：显示字段勾选、搜索开关与弹窗内「重置列宽」', async () => {
+  it('列配置弹窗：显示字段勾选、搜索开关与弹窗内「重置列宽」（合并列双键）', async () => {
     const wrapper = await mountRoute()
     const table = wrapper.findComponent({ name: 'ColDragTableStub' })
     const keys = () => (table.props('columns') as Array<{ key: unknown }>).map((c) => String(c.key))
     const colWidth = (key: string): number | unknown =>
       (table.props('columns') as Array<{ key: unknown; width?: number }>).find((c) => String(c.key) === key)?.width
-    expect(keys()).toContain('methods')
+    // methods 不再单独成列（合并进「请求匹配」），但仍是独立勾选键
+    expect(keys()).not.toContain('methods')
+    expect(keys()).toContain('uri')
     // 弹窗结构与节点管理一致：显示字段 / 搜索 / 拖宽提示 / 重置列宽
     const content = wrapper.find('.mock-popover-content')
     expect(content.text()).toContain('显示字段')
     expect(content.text()).toContain('显示搜索框')
     expect(content.text()).toContain('拖动表头右缘可调整列宽')
     expect(content.findAll('button').some((b) => b.text() === '重置列宽')).toBe(true)
-    // 取消勾选「方法」→ 列不再渲染
+    // 取消勾选「方法」→ 合并列仍渲染（URI 段保留），仅方法 chips 段消失（contract 10.1）
     const groups = wrapper.findAllComponents({ name: 'MockCheckboxGroup' })
     expect(groups.length).toBe(1)
     const all = groups[0].props('value') as string[]
     expect(all).toContain('methods')
-    groups[0].vm.$emit('update:value', all.filter((k) => k !== 'methods'))
+    groups[0].vm.$emit(
+      'update:value',
+      all.filter((k) => k !== 'methods'),
+    )
     await flushPromises()
-    expect(keys()).not.toContain('methods')
+    expect(keys()).toContain('uri')
+    expect((wrapper.vm as any).isMethodsSelected()).toBe(false)
+    expect((wrapper.vm as any).isUriSelected()).toBe(true)
+    // 两个键都取消 → 合并列整列不渲染
+    const all2 = (groups[0].props('value') as string[]).filter((k) => k !== 'uri')
+    groups[0].vm.$emit('update:value', all2)
+    await flushPromises()
+    expect(keys()).not.toContain('uri')
+    // 恢复勾选（拖宽断言需要 uri 列在位）
+    groups[0].vm.$emit('update:value', all)
+    await flushPromises()
     // 拖宽后经弹窗重置恢复默认
     const uriTh = wrapper.findAll('th[data-col]').find((t) => t.attributes('data-col') === 'uri')!
     await uriTh.find('.col-resize-handle').trigger('mousedown', { clientX: 300 })
     document.dispatchEvent(new MouseEvent('mousemove', { clientX: 360 }))
     await flushPromises()
-    expect(colWidth('uri')).toBe(280) // 220 + 60
-    await content.findAll('button').find((b) => b.text() === '重置列宽')!.trigger('click')
+    expect(colWidth('uri')).toBe(316) // 256 + 60
+    await content
+      .findAll('button')
+      .find((b) => b.text() === '重置列宽')!
+      .trigger('click')
     await flushPromises()
-    expect(colWidth('uri')).toBe(220)
+    expect(colWidth('uri')).toBe(256)
     // 搜索开关
     const toggle = wrapper.findAllComponents({ name: 'MockCheckbox' }).find((c) => c.text().includes('显示搜索框'))!
     toggle.vm.$emit('update:checked', false)
@@ -1568,4 +1684,243 @@ describe('RouteList 列个性化（column-personalization-rollout）', () => {
     expect(wrapper.find('input[placeholder="搜索名称、URI、描述、域名..."]').exists()).toBe(false)
     wrapper.unmount()
   }, 15_000)
+})
+
+// ── list-pages-console-restyle：集群分组 / 双模式 / 页头徽标 / V2 工具条 ─────────────
+describe('RouteList.vue 集群分组与双模式（list-pages-console-restyle）', () => {
+  const groupRoutes = {
+    total: 4,
+    page: 1,
+    page_size: 20,
+    items: [
+      {
+        id: 1,
+        name: 'alpha',
+        uri: '/a/*',
+        methods: 'GET',
+        cluster_id: 1,
+        cluster_name: '生产集群',
+        priority: 10,
+        current_version: 3,
+        published_at: '2026-01-15T10:30:00Z',
+        pending_publish: false,
+        status: 1,
+      },
+      // partial 态真实形状：pending=false + last_publish_status=partial（PublishStatusTag 判定序：待发布优先于 partial）
+      {
+        id: 2,
+        name: 'beta',
+        uri: '/b/*',
+        methods: 'GET,POST,PUT,DELETE',
+        cluster_id: 1,
+        cluster_name: '生产集群',
+        priority: 0,
+        current_version: 2,
+        published_at: '2026-01-16T10:30:00Z',
+        pending_publish: false,
+        last_publish_status: 'partial',
+        status: 1,
+      },
+      {
+        id: 3,
+        name: 'gamma',
+        uri: '/c/*',
+        methods: 'POST',
+        cluster_id: 2,
+        cluster_name: '预发集群',
+        priority: 5,
+        current_version: 1,
+        published_at: '2026-01-17T10:30:00Z',
+        pending_publish: true,
+        status: 1,
+      },
+      {
+        id: 4,
+        name: 'delta',
+        uri: '/d/*',
+        methods: 'GET',
+        cluster_id: 2,
+        cluster_name: '预发集群',
+        priority: 1,
+        current_version: null,
+        published_at: null,
+        pending_publish: false,
+        status: 1,
+      },
+    ],
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    localStorage.clear()
+    vi.clearAllMocks()
+    mockRouteQuery = {}
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/routes') return Promise.resolve({ data: groupRoutes })
+      if (url === '/clusters')
+        return Promise.resolve({
+          data: {
+            items: [
+              { id: 1, display_name: '生产集群', group_name: '线上' },
+              { id: 2, display_name: '预发集群', group_name: '预发' },
+            ],
+          },
+        })
+      if (url === '/plugins/builtin') return Promise.resolve({ data: { plugins: [] } })
+      return Promise.reject(new Error('unexpected GET: ' + url))
+    })
+  })
+
+  afterEach(() => {
+    localStorage.clear()
+  })
+
+  const routeStubs = {
+    ...stubs,
+    ATable: {
+      name: 'GroupStubTable',
+      template: `
+        <div class="mock-a-table">
+          <template v-for="r in dataSource" :key="r.key || r.id">
+            <div v-if="r.__groupHeader" data-test="group-header"><slot name="bodyCell" :record="r" :column="{ key: 'group' }" /></div>
+            <div v-else class="mock-row"><slot name="bodyCell" :record="r" :column="{ key: 'uri' }" /></div>
+          </template>
+        </div>
+      `,
+      props: ['columns', 'dataSource', 'loading', 'rowKey', 'pagination', 'size'],
+    },
+  }
+
+  async function mountPage() {
+    const RouteList = (await import('../RouteList.vue')).default
+    const wrapper = mount(RouteList, { global: { stubs: routeStubs } })
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    return wrapper
+  }
+
+  it('默认分组渲染：组头芯片 = 数量+已发布+待发布+部分失败（PublishStatusTag 同序判定）', async () => {
+    const wrapper = await mountPage()
+    expect((wrapper.vm as any).viewMode).toBe('group')
+    const headers = wrapper.findAll('[data-test="group-header"]')
+    expect(headers).toHaveLength(2)
+    const prod = headers[0].text()
+    expect(prod).toContain('生产集群')
+    expect(prod).toContain('2 路由')
+    expect(prod).toContain('1 已发布')
+    expect(prod).toContain('1 部分失败')
+    expect(prod).not.toContain('待发布')
+    const staging = headers[1].text()
+    expect(staging).toContain('预发集群')
+    expect(staging).toContain('2 路由')
+    expect(staging).toContain('1 待发布')
+    expect(staging).not.toContain('部分失败')
+    expect(staging).not.toContain('已发布')
+    const colKeys = wrapper.findComponent({ name: 'GroupStubTable' }).props('columns') as Array<{ key: string }>
+    expect(colKeys.map((c) => c.key)).not.toContain('cluster_name')
+    expect(colKeys.map((c) => c.key)).not.toContain('methods')
+    expect(colKeys.map((c) => c.key)).toContain('uri')
+    wrapper.unmount()
+  })
+
+  it('组内固定序 = 优先级升序（跨集群组互不影响）', async () => {
+    const wrapper = await mountPage()
+    // 合并列行的可识别锚 = pipe-uri（URI 段）；生产组 beta(P0)→alpha(P10)，预发组 delta(P1)→gamma(P5)
+    const uris = wrapper.findAll('.mock-row .pipe-uri').map((u) => u.text())
+    expect(uris).toEqual(['/b/*', '/a/*', '/d/*', '/c/*'])
+    wrapper.unmount()
+  })
+
+  it('请求匹配合并列：方法 chips 段 + URI 段；取消「方法」勾选仅剩 URI；两键全关整列消失', async () => {
+    const wrapper = await mountPage()
+    // 默认两键勾选：beta（4 方法 >3 → slice(0,3) + 溢出计数）行渲染 chips 与 pipe-uri
+    const betaRow = wrapper.findAll('.mock-row').find((r) => r.find('.pipe-uri').text() === '/b/*')
+    expect(betaRow).toBeDefined()
+    expect(betaRow!.findAll('.m-tag').map((m) => m.text())).toEqual(['GET', 'POST', 'PUT', '+1'])
+    expect(betaRow!.find('.pipe-uri').text()).toBe('/b/*')
+    // 取消「方法」→ chips 段消失、URI 段保留
+    ;(wrapper.vm as any).columnsSelected = [
+      'index',
+      'name',
+      'uri',
+      'upstream',
+      'priority',
+      'publish_status',
+      'created_at',
+      'actions',
+    ]
+    await wrapper.vm.$nextTick()
+    const betaRow2 = wrapper.findAll('.mock-row').find((r) => r.find('.pipe-uri').text() === '/b/*')
+    expect(betaRow2!.findAll('.m-tag')).toHaveLength(0)
+    expect(betaRow2!.find('.pipe-uri').text()).toBe('/b/*')
+    // uri 也取消 → 合并列整列消失
+    ;(wrapper.vm as any).columnsSelected = [
+      'index',
+      'name',
+      'upstream',
+      'priority',
+      'publish_status',
+      'created_at',
+      'actions',
+    ]
+    await wrapper.vm.$nextTick()
+    const colKeys = wrapper.findComponent({ name: 'GroupStubTable' }).props('columns') as Array<{ key: string }>
+    expect(colKeys.map((c) => c.key)).not.toContain('uri')
+    wrapper.unmount()
+  })
+
+  it('四步主流程：切平铺（排序键休眠恢复生效）→ 切分组（组内固定序）→ 回平铺（排序原样恢复）', async () => {
+    const wrapper = await mountPage()
+    const lastParams = () => {
+      const calls = mockApiGet.mock.calls.filter((c: unknown[]) => c[0] === '/routes')
+      return (calls[calls.length - 1][1] as { params: Record<string, unknown> }).params
+    }
+    // ① 切平铺：重查且不带排序参数（尚未排序）
+    await wrapper.find('[data-test="view-mode-flat"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.findAll('[data-test="group-header"]')).toHaveLength(0)
+    expect(lastParams().sort_by).toBeUndefined()
+    // ② 平铺下排序
+    ;(wrapper.vm as any).sortBy = 'priority'
+    ;(wrapper.vm as any).sortOrder = 'asc'
+    await (wrapper.vm as any).loadRoutes()
+    await flushPromises()
+    expect(lastParams().sort_by).toBe('priority')
+    // ③ 切分组：组头恢复，请求不带排序参数（休眠），排序键保留
+    await wrapper.find('[data-test="view-mode-group"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.findAll('[data-test="group-header"]')).toHaveLength(2)
+    expect(lastParams().sort_by).toBeUndefined()
+    expect((wrapper.vm as any).sortBy).toBe('priority')
+    // ④ 回平铺：排序参数原样恢复
+    await wrapper.find('[data-test="view-mode-flat"]').trigger('click')
+    await flushPromises()
+    expect(lastParams().sort_by).toBe('priority')
+    expect(lastParams().sort_order).toBe('asc')
+    wrapper.unmount()
+  })
+
+  it('页头徽标与 chips 行计数同口径（共 N 条路由 ↔ N 路由）', async () => {
+    const wrapper = await mountPage()
+    expect(wrapper.find('[data-test="route-count"]').text()).toContain('共 4 条路由')
+    // 工具条右端簇不含计数（V2：showCount=false）
+    expect(wrapper.find('[data-test="toolbar-count"]').exists()).toBe(false)
+    const stats = wrapper.findAll('[data-test="page-stat"]').map((s) => s.text())
+    expect(stats[0]).toContain('4 路由')
+    expect(stats.join(' ')).toContain('1 已发布')
+    expect(stats.join(' ')).toContain('1 待发布')
+    expect(stats.join(' ')).toContain('1 未发布')
+    wrapper.unmount()
+  })
+
+  it('刷新按钮：重拉列表+统计副本，不重置筛选/排序键/视图模式（D6）', async () => {
+    const wrapper = await mountPage()
+    const callsBefore = mockApiGet.mock.calls.filter((c: unknown[]) => c[0] === '/routes').length
+    await wrapper.find('[data-test="toolbar-refresh"]').trigger('click')
+    await flushPromises()
+    const callsAfter = mockApiGet.mock.calls.filter((c: unknown[]) => c[0] === '/routes').length
+    expect(callsAfter).toBeGreaterThan(callsBefore)
+    expect((wrapper.vm as any).viewMode).toBe('group')
+    wrapper.unmount()
+  })
 })

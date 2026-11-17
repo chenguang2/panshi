@@ -1,97 +1,132 @@
 <template>
   <div class="route-list">
     <PageHeader title="路由管理" description="管理 API 路由规则，配置请求匹配、转发目标和插件">
+      <template #stats>
+        <PageStatBadges :items="headerStatItems" />
+      </template>
       <template #actions>
         <button class="btn btn-primary" @click="openCreateModal">+ 新建路由</button>
       </template>
     </PageHeader>
 
-    <!-- Method filter chips -->
-    <div class="filter-chips">
-      <span
-        v-for="m in methodFilters"
-        :key="m.value"
-        class="filter-chip"
-        :class="{ active: activeMethod === m.value }"
-        @click="selectMethod(m.value)"
-        >{{ m.label }}</span
-      >
-    </div>
-
-    <div class="route-filter-bar">
-      <SearchInput v-if="searchVisible" v-model="searchText" placeholder="搜索名称、URI、描述、域名..." @input="onSearch" />
-      <select v-model="groupFilter" class="form-input" style="width: 140px" @change="onGroupChange">
-        <option value="__all__">全部分组</option>
-        <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
-        <option value="__ung__">未分组</option>
-      </select>
-      <ClusterSelect
-        v-model="clusterFilter"
-        :clusters="filteredClusters"
-        allow-all
-        style="width: 160px"
-        @change="onClusterChange"
-      />
-      <select
-        v-model="upstreamFilter"
-        class="form-input"
-        style="width: 160px"
-        @change="onFilterChange"
-        :disabled="!upstreams.length && !clusterFilter"
-      >
-        <option value="">全部上游</option>
-        <option v-for="u in upstreams" :key="u.id" :value="u.id">{{ u.name }}</option>
-      </select>
-      <select
-        v-model="pluginFilter"
-        class="form-input plugin-filter"
-        style="width: 140px; flex-shrink: 0"
-        @change="onFilterChange"
-      >
-        <option value="">全部插件</option>
-        <option v-for="p in pluginOptions" :key="p.name" :value="p.name">{{ p.display_name || p.name }}</option>
-      </select>
-      <select v-model="publishFilter" class="form-input" style="width: 130px" @change="onFilterChange">
-        <option value="">全部状态</option>
-        <option value="published">已发布</option>
-        <option value="pending">待发布</option>
-        <option value="unpublished">未发布</option>
-      </select>
-      <!-- 7.3：全量「方法」下拉，与上方 chips 同值联动（chips 只放常驻高频项） -->
-      <select v-model="activeMethod" class="form-input method-filter" style="width: 130px" @change="onFilterChange">
-        <option value="">全部方法</option>
-        <option v-for="m in methodOptions" :key="m" :value="m">{{ m }}</option>
-      </select>
-      <a-popover v-model:open="columnPopoverVisible" trigger="click" placement="bottomLeft">
-        <template #title>选择显示列</template>
-        <template #content>
-          <div style="min-width: 400px">
-            <div style="font-weight: 500; margin-bottom: 8px">显示字段</div>
-            <a-checkbox-group v-model:value="columnsSelected">
-              <div style="display: flex; flex-wrap: wrap; gap: 8px">
-                <div v-for="col in popoverColumns" :key="col.key" style="margin-bottom: 4px">
-                  <a-checkbox :value="col.key">{{ col.title }}</a-checkbox>
-                </div>
-              </div>
-            </a-checkbox-group>
-            <a-divider style="margin: 12px 0" />
-            <div style="font-weight: 500; margin-bottom: 8px">搜索</div>
-            <a-checkbox v-model:checked="searchVisible">显示搜索框</a-checkbox>
-            <a-divider style="margin: 12px 0" />
-            <div class="text-muted" style="font-size: 12px; margin-bottom: 8px">拖动表头右缘可调整列宽</div>
-            <button class="btn btn-primary btn-sm" @click="handleResetColumnWidths">重置列宽</button>
-          </div>
-        </template>
-        <button class="btn btn-secondary btn-sm">列配置</button>
-      </a-popover>
-      <span class="text-muted text-sm">共 {{ totalCount }} 条路由</span>
-    </div>
-
     <div class="table-container">
+      <!-- V2 双行工具条（table-toolbar-ux）：第一行 = 纯筛选行（右端簇不含计数，showCount=false）；
+           第二行 = 方法 chips 附属行（紧贴表头上方，「共 N 条路由」随行右置） -->
+      <TableToolbar
+        v-model:mode="viewMode"
+        class="nowrap"
+        :count="totalCount"
+        count-unit="条路由"
+        :show-count="false"
+        :refreshing="loading"
+        @refresh="refreshList"
+      >
+        <template #filters>
+          <SearchInput
+            v-if="searchVisible"
+            v-model="searchText"
+            placeholder="搜索名称、URI、描述、域名..."
+            @input="onSearch"
+          />
+          <select v-model="groupFilter" class="l5-select" style="width: 140px" @change="onGroupChange">
+            <option value="__all__">全部分组</option>
+            <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
+            <option value="__ung__">未分组</option>
+          </select>
+          <ClusterSelect
+            v-model="clusterFilter"
+            :clusters="filteredClusters"
+            allow-all
+            style="width: 160px"
+            @change="onClusterChange"
+          />
+          <select
+            v-model="upstreamFilter"
+            class="l5-select"
+            style="width: 160px"
+            @change="onFilterChange"
+            :disabled="!upstreams.length && !clusterFilter"
+          >
+            <option value="">全部上游</option>
+            <option v-for="u in upstreams" :key="u.id" :value="u.id">{{ u.name }}</option>
+          </select>
+          <select
+            v-model="pluginFilter"
+            class="l5-select plugin-filter"
+            style="width: 140px; flex-shrink: 0"
+            @change="onFilterChange"
+          >
+            <option value="">全部插件</option>
+            <option v-for="p in pluginOptions" :key="p.name" :value="p.name">{{ p.display_name || p.name }}</option>
+          </select>
+          <select v-model="publishFilter" class="l5-select" style="width: 130px" @change="onFilterChange">
+            <option value="">全部状态</option>
+            <option value="published">已发布</option>
+            <option value="pending">待发布</option>
+            <option value="unpublished">未发布</option>
+          </select>
+          <!-- 7.3：全量「方法」下拉，与下方 chips 同值联动（chips 只放常驻高频项） -->
+          <select v-model="activeMethod" class="l5-select method-filter" style="width: 130px" @change="onFilterChange">
+            <option value="">全部方法</option>
+            <option v-for="m in methodOptions" :key="m" :value="m">{{ m }}</option>
+          </select>
+        </template>
+        <template #extra>
+          <!-- 「清除排序」（contract 10.5）：仅平铺且存在排序键时可见；点击只清排序并重载，不切模式 -->
+          <button v-if="viewMode === 'flat' && sortBy" class="tool-btn" data-test="clear-sort" @click="clearSort">
+            清除排序
+          </button>
+        </template>
+        <template #config>
+          <a-popover v-model:open="columnPopoverVisible" trigger="click" placement="bottomLeft">
+            <template #title>选择显示列</template>
+            <template #content>
+              <div style="min-width: 400px">
+                <div style="font-weight: 500; margin-bottom: 8px">显示字段</div>
+                <a-checkbox-group v-model:value="columnsSelected">
+                  <div style="display: flex; flex-wrap: wrap; gap: 8px">
+                    <div v-for="col in popoverColumns" :key="col.key" style="margin-bottom: 4px">
+                      <a-checkbox :value="col.key">{{ col.title }}</a-checkbox>
+                    </div>
+                  </div>
+                </a-checkbox-group>
+                <a-divider style="margin: 12px 0" />
+                <div style="font-weight: 500; margin-bottom: 8px">搜索</div>
+                <a-checkbox v-model:checked="searchVisible">显示搜索框</a-checkbox>
+                <a-divider style="margin: 12px 0" />
+                <div class="text-muted" style="font-size: 12px; margin-bottom: 8px">拖动表头右缘可调整列宽</div>
+                <button class="btn btn-primary btn-sm" @click="handleResetColumnWidths">重置列宽</button>
+              </div>
+            </template>
+            <button class="btn btn-secondary btn-sm">列配置</button>
+          </a-popover>
+        </template>
+      </TableToolbar>
+
+      <!-- 方法 chips 附属行：紧贴表头上方，计数右置（V2 结构） -->
+      <div class="l5-chiprow" data-test="method-chip-row">
+        <span class="chiprow-label">方法</span>
+        <div class="f-chips">
+          <span
+            v-for="m in methodFilters"
+            :key="m.value"
+            class="f-chip"
+            :class="{ active: activeMethod === m.value }"
+            @click="selectMethod(m.value)"
+            >{{ m.label }}</span
+          >
+        </div>
+        <span class="t-spacer"></span>
+        <span class="l5-count" data-test="route-count"
+          >共 <b>{{ totalCount }}</b> 条路由</span
+        >
+      </div>
+
       <a-table
-        :data-source="displayedRoutes"
+        :data-source="displayRows"
         :columns="visibleColumns"
-        :row-key="(record: any) => record.id"
+        :row-key="(record: any) => record.key ?? record.id"
+        :custom-row="routeCustomRow"
         :pagination="paginationProps({ page, pageSize, total: totalCount }, '条路由')"
         :loading="loading"
         :scroll="{ x: 'max-content' }"
@@ -101,7 +136,12 @@
         @change="handleTableChange"
       >
         <template #headerCell="{ column, title }">
-          <span class="th-resize-wrap" :class="routeWrapClass(column)" @mousedown="startColumnMove($event, column)">
+          <span
+            class="th-resize-wrap"
+            :class="routeWrapClass(column)"
+            @mousedown="startColumnMove($event, column)"
+            @click="onSortableHeaderClick(column)"
+          >
             <span>{{ title }}</span>
             <span
               v-if="String(column.key) !== 'index'"
@@ -110,11 +150,15 @@
             />
           </span>
         </template>
-        <template #bodyCell="{ column, record, index }">
-          <template v-if="column.key === 'index'">
-            <span class="text-muted">{{ (page - 1) * pageSize + index + 1 }}</span>
+        <template #bodyCell="{ column, record }">
+          <!-- 组标记行（list-page-cluster-grouping）：整行 colspan 由列 customCell 控制，此处只渲染内容 -->
+          <template v-if="isGroupHeaderRow(record)">
+            <ClusterGroupRow :row="record" @toggle="toggleFold(record.groupKey)" />
           </template>
-          <template v-if="column.key === 'name'">
+          <template v-else-if="column.key === 'index'">
+            <span class="text-muted">{{ (page - 1) * pageSize + sequenceOf(record) }}</span>
+          </template>
+          <template v-else-if="column.key === 'name'">
             <div class="cell-primary">
               {{ record.name }}
               <span v-if="hasDnsPlugin(record)" class="dns-route-badge">DNS</span>
@@ -122,40 +166,42 @@
             <div class="cell-secondary">{{ record.description || '-' }}</div>
           </template>
 
-          <template v-if="column.key === 'uri'">
-            <span class="uri-cell">{{ record.uri }}</span>
-          </template>
-
-          <template v-if="column.key === 'methods'">
-            <a-tooltip
-              v-if="(record.methods || '').split(',').length > 3"
-              :title="(record.methods || '').split(',').join(' ')"
-            >
-              <span class="method-tags-wrap">
-                <span
-                  v-for="m in (record.methods || '').split(',').slice(0, 3)"
-                  :key="m"
-                  class="method-tag"
-                  :class="m"
-                  >{{ m }}</span
+          <!-- 请求匹配合并列（contract 10.1：列键=uri；「方法」勾选控制方法 chips 段、URI 段恒随 uri 键） -->
+          <template v-else-if="column.key === 'uri'">
+            <div class="match-cell">
+              <span v-if="isMethodsSelected()" class="m-row">
+                <a-tooltip
+                  v-if="(record.methods || '').split(',').length > 3"
+                  :title="(record.methods || '').split(',').join(' ')"
                 >
-                <span class="method-tag method-more">+{{ (record.methods || '').split(',').length - 3 }}</span>
+                  <span class="m-row">
+                    <span
+                      v-for="m in (record.methods || '').split(',').slice(0, 3)"
+                      :key="m"
+                      class="m-tag"
+                      :class="m"
+                      >{{ m }}</span
+                    >
+                    <span class="m-tag method-more">+{{ (record.methods || '').split(',').length - 3 }}</span>
+                  </span>
+                </a-tooltip>
+                <template v-else>
+                  <span v-for="m in (record.methods || '').split(',')" :key="m" class="m-tag" :class="m">{{ m }}</span>
+                </template>
               </span>
-            </a-tooltip>
-            <template v-else>
-              <span v-for="m in (record.methods || '').split(',')" :key="m" class="method-tag" :class="m">{{ m }}</span>
-            </template>
+              <span v-if="isUriSelected()" class="pipe-uri" :title="record.uri">{{ record.uri }}</span>
+            </div>
           </template>
 
-          <template v-if="column.key === 'upstream'">
-            <span class="text-mono text-sm">{{ record.upstream_name || '-' }}</span>
+          <template v-else-if="column.key === 'upstream'">
+            <span class="pipe-up" :title="record.upstream_name || ''">{{ record.upstream_name || '-' }}</span>
           </template>
 
-          <template v-if="column.key === 'priority'">
-            <span class="priority-badge">{{ record.priority }}</span>
+          <template v-else-if="column.key === 'priority'">
+            <span class="prio" :title="`优先级 ${record.priority}：按数值升序依次匹配`">P{{ record.priority }}</span>
           </template>
 
-          <template v-if="column.key === 'publish_status'">
+          <template v-else-if="column.key === 'publish_status'">
             <span class="status-cell-flex">
               <PublishStatusTag
                 :version="record.current_version"
@@ -171,11 +217,11 @@
             </span>
           </template>
 
-          <template v-if="column.key === 'created_at'">
+          <template v-else-if="column.key === 'created_at'">
             <span class="cell-secondary">{{ formatDate(record.created_at) }}</span>
           </template>
 
-          <template v-if="column.key === 'actions'">
+          <template v-else-if="column.key === 'actions'">
             <template v-if="hasDnsPlugin(record)">
               <!-- 7.9：DNS 路由禁用行内操作 + tooltip 指路（替代 toast 拦截）；拍平后发布与菜单一并禁用 -->
               <div class="action-cell">
@@ -218,17 +264,17 @@
         </template>
 
         <template #emptyText>
-          <div class="empty-state">
-            <div class="empty-state-icon">◇</div>
-            <!-- 7.2：空态双形态——无筛选引导新建，有筛选引导清空（含分组重置，C8） -->
-            <template v-if="hasActiveFilters">
-              <p>没有符合条件路由</p>
-              <button class="btn btn-secondary" @click="clearFilters">清空筛选</button>
-            </template>
-            <template v-else>
-              <p>尚未创建路由</p>
-              <button class="btn btn-primary" @click="openCreateModal">新建路由</button>
-            </template>
+          <div class="empty5">
+            <div class="e-icon">◇</div>
+            <div class="e-title">
+              <!-- 7.2：空态双形态——无筛选引导新建，有筛选引导清空（含分组重置，C8） -->
+              <template v-if="hasActiveFilters">没有符合条件路由</template>
+              <template v-else>尚未创建路由</template>
+            </div>
+            <div class="e-actions">
+              <button v-if="hasActiveFilters" class="btn btn-secondary" @click="clearFilters">清空筛选</button>
+              <button v-else class="btn btn-primary" @click="openCreateModal">新建路由</button>
+            </div>
           </div>
         </template>
       </a-table>
@@ -251,8 +297,8 @@
       :cluster-id="vmClusterId"
       :resource-name="vmName"
       :can-publish="true"
-      @version-change="loadRoutes"
-      @published="loadRoutes"
+      @version-change="refreshList"
+      @published="refreshList"
       @publish-requested="onVmPublishRequested"
     />
     <PublishConfirmModal
@@ -275,7 +321,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
 import { useColumnConfig, resolveOrderedColumns, applyColumnWidths } from '@/composables/useColumnConfig'
 import { useColumnDragColumns } from '@/composables/useColumnDragColumns'
@@ -300,6 +346,16 @@ import {
   fetchAllClusterNodes,
 } from '@/composables/useClusterUtils'
 import { paginationProps } from '@/composables/usePagination'
+import {
+  useListClusterGrouping,
+  isGroupHeaderRow,
+  type ClusterGroupChip,
+  type ListViewMode,
+} from '@/composables/useListClusterGrouping'
+import { compareRoutePriority } from '@/utils/listGroupSorters'
+import TableToolbar from '@/components/TableToolbar.vue'
+import ClusterGroupRow from '@/components/ClusterGroupRow.vue'
+import PageStatBadges from '@/components/PageStatBadges.vue'
 import { useRoute } from 'vue-router'
 import SearchInput from '@/components/SearchInput.vue'
 
@@ -333,6 +389,110 @@ function onGroupChange() {
 }
 
 const displayedRoutes = computed(() => routes.value)
+
+// ── 集群分组 + 双模式（list-page-cluster-grouping，共享组合式单点）──
+const viewMode = ref<ListViewMode>('group')
+/** 发布状态判定（contract 10.3：与行内 PublishStatusTag 同源同序——未发布 → 待发布 → partial → 已发布，
+ *  字段 current_version/pending_publish/last_publish_status 即该组件入参，禁止另造口径） */
+function routePublishState(r: Record<string, unknown>): 'unpublished' | 'pending' | 'partial' | 'published' {
+  if (r.current_version == null) return 'unpublished'
+  if (r.pending_publish === true) return 'pending'
+  if (r.last_publish_status === 'partial') return 'partial'
+  return 'published'
+}
+/** 组头统计芯片（contract 10.3 路由：数量 + 已发布 + 待发布 + 部分失败；0 项不渲染） */
+function routeGroupChips(rows: Array<Record<string, unknown>>): ClusterGroupChip[] {
+  let published = 0
+  let pending = 0
+  let partial = 0
+  for (const r of rows) {
+    const state = routePublishState(r)
+    if (state === 'published') published++
+    else if (state === 'pending') pending++
+    else if (state === 'partial') partial++
+  }
+  const chips: ClusterGroupChip[] = []
+  if (published) chips.push({ label: `${published} 已发布`, tone: 'ok' })
+  if (pending) chips.push({ label: `${pending} 待发布`, tone: 'warn' })
+  if (partial) chips.push({ label: `${partial} 部分失败`, tone: 'bad' })
+  return chips
+}
+const { displayRows, sequenceOf, toggleFold } = useListClusterGrouping({
+  rows: () => displayedRoutes.value,
+  unit: '路由',
+  mode: viewMode,
+  // 组内固定序 = 优先级升序（规格 list-page-cluster-grouping）；仅分组模式生效
+  sortWithinGroup: compareRoutePriority as (a: Record<string, unknown>, b: Record<string, unknown>) => number,
+  chips: routeGroupChips,
+})
+
+// 模式切换重查（D2）：平铺 = 服务端排序序（带 sort 参数）、分组 = 组内固定序（不带 sort 参数），
+// 两种数据序语义不同，切换必须重拉；排序键跨模式保留（sortBy/sortOrder 不动）
+watch(viewMode, () => {
+  loadRoutes()
+})
+
+/** 组标记行单元格协议（contract 10.6） */
+function groupHeaderCellProps(record: unknown, isFirst: boolean): Record<string, unknown> {
+  if (!isGroupHeaderRow(record)) return {}
+  return isFirst ? { colSpan: visibleColumns.value.length } : { class: 'l5-group-cell-hidden' }
+}
+function routeCustomRow(record: unknown): Record<string, unknown> {
+  return isGroupHeaderRow(record) ? { class: 'l5-group-row' } : {}
+}
+
+/** 合并列内部段显隐（contract 10.1）：「方法」「URI」为两个独立勾选键 */
+function isMethodsSelected(): boolean {
+  return columnsSelected.value.includes('methods')
+}
+function isUriSelected(): boolean {
+  return columnsSelected.value.includes('uri')
+}
+
+// ── 页头轻统计徽标（list-page-header-stats / design D3）：大分页统计副本，仅用于徽标聚合 ──
+const statsRoutes = ref<any[]>([])
+async function loadRouteStats() {
+  try {
+    const params: any = { page: 1, page_size: 500, group_name: groupFilter.value } // MAX_PAGE_SIZE（design D3）
+    if (clusterFilter.value) params.cluster_id = clusterFilter.value
+    if (upstreamFilter.value) params.upstream_id = upstreamFilter.value
+    if (activeMethod.value) params.method = activeMethod.value
+    if (publishFilter.value) params.publish_status = publishFilter.value
+    if (pluginFilter.value) params.plugin = pluginFilter.value
+    if (searchText.value) params.search = searchText.value
+    // 统计副本不带排序参数（仅用于聚合，与列表序无关）
+    const res = await api.get('/routes', { params })
+    statsRoutes.value = res.data.items || []
+  } catch {
+    // 徽标统计失败静默（保留上次分布）；列表加载失败由 loadRoutes 自己提示
+  }
+}
+/** 徽标主数字恒用 totalCount（与 chips 行「共 N」一致）；分布取统计副本（design D3）。
+ *  口径与规格 list-page-header-stats 一致：N 路由 · 已发布 · 待发布 · 未发布 */
+const headerStatItems = computed(() => {
+  let published = 0
+  let pending = 0
+  let unpublished = 0
+  for (const r of statsRoutes.value) {
+    const state = routePublishState(r)
+    if (state === 'published') published++
+    else if (state === 'pending') pending++
+    else if (state === 'unpublished') unpublished++
+  }
+  const items: Array<{ value: number | string; label: string; tone?: 'ok' | 'warn' | 'bad' }> = [
+    { value: totalCount.value, label: '路由' },
+  ]
+  if (published) items.push({ value: published, label: '已发布', tone: 'ok' })
+  if (pending) items.push({ value: pending, label: '待发布', tone: 'warn' })
+  if (unpublished) items.push({ value: unpublished, label: '未发布' })
+  return items
+})
+
+/** 刷新语义（design D6）：重拉列表 + 徽标统计；不重置筛选/排序键/视图模式 */
+async function refreshList(): Promise<void> {
+  loadRoutes()
+  loadRouteStats()
+}
 const activeMethod = ref('')
 
 /** 切换 Method 过滤并重新加载。
@@ -340,7 +500,7 @@ const activeMethod = ref('')
  *  导致 rolldown/vite:vue 解析失败（构建红、vue-tsc 不报）——见约定 #25。 */
 function selectMethod(value: string) {
   activeMethod.value = value
-  loadRoutes()
+  refreshList()
 }
 const publishFilter = ref('')
 const pluginFilter = ref('')
@@ -361,14 +521,13 @@ const publishVisible = ref(false)
 const publishClusterId = ref(0)
 const publishingRecord = ref<any | null>(null)
 
-// 默认宽度档 + 固定列（column-personalization-rollout：#/名称固定左、操作固定右）
+// 默认宽度档（column-personalization-rollout + list-pages-console-restyle L2）：
+// 「集群」列移除（集群归属由组头行表达）；方法+URI 合并为「请求匹配」（列键 uri，mockup 256px 档）
 const columns: TableColumnsType = [
   { title: '#', key: 'index', width: 45, fixed: 'left' },
-  { title: '名称', dataIndex: 'name', key: 'name', sorter: true, width: 140, fixed: 'left' },
-  { title: 'URI', key: 'uri', sorter: true, width: 220 },
-  { title: '方法', key: 'methods', width: 110 },
-  { title: '上游', key: 'upstream', width: 160 },
-  { title: '集群', dataIndex: 'cluster_name', key: 'cluster_name', width: 140 },
+  { title: '名称', dataIndex: 'name', key: 'name', sorter: true, width: 170, fixed: 'left' },
+  { title: '请求匹配', key: 'uri', sorter: true, width: 256 },
+  { title: '上游', key: 'upstream', width: 170 },
   { title: '优先级', key: 'priority', sorter: true, width: 90 },
   {
     title: '发布状态',
@@ -387,6 +546,12 @@ const columns: TableColumnsType = [
   },
   { title: '操作', key: 'actions', width: 110, fixed: 'right' },
 ]
+// 全量列键（含被「请求匹配」合并列吞并的 methods——仅作列配置勾选/存储键，不单独成列，contract 10.1）
+const ALL_COLUMN_KEYS: string[] = (() => {
+  const keys = columns.map((c) => String(c.key))
+  const at = keys.indexOf('uri') + 1
+  return [...keys.slice(0, at), 'methods', ...keys.slice(at)]
+})()
 
 // ── 列个性化（column-personalization-rollout）：宽度/顺序持久化 + 拖拽手势共享 composable ──
 const {
@@ -398,23 +563,50 @@ const {
   resetWidths: resetRouteColumnWidths,
   columnOrder: routeColumnOrder,
   setColumnOrder: setRouteColumnOrder,
-} = useColumnConfig({ key: 'route_standalone', defaultColumns: columns.map((c) => String(c.key)) })
+} = useColumnConfig({
+  key: 'route_standalone',
+  // 全量列键含被合并列吞并的 methods（独立勾选/存储键，contract 10.1；#79 清洗按全量清单）
+  defaultColumns: [...ALL_COLUMN_KEYS],
+  allColumns: [...ALL_COLUMN_KEYS],
+})
 
 // 列顺序：共享 resolveOrderedColumns 单点（未知/重复键剔除，未定位列按设计位落座）
 const orderedColumns = computed(() => resolveOrderedColumns(columns, routeColumnOrder.value))
 
-// 列显隐过滤 + 用户拖拽宽度覆盖默认档（与节点管理同款）
-// 序号列恒展示、不进入列配置弹窗（upstream-list-page 规格钉定；与 table-anatomy 序号列语义一致）
-const popoverColumns = computed(() => columns.filter((c) => String(c.key) !== 'index'))
+// 列配置勾选清单：合并列的「方法」为独立勾选键（contract 10.1），序号列恒不进勾选
+const popoverColumns = computed(() => {
+  const out: Array<{ key: string; title: string }> = []
+  for (const c of columns) {
+    const key = String(c.key)
+    if (key === 'index') continue
+    out.push({ key, title: String(c.title) })
+    if (key === 'uri') out.push({ key: 'methods', title: '方法' })
+  }
+  return out
+})
 
 const visibleColumns = computed(() => {
   const selected = new Set(columnsSelected.value)
-  // 序号列恒展示：它不进弹窗，而 antd CheckboxGroup 交互会把它从已选集合里剔除，故此处兜底
-  const isVisible = (c: { key?: unknown }) => String(c.key) === 'index' || selected.has(String(c.key))
-  return applyColumnWidths(
-    orderedColumns.value.filter(isVisible),
-    routeColumnWidths.value,
-  )
+  // 序号列恒展示：它不进弹窗，而 antd CheckboxGroup 交互会把它从已选集合里剔除，故此处兜底；
+  // 「请求匹配」合并列两键（uri/methods）任一勾选即整列出现（contract 10.1）
+  const isVisible = (c: { key?: unknown }) => {
+    const k = String(c.key)
+    if (k === 'index') return true
+    if (k === 'uri') return selected.has('uri') || selected.has('methods')
+    return selected.has(k)
+  }
+  const groupMode = viewMode.value === 'group'
+  // 平铺限定排序（table-sorting / contract §3）：分组模式 sorter 置 false（不参与组内序，
+  // 排序键跨模式保留于 sortBy/sortOrder，回平铺原样恢复）；分组模式剥离 fixed（contract 10.6）
+  const sortable = (c: { key?: unknown; sorter?: unknown }) =>
+    groupMode && SORTABLE_COLUMNS.includes(String(c.key)) ? false : c.sorter
+  const cols = orderedColumns.value.filter(isVisible).map((c, i) => ({
+    ...c,
+    sorter: sortable(c),
+    fixed: groupMode ? undefined : c.fixed,
+    customCell: (record: unknown) => groupHeaderCellProps(record, i === 0),
+  }))
+  return applyColumnWidths(cols, routeColumnWidths.value)
 })
 
 const {
@@ -452,6 +644,21 @@ const methodOptions = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS
 // 7.9：DNS 路由行内操作统一指路文案（独立页 tooltip 与 Tab 页 tooltip 共用语义）
 const DNS_ROUTE_HINT = 'DNS 路由请在「DNS 代理」页管理'
 
+// 分组模式排序拦截提示（规格 list-page-cluster-grouping）：一次性提示，数秒自动消失（message 自动关闭）
+const SORT_LOCKED_HINT = '分组模式下不可排序，切换「平铺」后可按表头排序'
+/** 表头点击拦截：仅分组模式 + 可排序列触发提示；不改变分组结构与行序，不改排序状态 */
+function onSortableHeaderClick(column: { key?: unknown }) {
+  if (viewMode.value === 'group' && SORTABLE_COLUMNS.includes(String(column.key))) {
+    message.info(SORT_LOCKED_HINT)
+  }
+}
+/** 「清除排序」（contract 10.5）：只清排序键并重载，不切模式；恢复平铺默认序（服务端默认序） */
+function clearSort() {
+  sortBy.value = ''
+  sortOrder.value = ''
+  loadRoutes()
+}
+
 // 7.2：空态双形态判定——任一筛选生效即视为「有筛选」
 const hasActiveFilters = computed(
   () =>
@@ -482,13 +689,13 @@ function clearFilters() {
 
 function onFilterChange() {
   page.value = 1
-  loadRoutes()
+  refreshList()
 }
 
 function onSearch() {
   onDebouncedSearch(() => {
     page.value = 1
-    loadRoutes()
+    refreshList()
   })
 }
 
@@ -536,7 +743,9 @@ async function loadRoutes() {
     if (publishFilter.value) params.publish_status = publishFilter.value
     if (pluginFilter.value) params.plugin = pluginFilter.value
     if (searchText.value) params.search = searchText.value
-    if (sortBy.value) {
+    // 平铺限定排序（D2/contract §3）：分组模式请求不带排序参数（组内固定序）；
+    // 排序键跨模式保留，回平铺后按 sortBy/sortOrder 原样恢复服务端排序
+    if (sortBy.value && viewMode.value === 'flat') {
       params.sort_by = sortBy.value
       params.sort_order = sortOrder.value
     }
@@ -578,7 +787,7 @@ function onClusterChange() {
   upstreamFilter.value = ''
   page.value = 1
   loadUpstreams(Number(clusterFilter.value) || undefined)
-  loadRoutes()
+  refreshList()
 }
 
 function openCreateModal() {
@@ -601,7 +810,7 @@ function closeFormModal() {
   isCopy.value = false
 }
 function onSaved() {
-  loadRoutes()
+  refreshList()
   closeFormModal()
 }
 
@@ -615,7 +824,7 @@ function publishRoute(r: any) {
   publishingRecord.value = r
   publishClusterId.value = r.cluster_id
   // 行内发布默认只刷新列表；版本弹窗出口条发布会用「刷新 + 重开版本弹窗」覆盖此默认（组3 3.1）
-  publishRefreshFn.value = loadRoutes
+  publishRefreshFn.value = refreshList
   publishVisible.value = true
 }
 
@@ -636,7 +845,7 @@ function onPreviewPublish() {
 
 // 本次发布完成后的刷新动作（组3 3.1）：发布确认弹窗是行内发布与版本弹窗出口条共用的单入口，
 // 出口条链路通过覆盖本刷新函数在发布成功后重开版本弹窗（重开触发既有 open watch 重载版本列表并复位出口条）
-const publishRefreshFn = ref<() => Promise<void>>(loadRoutes)
+const publishRefreshFn = ref<() => Promise<void>>(refreshList)
 
 async function onPublish(nodeIds: number[]) {
   publishVisible.value = false
@@ -648,7 +857,7 @@ async function onPublish(nodeIds: number[]) {
     nodeIds,
     refreshFn: publishRefreshFn.value,
   })
-  publishRefreshFn.value = loadRoutes
+  publishRefreshFn.value = refreshList
 }
 
 // route-save-publish-guidance 1.7：表单保存后的「立即发布」出口 → 复用行内发布同一套链路
@@ -679,7 +888,7 @@ function onVmPublishRequested() {
   publishingRecord.value = { id: vmId.value, cluster_id: vmClusterId.value, name: vmName.value }
   publishClusterId.value = vmClusterId.value
   publishRefreshFn.value = async () => {
-    await loadRoutes()
+    await refreshList()
     vmVisible.value = true
   }
   vmVisible.value = false
@@ -708,7 +917,7 @@ async function deleteRoute(r: any) {
         deleteDb,
         deleteEdge,
         nodeIds,
-        refreshFn: loadRoutes,
+        refreshFn: refreshList,
       })
     },
   })
@@ -756,32 +965,23 @@ onMounted(() => {
     })
     .catch(() => {})
   loadPlugins()
-  loadRoutes()
+  refreshList()
 })
 
 onUnmounted(() => {
   cancelSearch()
 })
+
+// 视图模式供测试/调试显式钉位（contract 10.2）
+defineExpose({ viewMode })
 </script>
 
 <style scoped>
-.route-filter-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 20px;
-  /* 7.10：窄屏允许换行，筛选控件不再挤压 */
-  flex-wrap: wrap;
-}
 .text-muted {
   color: var(--muted);
 }
-/* 7.10：计数与（后续的）刷新控制右置同组 */
 .text-sm {
   font-size: 12px;
-}
-.text-mono {
-  font-family: var(--font-mono);
 }
 .cell-primary {
   font-weight: 600;
@@ -792,88 +992,18 @@ onUnmounted(() => {
   color: var(--muted);
 }
 
-.filter-chips {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-bottom: 12px;
-}
-.filter-chip {
-  padding: 4px 12px;
-  border-radius: 14px;
-  font-size: 12px;
-  cursor: pointer;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--muted);
-  user-select: none;
-  transition: all 0.15s;
-}
-.filter-chip:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-.filter-chip.active {
-  background: oklch(56% 0.16 210 / 10%);
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.method-tag {
-  display: inline-block;
-  padding: 0 5px;
-  border-radius: 3px;
-  font-size: 11px;
-  font-weight: 600;
-  font-family: var(--font-mono);
-  margin-right: 2px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-}
-.method-tags-wrap {
+/* 方法 chips 附属行（.l5-chiprow/.f-chips 为全局控制台层单点）；与 filter 槽的「全部方法」下拉同值联动 */
+.m-row {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 3px;
 }
-.method-tag.method-more {
+/* 溢出收纳徽章（M9 收敛：slice(0, 3) + 溢出计数）——m-tag 族的弱化变体 */
+.m-tag.method-more {
   background: oklch(0% 0 0 / 6%);
   color: var(--muted);
-}
-.method-tag.GET {
-  border-color: oklch(55% 0.15 145 / 30%);
-  color: var(--success);
-}
-.method-tag.POST {
-  border-color: oklch(56% 0.16 210 / 30%);
-  color: var(--accent);
-}
-.method-tag.PUT {
-  border-color: oklch(65% 0.15 85 / 30%);
-  color: var(--warning);
-}
-.method-tag.DELETE {
-  border-color: oklch(55% 0.18 28 / 30%);
-  color: var(--danger);
-}
-.method-tag.PATCH {
-  border-color: oklch(55% 0.12 240 / 30%);
-  color: var(--info);
-}
-.method-tag.CONNECT {
-  border-color: oklch(55% 0.15 280 / 30%);
-  color: oklch(55% 0.15 280);
-}
-.method-tag.TRACE {
-  border-color: oklch(55% 0.1 200 / 30%);
-  color: oklch(55% 0.1 200);
-}
-
-.priority-badge {
-  font-family: var(--font-mono);
-  font-size: 11px;
-}
-.uri-cell {
-  font-family: var(--font-mono);
-  font-size: 12px;
+  border-color: transparent;
 }
 
 .action-trigger-btn {
@@ -916,14 +1046,5 @@ onUnmounted(() => {
   line-height: 1.4;
   margin-left: 6px;
   vertical-align: middle;
-}
-.empty-state {
-  text-align: center;
-  color: var(--muted);
-  padding: 32px;
-}
-.empty-state-icon {
-  font-size: 32px;
-  margin-bottom: 8px;
 }
 </style>

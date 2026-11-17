@@ -1,62 +1,77 @@
 <template>
   <div class="upstream-list">
     <PageHeader title="上游管理" description="管理后端上游服务，配置负载均衡和目标节点">
+      <template #stats>
+        <PageStatBadges :items="headerStatItems" />
+      </template>
       <template #actions>
         <button class="btn btn-primary" @click="openCreateModal">+ 新建上游</button>
       </template>
     </PageHeader>
 
-    <div class="upstream-filter-bar">
-      <SearchInput v-if="searchVisible" v-model="searchText" placeholder="搜索名称或描述..." @input="onSearch" />
-      <select v-model="groupFilter" class="form-input" style="width: 140px" @change="onGroupChange">
-        <option value="__all__">全部分组</option>
-        <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
-        <option value="__ung__">未分组</option>
-      </select>
-      <ClusterSelect
-        v-model="clusterFilter"
-        :clusters="filteredClusters"
-        allow-all
-        style="width: 160px"
-        @change="onFilterChange"
-      />
-      <select v-model="lbFilter" class="form-input" style="width: 140px" @change="onFilterChange">
-        <option value="">全部算法</option>
-        <option value="weighted_roundrobin">加权轮询</option>
-        <option value="chash">一致性哈希</option>
-        <option value="ewma">延迟最小</option>
-        <option value="least_conn">最少连接</option>
-      </select>
-      <a-popover v-model:open="columnPopoverVisible" trigger="click" placement="bottomLeft">
-        <template #title>选择显示列</template>
-        <template #content>
-          <div style="min-width: 400px">
-            <div style="font-weight: 500; margin-bottom: 8px">显示字段</div>
-            <a-checkbox-group v-model:value="columnsSelected">
-              <div style="display: flex; flex-wrap: wrap; gap: 8px">
-                <div v-for="col in popoverColumns" :key="col.key" style="margin-bottom: 4px">
-                  <a-checkbox :value="col.key">{{ col.title }}</a-checkbox>
-                </div>
-              </div>
-            </a-checkbox-group>
-            <a-divider style="margin: 12px 0" />
-            <div style="font-weight: 500; margin-bottom: 8px">搜索</div>
-            <a-checkbox v-model:checked="searchVisible">显示搜索框</a-checkbox>
-            <a-divider style="margin: 12px 0" />
-            <div class="text-muted" style="font-size: 12px; margin-bottom: 8px">拖动表头右缘可调整列宽</div>
-            <button class="btn btn-primary btn-sm" @click="handleResetColumnWidths">重置列宽</button>
-          </div>
-        </template>
-        <button class="btn btn-secondary btn-sm">列配置</button>
-      </a-popover>
-      <span class="text-muted text-sm">共 {{ totalCount }} 个上游</span>
-    </div>
-
     <div class="table-container">
+      <!-- 工具条（list-pages-console-restyle）：共享 TableToolbar，右端簇 = 计数 → 刷新 → 列配置 → 分组|平铺 -->
+      <TableToolbar
+        v-model:mode="viewMode"
+        class="nowrap"
+        :count="totalCount"
+        count-unit="个上游"
+        :refreshing="loading"
+        @refresh="refreshList"
+      >
+        <template #filters>
+          <SearchInput v-if="searchVisible" v-model="searchText" placeholder="搜索名称或描述..." @input="onSearch" />
+          <select v-model="groupFilter" class="l5-select" style="width: 140px" @change="onGroupChange">
+            <option value="__all__">全部分组</option>
+            <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
+            <option value="__ung__">未分组</option>
+          </select>
+          <ClusterSelect
+            v-model="clusterFilter"
+            :clusters="filteredClusters"
+            allow-all
+            style="width: 160px"
+            @change="onFilterChange"
+          />
+          <select v-model="lbFilter" class="l5-select" style="width: 140px" @change="onFilterChange">
+            <option value="">全部算法</option>
+            <option value="weighted_roundrobin">加权轮询</option>
+            <option value="chash">一致性哈希</option>
+            <option value="ewma">延迟最小</option>
+            <option value="least_conn">最少连接</option>
+          </select>
+        </template>
+        <template #config>
+          <a-popover v-model:open="columnPopoverVisible" trigger="click" placement="bottomLeft">
+            <template #title>选择显示列</template>
+            <template #content>
+              <div style="min-width: 400px">
+                <div style="font-weight: 500; margin-bottom: 8px">显示字段</div>
+                <a-checkbox-group v-model:value="columnsSelected">
+                  <div style="display: flex; flex-wrap: wrap; gap: 8px">
+                    <div v-for="col in popoverColumns" :key="col.key" style="margin-bottom: 4px">
+                      <a-checkbox :value="col.key">{{ col.title }}</a-checkbox>
+                    </div>
+                  </div>
+                </a-checkbox-group>
+                <a-divider style="margin: 12px 0" />
+                <div style="font-weight: 500; margin-bottom: 8px">搜索</div>
+                <a-checkbox v-model:checked="searchVisible">显示搜索框</a-checkbox>
+                <a-divider style="margin: 12px 0" />
+                <div class="text-muted" style="font-size: 12px; margin-bottom: 8px">拖动表头右缘可调整列宽</div>
+                <button class="btn btn-primary btn-sm" @click="handleResetColumnWidths">重置列宽</button>
+              </div>
+            </template>
+            <button class="btn btn-secondary btn-sm">列配置</button>
+          </a-popover>
+        </template>
+      </TableToolbar>
+
       <a-table
-        :data-source="displayedUpstreams"
+        :data-source="displayRows"
         :columns="visibleColumns"
-        :row-key="(record: any) => record.id"
+        :row-key="(record: any) => record.key ?? record.id"
+        :custom-row="upstreamCustomRow"
         :pagination="paginationProps({ page, pageSize, total: totalCount }, '个上游')"
         :loading="loading"
         :scroll="{ x: 'max-content' }"
@@ -75,33 +90,38 @@
             />
           </span>
         </template>
-        <template #bodyCell="{ column, record, index }">
-          <template v-if="column.key === 'index'">
-            <span class="text-muted">{{ (page - 1) * pageSize + index + 1 }}</span>
+        <template #bodyCell="{ column, record }">
+          <!-- 组标记行（list-page-cluster-grouping）：整行 colspan 由列 customCell 控制，此处只渲染内容 -->
+          <template v-if="isGroupHeaderRow(record)">
+            <ClusterGroupRow :row="record" @toggle="toggleFold(record.groupKey)" />
           </template>
-          <template v-if="column.key === 'name'">
+          <template v-else-if="column.key === 'index'">
+            <span class="text-muted">{{ (page - 1) * pageSize + sequenceOf(record) }}</span>
+          </template>
+          <template v-else-if="column.key === 'name'">
             <div class="cell-primary">{{ record.name }}</div>
             <div class="cell-secondary">{{ record.description || '-' }}</div>
           </template>
 
-          <template v-if="column.key === 'load_balance'">
-            <span class="lb-badge">{{ lbLabels[record.load_balance] || record.load_balance }}</span>
+          <template v-else-if="column.key === 'load_balance'">
+            <span class="lb-chip">{{ lbLabels[record.load_balance] || record.load_balance }}</span>
           </template>
 
-          <template v-if="column.key === 'targets'">
+          <!-- 目标节点与健康（contract §7：真实 targets 仅 target/weight，无健康字段 → 退化 chip 渲染） -->
+          <template v-else-if="column.key === 'targets'">
             <div class="target-list" v-if="record.targets?.length">
-              <span v-for="t in record.targets" :key="t.target" class="target-tag">
-                {{ t.target }} <span class="weight">({{ t.weight }})</span>
+              <span v-for="t in record.targets" :key="t.target" class="tg-chip">
+                {{ t.target }}<span class="tg-w">· 权重 {{ t.weight }}</span>
               </span>
             </div>
             <span v-else class="text-muted text-sm">—</span>
           </template>
 
-          <template v-if="column.key === 'scheme'">
-            <span class="text-mono text-sm">{{ record.scheme || '—' }}</span>
+          <template v-else-if="column.key === 'scheme'">
+            <span class="scheme-chip">{{ record.scheme || '—' }}</span>
           </template>
 
-          <template v-if="column.key === 'publish_status'">
+          <template v-else-if="column.key === 'publish_status'">
             <span class="status-cell-flex">
               <PublishStatusTag
                 :version="record.current_version"
@@ -117,7 +137,7 @@
             </span>
           </template>
 
-          <template v-if="column.key === 'actions'">
+          <template v-else-if="column.key === 'actions'">
             <div class="action-cell">
               <a-button size="small" @click="openPublishModal(record)">发布</a-button>
               <a-dropdown :trigger="['click']">
@@ -146,16 +166,16 @@
         </template>
 
         <template #emptyText>
-          <div class="empty-state">
-            <div class="empty-state-icon">◎</div>
-            <template v-if="hasActiveFilters">
-              <p>没有符合筛选条件的上游</p>
-              <button class="btn btn-secondary" @click="clearFilters">清除筛选</button>
-            </template>
-            <template v-else>
-              <p>还没有上游</p>
-              <button class="btn btn-primary" @click="openCreateModal">新建上游</button>
-            </template>
+          <div class="empty5">
+            <div class="e-icon">◎</div>
+            <div class="e-title">
+              <template v-if="hasActiveFilters">没有符合筛选条件的上游</template>
+              <template v-else>还没有上游</template>
+            </div>
+            <div class="e-actions">
+              <button v-if="hasActiveFilters" class="btn btn-secondary" @click="clearFilters">清除筛选</button>
+              <button v-else class="btn btn-primary" @click="openCreateModal">新建上游</button>
+            </div>
           </div>
         </template>
       </a-table>
@@ -178,8 +198,8 @@
       :cluster-id="vmClusterId"
       :resource-name="vmResourceName"
       :can-publish="true"
-      @version-change="loadUpstreams"
-      @published="loadUpstreams"
+      @version-change="refreshList"
+      @published="refreshList"
       @publish-requested="onVmPublishRequested"
     />
 
@@ -223,6 +243,16 @@ import PublishPreviewModal from '@/components/PublishPreviewModal.vue'
 import { executePublish } from '@/composables/useClusterUtils'
 import { showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
 import { paginationProps } from '@/composables/usePagination'
+import {
+  useListClusterGrouping,
+  isGroupHeaderRow,
+  type ClusterGroupChip,
+  type ListViewMode,
+} from '@/composables/useListClusterGrouping'
+import { compareUpstreamName } from '@/utils/listGroupSorters'
+import TableToolbar from '@/components/TableToolbar.vue'
+import ClusterGroupRow from '@/components/ClusterGroupRow.vue'
+import PageStatBadges from '@/components/PageStatBadges.vue'
 import { useRoute } from 'vue-router'
 import SearchInput from '@/components/SearchInput.vue'
 
@@ -251,10 +281,79 @@ const filteredClusters = computed(() => {
 
 function onGroupChange() {
   clusterFilter.value = ''
-  loadUpstreams()
+  refreshList()
 }
 
 const displayedUpstreams = computed(() => upstreams.value)
+
+// ── 集群分组 + 双模式（list-page-cluster-grouping，共享组合式单点）──
+const viewMode = ref<ListViewMode>('group')
+/** 组头统计芯片（contract 10.3）：发布状态判定与行内 PublishStatusTag 同源（pending_publish 字段） */
+function upstreamGroupChips(rows: Array<Record<string, unknown>>): ClusterGroupChip[] {
+  let published = 0
+  let pending = 0
+  for (const r of rows) {
+    if (r.pending_publish === true) pending++
+    else if (r.current_version != null) published++
+  }
+  const chips: ClusterGroupChip[] = []
+  if (published) chips.push({ label: `${published} 已发布`, tone: 'ok' })
+  if (pending) chips.push({ label: `${pending} 待发布`, tone: 'warn' })
+  return chips
+}
+const { displayRows, sequenceOf, isRowSelectable, toggleFold } = useListClusterGrouping({
+  rows: () => displayedUpstreams.value,
+  unit: '上游',
+  mode: viewMode,
+  // 组内固定序 = 名称序（规格 list-page-cluster-grouping）；仅分组模式生效
+  sortWithinGroup: compareUpstreamName as (a: Record<string, unknown>, b: Record<string, unknown>) => number,
+  chips: upstreamGroupChips,
+})
+
+/** 组标记行单元格协议（contract 10.6） */
+function groupHeaderCellProps(record: unknown, isFirst: boolean): Record<string, unknown> {
+  if (!isGroupHeaderRow(record)) return {}
+  return isFirst ? { colSpan: visibleColumns.value.length } : { class: 'l5-group-cell-hidden' }
+}
+function upstreamCustomRow(record: unknown): Record<string, unknown> {
+  return isGroupHeaderRow(record) ? { class: 'l5-group-row' } : {}
+}
+
+// ── 页头轻统计徽标（list-page-header-stats / design D3）：大分页统计副本，仅用于徽标聚合 ──
+const statsUpstreams = ref<any[]>([])
+async function loadUpstreamStats() {
+  try {
+    const params: any = { page: 1, page_size: 500, group_name: groupFilter.value } // MAX_PAGE_SIZE（design D3）
+    if (clusterFilter.value) params.cluster_id = clusterFilter.value
+    if (lbFilter.value) params.load_balance = lbFilter.value
+    if (searchText.value) params.search = searchText.value
+    const res = await listUpstreams(params)
+    statsUpstreams.value = res.data.items || []
+  } catch {
+    // 徽标统计失败静默（保留上次分布）；列表加载失败由 loadUpstreams 自己提示
+  }
+}
+/** 徽标主数字恒用 totalCount（与页脚「共 N」一致）；状态分布取统计副本（design D3） */
+const headerStatItems = computed(() => {
+  let published = 0
+  let pending = 0
+  for (const r of statsUpstreams.value) {
+    if (r.pending_publish === true) pending++
+    else if (r.current_version != null) published++
+  }
+  const items: Array<{ value: number | string; label: string; tone?: 'ok' | 'warn' | 'bad' }> = [
+    { value: totalCount.value, label: '上游' },
+  ]
+  if (published) items.push({ value: published, label: '已发布', tone: 'ok' })
+  if (pending) items.push({ value: pending, label: '待发布', tone: 'warn' })
+  return items
+})
+
+/** 刷新语义（design D6）：重拉列表 + 徽标统计；不重置筛选/视图模式 */
+async function refreshList(): Promise<void> {
+  loadUpstreams()
+  loadUpstreamStats()
+}
 const formModalVisible = ref(false)
 const editingUpstream = ref<any | null>(null)
 const copyingUpstream = ref(false)
@@ -266,15 +365,15 @@ const publishModalVisible = ref(false)
 const publishClusterId = ref(0)
 const publishingRecord = ref<any | null>(null)
 
-// 默认宽度档 + 固定列（column-personalization-rollout：#/名称固定左、操作固定右）
+// 默认宽度档（column-personalization-rollout + list-pages-console-restyle L2）：
+// 「集群」列移除（集群归属由组头行表达）；「目标节点」升级「目标节点与健康」按 mockup 314px 档
 const columns: TableColumnsType = [
   { title: '#', key: 'index', width: 45, fixed: 'left' },
-  { title: '名称', dataIndex: 'name', key: 'name', width: 140, fixed: 'left' },
-  { title: '集群', dataIndex: 'cluster_name', key: 'cluster_name', width: 140 },
+  { title: '名称', dataIndex: 'name', key: 'name', width: 176, fixed: 'left' },
   { title: '负载均衡', key: 'load_balance', width: 120 },
-  { title: '目标节点', key: 'targets', width: 220 },
+  { title: '目标节点与健康', key: 'targets', width: 314 },
   { title: '协议', key: 'scheme', width: 90 },
-  { title: '发布状态', key: 'publish_status', width: 160 },
+  { title: '发布状态', key: 'publish_status', width: 184 },
   { title: '操作', key: 'actions', width: 150, fixed: 'right' },
 ]
 
@@ -301,10 +400,14 @@ const visibleColumns = computed(() => {
   const selected = new Set(columnsSelected.value)
   // 序号列恒展示：它不进弹窗，而 antd CheckboxGroup 交互会把它从已选集合里剔除，故此处兜底
   const isVisible = (c: { key?: unknown }) => String(c.key) === 'index' || selected.has(String(c.key))
-  return applyColumnWidths(
-    orderedColumns.value.filter(isVisible),
-    upstreamColumnWidths.value,
-  )
+  const groupMode = viewMode.value === 'group'
+  // 分组模式剥离 fixed（colSpan 通栏与 sticky 冲突，contract 10.6），平铺保留原状
+  const cols = orderedColumns.value.filter(isVisible).map((c, i) => ({
+    ...c,
+    fixed: groupMode ? undefined : c.fixed,
+    customCell: (record: unknown) => groupHeaderCellProps(record, i === 0),
+  }))
+  return applyColumnWidths(cols, upstreamColumnWidths.value)
 })
 
 const {
@@ -345,7 +448,7 @@ function clearFilters() {
   lbFilter.value = ''
   groupFilter.value = '__all__'
   page.value = 1
-  loadUpstreams()
+  refreshList()
 }
 
 function handleAction(action: string, record: any) {
@@ -369,7 +472,7 @@ function openPublishModal(record: any) {
   publishingRecord.value = record
   publishClusterId.value = record.cluster_id
   // 行内发布默认只刷新列表；版本弹窗出口条发布用「刷新 + 重开版本弹窗」覆盖此默认（组3 A2）
-  publishRefreshFn.value = loadUpstreams
+  publishRefreshFn.value = refreshList
   publishModalVisible.value = true
 }
 
@@ -390,7 +493,7 @@ function onPreviewPublish() {
 
 // 本次发布完成后的刷新动作（组3 A2）：发布确认弹窗是行内发布与版本弹窗出口条共用的单入口，
 // 出口条链路通过覆盖本刷新函数在发布成功后重开版本弹窗（重开触发既有 open watch 重载版本列表）
-const publishRefreshFn = ref<() => Promise<void>>(loadUpstreams)
+const publishRefreshFn = ref<() => Promise<void>>(refreshList)
 
 // 1.3/组3 A2：版本管理弹窗恢复成功后的「立即发布恢复的配置」出口 → 同一行内发布的链路；
 // 发布成功后刷新列表并重开版本弹窗（重开触发既有 open watch 重载版本列表并复位出口条）
@@ -399,7 +502,7 @@ function onVmPublishRequested() {
   publishingRecord.value = { id: vmResourceId.value, cluster_id: vmClusterId.value, name: vmResourceName.value }
   publishClusterId.value = vmClusterId.value
   publishRefreshFn.value = async () => {
-    await loadUpstreams()
+    await refreshList()
     vmModalVisible.value = true
   }
   vmModalVisible.value = false
@@ -415,13 +518,13 @@ function onFormPublishRequested(payload: { clusterId: number | string; upstreamI
 
 function onFilterChange() {
   page.value = 1
-  loadUpstreams()
+  refreshList()
 }
 
 function onSearch() {
   onDebouncedSearch(() => {
     page.value = 1
-    loadUpstreams()
+    refreshList()
   })
 }
 
@@ -471,7 +574,7 @@ function closeFormModal() {
 }
 
 function onSaved() {
-  loadUpstreams()
+  refreshList()
   closeFormModal()
 }
 
@@ -496,7 +599,7 @@ async function deleteUpstream(record: any) {
         deleteDb,
         deleteEdge,
         nodeIds,
-        refreshFn: loadUpstreams,
+        refreshFn: refreshList,
         clearSelectedFn: () => {},
       })
     },
@@ -513,7 +616,7 @@ async function onPublishConfirm(nodeIds: number[]) {
     nodeIds,
     refreshFn: publishRefreshFn.value,
   })
-  publishRefreshFn.value = loadUpstreams
+  publishRefreshFn.value = refreshList
 }
 
 function onPublishCancel() {
@@ -524,31 +627,24 @@ onMounted(() => {
   const clusterId = route.query.cluster_id as string | undefined
   if (clusterId) clusterFilter.value = clusterId
   loadClusters()
-  loadUpstreams()
+  refreshList()
 })
 
 onUnmounted(() => {
   cancelSearch()
 })
+
+// 视图模式供测试/调试显式钉位（contract 10.2）
+defineExpose({ viewMode })
 import type { TableColumnsType } from 'ant-design-vue'
 </script>
 
 <style scoped>
-.upstream-filter-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 20px;
-  flex-wrap: nowrap;
-}
 .text-muted {
   color: var(--muted);
 }
 .text-sm {
   font-size: 12px;
-}
-.text-mono {
-  font-family: var(--font-mono);
 }
 .cell-primary {
   font-weight: 600;
@@ -559,33 +655,11 @@ import type { TableColumnsType } from 'ant-design-vue'
   color: var(--muted);
 }
 
+/* 目标节点与健康 chips（.tg-chip 为全局控制台层单点，这里只承载换行容器） */
 .target-list {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-}
-.target-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 1px 8px;
-  border-radius: 10px;
-  font-size: 11px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  font-family: var(--font-mono);
-}
-.target-tag .weight {
-  color: var(--muted);
-  font-size: 11px;
-}
-.lb-badge {
-  font-size: 11px;
-  padding: 1px 7px;
-  border-radius: 10px;
-  font-family: var(--font-mono);
-  background: oklch(56% 0.16 210 / 8%);
-  color: var(--accent);
 }
 
 .action-cell {
@@ -599,15 +673,5 @@ import type { TableColumnsType } from 'ant-design-vue'
   background: transparent !important;
   font-size: 16px !important;
   color: var(--muted) !important;
-}
-
-.empty-state {
-  text-align: center;
-  color: var(--muted);
-  padding: 32px;
-}
-.empty-state-icon {
-  font-size: 32px;
-  margin-bottom: 8px;
 }
 </style>

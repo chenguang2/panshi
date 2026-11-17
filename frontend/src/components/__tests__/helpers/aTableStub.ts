@@ -74,7 +74,10 @@ export const aTableStub = {
         <table>
           <tbody class="ant-table-tbody">
             <template v-for="(r, i) in pageRows" :key="keyOf(r)">
-              <tr class="ant-table-row">
+              <tr v-if="r.__groupHeader" data-test="group-header">
+                <td :colspan="columns.length + 1"><slot name="bodyCell" :column="{ key: 'group' }" :record="r" :index="i" /></td>
+              </tr>
+              <tr v-else class="ant-table-row">
                 <td class="ant-table-row-expand-icon-cell">
                   <button
                     v-if="expandable(r)"

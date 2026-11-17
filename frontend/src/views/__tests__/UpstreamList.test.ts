@@ -50,7 +50,10 @@ const vmModalStub = {
 }
 
 const stubs = {
-  PageHeader: { template: '<div class="page-header"><slot name="actions" /></div>', props: ['title', 'description'] },
+  PageHeader: {
+    template: '<div class="page-header"><slot name="stats" /><slot name="actions" /></div>',
+    props: ['title', 'description'],
+  },
   AButton: {
     template:
       "<button class=\"mock-btn\" :class=\"type === 'primary' ? 'mock-btn-primary' : ''\" @click=\"$emit('click')\"><slot /></button>",
@@ -170,27 +173,25 @@ describe('UpstreamList.vue', () => {
     expect(mockApiGet).toHaveBeenCalledWith('/clusters', { params: {} })
   })
 
-  it('renders upstream count', async () => {
+  it('renders upstream count（工具条右端计数）', async () => {
     const UpstreamList = (await import('../UpstreamList.vue')).default
     const wrapper = mount(UpstreamList, { global: { stubs } })
     await flushPromises()
     await wrapper.vm.$nextTick()
-    // 精确匹配计数节点文案「共 {{ totalCount }} 个上游」，避免任意含 2 的文本误命中
-    const countSpan = wrapper.findAll('span').find((s) => s.text().includes('个上游'))
-    expect(countSpan).toBeDefined()
-    expect(countSpan!.text()).toBe('共 2 个上游')
+    // 反转（list-pages-console-restyle）：计数迁到工具条右端簇 [data-test=toolbar-count]
+    expect(wrapper.find('[data-test="toolbar-count"]').text()).toBe('共 2 个上游')
   })
 
   // ── 2.6 列表改版：列集合 / 假排序移除 ──────────────────────────────────
 
-  it('列序为 #/名称/集群/负载均衡/目标节点/协议/发布状态/操作，无「创建时间」列', async () => {
+  it('列序为 #/名称/负载均衡/目标节点与健康/协议/发布状态/操作（集群列由分组组头替代）', async () => {
     const UpstreamList = (await import('../UpstreamList.vue')).default
     const wrapper = mount(UpstreamList, { global: { stubs } })
     await flushPromises()
     const table = wrapper.findComponent({ name: 'ATableStub' })
     expect(table).toBeTruthy()
     const cols = table!.props('columns') as Array<Record<string, unknown>>
-    expect(cols.map((c) => c.title)).toEqual(['#', '名称', '集群', '负载均衡', '目标节点', '协议', '发布状态', '操作'])
+    expect(cols.map((c) => c.title)).toEqual(['#', '名称', '负载均衡', '目标节点与健康', '协议', '发布状态', '操作'])
   })
 
   it('移除全部前端 sorter（服务端未支持排序参数）', async () => {
@@ -283,9 +284,9 @@ describe('UpstreamList.vue', () => {
     const wrapper = mount(UpstreamList, { global: { stubs } })
     await flushPromises()
     const rows = wrapper.findAll('tr.ant-table-row')
-    // 列序：展开占位 td + #序号/名称/集群/负载均衡/目标节点/协议/发布状态/操作 → 协议 cell 下标 6
-    expect(rows[0].findAll('td')[6].text()).toBe('http')
-    expect(rows[1].findAll('td')[6].text()).toBe('—')
+    // 列序：展开占位 td + #序号/名称/负载均衡/目标节点与健康/协议/发布状态/操作 → 协议 cell 下标 5（集群列已移除）
+    expect(rows[0].findAll('td')[5].text()).toBe('http')
+    expect(rows[1].findAll('td')[5].text()).toBe('—')
   })
 
   // ── 2.6 EWMA 展示名统一「延迟最小」（D7） ─────────────────────────────
@@ -314,7 +315,7 @@ describe('UpstreamList.vue', () => {
     const UpstreamList = (await import('../UpstreamList.vue')).default
     const wrapper = mount(UpstreamList, { global: { stubs } })
     await flushPromises()
-    const badge = wrapper.find('.lb-badge')
+    const badge = wrapper.find('.lb-chip')
     expect(badge.text()).toBe('延迟最小')
   })
 
@@ -419,7 +420,7 @@ describe('UpstreamList.vue', () => {
     const UpstreamList = (await import('../UpstreamList.vue')).default
     const wrapper = mount(UpstreamList, { global: { stubs } })
     await flushPromises()
-    const empty = wrapper.find('.empty-state')
+    const empty = wrapper.find('.empty5')
     expect(empty.exists()).toBe(true)
     expect(empty.text()).toContain('还没有上游')
     const cta = empty.findAll('button').find((b) => b.text().includes('新建上游'))
@@ -448,7 +449,7 @@ describe('UpstreamList.vue', () => {
     await vm.loadUpstreams()
     await wrapper.vm.$nextTick()
 
-    const empty = wrapper.find('.empty-state')
+    const empty = wrapper.find('.empty5')
     expect(empty.exists()).toBe(true)
     expect(empty.text()).toContain('没有符合筛选条件的上游')
     const clearBtn = empty.findAll('button').find((b) => b.text().includes('清除筛选'))
@@ -461,7 +462,8 @@ describe('UpstreamList.vue', () => {
     expect(vm.clusterFilter).toBe('')
     expect(vm.groupFilter).toBe('__all__')
     const calls = mockApiGet.mock.calls.filter((c: unknown[]) => c[0] === '/upstreams')
-    const lastParams = (calls[calls.length - 1][1] as { params: Record<string, unknown> }).params
+    const listCalls = calls.filter((c) => (c[1] as { params?: { page_size?: number } })?.params?.page_size !== 500)
+    const lastParams = (listCalls[listCalls.length - 1][1] as { params: Record<string, unknown> }).params
     expect(lastParams.load_balance).toBeUndefined()
   })
 
@@ -594,6 +596,9 @@ describe('UpstreamList.vue - 序号列跨页计数（upstream-list-index-column�
     const UpstreamList = (await import('../UpstreamList.vue')).default
     const wrapper = mount(UpstreamList, { global: { stubs } })
     await flushPromises()
+    // 序号连续性为列解剖断言，钉平铺（分组模式组头行参与 stub 的页切片会挤掉末行数据行）
+    ;(wrapper.vm as any).viewMode = 'flat'
+    await wrapper.vm.$nextTick()
 
     const rows = wrapper.findAll('tr.ant-table-row')
     expect(rows.length).toBe(20)
@@ -660,9 +665,12 @@ describe('UpstreamList 列个性化（column-personalization-rollout）', () => 
                 </tr>
               </thead>
               <tbody class="ant-table-tbody">
-                <tr class="ant-table-row" v-for="(r, i) in dataSource" :key="r.id">
-                  <td v-for="col in columns" :key="col.key"><slot name="bodyCell" :column="col" :record="r" :index="i" /></td>
-                </tr>
+                <template v-for="(r, i) in dataSource" :key="r.key || r.id">
+                  <tr v-if="r.__groupHeader" data-test="group-header"></tr>
+                  <tr v-else class="ant-table-row">
+                    <td v-for="col in columns" :key="col.key"><slot name="bodyCell" :column="col" :record="r" :index="i" /></td>
+                  </tr>
+                </template>
               </tbody>
             </table>
           </div>
@@ -706,22 +714,26 @@ describe('UpstreamList 列个性化（column-personalization-rollout）', () => 
     })
   }
 
-  it('表格横向滚动/fixed 布局/竖线共享类/全列默认宽/#名称固定左、操作固定右', async () => {
+  it('表格横向滚动/fixed 布局/竖线共享类/全列默认宽/#名称固定左、操作固定右（平铺钉位）', async () => {
     const wrapper = await mountUp()
+    // fixed 语义仅平铺模式承载（分组模式 colSpan 通栏剥离 fixed，contract 10.6）
+    ;(wrapper.vm as any).viewMode = 'flat'
+    await wrapper.vm.$nextTick()
     const table = wrapper.findComponent({ name: 'ColDragTableStub' })
     expect(table.props('scroll')).toEqual({ x: 'max-content' })
     expect(table.props('tableLayout')).toBe('fixed')
     const cols = table.props('columns') as Array<{ key: unknown; width?: number; fixed?: string }>
     const byKey = Object.fromEntries(cols.map((c) => [String(c.key), c]))
     expect(byKey['index']).toMatchObject({ width: 45, fixed: 'left' })
-    expect(byKey['name']).toMatchObject({ width: 140, fixed: 'left' })
+    expect(byKey['name']).toMatchObject({ width: 176, fixed: 'left' })
     expect(byKey['actions']).toMatchObject({ width: 150, fixed: 'right' })
     for (const c of cols) expect(c.width, `列 ${String(c.key)} 缺默认宽`).toBeGreaterThan(0)
+    expect(cols.map((c) => String(c.key))).not.toContain('cluster_name')
     expect(wrapper.find('.upstream-table').classes()).toContain('grid-table')
     wrapper.unmount()
   })
 
-  it('拖宽实时生效并持久化；页头「重置列宽」恢复默认', async () => {
+  it('拖宽实时生效并持久化；列配置弹窗「重置列宽」恢复默认', async () => {
     const wrapper = await mountUp()
     patchRects(wrapper)
     const table = wrapper.findComponent({ name: 'ColDragTableStub' })
@@ -735,12 +747,12 @@ describe('UpstreamList 列个性化（column-personalization-rollout）', () => 
     await handle.trigger('mousedown', { clientX: 100 })
     document.dispatchEvent(new MouseEvent('mousemove', { clientX: 180 }))
     await flushPromises()
-    expect(colWidth('targets')).toBe(300) // 220 + 80
+    expect(colWidth('targets')).toBe(394) // 314 + 80
     // 列配置弹窗内「重置列宽」（入口与节点管理统一：工具条不再单列按钮）
     const resetBtn = wrapper.findAll('.mock-popover-content button').find((b) => b.text() === '重置列宽')!
     await resetBtn.trigger('click')
     await flushPromises()
-    expect(colWidth('targets')).toBe(220)
+    expect(colWidth('targets')).toBe(314)
     const saved = JSON.parse(localStorage.getItem('upstream_standalone_cfg_guest') ?? '{}')
     expect(saved.widths ?? {}).toEqual({})
     wrapper.unmount()
@@ -752,14 +764,14 @@ describe('UpstreamList 列个性化（column-personalization-rollout）', () => 
     const table = wrapper.findComponent({ name: 'ColDragTableStub' })
     const keySeq = () => (table.props('columns') as Array<{ key: unknown }>).map((c) => String(c.key))
     const ths = () => wrapper.findAll('th[data-col]')
-    // 拖「目标节点」（矩形 400-500）标题到「协议」（500-600）左半 → 实时换位
+    // 拖「目标节点与健康」（矩形 300-400）标题到「协议」（400-500）左半 → 实时换位
     const tgWrap = ths()
       .find((t) => t.attributes('data-col') === 'targets')!
       .find('.th-resize-wrap')!
     expect(tgWrap.classes()).toContain('movable')
-    await tgWrap.trigger('mousedown', { clientX: 450 })
+    await tgWrap.trigger('mousedown', { clientX: 350 })
     expect(document.body.classList.contains('col-move-dragging')).toBe(true)
-    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 520 }))
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 420 }))
     await flushPromises()
     const seq = keySeq()
     expect(seq.indexOf('targets')).toBe(seq.indexOf('scheme') - 1)
@@ -806,7 +818,10 @@ describe('UpstreamList 列个性化（column-personalization-rollout）', () => 
     const all = groups[0].props('value') as string[]
     expect(all).toContain('scheme')
     // 取消勾选「协议」→ 列不再渲染且持久化
-    groups[0].vm.$emit('update:value', all.filter((k) => k !== 'scheme'))
+    groups[0].vm.$emit(
+      'update:value',
+      all.filter((k) => k !== 'scheme'),
+    )
     await flushPromises()
     expect(keys()).not.toContain('scheme')
     const saved = JSON.parse(localStorage.getItem('upstream_standalone_cfg_guest') ?? '{}')
@@ -816,6 +831,144 @@ describe('UpstreamList 列个性化（column-personalization-rollout）', () => 
     toggle.vm.$emit('update:checked', false)
     await flushPromises()
     expect(wrapper.find('input[placeholder="搜索名称或描述..."]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+})
+
+// ── list-pages-console-restyle：集群分组 / 双模式 / 页头徽标 / 刷新 ──────────────────
+describe('UpstreamList.vue 集群分组与双模式（list-pages-console-restyle）', () => {
+  const groupUpstreams = {
+    total: 3,
+    page: 1,
+    page_size: 20,
+    items: [
+      makeItem({ id: 1, name: 'alpha', cluster_id: 1, cluster_name: '生产集群', pending_publish: false }),
+      makeItem({ id: 2, name: 'beta', cluster_id: 1, cluster_name: '生产集群', pending_publish: true }),
+      makeItem({
+        id: 3,
+        name: 'gamma',
+        cluster_id: 2,
+        cluster_name: '预发集群',
+        pending_publish: true,
+        current_version: null,
+        published_at: null,
+      }),
+    ],
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    localStorage.clear()
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/upstreams') return Promise.resolve({ data: groupUpstreams })
+      if (url === '/clusters') {
+        return Promise.resolve({
+          data: {
+            items: [
+              { id: 1, display_name: '生产集群', group_name: '线上' },
+              { id: 2, display_name: '预发集群', group_name: '预发' },
+            ],
+          },
+        })
+      }
+      return Promise.reject(new Error('unknown url'))
+    })
+  })
+
+  afterEach(() => {
+    localStorage.clear()
+  })
+
+  async function mountPage() {
+    const UpstreamList = (await import('../UpstreamList.vue')).default
+    const wrapper = mount(UpstreamList, { global: { stubs } })
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    return wrapper
+  }
+
+  function tableProps(wrapper: Awaited<ReturnType<typeof mountPage>>) {
+    return wrapper.findComponent({ name: 'ATableStub' }).props() as unknown as {
+      dataSource: Array<Record<string, unknown>>
+      columns: Array<{ key: string }>
+    }
+  }
+
+  it('默认分组渲染：每集群一个组头行，组头芯片与发布状态同源（pending_publish）', async () => {
+    const wrapper = await mountPage()
+    const headers = wrapper.findAll('[data-test="group-header"]')
+    expect(headers).toHaveLength(2)
+    const prod = headers[0].text()
+    expect(prod).toContain('生产集群')
+    expect(prod).toContain('2 上游')
+    expect(prod).toContain('1 已发布')
+    expect(prod).toContain('1 待发布')
+    const staging = headers[1].text()
+    expect(staging).toContain('预发集群')
+    expect(staging).toContain('1 上游')
+    expect(staging).toContain('1 待发布')
+    expect(staging).not.toContain('已发布')
+    expect(tableProps(wrapper).columns.map((c) => c.key)).not.toContain('cluster_name')
+    expect(wrapper.findAll('tr.ant-table-row')).toHaveLength(3)
+    wrapper.unmount()
+  })
+
+  it('组内固定序 = 名称序（上游页无勾选列，组头选择性由组合式 isRowSelectable 钉住）', async () => {
+    const wrapper = await mountPage()
+    const vm = wrapper.vm as any
+    const rows = tableProps(wrapper).dataSource.filter((r) => !r.__groupHeader)
+    expect(rows.map((r) => r.name)).toEqual(['alpha', 'beta', 'gamma'])
+    const header = tableProps(wrapper).dataSource.find((r) => r.__groupHeader)
+    expect(vm.isRowSelectable(header)).toBe(false)
+    expect(vm.isRowSelectable(groupUpstreams.items[0])).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('切换器默认「分组」；切平铺无组头；折叠后切平铺忽略、切回保留（四步主流程，上游无可排序 → 排序步 N/A）', async () => {
+    const wrapper = await mountPage()
+    expect((wrapper.vm as any).viewMode).toBe('group')
+    expect(wrapper.find('[data-test="view-mode-group"]').classes()).toContain('active')
+    // 切平铺：组头消失、数据行全量
+    await wrapper.find('[data-test="view-mode-flat"]').trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findAll('[data-test="group-header"]')).toHaveLength(0)
+    expect(wrapper.findAll('tr.ant-table-row')).toHaveLength(3)
+    // 折叠（平铺下无组头可点，先回分组）
+    await wrapper.find('[data-test="view-mode-group"]').trigger('click')
+    await wrapper.vm.$nextTick()
+    await wrapper.find('[data-test="group-header"] [data-test="cluster-group-row"]').trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(tableProps(wrapper).dataSource).toHaveLength(3) // 2 组头 + 1 行（生产组 2 行折叠，预发组未折叠）
+    // 切平铺：忽略折叠
+    await wrapper.find('[data-test="view-mode-flat"]').trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findAll('tr.ant-table-row')).toHaveLength(3)
+    // 切回分组：折叠记忆保留
+    await wrapper.find('[data-test="view-mode-group"]').trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(tableProps(wrapper).dataSource).toHaveLength(3)
+    wrapper.unmount()
+  })
+
+  it('页头徽标 = 工具条计数同口径（共 N 个上游 ↔ N 上游），分布来自统计副本', async () => {
+    const wrapper = await mountPage()
+    expect(wrapper.find('[data-test="toolbar-count"]').text()).toContain('共 3 个上游')
+    const stats = wrapper.findAll('[data-test="page-stat"]').map((s) => s.text())
+    expect(stats[0]).toContain('3 上游')
+    expect(stats.join(' ')).toContain('1 已发布')
+    expect(stats.join(' ')).toContain('2 待发布')
+    wrapper.unmount()
+  })
+
+  it('新增刷新按钮：重拉列表+统计副本，不重置筛选与视图模式（D6）', async () => {
+    const wrapper = await mountPage()
+    const callsBefore = mockApiGet.mock.calls.filter((c: unknown[]) => c[0] === '/upstreams').length
+    await wrapper.find('[data-test="toolbar-refresh"]').trigger('click')
+    await flushPromises()
+    const callsAfter = mockApiGet.mock.calls.filter((c: unknown[]) => c[0] === '/upstreams').length
+    expect(callsAfter).toBeGreaterThan(callsBefore)
+    expect((wrapper.vm as any).viewMode).toBe('group')
     wrapper.unmount()
   })
 })
