@@ -44,6 +44,11 @@ const ICON_PATHS = {
   // 分组批量折叠（r5-④）：双线 chevron 向外=展开、向内=收起
   expandAll: '<polyline points="7 9 12 4 17 9" /><polyline points="7 15 12 20 17 15" />',
   collapseAll: '<polyline points="7 4 12 9 17 4" /><polyline points="7 20 12 15 17 20" />',
+  // 批量删除（设计 .l5-batchbar 的批量删除图标：垃圾桶轮廓）
+  trash: '<path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" />',
+  // 警示三角（四档警示语义：危险 = 实心三角 + 感叹号，设计 .lp-notice .n-ico）
+  warning:
+    '<path d="M12 3.2 21.4 20H2.6L12 3.2z" fill="currentColor" stroke="none" /><path d="M12 9.4v4M12 16.6v.1" stroke="#fff" stroke-width="2" stroke-linecap="round" />',
 } as const
 
 /** 实心图标集合（fill=currentColor，无描边） */

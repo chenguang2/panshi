@@ -233,6 +233,10 @@ body {
 .std-card:hover {
   box-shadow: var(--shadow-md);
 }
+/* 卡片页：卡内弹层（⋯ 菜单）必须溢出可见；圆角由 .lp-strip 自身承担（r15-4 实测修复） */
+.l5-panel.std-card {
+  overflow: visible;
+}
 
 .card-header {
   display: flex;
@@ -2162,6 +2166,16 @@ body.col-move-dragging * {
 .l5-menu.open {
   display: block;
 }
+/* 空间不足时向上弹（r15-4：末行卡片菜单曾落到视口外，用户以为「点 ⋯ 没反应」） */
+.l5-menu.flip-up {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+/* 菜单打开时抬起所在卡片层级，避免被下一行卡片盖住 */
+.l5-panel:has(.l5-menu.open),
+.ant-table-row:has(.l5-menu.open) {
+  z-index: 5;
+}
 .mi {
   display: flex;
   flex-direction: column;
@@ -2974,27 +2988,43 @@ th.resizable {
 }
 .cluster-c1 {
   --cc: oklch(56% 0.16 210);
+  --cc-bg: oklch(56% 0.16 210 / 10%);
+  --cc-bd: oklch(56% 0.16 210 / 34%);
 }
 .cluster-c2 {
   --cc: oklch(55% 0.14 300);
+  --cc-bg: oklch(55% 0.14 300 / 10%);
+  --cc-bd: oklch(55% 0.14 300 / 34%);
 }
 .cluster-c3 {
   --cc: oklch(55% 0.15 145);
+  --cc-bg: oklch(55% 0.15 145 / 10%);
+  --cc-bd: oklch(55% 0.15 145 / 34%);
 }
 .cluster-c4 {
   --cc: oklch(58% 0.16 28);
+  --cc-bg: oklch(58% 0.16 28 / 10%);
+  --cc-bd: oklch(58% 0.16 28 / 34%);
 }
 .cluster-c5 {
   --cc: oklch(55% 0.12 240);
+  --cc-bg: oklch(55% 0.12 240 / 10%);
+  --cc-bd: oklch(55% 0.12 240 / 34%);
 }
 .cluster-c6 {
   --cc: oklch(62% 0.13 95);
+  --cc-bg: oklch(62% 0.13 95 / 12%);
+  --cc-bd: oklch(62% 0.13 95 / 36%);
 }
 .cluster-c7 {
   --cc: oklch(58% 0.16 330);
+  --cc-bg: oklch(58% 0.16 330 / 10%);
+  --cc-bd: oklch(58% 0.16 330 / 34%);
 }
 .cluster-c8 {
   --cc: oklch(58% 0.13 190);
+  --cc-bg: oklch(58% 0.13 190 / 10%);
+  --cc-bd: oklch(58% 0.13 190 / 34%);
 }
 
 /* 优先级等度量值：mono 文本而非胶囊（chip 只用于枚举/分类，BRIEF §8.1） */
@@ -3003,4 +3033,500 @@ th.resizable {
   font-size: 12.5px;
   color: var(--fg);
   font-variant-numeric: tabular-nums;
+}
+
+/* ═══ 卡片型列表页解剖（filter-architecture / CARD-PAGES-DESIGN-BRIEF，2026-11-18）═══
+   `.l5-panel` = 单卡片容器；`.lp-*` = 卡头/卡体/卡脚/内嵌提示；`.l5-band` = 集群分组带。
+   卡片页 SHALL 用这些共享类，不要在页面内重写容器、圆角、内距（守卫见 mockupParity r14）。 */
+.l5-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  transition:
+    box-shadow 0.15s,
+    border-color 0.15s;
+}
+.l5-panel:hover {
+  box-shadow: var(--shadow-md);
+  border-color: oklch(56% 0.16 210 / 28%);
+}
+.lp-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.lp-head.no-wrap {
+  flex-wrap: nowrap;
+}
+.lp-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.lp-name {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.lp-name.mono {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  letter-spacing: 0;
+}
+.lp-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 19px;
+  padding: 0 7px;
+  border-radius: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.lp-tag.group {
+  background: oklch(50% 0.12 170 / 12%);
+  border-color: oklch(50% 0.12 170 / 25%);
+  color: oklch(45% 0.12 170);
+  font-family: var(--font-body);
+  font-weight: 600;
+}
+.lp-tag.tech {
+  background: var(--accent-bg);
+  border-color: oklch(56% 0.16 210 / 22%);
+  color: var(--accent);
+}
+.lp-tag.lp-cluster {
+  background: var(--cc-bg, var(--bg));
+  border-color: var(--cc-bd, var(--border));
+  color: var(--cc, var(--muted));
+}
+.lp-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.lp-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 7px 14px;
+}
+.lp-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.lp-k {
+  flex: 0 0 52px;
+  width: 52px;
+  color: var(--muted);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+.lp-v {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lp-v.dim {
+  color: var(--muted);
+}
+.lp-v.mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.lp-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+.lp-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 19px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1;
+  white-space: nowrap;
+}
+.lp-chip.off {
+  background: oklch(50% 0.018 240 / 8%);
+  color: var(--muted);
+}
+.lp-cnt {
+  align-self: center;
+  margin-left: 2px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.lp-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 0 14px 4px;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.lp-notice .n-ico {
+  flex-shrink: 0;
+  display: inline-flex;
+  margin-top: 1px;
+}
+.lp-notice .n-txt {
+  flex: 1;
+  min-width: 0;
+}
+.lp-notice .n-act {
+  flex-shrink: 0;
+  align-self: center;
+  border: none;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.lp-foot {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 7px 14px;
+  border-top: 1px solid var(--border);
+}
+.lp-hero {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+  color: var(--fg);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.lp-hero.sm {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.lp-proto {
+  display: inline-flex;
+  align-items: center;
+  height: 19px;
+  padding: 0 7px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.lp-proto.tcp {
+  background: oklch(55% 0.12 240 / 12%);
+  color: var(--info);
+}
+.lp-proto.udp {
+  background: oklch(65% 0.15 85 / 14%);
+  color: var(--warning);
+}
+.lp-proto.tls {
+  background: oklch(55% 0.15 145 / 12%);
+  color: var(--success);
+}
+.lp-algo {
+  display: inline-flex;
+  align-items: center;
+  height: 19px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.field-warn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  line-height: 1.3;
+  color: var(--warning);
+  white-space: nowrap;
+}
+.field-danger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  line-height: 1.3;
+  color: var(--danger);
+  white-space: nowrap;
+}
+
+/* 集群分组带（分组视图）*/
+.l5-band {
+  grid-column: 1 / -1;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px 8px 16px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.l5-band[role='button'] {
+  cursor: pointer;
+}
+.l5-band[role='button']:hover {
+  /* r17-2（方案 B）：hover 底取**该集群**淡色（--cc-bg，10%），与左条色相同源；
+     曾用 accent 4%（与色条不同源）与 --surface（比常态更亮） */
+  border-color: var(--cc-bd, var(--border));
+  background: var(--cc-bg, oklch(56% 0.16 210 / 4%));
+}
+.l5-band[role='button']:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.l5-band::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  /* r16-1（回退 r15-3）：卡片页没有「集群列」，band 左条是集群身份的**唯一线索**，
+     故恒取集群色相（无 --cc 时回落 accent）；与平铺左缘条 / 列表页集群列色点同源 */
+  background: var(--cc, var(--accent));
+}
+.l5-band .b-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.l5-band .b-count {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: oklch(50% 0.018 240 / 8%);
+  color: var(--muted);
+}
+.l5-band .b-spacer {
+  flex: 1;
+}
+.l5-band .b-hint {
+  font-size: 11px;
+  color: var(--muted);
+}
+.l5-band .g-chev {
+  /* 与表格页组头同款：chevron 恒 muted（r15-3） */
+  color: var(--muted);
+}
+.band-cards {
+  display: contents;
+}
+
+/* 平铺视图：集群条 + 左缘色条 */
+.lp-strip {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--cc-bg, var(--bg));
+  border-top-left-radius: calc(var(--radius-lg) - 1px);
+  border-top-right-radius: calc(var(--radius-lg) - 1px);
+}
+.lp-strip .st-algo {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--muted);
+}
+.lp-strip .st-algo b {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--fg);
+}
+
+/* 双模式互斥 */
+.l5-card.mode-group .lp-cluster,
+.l5-card.mode-group .lp-group {
+  display: none;
+}
+.l5-card.mode-group .l5-pager {
+  display: none;
+}
+.l5-card.mode-flat .l5-band {
+  display: none;
+}
+.l5-card.mode-flat .lp-strip {
+  display: flex;
+}
+.l5-card.mode-flat .lp-row.group-only {
+  display: none;
+}
+.l5-card.mode-flat .l5-panel {
+  border-left: 4px solid var(--cc, var(--border));
+}
+.l5-card.mode-flat .fold-all-btn {
+  display: none;
+}
+.l5-panel.is-folded {
+  display: none;
+}
+
+/* 批量选择（卡片页按需出现）*/
+.lp-check {
+  display: none;
+  position: absolute;
+  left: 9px;
+  top: 11px;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--surface);
+  z-index: 2;
+  transition:
+    background 0.12s,
+    border-color 0.12s;
+}
+.l5-card.batch .lp-check {
+  display: block;
+}
+/* 批量态让位（设计 theme.css:2624；勾选框占 9–25px，卡头/集群条内容自 33px 起排） */
+.l5-card.batch .lp-head,
+.l5-card.batch .lp-strip {
+  padding-left: 33px;
+}
+.l5-panel.is-selected {
+  border-color: var(--accent);
+  background: oklch(56% 0.16 210 / 5%);
+}
+.l5-card.mode-flat .l5-panel.is-selected {
+  border-left-color: var(--accent);
+}
+.l5-panel.is-selected .lp-check {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.l5-panel.is-selected .lp-check::after {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 1.5px;
+  width: 4px;
+  height: 8px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.band-select {
+  display: none;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 2px;
+  font-family: var(--font-body);
+}
+.l5-card.batch.mode-group .band-select {
+  display: inline;
+}
+.band-select:hover {
+  text-decoration: underline;
+}
+.b-selcount {
+  display: none;
+  font-size: 11px;
+  color: var(--accent);
+  font-family: var(--font-mono);
+}
+.l5-card.batch.mode-group .b-selcount {
+  display: inline;
+}
+
+/* 内嵌提示四态（卡片卡体内 .lp-notice 与页面横幅共用；设计 theme.css 同源）：危险 / 警告 / 提示 / 成功 */
+.alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  margin-bottom: 16px;
+  border: 1px solid transparent;
+}
+.alert-info {
+  background: oklch(56% 0.16 210 / 8%);
+  border-color: oklch(56% 0.16 210 / 20%);
+  color: var(--accent);
+}
+.alert-success {
+  background: oklch(55% 0.15 145 / 8%);
+  border-color: oklch(55% 0.15 145 / 20%);
+  color: var(--success);
+}
+.alert-warning {
+  background: oklch(65% 0.15 85 / 8%);
+  border-color: oklch(65% 0.15 85 / 20%);
+  color: var(--warning);
+}
+.alert-error {
+  background: oklch(55% 0.18 28 / 8%);
+  border-color: oklch(55% 0.18 28 / 20%);
+  color: var(--danger);
 }

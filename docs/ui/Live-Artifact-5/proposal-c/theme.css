@@ -2576,13 +2576,14 @@ tr.l5-group td { background: var(--bg); padding: 0; border-bottom: 1px solid var
 .cluster-c8 { --cc: oklch(58% 0.13 190); --cc-bg: oklch(58% 0.13 190 / 10%); --cc-bd: oklch(58% 0.13 190 / 34%); }
 
 /* 分组带：跨整行、只表达规模（状态分布归顶部 chips，不在此重复） */
-.l5-band { grid-column: 1 / -1; position: relative; display: flex; align-items: center; gap: 8px; padding: 7px 12px 7px 16px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-md); }
+.l5-band { grid-column: 1 / -1; position: relative; display: flex; align-items: center; gap: 10px; padding: 8px 12px 8px 16px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-md); }
+/* r16-1：卡片页无「集群列」，band 左条是集群身份唯一线索 → 恒取集群色相（回落 accent） */
 .l5-band::before { content: ''; position: absolute; left: 0; top: 6px; bottom: 6px; width: 3px; border-radius: 0 2px 2px 0; background: var(--cc, var(--accent)); }
 .l5-band .b-name { font-size: 13px; font-weight: 600; color: var(--fg); }
-.l5-band .b-count { font-size: 11px; color: var(--muted); }
+.l5-band .b-count { font-size: 11px; font-family: var(--font-mono); padding: 1px 8px; border-radius: 999px; background: oklch(50% 0.018 240 / 8%); color: var(--muted); }
 .l5-band .b-spacer { flex: 1; }
 .l5-band .b-hint { font-size: 11px; color: var(--muted); }
-.l5-band .g-chev { color: var(--cc, var(--muted)); }
+.l5-band .g-chev { color: var(--muted); }
 
 /* 平铺模式集群角标：色取所在集群的 --cc */
 .lp-tag.lp-cluster { background: var(--cc-bg, var(--bg)); border-color: var(--cc-bd, var(--border)); color: var(--cc, var(--muted)); }
@@ -2613,7 +2614,8 @@ tr.l5-group td { background: var(--bg); padding: 0; border-bottom: 1px solid var
 /* 分组可点开合 + 键盘可达：整条 band 是 role="button"（chevron 仍保留、点击不重复触发） */
 .band-cards { display: contents; }
 .l5-band[role="button"] { cursor: pointer; transition: background .15s, border-color .15s; }
-.l5-band[role="button"]:hover { background: var(--surface); border-color: oklch(84% 0.008 240); }
+/* r17-2 方案 B：hover 底取该集群淡色（与左条同源） */
+.l5-band[role="button"]:hover { background: var(--cc-bg, oklch(56% 0.16 210 / 4%)); border-color: var(--cc-bd, oklch(84% 0.008 240)); }
 .l5-band[role="button"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .l5-card.mode-flat .fold-all-btn { display: none; }
 

@@ -10,10 +10,12 @@ function src(...parts: string[]): string {
 }
 
 describe('M1 四层代理权重语法与上游统一', () => {
-  it('权重显示为 :100（stream-proxy-ux-review-fixes 反转：与抽屉/上游列表统一，旧全角括号约定废止）', () => {
+  it('权重显示为 tg-w 数字（设计解剖反转：卡片 .tg-chip 内权重不带冒号，旧 `:100` 与全角括号均废止）', () => {
     const s = src('views', 'StreamProxyList.vue')
-    expect(s).toContain(':{{ t.weight }}')
+    // filter-architecture 卡片解剖（2026-11-18）：目标胶囊 = 设计 .tg-chip + 权重 .tg-w（纯数字）
+    expect(s).toContain('class="tg-w">{{ t.weight }}')
     expect(s).not.toContain('（{{ t.weight }}）')
+    expect(s).not.toContain(':{{ t.weight }}')
   })
 })
 

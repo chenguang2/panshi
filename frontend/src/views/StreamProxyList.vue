@@ -2,181 +2,255 @@
   <div class="sp-page">
     <PageHeader title="四层代理" description="管理 TCP/UDP/TLS 四层转发规则">
       <template #actions>
-        <button class="btn btn-primary" @click="openCreateWizard">+ 新建四层代理</button>
-        <button class="btn btn-secondary" @click="toggleBatchMode">
+        <!-- 序与设计页一致（r15-6）：批量管理（secondary）在「新建」（primary）左侧 -->
+        <button class="btn btn-secondary" :aria-pressed="batchMode" @click="toggleBatchMode">
           {{ batchMode ? '退出批量管理' : '批量管理' }}
         </button>
+        <button class="btn btn-primary" @click="openCreateWizard">+ 新建四层代理</button>
       </template>
     </PageHeader>
 
-    <div class="sp-header-actions">
-      <!-- 状态筛选 chips（filter-architecture 方案甲）：与路由/上游/节点同款 .f-chip.chip-status，
-           点击行为与旧 .sp-status-tab 完全一致（goStatus → statusFilter → 服务端重取），仅换造型 -->
-      <div class="f-chips status-chips" role="group" aria-label="按发布状态筛选">
-        <button
-          v-for="t in statusTabs"
-          :key="t.key"
-          type="button"
-          class="f-chip chip-status"
-          :class="{ active: statusFilter === t.key, empty: t.count === 0 }"
-          :aria-pressed="statusFilter === t.key ? 'true' : 'false'"
-          @click="goStatus(t.key)"
-        >
-          {{ t.label }}<span class="f-count">{{ t.count }}</span>
-        </button>
+    <!-- 工具条 + 状态行（列表页同构，r15-1/2）：第一行 = 共享 TableToolbar（尺寸/边框/右侧簇顺序与路由页一致）；
+         第二行 = .l5-chiprow 状态 chips（带「状态」标签与权威计数） -->
+    <div class="l5-card sp-card-page">
+      <TableToolbar
+        v-model:mode="cardMode"
+        :count="totalCount"
+        count-unit="个四层代理"
+        :show-count="false"
+        :refreshing="loading"
+        @refresh="refreshList"
+      >
+        <template #filters>
+          <SearchInput v-model="searchText" placeholder="搜索四层代理名称..." :width="150" @input="onSearch" />
+          <select v-model="groupFilter" class="l5-select" style="width: 104px" @change="onGroupChange">
+            <option value="__all__">全部分组</option>
+            <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
+            <option value="__ung__">未分组</option>
+          </select>
+          <ClusterSelect
+            v-model="clusterFilter"
+            :clusters="filteredClusters"
+            allow-all
+            style="width: 120px"
+            @change="onClusterChange"
+          />
+          <select v-model="protoFilter" class="l5-select" style="width: 104px" @change="loadProxies">
+            <option value="">全部协议</option>
+            <option value="TCP">TCP</option>
+            <option value="UDP">UDP</option>
+            <option value="TLS">TLS</option>
+          </select>
+        </template>
+        <template #mode-extra>
+          <button
+            v-if="cardMode === 'group'"
+            type="button"
+            class="tool-btn fold-all-btn"
+            data-test="card-fold-all"
+            :title="pageHasFolded ? '展开全部集群组' : '收起全部集群组'"
+            @click="toggleFoldAll"
+          >
+            <StrokeIcon :name="pageHasFolded ? 'expandAll' : 'collapseAll'" :size="13" />
+            <span class="fold-all-label">{{ pageHasFolded ? '全部展开' : '全部收起' }}</span>
+          </button>
+        </template>
+      </TableToolbar>
+
+      <!-- 状态 chips 附属行（r15-2）：与节点/上游/路由同款 .l5-chiprow -->
+      <div class="l5-chiprow" data-test="status-chip-row">
+        <span class="chiprow-label">状态</span>
+        <div class="f-chips status-chips" role="group" aria-label="按发布状态筛选">
+          <button
+            v-for="t in statusTabs"
+            :key="t.key"
+            type="button"
+            class="f-chip chip-status"
+            :class="{ active: statusFilter === t.key, empty: t.count === 0 }"
+            :aria-pressed="statusFilter === t.key ? 'true' : 'false'"
+            @click="goStatus(t.key)"
+          >
+            {{ t.label }}<span class="f-count">{{ t.count }}</span>
+          </button>
+        </div>
+        <span class="t-spacer"></span>
       </div>
-      <SearchInput v-model="searchText" placeholder="搜索四层代理名称..." @input="onSearch" />
-      <select v-model="groupFilter" class="form-input" style="width: 104px; flex-shrink: 0" @change="onGroupChange">
-        <option value="__all__">全部分组</option>
-        <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
-        <option value="__ung__">未分组</option>
-      </select>
-      <ClusterSelect
-        v-model="clusterFilter"
-        :clusters="filteredClusters"
-        allow-all
-        style="width: 120px; flex-shrink: 0"
-        @change="loadProxies"
-      />
-      <span class="text-sm text-muted">共 {{ totalCount }} 个四层代理</span>
-      <template v-if="batchMode">
+
+      <!-- 批量条（r15-7）：状态行之下、网格之上，随内容流（列表页 .l5-batchbar 同款） -->
+      <div v-if="batchMode" class="l5-batchbar batchbar-dynamic" :class="{ 'has-sel': selectedProxies.length > 0 }">
+        <span class="b-count">已选 {{ selectedProxies.length }} 项</span>
+        <span class="b-sep"></span>
+        <button class="btn btn-danger btn-sm need-sel" :disabled="selectedProxies.length === 0" @click="batchDelete">
+          <StrokeIcon name="trash" :size="12" /> 批量删除
+        </button>
+        <span class="b-spacer"></span>
         <button v-if="showGroupSelectAll" class="link-btn" @click="toggleSelectAllGroup">
           {{ allGroupSelected ? '取消全选分组' : '全选当前分组' }}
         </button>
         <button class="link-btn" @click="toggleSelectAllFiltered">
           {{ allFilteredSelected ? '取消全选结果' : '全选当前筛选结果' }}
         </button>
-      </template>
-    </div>
-
-    <div v-if="loading" class="loading-state">加载中...</div>
-    <div v-else-if="displayedProxies.length === 0" class="sp-empty">
-      <svg
-        class="sp-empty-icon"
-        viewBox="0 0 48 48"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        style="width: 48px; height: 48px; color: var(--muted)"
-      >
-        <rect x="8" y="14" width="32" height="24" rx="2" />
-        <path d="M8 22h32M16 10v8M32 10v8" />
-      </svg>
-      <div v-if="searchText" class="sp-empty-text">
-        没有匹配「{{ searchText }}」的四层代理
-        <a class="link-btn" style="margin-left: 8px" @click="onClearSearch">清除筛选</a>
+        <button class="btn btn-ghost btn-sm" @click="clearSelection">清除选择</button>
       </div>
-      <div v-else class="sp-empty-text">暂无四层代理</div>
-    </div>
-    <div v-else class="sp-grid card-grid" :class="{ 'batch-mode': batchMode }">
+
+      <div v-if="loading" class="loading-state">加载中...</div>
+      <div v-else-if="displayedProxies.length === 0" class="sp-empty">
+        <svg
+          class="sp-empty-icon"
+          viewBox="0 0 48 48"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          style="width: 48px; height: 48px; color: var(--muted)"
+        >
+          <rect x="8" y="14" width="32" height="24" rx="2" />
+          <path d="M8 22h32M16 10v8M32 10v8" />
+        </svg>
+        <div v-if="searchText" class="sp-empty-text">
+          没有匹配「{{ searchText }}」的四层代理
+          <a class="link-btn" style="margin-left: 8px" @click="onClearSearch">清除筛选</a>
+        </div>
+        <div v-else class="sp-empty-text">暂无四层代理</div>
+      </div>
       <div
-        v-for="p in displayedProxies"
-        :key="p.id"
-        class="sp-card std-card"
-        :class="{ selected: selectedProxyIds.includes(p.id) }"
-        :style="getCardBorderStyle(p.cluster_group_name)"
-        @click="batchMode && toggleProxy(p.id)"
+        v-else
+        class="sp-grid card-grid l5-card"
+        :class="[`mode-${cardMode}`, { 'batch-mode': batchMode, batch: batchMode }]"
       >
-        <div class="sp-card-topbar" :style="getGroupColorStyle(p.cluster_group_name)">
-          <span>{{ p.cluster_name || '-' }}</span>
-          <span v-if="p.proxy_type === 'dns'" class="dns-badge">DNS</span>
-          <span v-if="p.proxy_type === 'dns' && isWanEnabled(p)" class="wan-badge">内外网分离</span>
-          <span v-if="p.cluster_group_name" class="group-badge">{{ p.cluster_group_name }}</span>
-          <span v-if="batchMode" class="sp-checkbox" @click.stop="toggleProxy(p.id)"></span>
-        </div>
-        <div class="sp-card-header">
-          <div class="sp-card-info">
-            <div class="sp-card-name">{{ p.name }}</div>
-            <div v-if="p.description" class="sp-card-desc">{{ p.description }}</div>
-          </div>
-          <div class="sp-card-meta">
-            <span class="status-cell-flex">
-              <PublishStatusTag
-                :version="p.current_version"
-                :published-at="p.published_at"
-                :pending="p.pending_publish === true"
-                :last-publish-status="p.last_publish_status"
-              />
-              <PublishDiffButton
-                :pending="p.pending_publish === true"
-                :last-publish-status="p.last_publish_status"
-                @click.stop="openPublishPreview(p)"
-              />
-            </span>
-          </div>
-        </div>
-        <div class="sp-card-details">
-          <div class="sp-detail-row">
-            <span class="sp-detail-label">协议</span>
-            <span class="sp-detail-value">{{ schemeLabel(p.scheme) }}</span>
-          </div>
-          <span class="sp-detail-sep">&middot;</span>
-          <div class="sp-detail-row">
-            <span class="sp-detail-label">端口</span>
-            <span class="sp-detail-value sp-port">{{ p.listen_port }}</span>
-          </div>
-        </div>
-
-        <!-- Normal mode: load balance + targets -->
-        <template v-if="p.proxy_type !== 'dns'">
-          <div class="sp-card-details" style="margin-top: -4px">
-            <div class="sp-detail-row">
-              <span class="sp-detail-label">负载均衡</span>
-              <span class="sp-detail-value">{{ lbLabel(p.load_balance) }}</span>
+        <template v-for="g in renderGroups" :key="g.clusterId">
+          <!-- 集群分组带（仅分组视图）：只报规模 + 次要指标，状态计数归顶部 chips 行 -->
+          <ClusterBand
+            v-if="cardMode === 'group'"
+            :name="g.clusterName"
+            :group="g.groupName"
+            :count-label="countLabelOf(g.count)"
+            :secondary="secondaryOf(g.rows)"
+            :hue-class="g.hueClass"
+            :folded="isFolded(g.clusterId)"
+            :batch="batchMode"
+            :selected-count="selectedCountInGroup(g.rows)"
+            @toggle="toggleFold(g.clusterId)"
+            @toggle-select="toggleGroupSelect(g.rows)"
+          />
+          <div
+            v-for="p in g.rows"
+            :key="p.id"
+            class="sp-card std-card l5-panel"
+            :class="[
+              clusterHueClass(p.cluster_id),
+              {
+                selected: selectedProxyIds.includes(p.id),
+                'is-selected': selectedProxyIds.includes(p.id),
+                'is-folded': cardMode === 'group' && !groupVisible(g.clusterId),
+              },
+            ]"
+            @click="batchMode && toggleProxy(p.id)"
+          >
+            <span class="lp-check" aria-hidden="true"></span>
+            <!-- 平铺视图集群条（分组视图隐藏，集群信息由分组带承担） -->
+            <div class="lp-strip">
+              <span class="lp-tag lp-cluster">{{ p.cluster_name || '-' }}</span>
+              <span v-if="p.cluster_group_name" class="lp-tag group lp-group">{{ p.cluster_group_name }}</span>
+              <span class="st-algo"
+                >负载均衡 · <b>{{ lbLabel(p.load_balance) }}</b></span
+              >
             </div>
-          </div>
-          <div class="sp-card-targets">
-            <span v-for="(t, i) in p.targets" :key="i" class="sp-target-tag"
-              >{{ t.target }}<span class="sp-target-wt">:{{ t.weight }}</span></span
-            >
-            <span v-if="!p.targets || p.targets.length === 0" class="sp-no-targets">无目标</span>
-          </div>
-        </template>
-
-        <!-- DNS mode: show dns_upstream hosts info -->
-        <template v-if="p.proxy_type === 'dns'">
-          <div class="sp-card-dns" v-if="dnsHosts(p)">
-            <div v-for="(host, domain) in dnsHosts(p)" :key="domain" class="sp-dns-domain">
-              <div class="sp-dns-domain-name">{{ domain }}</div>
-              <div class="sp-dns-domain-lb" style="display: flex; gap: 12px">
-                <span>类型: {{ dnsLbLabel(host.type) }}</span>
-                <span v-if="host.ttl_valid != null">TTL: {{ host.ttl_valid }}s</span>
+            <div class="lp-head no-wrap">
+              <div class="lp-title">
+                <span class="lp-hero">:{{ p.listen_port }}</span>
+                <span class="lp-proto" :class="protoTone(p.scheme)">{{ protoLabel(p.scheme) }}</span>
+                <span class="lp-name" :title="p.name">{{ p.name }}</span>
               </div>
-              <div class="sp-dns-nodes">
-                <span v-for="(cidrs, nodeIp) in host.nodes" :key="nodeIp" class="sp-target-tag">{{ nodeIp }}</span>
+              <div class="lp-status status-cell-flex">
+                <PublishStatusTag
+                  :version="p.current_version"
+                  :published-at="p.published_at"
+                  :pending="p.pending_publish === true"
+                  :last-publish-status="p.last_publish_status"
+                />
+                <PublishDiffButton
+                  :pending="p.pending_publish === true"
+                  :last-publish-status="p.last_publish_status"
+                  @click.stop="openPublishPreview(p)"
+                />
               </div>
             </div>
-          </div>
-          <div v-else class="sp-card-targets">
-            <span class="sp-no-targets">无 DNS 配置</span>
+            <div class="lp-body">
+              <div class="lp-row group-only">
+                <span class="lp-k">负载均衡</span>
+                <span class="lp-v">{{ lbLabel(p.load_balance) }}</span>
+              </div>
+              <div class="lp-row">
+                <span class="lp-k">目标</span>
+                <div class="lp-chips">
+                  <span v-for="(t, i) in p.targets" :key="i" class="tg-chip"
+                    >{{ t.target }}<span class="tg-w">{{ t.weight }}</span></span
+                  >
+                  <span v-if="!p.targets || p.targets.length === 0" class="lp-v dim">无目标</span>
+                </div>
+                <span v-if="p.targets && p.targets.length" class="lp-cnt">{{ p.targets.length }} 个</span>
+              </div>
+            </div>
+            <!-- 发布未完全生效：卡内危险提示（四档警示语义：危险 = 实心红三角 + 可执行动作） -->
+            <div v-if="p.last_publish_status === 'partial' && !p.pending_publish" class="lp-notice alert alert-error">
+              <span class="n-ico"><StrokeIcon name="warning" :size="13" /></span>
+              <span class="n-txt">{{ partialNoticeText(p) }}</span>
+              <button class="n-act" @click.stop="openPublishPreview(p)">查看差异</button>
+            </div>
+            <!-- DNS mode: show dns_upstream hosts info -->
+            <template v-if="p.proxy_type === 'dns'">
+              <div class="sp-card-dns" v-if="dnsHosts(p)">
+                <div v-for="(host, domain) in dnsHosts(p)" :key="domain" class="sp-dns-domain">
+                  <div class="sp-dns-domain-name">{{ domain }}</div>
+                  <div class="sp-dns-domain-lb" style="display: flex; gap: 12px">
+                    <span>类型: {{ dnsLbLabel(host.type) }}</span>
+                    <span v-if="host.ttl_valid != null">TTL: {{ host.ttl_valid }}s</span>
+                  </div>
+                  <div class="sp-dns-nodes">
+                    <span v-for="(cidrs, nodeIp) in host.nodes" :key="nodeIp" class="sp-target-tag">{{ nodeIp }}</span>
+                  </div>
+                </div>
+              </div>
+              <div v-else class="sp-card-targets">
+                <span class="sp-no-targets">无 DNS 配置</span>
+              </div>
+            </template>
+            <div class="lp-foot" @click.stop>
+              <button class="op-pub" @click="publishProxyAction(p)">发布</button>
+              <div class="menu-anchor">
+                <button
+                  type="button"
+                  class="op-btn"
+                  title="更多操作"
+                  aria-label="更多操作"
+                  @click.stop="toggleCardMenu(p.id, $event)"
+                >
+                  <StrokeIcon name="dots" :size="14" />
+                </button>
+                <div class="l5-menu" :class="{ open: openMenuId === p.id, 'flip-up': menuFlipUp }">
+                  <button class="mi" @click="menuView(p)">
+                    <span class="mi-main">查看</span>
+                  </button>
+                  <button class="mi" @click="menuEdit(p)">
+                    <span class="mi-main">编辑</span>
+                  </button>
+                  <button class="mi" @click="menuVersion(p)">
+                    <span class="mi-main">版本管理</span>
+                    <span class="mi-sub">历史版本查看与回滚</span>
+                  </button>
+                  <hr class="menu-sep" />
+                  <button class="mi danger" @click="menuDelete(p)">
+                    <span class="mi-main">删除</span>
+                    <span class="mi-sub">删平台配置，可同步删 Edge 监听规则（弹窗可选）</span>
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </template>
-        <div class="sp-card-actions" @click.stop>
-          <button class="btn btn-ghost btn-sm sp-action-btn" @click="viewProxy(p)">查看</button>
-          <button class="btn btn-ghost btn-sm sp-action-btn" @click="editProxy(p)">编辑</button>
-          <button class="btn btn-ghost btn-sm sp-action-btn" style="color: var(--danger)" @click="deleteProxy(p)">
-            删除
-          </button>
-          <span style="flex: 1"></span>
-          <button class="btn btn-secondary btn-sm" @click="publishProxyAction(p)">发布</button>
-          <button class="btn btn-secondary btn-sm" @click="openVersionManagement(p)">版本管理</button>
-        </div>
       </div>
-    </div>
-
-    <!-- Bottom batch action bar -->
-    <div v-show="batchMode" class="sp-batch-bar">
-      <span class="bb-selected"
-        >已选择 <b>{{ selectedProxies.length }}</b> 个四层代理</span
-      >
-      <button class="btn btn-ghost btn-sm link-btn" @click="clearSelection">取消选择</button>
-      <span class="bb-spacer"></span>
-      <button class="btn btn-danger btn-sm" :disabled="selectedProxies.length === 0" @click="batchDelete">
-        批量删除
-      </button>
-      <button class="btn btn-secondary btn-sm" @click="toggleBatchMode">退出批量管理</button>
     </div>
 
     <!-- Create/Edit Form Wizard (component) -->
@@ -235,6 +309,10 @@ import { useRoute } from 'vue-router'
 const route = useRoute()
 import { message } from 'ant-design-vue'
 import ClusterSelect from '@/components/ClusterSelect.vue'
+import ClusterBand from '@/components/ClusterBand.vue'
+import StrokeIcon from '@/components/StrokeIcon.vue'
+import { useCardClusterGrouping } from '@/composables/useCardClusterGrouping'
+import { clusterHueClass } from '@/utils/clusterHue'
 import type { StreamProxy } from '@/types'
 import api from '@/api'
 import PageHeader from '@/components/PageHeader.vue'
@@ -251,6 +329,7 @@ import PublishStatusTag from '@/components/PublishStatusTag.vue'
 import PublishDiffButton from '@/components/PublishDiffButton.vue'
 import PublishPreviewModal from '@/components/PublishPreviewModal.vue'
 import SearchInput from '@/components/SearchInput.vue'
+import TableToolbar from '@/components/TableToolbar.vue'
 
 // ── Proxy type from route query ──
 const proxyType = computed<'normal' | 'dns'>(() => (route.query.type === 'dns' ? 'dns' : 'normal'))
@@ -282,6 +361,139 @@ const {
   loadProxies,
   loadClusters,
 } = useStreamProxyList(proxyType)
+
+// ── 集群分组 / 平铺双视图（filter-architecture，AGENTS #87）──
+// 分组：每集群一条 band（只报规模 + 目标数），卡片内不重复集群标识；平铺：无 band，卡片顶条带集群。
+// 折叠整条 band 可点 + 「全部收起/展开」；进页默认全展开。次要指标取目标总数（band 右端）。
+/** 四层代理卡片在分组/平铺视图里的最小形状（比完整 StreamProxy 窄，便于复用分组组合式） */
+type ProxyCardRow = StreamProxy & { cluster_group_name?: string }
+
+const {
+  mode: cardMode,
+  groups: cardGroups,
+  countLabel: countLabelOf,
+  secondaryOf,
+  isFolded,
+  toggleFold,
+  pageHasFolded,
+  toggleFoldAll,
+  groupVisible,
+} = useCardClusterGrouping<ProxyCardRow>({
+  rows: () => displayedProxies.value as ProxyCardRow[],
+  unit: '个四层代理',
+  clusterIdOf: (p) => p.cluster_id,
+  clusterNameOf: (p) => p.cluster_name,
+  groupNameOf: (p) => p.cluster_group_name,
+  secondary: (rows) => `目标 ${rows.reduce((n, p) => n + (p.targets?.length ?? 0), 0)} 个`,
+})
+
+/** 渲染用分组：分组视图按集群分堆；平铺视图收敛为单个伪组（band 不渲染，卡片全量） */
+const renderGroups = computed(() =>
+  cardMode.value === 'group'
+    ? cardGroups.value
+    : [
+        {
+          clusterId: -1,
+          clusterName: '',
+          groupName: '',
+          hueClass: 'cluster-c1',
+          rows: displayedProxies.value as ProxyCardRow[],
+          count: displayedProxies.value.length,
+        },
+      ],
+)
+
+/** 协议筛选（r15-8：设计页第 4 个下拉；现有 loadProxies 按 scheme 客户端过滤） */
+const protoFilter = ref('')
+
+/** 工具条刷新（TableToolbar @refresh）：重取集群与列表 */
+async function refreshList(): Promise<void> {
+  await loadClusters()
+  await loadProxies()
+}
+
+/** 集群切换：清上游等联动筛选后重取（与路由页同名语义） */
+function onClusterChange(): void {
+  loadProxies()
+}
+
+/** 卡片 ⋯ 菜单（同屏只开一个；点外部关闭；空间不足时向上翻转） */
+const openMenuId = ref<number | null>(null)
+/** 打开中的菜单是否向上弹（r15-4：末行卡片下方空间不足时会落到视口外） */
+const menuFlipUp = ref(false)
+function toggleCardMenu(id: number, event?: MouseEvent): void {
+  if (openMenuId.value === id) {
+    openMenuId.value = null
+    return
+  }
+  openMenuId.value = id
+  // 预估菜单高度（4 条目 + 分隔线 ≈ 196px）；锚点下方不足即向上弹
+  const anchor = (event?.currentTarget as HTMLElement | null) ?? null
+  const rect = anchor?.getBoundingClientRect()
+  const MENU_H = 200
+  menuFlipUp.value = rect ? rect.bottom + MENU_H > window.innerHeight : false
+}
+function closeCardMenu(): void {
+  openMenuId.value = null
+}
+function onDocClick(): void {
+  if (openMenuId.value !== null) openMenuId.value = null
+}
+onMounted(() => document.addEventListener('click', onDocClick))
+onUnmounted(() => document.removeEventListener('click', onDocClick))
+
+/** ⋯ 菜单条目：先关菜单再执行（模板多语句会被 prettier 重排破坏编译，故提为函数，#25） */
+function menuView(p: StreamProxy): void {
+  closeCardMenu()
+  viewProxy(p)
+}
+function menuEdit(p: StreamProxy): void {
+  closeCardMenu()
+  editProxy(p)
+}
+function menuVersion(p: StreamProxy): void {
+  closeCardMenu()
+  openVersionManagement(p)
+}
+function menuDelete(p: StreamProxy): void {
+  closeCardMenu()
+  deleteProxy(p)
+}
+
+/** 卡内「发布未完全生效」文案：取失败节点摘要（last_publish_detail 是结构化对象） */
+function partialNoticeText(p: ProxyCardRow): string {
+  const d = p.last_publish_detail
+  const failed = d?.failed_nodes ?? []
+  if (!failed.length) return `发布未完全生效（${d?.success ?? 0}/${d?.total ?? 0} 节点成功）`
+  const first = failed[0]
+  const reason = first?.error ? `（${first.node} ${first.error}）` : `（${first?.node ?? ''} 超时）`
+  return failed.length === 1
+    ? `1 个节点未生效${reason}`
+    : `${d?.total ?? 0} 个节点中 ${failed.length} 个未生效${reason}`
+}
+
+/** 协议标签与色调（设计 .lp-proto 三态：tcp / udp / tls） */
+function protoLabel(scheme?: string | null): string {
+  const v = String(scheme ?? '').toLowerCase()
+  if (v.includes('tls') || v === 'https') return 'TLS'
+  if (v.includes('udp')) return 'UDP'
+  return 'TCP'
+}
+function protoTone(scheme?: string | null): string {
+  return protoLabel(scheme).toLowerCase()
+}
+
+/** 批量态：某组已选数量 / 整组全选切换（band 右端「全选本组 / 取消本组」） */
+function selectedCountInGroup(rows: ProxyCardRow[]): number {
+  return rows.filter((p) => selectedProxyIds.value.includes(p.id)).length
+}
+function toggleGroupSelect(rows: ProxyCardRow[]): void {
+  const ids = rows.map((p) => p.id)
+  const allSelected = ids.every((id) => selectedProxyIds.value.includes(id))
+  selectedProxyIds.value = allSelected
+    ? selectedProxyIds.value.filter((id) => !ids.includes(id))
+    : [...new Set([...selectedProxyIds.value, ...ids])]
+}
 
 function onGroupChange() {
   clusterFilter.value = ''
@@ -659,43 +871,13 @@ onUnmounted(() => {
 .batch-mode .sp-card {
   cursor: pointer;
 }
-.sp-card-topbar {
-  padding: 4px 16px;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--accent);
-  background: oklch(56% 0.16 210 / 8%);
-  border-bottom: 1px solid oklch(56% 0.16 210 / 12%);
-  display: flex;
-  align-items: center;
-  gap: 6px;
+/* 分组视图：集群信息由分组带承担，卡内顶条隐藏；折叠组内卡片隐藏 */
+.sp-card.is-folded {
+  display: none;
 }
-.sp-checkbox {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  border: 2px solid var(--border);
-  background: var(--surface);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.15s;
-  margin-left: auto;
-  flex-shrink: 0;
-}
-.sp-card:not(.selected) .sp-checkbox:hover {
-  border-color: var(--accent);
-}
-.sp-card.selected .sp-checkbox {
-  border-color: var(--accent);
-  background: var(--accent);
-}
-.sp-card.selected .sp-checkbox::after {
-  content: '✓';
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
+/* 平铺视图：左缘集群色条（色相 cluster-cN，与 band / 列表页集群列同源） */
+.mode-flat .sp-card {
+  border-left: 4px solid var(--cc, var(--border));
 }
 .sp-batch-bar {
   position: fixed;
@@ -787,37 +969,6 @@ onUnmounted(() => {
   color: var(--muted);
   margin-top: 4px;
   font-family: var(--font-mono);
-}
-.sp-card-details {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
-  margin-bottom: 8px;
-  padding: 0 20px;
-}
-.sp-detail-row {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.sp-detail-sep {
-  color: var(--border);
-  font-size: 12px;
-}
-.sp-detail-label {
-  font-size: 11px;
-  color: var(--muted);
-}
-.sp-detail-value {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--fg);
-}
-.sp-detail-value.sp-port {
-  font-family: var(--font-mono);
-  font-weight: 600;
-  color: var(--accent);
 }
 .sp-card-targets {
   display: flex;

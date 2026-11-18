@@ -227,3 +227,59 @@
       （app → jd → monitor → test / 反向），分组态无该列无排序入口。
       断言反转：`NodeList.source` 的「零客户端 sorter」守卫改为「禁比较函数 + 仅集群列允许 sorter: true」。
       新增守卫 r13（2 例）+ 后端 3 例（三端点按集群名升降序）。
+
+## 20. 卡片模块实现（按设计页落地，2026-11-18 起）
+
+- [x] 20.1 共享底座：`style.css` 增卡片解剖（`.l5-panel` / `.lp-head|body|foot|strip|chip|tag|hero|proto|algo|notice|check` / `.l5-band` / `.band-select` / `.alert-*` 四态）+ `.cluster-cN` 补 `--cc-bg/--cc-bd`；
+      `composables/useCardClusterGrouping.ts`（分组/平铺、折叠、次要指标、按组分页阈值）；`components/ClusterBand.vue`（整条可点、aria 双向、批量态全选本组）；
+      `StrokeIcon` 增 `warning`（四档警示的危险图标）。
+- [x] 20.2 **四层代理（试点，最复杂：分组 + 平铺 + 批量 + 局部失败）**：卡片改设计解剖（hero 端口 + proto 标签 + 名称 + 状态 / 负载均衡 + 目标胶囊 / 局部失败红提示 + 查看差异 / 卡脚「发布 + ⋯」）；操作收进 ⋯ 菜单（查看/编辑/版本管理/删除 danger 带解释）；
+      band 右端次要指标 = 目标总数；平铺态集群条 + 左缘色条；分组态隐藏集群条与负载均衡行（由 band 与 strip 承担）。真机实测：6 band / 19 卡 / 折叠生效 / 平铺 19 卡带 strip。
+- [ ] 20.3 其余 7 个有集群维度的卡片页按同一解剖迁移（插件组 / 插件元数据 / 全局规则 / 静态资源 / 服务器证书 / DNS-UDP / DNS-HTTP），band 次要指标见 BRIEF §七
+- [ ] 20.4 无集群维度两页（插件开关 / CA 根证书）只做解剖与四态警示，不加分组开关
+- [ ] 20.5 band 的次要指标聚合：>60 条时需后端响应带 `cluster_summary`（当前全部前端聚合）
+- [ ] 20.6 批量条位置对齐设计（`.l5-batchbar` 在状态行下；四层/DNS-UDP 目前仍是底部固定条）
+
+## 21. 卡片页与列表页一致性（r15 审计，待批准后落地）
+
+审计报告：`parity-audit-stream-proxies-r15.md`（量测数值 + 根因 + 修法 + 3 个决策点）
+
+- [x] 21.1 卡片页工具条改接共享 `TableToolbar`（尺寸 57/12-16/1px 下边框/gap、右侧簇顺序、`show-count=false`、刷新按钮）；分组控件用 `.l5-select`、搜索宽 150
+- [x] 21.2 状态行独立成 `.l5-chiprow`（「状态」标签 + chips + 下边框），从工具条首位移出
+- [x] 21.3 集群带视觉对齐路由组头：左色条、内距 8/12/16、gap 10、数量灰胶囊（决策点 A/B）；**同步更新设计页 `stream-proxies.html` 与 `theme.css`**
+- [x] 21.4 卡脚 ⋯ 菜单可用性：空间不足向上翻转、打开时抬起卡片层级、触发区 hover 反馈（决策点 C 决定是否外露编辑）
+- [x] 21.5 批量态让位：移植 `.l5-card.batch .lp-head/.lp-strip{padding-left:33px}`（修 checkbox 压端口/名称）
+- [x] 21.6 页头按钮序：批量管理在「新建」左侧
+- [x] 21.7 批量条改 `.l5-batchbar`（状态行下、随流；已选 N 项 / 批量发布 / 批量删除 / 清除选择；未选时 45% 透明），删除 `.sp-batch-bar` 底部固定条与 `padding-bottom` hack
+- [x] 21.8 附带：「全部协议」筛选下拉、工具条 gap 4（卡片页）、页头 `ph-inline` 徽标（集群数 / 目标数）
+- [ ] 21.9 同一套改造推广到 DNS-UDP / DNS-HTTP（同有批量）与其余卡片页；标准写入 AGENTS（新条目）与 BRIEF §九
+
+> 21.x 落地记录（2026-11-18，真机 1600 验收）：
+> - 工具条：`.l5-toolbar` 高 57 / 内距 12-16 / 1px 下边框 / gap 6；序 = 搜索150 → 分组104 → 集群120 → **协议104** → spacer → 刷新 → 全部收起 → seg（与路由页逐项一致）；`show-count=false`（总数归 chips「全部 N」）。
+> - 状态行：独立 `.l5-chiprow`（「状态」标签 + chips + 下边框，高 41）。
+> - 批量条：`.l5-batchbar` 在状态行下、网格前（`position: static`）、`has-sel` 生效；底部固定条与 `padding-bottom` hack 已删。
+> - 批量让位：`.l5-card.batch .lp-head/.lp-strip{padding-left:33px}`（勾选框 292 右缘 vs 端口 300 左缘，无重叠）。
+> - 集群带：左条 accent（`oklch(.56 .16 210)`）、gap 10、内距 8-12-16、数量灰胶囊 11px mono；设计页 `theme.css` 同步（三份卡片页实测同值）。
+> - ⋯ 菜单「没反应」真因 = **`.std-card{overflow:hidden}` 把菜单整块裁掉**（不是没打开）；改 `.l5-panel.std-card{overflow:visible}` + 空间不足向上翻转（末行卡菜单 bottom 1036 < 视口 1100）+ 打开时卡片 z-index 5。**此条为 r15 最有价值发现**。
+> - 页头序：批量管理 → 新建。守卫 r15 段 5 例；断言反转 2 处（`.sp-header-actions`/`.sp-batch-bar` 退场、计数改由 chips 承担）。
+
+## 22. 集群色编码与批量条收敛（r16 审计，待批准后落地）
+
+审计报告：`parity-audit-stream-proxies-r16.md`
+
+- [x] 22.1 **回退 r15-3**：集群带左色条恢复集群色相 `var(--cc, var(--accent))`（卡片页无集群列，左条是唯一集群身份线索）；同步 `theme.css`、`AGENTS #88 ⑤`、`BRIEF §九 6`
+- [x] 22.2 集群带 hover：改 `oklch(56% .16 210 / 4%)`（与路由组头同值），消除「hover 变纯白」（方案待裁决 A/B/C）
+- [x] 22.3 删除批量条的「批量发布」按钮与 `batchPublish()`（功能不存在）；两份设计稿 + `BRIEF §七.5` + `AGENTS #87/88` 同步
+- [x] 22.4 守卫反转：r15 段「band 左条 = accent」→「band 左条 = `--cc`」；新增「批量条 SHALL NOT 含批量发布」
+
+> 22.x 落地记录（2026-11-18，1600 真机验收）：
+> - 22.1 band 左条恢复 `var(--cc, var(--accent))`：六条带实测六种色相（c5 蓝 / c3 绿 / c4 红 / c8 青 / c1 蓝 / c2 紫），cluster-cN 类真正生效；设计页 `theme.css` 同步（三份卡片页同值）。
+> - 22.2 band hover = `oklch(56% .16 210 / 4%)`：实测与路由组头同值，消除「hover 变纯白」（原 `--surface` = oklch(1 0 0) 比常态 `--bg` 更亮）。
+> - 22.3 批量条按钮集 = `批量删除 / 全选当前筛选结果 / 清除选择`，实现侧删 `batchPublish()`，两份设计稿同步；实测 `batchBtns` 无「批量发布」、`hasBatchPublish=false`。
+> - 22.4 守卫：r15-③ 原「左条 accent」断言反转为 `var(--cc, var(--accent))`；新增 r16 段 3 例（色相 / hover 禁 surface / 批量条禁批量发布）。全量 216 files / 3019 passed。
+
+## 23. 平铺卡色相与 hover 同源（r17，2026-11-18 已落地）
+
+- [x] 23.1 **平铺卡片色相按行计算**：卡片根类由分组伪组的 `hueClass` 改为 `clusterHueClass(p.cluster_id)`（伪组把所有卡收成一组 → 平坦全 `cluster-c1`，实测 19 张卡同一种蓝，集群区分失效）；守卫 r17 段
+- [x] 23.2 **band hover = `var(--cc-bg)`（方案 B）**：hover 底与左条同源（该集群 10% 淡色）+ 边框 `--cc-bd`；实测 monitor 集群 hover = `oklch(.55 .15 145 / .1)`、左条 `oklch(.55 .15 145)`
+- [x] 23.3 设计页 `theme.css` 同步（hover 改 `--cc-bg`/`--cc-bd`）；`AGENTS #88 ⑤⑧`、`BRIEF 九 6/9` 记录判据

@@ -574,3 +574,111 @@ describe('mockup-parity r13（平铺集群列排序 = 服务端排序，参考�
     expect(api).toContain('sort_order')
   })
 })
+
+describe('mockup-parity r14（卡片页解剖单点：共享类 + 分组组合式）', () => {
+  it('r14-① 四层代理卡片走设计解剖（l5-panel / lp-head / lp-body / lp-foot / lp-strip）', () => {
+    const s = page('StreamProxyList.vue')
+    for (const cls of ['l5-panel', 'lp-head', 'lp-body', 'lp-foot', 'lp-strip', 'lp-hero', 'lp-proto', 'lp-notice'])
+      expect(s, `缺少 ${cls}`).toContain(cls)
+    // 旧自造卡头/详情行不得回潮
+    expect(s).not.toContain('sp-card-topbar')
+    expect(s).not.toContain('sp-detail-row')
+  })
+
+  it('r14-② 集群分组走共享组合式与共享 band 组件（禁页面内自造分组带）', () => {
+    const s = page('StreamProxyList.vue')
+    expect(s).toContain("from '@/composables/useCardClusterGrouping'")
+    expect(s).toContain('<ClusterBand')
+    // 双模式类挂在网格上（.l5-card 承载 mode-group/mode-flat 的 CSS 互斥）
+    expect(s).toContain('l5-card')
+    expect(s).toMatch(/mode-\$\{cardMode\}/)
+  })
+
+  it('r14-③ 动作收进 ⋯ 菜单：危险项独立 + 常驻解释（AGENTS #81）', () => {
+    const s = page('StreamProxyList.vue')
+    expect(s).toContain('class="l5-menu"')
+    expect(s).toContain('class="mi danger"')
+    expect(s).toContain('删平台配置，可同步删 Edge 监听规则')
+    // 多语句模板 handler 必须提成函数（#25：prettier 重排会破坏编译）
+    expect(s).not.toMatch(/@click="\s*closeCardMenu\(\)/)
+  })
+})
+
+describe('mockup-parity r15（卡片页与列表页同构：工具条 / 状态行 / 批量条 / 集群带 / 菜单）', () => {
+  it('r15-① 卡片页接共享 TableToolbar + 独立 .l5-chiprow 状态行（禁自造头部行）', () => {
+    const s = page('StreamProxyList.vue')
+    expect(s).toContain('<TableToolbar')
+    expect(s).toContain('class="l5-chiprow"')
+    expect(s).toContain('class="chiprow-label"')
+    expect(s).toContain(':show-count="false"')
+    // 自造工具条行与底部固定批量条已退场
+    expect(s).not.toContain('class="sp-header-actions"')
+    expect(s).not.toContain('class="sp-batch-bar"')
+  })
+
+  it('r15-② 批量条 = .l5-batchbar 随流（状态行下、网格之前）', () => {
+    const s = page('StreamProxyList.vue')
+    expect(s).toContain('class="l5-batchbar batchbar-dynamic"')
+    expect(s).toMatch(/has-sel/)
+    // 位置：批量条在 card-grid 之前
+    const barIdx = s.indexOf('l5-batchbar')
+    const gridIdx = s.indexOf('class="sp-grid card-grid l5-card"')
+    expect(gridIdx).toBeGreaterThan(barIdx)
+  })
+
+  it('r15-③ 集群带与表格组头同构：数量灰胶囊 / gap 10 / 内距 8-12-16 / 左条取集群色相（r16 反转原 accent 断言）', () => {
+    // r16-1：卡片页无「集群列」，band 左条是集群身份唯一线索 → 恒取 --cc（回落 accent）
+    expect(css).toMatch(/\.l5-band::before[^}]*background:\s*var\(--cc,\s*var\(--accent\)\)/)
+    expect(css).toMatch(/\.l5-band\s*\{[^}]*gap:\s*10px/)
+    expect(css).toMatch(/\.l5-band\s*\{[^}]*padding:\s*8px 12px 8px 16px/)
+    expect(css).toMatch(/\.l5-band \.b-count\s*\{[^}]*border-radius:\s*999px/)
+  })
+
+  it('r15-④ 批量态为勾选框让位 33px；卡内弹层不被裁剪；菜单可向上翻转', () => {
+    expect(css).toMatch(/\.l5-card\.batch \.lp-head[\s\S]{0,120}padding-left:\s*33px/)
+    expect(css).toMatch(/\.l5-panel\.std-card\s*\{[^}]*overflow:\s*visible/)
+    expect(css).toContain('.l5-menu.flip-up')
+    expect(page('StreamProxyList.vue')).toContain("'flip-up': menuFlipUp")
+  })
+
+  it('r15-⑤ 页头按钮序：批量管理在「新建」左侧', () => {
+    const s = page('StreamProxyList.vue')
+    const batchIdx =
+      s.indexOf('批量管理</button>') === -1
+        ? s.indexOf("batchMode ? '退出批量管理' : '批量管理'")
+        : s.indexOf('批量管理</button>')
+    const createIdx = s.indexOf('新建四层代理</button>')
+    expect(batchIdx).toBeGreaterThan(-1)
+    expect(createIdx).toBeGreaterThan(-1)
+    expect(batchIdx).toBeLessThan(createIdx)
+  })
+})
+
+describe('mockup-parity r16（集群色编码 / band hover / 批量条按钮集）', () => {
+  it('r16-① 集群带左条 = 集群色相 `--cc`（回落 accent），不是恒 accent', () => {
+    expect(css).toMatch(/\.l5-band::before[^}]*var\(--cc,\s*var\(--accent\)\)/)
+  })
+
+  it('r16-②/r17-② 集群带 hover = 该集群淡色（方案 B），禁 --surface（会变纯白）', () => {
+    const m = css.match(/\.l5-band\[role='button'\]:hover\s*\{([^}]*)\}/)
+    expect(m).toBeTruthy()
+    // r17-2：hover 底与左条同源（--cc-bg），回落 accent 4%
+    expect(m![1]).toContain('var(--cc-bg')
+    expect(m![1]).not.toContain('var(--surface)')
+  })
+
+  it('r16-③ 批量条 SHALL NOT 含「批量发布」（功能不存在）', () => {
+    const s = page('StreamProxyList.vue')
+    expect(s).not.toContain('批量发布')
+    expect(s).not.toContain('batchPublish')
+    expect(s).toContain('批量删除')
+  })
+})
+
+describe('mockup-parity r17（平铺卡片按行取集群色相）', () => {
+  it('r17-① 卡片色相按行计算（clusterHueClass(p.cluster_id)），不是分组伪组的统一 hueClass', () => {
+    const s = page('StreamProxyList.vue')
+    expect(s).toContain('clusterHueClass(p.cluster_id)')
+    expect(s).not.toMatch(/class="sp-card[\s\S]{0,200}g\.hueClass/)
+  })
+})

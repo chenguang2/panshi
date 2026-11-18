@@ -334,6 +334,13 @@ export interface StreamProxy {
   /** 四态发布状态（stream-proxy-ux-review-fixes，后端 derive_pending_publish 推导） */
   pending_publish?: boolean
   last_publish_status?: string | null
+  /** 上次发布逐节点结果（partial 时卡内提示取失败节点摘要） */
+  last_publish_detail?: {
+    total?: number
+    success?: number
+    failed?: number
+    failed_nodes?: { node: string; node_id?: number; error?: string }[]
+  } | null
   published_at?: string
   created_at?: string
   updated_at?: string

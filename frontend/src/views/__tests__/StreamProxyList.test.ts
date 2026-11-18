@@ -28,6 +28,13 @@ vi.mock('@/composables/useClusterUtils', async (importOriginal) => {
 })
 
 const stubs = {
+  // r15：工具条改接共享 TableToolbar —— 桩渲染 filters / mode-extra 槽并转发 v-model:mode
+  TableToolbar: {
+    template:
+      '<div class="l5-toolbar"><slot name="filters" /><slot name="extra" /><slot name="config" /><slot name="mode-extra" /><div class="seg" /></div>',
+    props: ['count', 'countUnit', 'showCount', 'refreshing', 'showMode', 'mode'],
+    emits: ['refresh', 'update:mode'],
+  },
   PageHeader: { template: '<div class="page-header"><slot name="actions" /></div>', props: ['title', 'description'] },
   StreamProxyFormWizard: {
     template: '<div class="mock-form-wizard" />',
@@ -219,9 +226,13 @@ describe('StreamProxyList.vue', () => {
     selectEl.dispatchEvent(new Event('change'))
     await flushPromises()
     await wrapper.vm.$nextTick()
-    const countSpan = wrapper.findAll('span.text-sm.text-muted').find((s) => s.text().includes('共'))
-    expect(countSpan).toBeDefined()
-    expect(countSpan!.text()).toContain('2')
+    // r15-1（对齐列表页）：工具栏不再显示「共 N 个」——命中总数只由状态 chips「全部 N」承担，
+    // 且恒为服务端 totalCount（分组筛选不改它）
+    expect(wrapper.findAll('span.text-sm.text-muted').some((s) => s.text().includes('共'))).toBe(false)
+    expect(wrapper.find('.l5-toolbar').exists()).toBe(true)
+    const allChip = wrapper.findAll('.chip-status').find((c) => c.text().includes('全部'))
+    expect(allChip).toBeDefined()
+    expect(allChip!.text()).toContain('2')
   })
 })
 
@@ -250,15 +261,16 @@ describe('StreamProxyList.vue 批量管理', () => {
     await flushPromises()
     await wrapper.vm.$nextTick()
 
-    expect(wrapper.findAll('.sp-checkbox').length).toBe(0)
+    // 设计解剖迁移（2026-11-18）：.lp-check 恒在 DOM，批量态由网格 .batch 类控制显现（CSS）
+    expect(wrapper.find('.sp-grid').classes()).not.toContain('batch')
 
     const batchBtn = wrapper.findAll('button').find((b) => b.text().includes('批量管理'))
     expect(batchBtn).toBeDefined()
     await batchBtn!.trigger('click')
     await wrapper.vm.$nextTick()
 
-    expect(wrapper.findAll('.sp-checkbox').length).toBe(2)
-    expect(wrapper.find('.sp-batch-bar').exists()).toBe(true)
+    expect(wrapper.find('.sp-grid').classes()).toContain('batch')
+    expect(wrapper.find('.l5-batchbar').exists()).toBe(true)
   })
 
   it('勾选卡片后计数更新、批量删除按钮启用', async () => {
@@ -273,12 +285,12 @@ describe('StreamProxyList.vue 批量管理', () => {
       .trigger('click')
     await wrapper.vm.$nextTick()
 
-    const checkboxes = wrapper.findAll('.sp-checkbox')
+    const checkboxes = wrapper.findAll('.lp-check')
     await checkboxes[0].trigger('click')
     await wrapper.vm.$nextTick()
 
     expect(wrapper.findAll('.sp-card.selected').length).toBe(1)
-    expect(wrapper.find('.sp-batch-bar').text()).toContain('1')
+    expect(wrapper.find('.l5-batchbar').text()).toContain('1')
 
     const delBtn = wrapper.findAll('button').find((b) => b.text().includes('批量删除'))
     expect(delBtn).toBeDefined()
@@ -320,7 +332,7 @@ describe('StreamProxyList.vue 批量管理', () => {
       .find((b) => b.text().includes('批量管理'))!
       .trigger('click')
     await wrapper.vm.$nextTick()
-    await wrapper.findAll('.sp-checkbox')[0].trigger('click')
+    await wrapper.findAll('.lp-check')[0].trigger('click')
     await wrapper.vm.$nextTick()
     expect(wrapper.findAll('.sp-card.selected').length).toBe(1)
 
@@ -329,7 +341,7 @@ describe('StreamProxyList.vue 批量管理', () => {
       .find((b) => b.text().includes('退出批量管理'))!
       .trigger('click')
     await wrapper.vm.$nextTick()
-    expect(wrapper.findAll('.sp-checkbox').length).toBe(0)
+    expect(wrapper.find('.sp-grid').classes()).not.toContain('batch')
     expect(wrapper.findAll('.sp-card.selected').length).toBe(0)
   })
 })
@@ -453,7 +465,11 @@ describe('StreamProxyList.vue · 版本弹窗发布出口接线', () => {
     const StreamProxyList = (await import('../StreamProxyList.vue')).default
     const wrapper = mount(StreamProxyList, { global: { stubs: vmStubs } })
     await flushPromises()
-    const vmBtn = wrapper.findAll('button').find((b) => b.text().trim() === '版本管理')
+    // ⋯ 菜单（设计解剖）：先点触发器再点「版本管理」条目
+    const menuBtn = wrapper.find('.op-btn')
+    expect(menuBtn.exists()).toBe(true)
+    await menuBtn.trigger('click')
+    const vmBtn = wrapper.findAll('.mi').find((b) => b.text().includes('版本管理'))
     expect(vmBtn).toBeTruthy()
     await vmBtn!.trigger('click')
     const vmm = wrapper.findComponent({ name: 'VersionManagementModal' })
@@ -569,7 +585,7 @@ describe('StreamProxyList.vue 四态状态（ssl 外域对齐 upstream）', () =
     expect(pendingTab.text()).toContain('1')
     await pendingTab.trigger('click')
     await w.vm.$nextTick()
-    const names = w.findAll('.sp-card-name').map((n) => n.text())
+    const names = w.findAll('.lp-name').map((n) => n.text())
     expect(names).toEqual(['a-pending'])
   })
 
@@ -704,6 +720,6 @@ describe('StreamProxyList.vue 批 4 空态与权重', () => {
     const StreamProxyList = (await import('../StreamProxyList.vue')).default
     const w = mount(StreamProxyList, { global: { stubs } })
     await flushPromises()
-    expect(w.find('.sp-target-wt').text()).toBe(':100')
+    expect(w.find('.tg-w').text()).toBe('100')
   })
 })
