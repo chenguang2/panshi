@@ -69,6 +69,8 @@ async def list_all_upstreams(
     cluster_id: Optional[int] = None,
     load_balance: Optional[str] = None,
     publish_status: Optional[str] = Query(None, description="published / pending / unpublished"),
+    sort_by: Optional[str] = Query(None, description="Sort field: name | cluster"),
+    sort_order: Optional[str] = Query("asc", pattern="^(asc|desc)$"),
     current_user: User = Depends(require_permission('upstreams')),
 ):
     allowed_ids = await _allowed_cluster_ids(db, current_user)
@@ -106,9 +108,21 @@ async def list_all_upstreams(
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
 
-    # Pagination
+    # Pagination + 排序（默认名称升序；cluster 走相关子查询取集群显示名，
+    # 避免与分组过滤的 JOIN 冲突）
     offset_val = (page - 1) * page_size
-    query = query.offset(offset_val).limit(page_size).order_by(Upstream.name)
+    if sort_by == "cluster":
+        sort_col = (
+            select(func.coalesce(Cluster.display_name, Cluster.name))
+            .where(Cluster.id == Upstream.cluster_id)
+            .limit(1)
+            .scalar_subquery()
+        )
+    else:
+        sort_col = Upstream.name
+    if sort_order == "desc":
+        sort_col = sort_col.desc()
+    query = query.offset(offset_val).limit(page_size).order_by(sort_col, Upstream.id)
 
     result = await db.execute(query)
     upstreams = result.scalars().all()

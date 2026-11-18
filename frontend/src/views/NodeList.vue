@@ -156,6 +156,7 @@
         :table-layout="'fixed'"
         size="middle"
         class="node-table grid-table"
+        @change="handleTableChange"
       >
         <template #headerCell="{ column, title }">
           <span class="th-resize-wrap" :class="nodeWrapClass(column)" @mousedown="startColumnMove($event, column)">
@@ -180,6 +181,12 @@
           </template>
           <template v-else-if="column.key === 'ip'">
             <span class="text-mono c-strong">{{ record.ip }}</span>
+          </template>
+
+          <template v-else-if="column.key === 'cluster'">
+            <span class="cl-cell" :class="clusterHueClass(record.cluster_id)">
+              <i class="cl-dot"></i><span class="cl-name">{{ record.cluster_name || '-' }}</span>
+            </span>
           </template>
 
           <template v-else-if="column.key === 'service_port'">
@@ -673,6 +680,7 @@ import {
   type ListViewMode,
 } from '@/composables/useListClusterGrouping'
 import { compareNodeIp } from '@/utils/listGroupSorters'
+import { clusterHueClass, CLUSTER_COLUMN_MIN_WIDTH, CLUSTER_COLUMN_WIDTH } from '@/utils/clusterHue'
 import TableToolbar from '@/components/TableToolbar.vue'
 import { useFitColumnWidths, toDesignWidths, SELECTION_COLUMN_WIDTH } from '@/composables/useFitColumnWidths'
 import ClusterGroupRow from '@/components/ClusterGroupRow.vue'
@@ -995,6 +1003,7 @@ const columns: TableColumnsType = [
   // 富余宽度给安装路径而不是端口/版本——设计里路径列占比最大，且它是唯一长文本列）
   { title: '#', key: 'index', width: 48, fixed: 'left' },
   { title: 'IP', dataIndex: 'ip', key: 'ip', width: 149, fixed: 'left' },
+  { title: '集群', key: 'cluster', width: 116, sorter: true }, // 仅平铺可见；服务端 sort_by=cluster
   { title: '服务端口', key: 'service_port', width: 82 },
   { title: '管理端口', key: 'management_port', width: 82 },
   { title: '安装路径', key: 'edge_path', width: 377 },
@@ -1162,7 +1171,7 @@ const popoverColumns = computed(() => {
   const out: Array<{ key: string; title: string }> = []
   for (const c of columns) {
     const key = String(c.key)
-    if (key === 'index') continue
+    if (key === 'index' || key === 'cluster') continue
     out.push({ key, title: key === 'edge_path' ? 'Edge 安装路径' : String(c.title) })
     if (key === 'edge_path') out.push({ key: 'openresty_path', title: 'OpenResty 安装路径' })
   }
@@ -1191,8 +1200,15 @@ function nodeCustomRow(record: unknown): Record<string, unknown> {
 // 窄于设计总宽时等比收缩（下限 = 设计最小总宽 1086，含选择列 40 → 列部分 1046），
 // 用户拖拽过的列保持像素值、差额由安装路径列吸收 —— 因此「重置列宽」后不会再横向溢出。
 const cardRef = ref<HTMLElement | null>(null)
+// 集群列已在 columns 定义里（仅平铺可见）；分组态不参与列宽缩放
+const designWidths = () => {
+  const base = toDesignWidths(columns)
+  if (viewMode.value === 'flat') return base
+  const { cluster: _cluster, ...rest } = base
+  return rest
+}
 const { widths: fittedColumnWidths, minTableWidth } = useFitColumnWidths({
-  designWidths: () => toDesignWidths(columns),
+  designWidths,
   containerRef: cardRef,
   overrides: () => nodeColumnWidths.value,
   reserved: () => SELECTION_COLUMN_WIDTH,
@@ -1201,6 +1217,7 @@ const { widths: fittedColumnWidths, minTableWidth } = useFitColumnWidths({
   // 操作列按钮组 ≈ 268px（压到其下内容溢出）；状态列 140px（两枚胶囊并排需 115.6 + 内距 24）。
   // scroll.x = 下限之和 740 + 选择列 40 = 780 → 窗口 ≥ ~1180 时永不出现横向滚动。
   minWidths: () => ({
+    ...(viewMode.value === 'flat' ? { cluster: CLUSTER_COLUMN_MIN_WIDTH } : {}),
     index: 40,
     ip: 90,
     service_port: 60,
@@ -1218,6 +1235,8 @@ const visibleNodeColumns = computed(() => {
   const cols = orderedColumns.value.filter((c) => {
     const k = String(c.key)
     if (k === 'index') return true
+    // 集群列仅平铺视图存在（分组视图由组头承担），不进列配置弹窗
+    if (k === 'cluster') return viewMode.value === 'flat'
     if (k === 'edge_path') return selected.has('edge_path') || selected.has('openresty_path')
     return selected.has(k)
   })
@@ -1298,6 +1317,36 @@ function handleConfiguredAction(record: any, key: string) {
 
 // ── Data Loading ──
 
+// ── 服务端排序（参考 RouteList 优先级实现）：仅「集群」列可排，且仅平铺视图有效 ──
+const SORTABLE_COLUMNS = ['cluster']
+const sortBy = ref('')
+const sortOrder = ref('')
+
+interface SorterEvent {
+  order?: string | null
+  field?: unknown
+  column?: { key?: unknown }
+}
+
+function handleTableChange(
+  pagination: { current?: number; pageSize?: number },
+  _filters: Record<string, unknown>,
+  sorter: SorterEvent | SorterEvent[],
+) {
+  page.value = pagination.current || 1
+  if (pagination.pageSize) pageSize.value = pagination.pageSize
+  const s = Array.isArray(sorter) ? sorter[0] : sorter
+  const field = s && !Array.isArray(s.field) ? String(s.field || s.column?.key || '') : ''
+  if (s?.order && SORTABLE_COLUMNS.includes(field)) {
+    sortBy.value = field
+    sortOrder.value = s.order === 'descend' ? 'desc' : 'asc'
+  } else {
+    sortBy.value = ''
+    sortOrder.value = ''
+  }
+  loadNodes()
+}
+
 async function loadNodes() {
   loading.value = true
   try {
@@ -1310,6 +1359,9 @@ async function loadNodes() {
       search: searchText.value || undefined,
       clusterId: clusterFilter.value ? Number(clusterFilter.value) : undefined,
       status: undefined, // 全部通过 nginxRunning() 客户端过滤
+      // 分组视图按组内固定序（IP），不参与服务端排序
+      sortBy: sortBy.value && viewMode.value === 'flat' ? sortBy.value : undefined,
+      sortOrder: sortBy.value && viewMode.value === 'flat' ? ((sortOrder.value || 'asc') as 'asc' | 'desc') : undefined,
     })
     nodes.value = res.data.items || []
     // loadAll（状态筛选）模式：计数 = 过滤后全量（与「筛出 X 个」/页头徽标同口径，规格一致性）

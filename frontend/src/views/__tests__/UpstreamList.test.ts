@@ -723,7 +723,8 @@ describe('UpstreamList 列个性化（column-personalization-rollout）', () => 
     ;(wrapper.vm as any).viewMode = 'flat'
     await wrapper.vm.$nextTick()
     const table = wrapper.findComponent({ name: 'ColDragTableStub' })
-    expect(table.props('scroll')).toEqual({ x: 572 })
+    // 平铺态多一列「集群」（设计宽 116 / 下限 96）→ 最小宽 572 + 96 = 668
+    expect(table.props('scroll')).toEqual({ x: 668 })
     expect(table.props('tableLayout')).toBe('fixed')
     const cols = table.props('columns') as Array<{ key: unknown; width?: number; fixed?: string }>
     const byKey = Object.fromEntries(cols.map((c) => [String(c.key), c]))

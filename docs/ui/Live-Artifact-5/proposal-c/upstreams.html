@@ -228,5 +228,125 @@
   });
 })();
 </script>
+
+<script>
+/* 平铺态集群列：本脚本在页面自带的分组/平铺脚本之后执行，
+   因此 applyFlat()/applyGroup() 先完成 tbody 重建，这里再插/删列。 */
+(function(){
+  'use strict';
+  var table = document.querySelector('.l5-table');
+  if (!table) return;
+  var tbody = table.querySelector('tbody');
+  var seg = document.querySelectorAll('#modeSeg .seg-opt');
+  var foldAll = document.querySelector('.fold-all-btn');
+  var NAME_INDEX = 1;
+  var COL_W = 116;
+  var HUE = { '生产集群': 'c1', '预发集群': 'c2', '开发集群': 'c3', '未绑定集群': 'c0' };
+  var baseMinWidth = parseInt(table.style.minWidth || '0', 10) || 0;
+  var mode = 'group';
+  var sortDir = 1;
+
+  /* ① 行数据的集群标识取自组头（组头是唯一事实源），写到 data-cluster */
+  (function tagClusters(){
+    var cur = null;
+    Array.prototype.forEach.call(tbody.children, function(tr){
+      if (tr.classList.contains('l5-group')) {
+        var n = tr.querySelector('.g-name');
+        if (n) cur = n.textContent.trim();
+        return;
+      }
+      if (cur) tr.setAttribute('data-cluster', cur);
+    });
+  })();
+
+  function cellHTML(name){
+    var hue = HUE[name] || 'c1';
+    return '<span class="cl-cell"><span class="cl-dot cluster-' + hue + '"></span><span class="cl-name">' + name + '</span></span>';
+  }
+
+  function markSort(dir){
+    var th = table.querySelector('th.col-cluster');
+    if (!th) return;
+    th.classList.toggle('sorted-asc', dir === 1);
+    th.classList.toggle('sorted-desc', dir === -1);
+  }
+
+  function onSort(e){
+    e.stopPropagation();
+    var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr[data-cluster]'));
+    if (!rows.length) return;
+    rows.sort(function(a, b){
+      return a.getAttribute('data-cluster').localeCompare(b.getAttribute('data-cluster'), 'zh') * sortDir;
+    });
+    rows.forEach(function(r){ tbody.appendChild(r); });
+    markSort(sortDir);
+    sortDir = -sortDir;
+  }
+
+  function insertColumn(){
+    if (table.querySelector('th.col-cluster')) return;
+    var cols = table.querySelectorAll('colgroup col');
+    var nameCol = cols[NAME_INDEX];
+    if (nameCol) {
+      var col = document.createElement('col');
+      col.className = 'col-cluster';
+      col.style.width = COL_W + 'px';
+      nameCol.parentNode.insertBefore(col, nameCol.nextSibling);
+    }
+    var ths = table.querySelectorAll('thead th');
+    var nameTh = ths[NAME_INDEX];
+    if (nameTh) {
+      var th = document.createElement('th');
+      th.className = 'col-cluster';
+      th.title = '点击按集群排序（平铺视图）；分组视图按集群分堆，无需该列';
+      th.innerHTML = '集群<span class="sort-ind"></span>';
+      th.addEventListener('click', onSort);
+      nameTh.parentNode.insertBefore(th, nameTh.nextSibling);
+    }
+    Array.prototype.forEach.call(tbody.querySelectorAll('tr[data-cluster]'), function(tr){
+      var tds = tr.querySelectorAll('td');
+      var nameTd = tds[NAME_INDEX];
+      if (!nameTd) return;
+      var td = document.createElement('td');
+      td.className = 'nw col-cluster';
+      td.innerHTML = cellHTML(tr.getAttribute('data-cluster'));
+      nameTd.parentNode.insertBefore(td, nameTd.nextSibling);
+    });
+    Array.prototype.forEach.call(tbody.querySelectorAll('tr.l5-group td[colspan]'), function(td){
+      td.setAttribute('colspan', String(parseInt(td.getAttribute('colspan'), 10) + 1));
+    });
+    if (baseMinWidth) table.style.minWidth = (baseMinWidth + COL_W) + 'px';
+  }
+
+  function removeColumn(){
+    Array.prototype.forEach.call(table.querySelectorAll('col.col-cluster, th.col-cluster, td.col-cluster'), function(el){
+      el.remove();
+    });
+    if (baseMinWidth) table.style.minWidth = baseMinWidth + 'px';
+  }
+
+  function syncSeg(m){
+    Array.prototype.forEach.call(seg, function(o){
+      var on = o.getAttribute('data-mode') === m;
+      o.classList.toggle('active', on);
+      o.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+  }
+
+  function setMode(m){
+    if (m !== mode) {
+      mode = m;
+      if (m === 'flat') { insertColumn(); if (foldAll) foldAll.style.display = 'none'; }
+      else { removeColumn(); if (foldAll) foldAll.style.display = ''; }
+    }
+    syncSeg(m);
+  }
+
+  Array.prototype.forEach.call(seg, function(o){
+    o.addEventListener('click', function(){ setMode(o.getAttribute('data-mode')); });
+  });
+  syncSeg(mode);
+})();
+</script>
 </body>
 </html>

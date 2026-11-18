@@ -510,3 +510,67 @@ describe('mockup-parity r11（筛选行与状态行之间的分隔线）', () =>
     }
   })
 })
+
+describe('mockup-parity r12（平铺视图集群标识 / 优先级 mono）', () => {
+  it('r12-① 三页「集群」列定义在 columns 里，且仅平铺可见、不进列配置弹窗', () => {
+    for (const f of ['NodeList.vue', 'UpstreamList.vue', 'RouteList.vue']) {
+      const s = page(f)
+      expect(s, f).toContain("key: 'cluster'")
+      // 分组态过滤：isVisible 里按 viewMode 判定
+      expect(s, f).toMatch(/if \(k === 'cluster'\) return viewMode\.value === 'flat'/)
+      // 列配置弹窗不含集群列
+      expect(s, f).toMatch(/key === 'cluster'\) continue|!== 'cluster'/)
+    }
+  })
+
+  it('r12-② 集群单元格 = 色点 + 集群名，色相走 utils/clusterHue（cluster_id % 8）', () => {
+    for (const f of ['NodeList.vue', 'UpstreamList.vue', 'RouteList.vue']) {
+      const s = page(f)
+      expect(s, f).toContain('class="cl-cell"')
+      expect(s, f).toContain(':class="clusterHueClass(record.cluster_id)"')
+      expect(s, f).toContain("from '@/utils/clusterHue'")
+    }
+    expect(css).toContain('.cl-dot')
+    expect(css).toContain('.cluster-c1')
+    expect(css).toContain('.cluster-c8')
+  })
+
+  it('r12-③ 分组态不参与集群列缩放（designWidths 在分组态剔除 cluster）', () => {
+    for (const f of ['NodeList.vue', 'UpstreamList.vue', 'RouteList.vue']) {
+      expect(page(f), f).toContain('const { cluster: _cluster, ...rest } = base')
+    }
+  })
+
+  it('r12-④ 路由优先级为 mono 文本而非 chip（度量值不做胶囊）', () => {
+    const s = page('RouteList.vue')
+    expect(s).toContain('class="prio-txt"')
+    expect(s).not.toContain('<span class="prio"')
+    expect(css).toContain('.prio-txt')
+  })
+})
+
+describe('mockup-parity r13（平铺集群列排序 = 服务端排序，参考优先级实现）', () => {
+  it('r13-① 三页「集群」列 sorter: true，且仅平铺可排（分组态 sortable() 关闭）', () => {
+    for (const f of ['NodeList.vue', 'UpstreamList.vue', 'RouteList.vue']) {
+      const s = page(f)
+      expect(s, f).toMatch(/key: 'cluster'[^\n]*sorter: true/)
+      expect(s, f).toContain('@change="handleTableChange"')
+    }
+    // 路由：集群进 SORTABLE_COLUMNS（分组态被 sortable() 置 false）
+    expect(page('RouteList.vue')).toContain(
+      "const SORTABLE_COLUMNS = ['name', 'uri', 'priority', 'created_at', 'cluster']",
+    )
+  })
+
+  it('r13-② 三页排序键只在平铺视图下发（分组视图按组内固定序）', () => {
+    for (const f of ['NodeList.vue', 'UpstreamList.vue', 'RouteList.vue']) {
+      const s = page(f)
+      expect(s, f).toMatch(/viewMode\.value === 'flat'/)
+      expect(s, f).toMatch(/sort_by|sortBy/)
+    }
+    // 节点页：API 封装透传 sort_by/sort_order
+    const api = readFileSync(resolve(process.cwd(), 'src/api/nodes.ts'), 'utf-8')
+    expect(api).toContain('sort_by: params.sortBy')
+    expect(api).toContain('sort_order')
+  })
+})

@@ -208,7 +208,15 @@
           </template>
 
           <template v-else-if="column.key === 'priority'">
-            <span class="prio" :title="`优先级 ${record.priority}：按数值升序依次匹配`">P{{ record.priority }}</span>
+            <span class="prio-txt" :title="`优先级 ${record.priority}：按数值升序依次匹配`"
+              >P{{ record.priority }}</span
+            >
+          </template>
+
+          <template v-else-if="column.key === 'cluster'">
+            <span class="cl-cell" :class="clusterHueClass(record.cluster_id)">
+              <i class="cl-dot"></i><span class="cl-name">{{ record.cluster_name || '-' }}</span>
+            </span>
           </template>
 
           <template v-else-if="column.key === 'publish_status'">
@@ -368,6 +376,7 @@ import {
   type ListViewMode,
 } from '@/composables/useListClusterGrouping'
 import { compareRoutePriority } from '@/utils/listGroupSorters'
+import { clusterHueClass, CLUSTER_COLUMN_MIN_WIDTH, CLUSTER_COLUMN_WIDTH } from '@/utils/clusterHue'
 import TableToolbar from '@/components/TableToolbar.vue'
 import { useFitColumnWidths, toDesignWidths } from '@/composables/useFitColumnWidths'
 import ClusterGroupRow from '@/components/ClusterGroupRow.vue'
@@ -545,6 +554,7 @@ const publishingRecord = ref<any | null>(null)
 const columns: TableColumnsType = [
   { title: '#', key: 'index', width: 45, fixed: 'left' },
   { title: '名称', dataIndex: 'name', key: 'name', sorter: true, width: 170, fixed: 'left' },
+  { title: '集群', key: 'cluster', width: 116, sorter: true }, // 仅平铺可见；排序同优先级（服务端 sort_by=cluster）
   { title: '请求匹配', key: 'uri', sorter: true, width: 256 },
   { title: '上游', key: 'upstream', width: 170 },
   { title: '优先级', key: 'priority', sorter: true, width: 90 },
@@ -597,7 +607,7 @@ const popoverColumns = computed(() => {
   const out: Array<{ key: string; title: string }> = []
   for (const c of columns) {
     const key = String(c.key)
-    if (key === 'index') continue
+    if (key === 'index' || key === 'cluster') continue
     out.push({ key, title: String(c.title) })
     if (key === 'uri') out.push({ key: 'methods', title: '方法' })
   }
@@ -606,13 +616,21 @@ const popoverColumns = computed(() => {
 
 // 列宽自适应（r6-② 方案 A）：窄于设计总宽（1247）等比收缩，下限 = 设计最小总宽 1130
 const cardRef = ref<HTMLElement | null>(null)
+// 集群列已在 columns 定义里（仅平铺可见）；分组态不参与列宽缩放
+const designWidths = () => {
+  const base = toDesignWidths(columns)
+  if (viewMode.value === 'flat') return base
+  const { cluster: _cluster, ...rest } = base
+  return rest
+}
 const { widths: fittedColumnWidths, minTableWidth } = useFitColumnWidths({
-  designWidths: () => toDesignWidths(columns),
+  designWidths,
   containerRef: cardRef,
   overrides: () => routeColumnWidths.value,
   flexKey: 'uri',
   // 列内容下限（r7-B4）：请求匹配（uri）为弹性列不设下限；scroll.x 下限之和 = 652 → 窗口 ≥ ~1040 零横向滚动
   minWidths: () => ({
+    ...(viewMode.value === 'flat' ? { cluster: CLUSTER_COLUMN_MIN_WIDTH } : {}),
     index: 40,
     name: 110,
     upstream: 100,
@@ -630,6 +648,8 @@ const visibleColumns = computed(() => {
   const isVisible = (c: { key?: unknown }) => {
     const k = String(c.key)
     if (k === 'index') return true
+    // 集群列仅平铺视图存在（分组视图由组头承担），不进列配置弹窗
+    if (k === 'cluster') return viewMode.value === 'flat'
     if (k === 'uri') return selected.has('uri') || selected.has('methods')
     return selected.has(k)
   }
@@ -733,7 +753,7 @@ function onSearch() {
 // A4：可排序收敛 name/uri/priority/created_at（列 sorter: true），值域与后端
 // routes.py ALLOWED_SORT_FIELDS 对齐（后端保留 status 但前端状态列不渲染、不入口）。
 // A5：集群/上游两列移除本地 sorter——本地排序只重排当前页，是排序假象。
-const SORTABLE_COLUMNS = ['name', 'uri', 'priority', 'created_at']
+const SORTABLE_COLUMNS = ['name', 'uri', 'priority', 'created_at', 'cluster']
 const sortBy = ref('')
 const sortOrder = ref('')
 

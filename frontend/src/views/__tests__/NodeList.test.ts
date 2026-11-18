@@ -1559,15 +1559,18 @@ describe('NodeList 列宽个性化（node-list-column-resize）', () => {
     await wrapper.vm.$nextTick()
     const table = wrapper.findComponent({ name: 'ATableStub' })
     expect(table.exists()).toBe(true)
-    expect(table.props('scroll')).toEqual({ x: 780 })
+    // 平铺态多一列「集群」（设计宽 116 / 下限 96）→ 最小宽 780 + 96 = 876
+    expect(table.props('scroll')).toEqual({ x: 876 })
     expect(table.props('tableLayout')).toBe('fixed')
     // 竖线/手势共享样式单点：三页表格根元素均挂 .grid-table（column-personalization-rollout D5）
     expect(wrapper.find('.node-table').classes()).toContain('grid-table')
     const cols = table.props('columns') as Array<{ key: string; title?: string; width?: number; fixed?: string }>
     // L2 列集合：集群列移除（分组组头替代）、两路径列合并为「安装路径」（8 列）
+    // 平铺态在 IP 之后插入「集群」列（行内集群标识；分组态由组头承担）
     expect(cols.map((c) => c.key)).toEqual([
       'index',
       'ip',
+      'cluster',
       'service_port',
       'management_port',
       'edge_path',
@@ -1715,19 +1718,21 @@ describe('NodeList 列宽个性化（node-list-column-resize）', () => {
           .classes(),
       ).not.toContain('movable')
     }
-    // 拖「安装路径」（矩形 400-500）标题到「服务端口」（200-300）左半区 → 实时换位（未松手即生效）
+    // 拖「安装路径」标题到「服务端口」左半区 → 实时换位（未松手即生效）
+    // 注：平铺态新增「集群」列后每列桩宽 100px 整体右移一格，故坐标较原值 +100
     const edgeWrap = ths()
       .find((t) => t.attributes('data-col') === 'edge_path')!
       .find('.th-resize-wrap')!
-    await edgeWrap.trigger('mousedown', { clientX: 450 })
+    await edgeWrap.trigger('mousedown', { clientX: 550 })
     expect(edgeWrap.classes()).toContain('dragging-source')
     // 拖拽全程抓取光标：body 挂类（CSS 对所有元素强制 grabbing）
     expect(document.body.classList.contains('col-move-dragging')).toBe(true)
-    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 220 }))
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 320 }))
     await flushPromises()
     const LIVE_SEQ = [
       'index',
       'ip',
+      'cluster', // 平铺态集群列紧随 IP（分组态不存在）
       'edge_path',
       'service_port',
       'management_port',
@@ -1742,7 +1747,7 @@ describe('NodeList 列宽个性化（node-list-column-resize）', () => {
     )
     expect(flipped, '换位应触发 FLIP 位移动画').toBe(true)
     // 松手确认当前位次（无跳变）
-    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 220 }))
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 320 }))
     await flushPromises()
     expect(keySeq()).toEqual(LIVE_SEQ)
     // 持久化按全量列键清洗补位：被合并列吞并的 openresty_path 保留在存储序末位（contract 10.1）
@@ -1754,12 +1759,13 @@ describe('NodeList 列宽个性化（node-list-column-resize）', () => {
     const verWrap = ths()
       .find((t) => t.attributes('data-col') === 'edge_version')!
       .find('.th-resize-wrap')!
-    await verWrap.trigger('mousedown', { clientX: 620 })
-    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 240 }))
+    await verWrap.trigger('mousedown', { clientX: 720 })
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 340 }))
     await flushPromises()
     expect(keySeq()).toEqual([
       'index',
       'ip',
+      'cluster',
       'edge_version',
       'edge_path',
       'service_port',
@@ -1774,12 +1780,12 @@ describe('NodeList 列宽个性化（node-list-column-resize）', () => {
     const ipWrap = ths()
       .find((t) => t.attributes('data-col') === 'ip')!
       .find('.th-resize-wrap')!
-    await ipWrap.trigger('mousedown', { clientX: 150 })
-    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 720 }))
+    await ipWrap.trigger('mousedown', { clientX: 250 })
+    document.dispatchEvent(new MouseEvent('mousemove', { clientX: 820 }))
     await flushPromises()
     expect(keySeq()).toEqual(LIVE_SEQ)
     expect(ipWrap.classes()).not.toContain('dragging-source')
-    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 720 }))
+    document.dispatchEvent(new MouseEvent('mouseup', { clientX: 820 }))
     wrapper.unmount()
   }, 15_000)
 })

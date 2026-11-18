@@ -147,3 +147,56 @@ async def test_upstream_status_counts(async_authed_client, isolated_session):
     listing = (await async_authed_client.get("/api/v1/upstreams?page=1&page_size=1&load_balance=chash")).json()
     narrowed = (await async_authed_client.get("/api/v1/upstreams/status-counts?load_balance=chash")).json()
     assert narrowed["total"] == listing["total"] == 1
+
+
+# ── 平铺视图「集群」列排序（2026-11-18）─────────────────────────────────────
+async def _seed_sortable(session_factory):
+    """两个集群（B 在前按 id、A 在后）+ 三节点/两上游/两路由，用于验证按集群名排序。"""
+    from app.models.cluster import Node as NodeModel
+
+    async with session_factory() as s:
+        existing = await s.get(Cluster, 1)
+        existing.display_name = "Z集群"
+        s.add(Cluster(id=3, name="c3", display_name="A集群", status=1))
+        await s.flush()
+        s.add_all(
+            [
+                NodeModel(id=1, cluster_id=1, ip="10.0.0.2", service_port=80, management_port=9180, edge_path="/edge"),
+                NodeModel(id=2, cluster_id=3, ip="10.0.0.1", service_port=80, management_port=9180, edge_path="/edge"),
+                Upstream(id=3, name="up-z", cluster_id=1),
+                Upstream(id=4, name="up-a", cluster_id=3),
+                Route(id=80, cluster_id=1, name="r-z", uri="/z", methods="GET", priority=0, status=1),
+                Route(id=81, cluster_id=3, name="r-a", uri="/a", methods="GET", priority=0, status=1),
+            ]
+        )
+        await s.commit()
+
+
+@pytest.mark.asyncio
+async def test_nodes_sorted_by_cluster_name(async_authed_client, isolated_session):
+    await _seed_sortable(isolated_session)
+    resp = await async_authed_client.get("/api/v1/nodes?page=1&page_size=10&sort_by=cluster&sort_order=asc")
+    assert resp.status_code == 200, resp.text
+    items = resp.json()["items"]
+    clusters = [i["cluster_name"] for i in items]
+    assert clusters == sorted(clusters), f"应按集群名升序，实际 {clusters}"
+    desc = (await async_authed_client.get("/api/v1/nodes?page=1&page_size=10&sort_by=cluster&sort_order=desc")).json()["items"]
+    assert [i["cluster_name"] for i in desc] == sorted(clusters, reverse=True)
+
+
+@pytest.mark.asyncio
+async def test_upstreams_sorted_by_cluster_name(async_authed_client, isolated_session):
+    await _seed_sortable(isolated_session)
+    resp = await async_authed_client.get("/api/v1/upstreams?page=1&page_size=10&sort_by=cluster&sort_order=asc")
+    assert resp.status_code == 200, resp.text
+    names = [i["cluster_name"] for i in resp.json()["items"]]
+    assert names == sorted(names), f"应按集群名升序，实际 {names}"
+
+
+@pytest.mark.asyncio
+async def test_routes_sorted_by_cluster_name(async_authed_client, isolated_session):
+    await _seed_sortable(isolated_session)
+    resp = await async_authed_client.get("/api/v1/routes?page=1&page_size=10&sort_by=cluster&sort_order=asc")
+    assert resp.status_code == 200, resp.text
+    names = [i["cluster_name"] for i in resp.json()["items"]]
+    assert names == sorted(names), f"应按集群名升序，实际 {names}"

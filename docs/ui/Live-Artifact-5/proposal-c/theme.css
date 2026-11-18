@@ -2641,3 +2641,24 @@ tr.l5-group td { background: var(--bg); padding: 0; border-bottom: 1px solid var
 
 /* 值内联色（strip / 卡体共用，勿替代结构性类） */
 .c-danger { color: var(--danger); font-size: 11.5px; }
+
+/* ── 列表页平铺态的集群列（与卡片页 .cluster-cN 固定色相一致） ── */
+.cl-cell { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.cl-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--cc, var(--border)); flex-shrink: 0; }
+.cl-cell .cl-name { font-size: 12.5px; color: var(--fg); white-space: nowrap; }
+.l5-table th.col-cluster { cursor: pointer; }
+.l5-table th.col-cluster:hover { color: var(--fg); }
+.sort-ind { display: inline-flex; width: 11px; margin-left: 3px; justify-content: center; color: var(--accent); font-size: 9px; }
+.l5-table thead th.sorted-asc .sort-ind::after { content: '▲'; }
+.l5-table thead th.sorted-desc .sort-ind::after { content: '▼'; }
+
+/* 度量值用 mono 文本（不用 chip）：优先级等 */
+.prio-txt { font-family: var(--font-mono); font-size: 12.5px; color: var(--fg); font-variant-numeric: tabular-nums; }
+.prio-txt abbr { text-decoration: none; border: none; }
+
+/* ── 工具条不压缩契约（#85 ⑤）：控件禁止被 flex 压缩，窄视口允许换行 ──
+   缺 flex-shrink:0 时 .seg（分组|平铺）会被压到 2px，用户看不到「平铺」。 */
+.l5-toolbar > * { flex-shrink: 0; }
+@media (max-width: 1366px) {
+  .l5-toolbar.nowrap { flex-wrap: wrap; row-gap: 6px; }
+}

@@ -8,6 +8,9 @@ interface NodeListParams {
   search?: string
   clusterId?: number
   status?: number
+  /** 平铺视图排序键：ip | cluster（分组视图不下发） */
+  sortBy?: string
+  sortOrder?: 'asc' | 'desc'
 }
 
 interface NodeCreatePayload {
@@ -52,6 +55,8 @@ export function listNodes(params: NodeListParams = {}) {
       ...(params.search ? { search: params.search } : {}),
       ...(params.clusterId ? { cluster_id: params.clusterId } : {}),
       ...(params.status !== undefined ? { status: params.status } : {}),
+      ...(params.sortBy ? { sort_by: params.sortBy } : {}),
+      ...(params.sortBy ? { sort_order: params.sortOrder || 'asc' } : {}),
     },
   })
 }

@@ -2948,3 +2948,59 @@ th.resizable {
   flex-shrink: 0;
   color: var(--muted);
 }
+
+/* ── 平铺视图「集群」列（filter-architecture 补充，2026-11-18）：
+     分组视图由组头给出集群，平铺视图必须在行内给出；色点复用卡片页固定色相
+     `.cluster-cN`（cluster_id % 8），同集群全站同色。 ── */
+.cl-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.cl-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--cc, var(--border));
+  flex-shrink: 0;
+}
+.cl-cell .cl-name {
+  font-size: 12.5px;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cluster-c1 {
+  --cc: oklch(56% 0.16 210);
+}
+.cluster-c2 {
+  --cc: oklch(55% 0.14 300);
+}
+.cluster-c3 {
+  --cc: oklch(55% 0.15 145);
+}
+.cluster-c4 {
+  --cc: oklch(58% 0.16 28);
+}
+.cluster-c5 {
+  --cc: oklch(55% 0.12 240);
+}
+.cluster-c6 {
+  --cc: oklch(62% 0.13 95);
+}
+.cluster-c7 {
+  --cc: oklch(58% 0.16 330);
+}
+.cluster-c8 {
+  --cc: oklch(58% 0.13 190);
+}
+
+/* 优先级等度量值：mono 文本而非胶囊（chip 只用于枚举/分类，BRIEF §8.1） */
+.prio-txt {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}

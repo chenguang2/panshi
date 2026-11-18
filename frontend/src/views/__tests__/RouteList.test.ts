@@ -1534,17 +1534,19 @@ describe('RouteList 列个性化（column-personalization-rollout）', () => {
     ;(wrapper.vm as any).viewMode = 'flat'
     await wrapper.vm.$nextTick()
     const table = wrapper.findComponent({ name: 'ColDragTableStub' })
-    expect(table.props('scroll')).toEqual({ x: 652 })
+    // 平铺态多一列「集群」（设计宽 116 / 缩放下限 96，分组视图无此列）→ 最小宽 652 + 96 = 748
+    expect(table.props('scroll')).toEqual({ x: 748 })
     expect(table.props('tableLayout')).toBe('fixed')
     const cols = table.props('columns') as Array<{ key: unknown; width?: number; fixed?: string }>
     const byKey = Object.fromEntries(cols.map((c) => [String(c.key), c]))
     expect(byKey['index']).toMatchObject({ width: 45, fixed: 'left' })
     expect(byKey['name']).toMatchObject({ width: 170, fixed: 'left' })
     expect(byKey['actions']).toMatchObject({ width: 110, fixed: 'right' })
-    // L2 列集合：集群列移除、方法+URI 合并「请求匹配」（列键 uri）
+    // L2 列集合：分组态移除集群列（组头替代），平铺态补回「集群」列（行内标识）+ 方法+URI 合并「请求匹配」
     expect(cols.map((c) => String(c.key))).toEqual([
       'index',
       'name',
+      'cluster',
       'uri',
       'upstream',
       'priority',

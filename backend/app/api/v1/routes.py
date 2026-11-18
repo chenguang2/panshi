@@ -17,7 +17,21 @@ from app.services.status_counts import publish_status_counts, latest_publish_sub
 router = APIRouter(prefix="/routes", tags=["routes"])
 
 ALLOWED_SEARCH_FIELDS = {"name", "uri", "description", "hosts"}
-ALLOWED_SORT_FIELDS = {"name", "uri", "priority", "status", "created_at"}
+ALLOWED_SORT_FIELDS = {"name", "uri", "priority", "status", "created_at", "cluster"}
+
+
+def _cluster_name_subquery(cluster_id_col):
+    """按集群名排序的相关子查询（display_name 优先，回退 name）。
+
+    用相关子查询而不是 JOIN：路由/上游列表在「分组筛选」时已经 JOIN 过 Cluster，
+    再 join 同名表会产生第二个别名并把行数放大（一对多风险）。
+    """
+    return (
+        select(func.coalesce(Cluster.display_name, Cluster.name))
+        .where(Cluster.id == cluster_id_col)
+        .limit(1)
+        .scalar_subquery()
+    )
 
 
 def _apply_route_filters(
@@ -133,9 +147,12 @@ async def list_all_routes(
                 ),
             )
 
-    # Sort
+    # Sort（cluster 走相关子查询取集群显示名，避免与分组过滤的 JOIN 冲突）
     if sort_by and sort_by in ALLOWED_SORT_FIELDS:
-        col = getattr(Route, sort_by)
+        if sort_by == "cluster":
+            col = _cluster_name_subquery(Route.cluster_id)
+        else:
+            col = getattr(Route, sort_by)
         if sort_order == "desc":
             col = col.desc()
         query = query.order_by(col)

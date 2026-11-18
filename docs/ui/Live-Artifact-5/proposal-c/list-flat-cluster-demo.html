@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>平铺视图 · 集群标识三方案对比 — 磐石网关管理平台</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+.page-header h1 { font-size: 21px; }
+.demo-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 1200px) { .demo-grid { grid-template-columns: 1fr; } }
+
+.demo-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); overflow: hidden; display: flex; flex-direction: column; }
+.dp-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--border); background: var(--bg); flex-wrap: wrap; }
+.dp-tag { font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: .02em; padding: 2px 8px; border-radius: 999px; background: var(--accent-bg); color: var(--accent); border: 1px solid oklch(56% 0.16 210 / 28%); }
+.dp-title { font-size: 13px; font-weight: 600; color: var(--fg); }
+.dp-flag { margin-left: auto; font-size: 11px; color: var(--success); font-weight: 600; white-space: nowrap; }
+.dp-body { padding: 0; }
+.demo-tbl { width: 100%; }
+.demo-tbl thead th { padding: 8px 10px; }
+.demo-tbl tbody td { padding: 14px 10px; }
+.dp-facts { list-style: none; margin: auto 0 0; padding: 12px 14px 14px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 5px; }
+.dp-facts li { font-size: 11.5px; color: var(--muted); line-height: 1.5; }
+.dp-facts b { color: var(--fg); font-weight: 600; margin-right: 4px; }
+.name-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.name-row .c-strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.c-strong { font-weight: 600; color: var(--fg); }
+</style>
+</head>
+<body>
+<div class="app-layout">
+  <aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="sidebar-logo-icon">磐</div>
+    <span class="sidebar-logo-text">磐石</span>
+    <span class="sidebar-logo-version">v1.0</span>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">核心功能</div>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h5v5H3v-5zm7 0h5v5h-5v-5z"/></svg><span>概览</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h14v5H2V3zm0 7h14v5H2v-5z"/></svg><span>集群管理</span></a>
+      <a class="nav-item active" href="routes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l5-7v5h9v4H7v5l-5-7z"/></svg><span>路由管理</span></a>
+      <a class="nav-item" href="upstreams.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>上游管理</span></a>
+      <a class="nav-item" href="nodes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3a2 2 0 110 4 2 2 0 010-4zM3.5 14a2 2 0 110-4 2 2 0 010 4zM14.5 14a2 2 0 110-4 2 2 0 010 4z"/></svg><span>节点管理</span></a>
+      <a class="nav-item" href="plugin-groups.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h12v5H3v-5z"/></svg><span>插件组</span></a>
+      <a class="nav-item" href="plugin-metadata.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h8l3 3v9a1 1 0 01-1 1H5a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M9 7v4M9 13v-1"/></svg><span>插件元数据</span></a>
+      <a class="nav-item" href="global-rules.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l6 3v4c0 3-2.5 5.5-6 7-3.5-1.5-6-4-6-7V5l6-3z"/></svg><span>全局规则</span></a>
+      <a class="nav-item" href="static-resources.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3a1 1 0 011-1h6l4 4v10a1 1 0 01-1 1H6a1 1 0 01-1-1V3zM11 2v4h4"/></svg><span>静态资源</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">证书管理</div>
+      <a class="nav-item" href="ca-certs.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="12.5" r="2.5"/><path d="M8 12.5h7M13 12.5v2.5M15 12.5v2.5"/></svg><span>CA 根证书</span></a>
+      <a class="nav-item" href="server-certs.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="10" height="8" rx="1"/><path d="M6.5 8V6a2.5 2.5 0 015 0v2"/></svg><span>服务器证书</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">边缘网络</div>
+      <a class="nav-item" href="stream-proxies.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="12" height="4" rx="1"/><rect x="4" y="7" width="10" height="4" rx="1"/><rect x="5" y="12" width="8" height="4" rx="1"/></svg><span>四层代理</span></a>
+      <a class="nav-item" href="dns-udp-proxies.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="4" r="2"/><circle cx="4" cy="14" r="2"/><circle cx="14" cy="14" r="2"/><path d="M9 6v3M4 12l2-2M14 12l-2-2"/></svg><span>DNS代理[UDP]</span></a>
+      <a class="nav-item" href="dns-http-proxies.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="4" r="2"/><circle cx="4" cy="14" r="2"/><circle cx="14" cy="14" r="2"/><path d="M9 6v3M4 12l2-2M14 12l-2-2"/></svg><span>DNS代理[HTTP]</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">系统管理</div>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l5 3v6l-5 3-5-3V5l5-3z"/></svg><span>插件管理</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9a3 3 0 100-6 3 3 0 000 6zM3 16c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg><span>用户管理</span></a>
+      <a class="nav-item" href="plugin-switches.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9h8a4 4 0 010 8H5a4 4 0 010-8zM5 15a2 2 0 110-4 2 2 0 010 4z"/></svg><span>插件开关</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Edge功能</div>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l7 7-7 7-7-7z"/></svg><span>Edge直连</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>数据导入</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h8v8H5V7zM7 7V5h4v2"/></svg><span>工具箱</span></a>
+    </div>
+  </nav>
+</aside>
+
+  <div class="main-area">
+    <header class="top-header">
+      <div class="top-header-breadcrumb"><a href="#">首页</a><span>/</span><a href="routes.html">路由管理</a><span>/</span><span>集群标识方案对比</span></div>
+      <div class="top-header-actions">
+        <div class="h-search">
+          <input type="text" placeholder="搜索功能或页面...">
+          <svg class="s-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        </div>
+        <div class="header-user"><div class="header-avatar">管</div><span>管理员</span></div>
+      </div>
+    </header>
+
+    <div class="content-area">
+      <div class="page-header" style="margin-bottom:16px;">
+        <div>
+          <h1>平铺视图：集群标识三方案<span class="ph-inline"><span class="ph-lite lite-accent">行数据：路由管理</span></span></h1>
+          <p>三页（节点 / 上游 / 路由）切到「平铺」后组头消失，需要另一种方式说明每行属于哪个集群 · 下图三种做法各 3 行示意</p>
+        </div>
+        <div class="page-header-actions">
+          <a class="btn btn-secondary" href="routes.html">查看路由页（方案 A 已落地）</a>
+        </div>
+      </div>
+
+      <div class="alert alert-info" style="margin-bottom:16px;">
+        <span class="alert-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></span>
+        <div class="alert-content">三方案共用同一组真实行（订单创建 / 用户查询接口属<b>生产集群</b>，文件上传属<b>预发集群</b>）。集群色点取 <code class="c-mono">.cluster-cN</code>（<code class="c-mono">cluster_id % 8</code>），与卡片页分组带同色；优先级等度量值一律 mono 文本，不做 chip。</div>
+      </div>
+
+      <div class="demo-grid">
+
+        <!-- 方案 A -->
+        <section class="demo-panel">
+          <div class="dp-head">
+            <span class="dp-tag">方案 A</span>
+            <span class="dp-title">新增「集群」列</span>
+            <span class="dp-flag">已落到设计稿</span>
+          </div>
+          <div class="dp-body">
+            <table class="l5-table demo-tbl">
+              <colgroup><col style="width:30px"><col><col style="width:116px"><col style="width:50px"></colgroup>
+              <thead><tr><th class="c-c">#</th><th>路由</th><th>集群<span class="sort-ind"></span></th><th class="c-c">优先级</th></tr></thead>
+              <tbody>
+                <tr><td class="c-c"><span class="c-idx">1</span></td>
+                  <td><div class="cell-stack"><span class="c-strong">订单创建</span><span class="c-sub">下单入口（幂等校验）</span></div></td>
+                  <td class="nw"><span class="cl-cell"><span class="cl-dot cluster-c1"></span><span class="cl-name">生产集群</span></span></td>
+                  <td class="nw c-c"><span class="prio-txt">P0</span></td></tr>
+                <tr><td class="c-c"><span class="c-idx">2</span></td>
+                  <td><div class="cell-stack"><span class="c-strong">用户查询接口</span><span class="c-sub">用户列表与详情查询</span></div></td>
+                  <td class="nw"><span class="cl-cell"><span class="cl-dot cluster-c1"></span><span class="cl-name">生产集群</span></span></td>
+                  <td class="nw c-c"><span class="prio-txt">P10</span></td></tr>
+                <tr><td class="c-c"><span class="c-idx">3</span></td>
+                  <td><div class="cell-stack"><span class="c-strong">文件上传</span><span class="c-sub">大文件分片上传</span></div></td>
+                  <td class="nw"><span class="cl-cell"><span class="cl-dot cluster-c2"></span><span class="cl-name">预发集群</span></span></td>
+                  <td class="nw c-c"><span class="prio-txt">P0</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <ul class="dp-facts">
+            <li><b>占宽</b>固定列 <b>+116px</b>（路由页最小宽 1130 → 1246；1200 视口下表格自身横向滚动）</li>
+            <li><b>行高</b>不变（仍 68px，名称列两行）</li>
+            <li><b>可排序</b>可——独立列，点表头按集群分组排序（asc/desc）</li>
+            <li><b>一致性</b>色点复用 <code class="c-mono">.cluster-cN</code>，与卡片页分组带/角标同色同义</li>
+          </ul>
+        </section>
+
+        <!-- 方案 B -->
+        <section class="demo-panel">
+          <div class="dp-head">
+            <span class="dp-tag">方案 B</span>
+            <span class="dp-title">名称下加小字</span>
+          </div>
+          <div class="dp-body">
+            <table class="l5-table demo-tbl">
+              <colgroup><col style="width:30px"><col><col style="width:50px"></colgroup>
+              <thead><tr><th class="c-c">#</th><th>路由</th><th class="c-c">优先级</th></tr></thead>
+              <tbody>
+                <tr><td class="c-c"><span class="c-idx">1</span></td>
+                  <td><div class="cell-stack"><span class="c-strong">订单创建</span><span class="c-sub">下单入口（幂等校验）</span><span class="c-sub">集群 · 生产集群</span></div></td>
+                  <td class="nw c-c"><span class="prio-txt">P0</span></td></tr>
+                <tr><td class="c-c"><span class="c-idx">2</span></td>
+                  <td><div class="cell-stack"><span class="c-strong">用户查询接口</span><span class="c-sub">用户列表与详情查询</span><span class="c-sub">集群 · 生产集群</span></div></td>
+                  <td class="nw c-c"><span class="prio-txt">P10</span></td></tr>
+                <tr><td class="c-c"><span class="c-idx">3</span></td>
+                  <td><div class="cell-stack"><span class="c-strong">文件上传</span><span class="c-sub">大文件分片上传</span><span class="c-sub">集群 · 预发集群</span></div></td>
+                  <td class="nw c-c"><span class="prio-txt">P0</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <ul class="dp-facts">
+            <li><b>占宽</b>0（不加列；名称列有效宽不变）</li>
+            <li><b>行高</b><b>+18px</b>（每行约 68 → 86，一屏少看 1–2 行；名称列变三行）</li>
+            <li><b>可排序</b>不可——集群是名称列内的文本，无独立列可点</li>
+            <li><b>一致性</b>只有文字、无色相；与卡片页 cluster-cN 的视觉关联最弱</li>
+          </ul>
+        </section>
+
+        <!-- 方案 C -->
+        <section class="demo-panel">
+          <div class="dp-head">
+            <span class="dp-tag">方案 C</span>
+            <span class="dp-title">名称前加集群徽标</span>
+          </div>
+          <div class="dp-body">
+            <table class="l5-table demo-tbl">
+              <colgroup><col style="width:30px"><col><col style="width:50px"></colgroup>
+              <thead><tr><th class="c-c">#</th><th>路由</th><th class="c-c">优先级</th></tr></thead>
+              <tbody>
+                <tr><td class="c-c"><span class="c-idx">1</span></td>
+                  <td><div class="cell-stack"><div class="name-row"><span class="lp-tag lp-cluster cluster-c1"><span class="cl-dot"></span>生产集群</span><span class="c-strong">订单创建</span></div><span class="c-sub">下单入口（幂等校验）</span></div></td>
+                  <td class="nw c-c"><span class="prio-txt">P0</span></td></tr>
+                <tr><td class="c-c"><span class="c-idx">2</span></td>
+                  <td><div class="cell-stack"><div class="name-row"><span class="lp-tag lp-cluster cluster-c1"><span class="cl-dot"></span>生产集群</span><span class="c-strong">用户查询接口</span></div><span class="c-sub">用户列表与详情查询</span></div></td>
+                  <td class="nw c-c"><span class="prio-txt">P10</span></td></tr>
+                <tr><td class="c-c"><span class="c-idx">3</span></td>
+                  <td><div class="cell-stack"><div class="name-row"><span class="lp-tag lp-cluster cluster-c2"><span class="cl-dot"></span>预发集群</span><span class="c-strong">文件上传</span></div><span class="c-sub">大文件分片上传</span></div></td>
+                  <td class="nw c-c"><span class="prio-txt">P0</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <ul class="dp-facts">
+            <li><b>占宽</b>0 列，但名称列被徽标吃掉 ~86px（长名称需省略号截断）</li>
+            <li><b>行高</b>不变（68px），但名称与徽标竞争同一行宽</li>
+            <li><b>可排序</b>不可——集群在名称单元格内，不能单独点表头排序</li>
+            <li><b>一致性</b>徽标复用 <code class="c-mono">.lp-tag.lp-cluster</code>，与卡片页平铺态卡顶角标同款</li>
+          </ul>
+        </section>
+
+      </div>
+
+      <div class="alert alert-success" style="margin-top:16px; margin-bottom:0;">
+        <span class="alert-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></span>
+        <div class="alert-content"><b>当前实现取方案 A</b>：不占名称列、不加行高、可排序，且色相与卡片页同一套 <code class="c-mono">.cluster-c1…c8</code>。平铺态插入「集群」列并隐藏组头与「全部收起」按钮；切回分组视图时该列整体移除、表格最小宽还原（节点 1086 / 上游 1054 / 路由 1130）。</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="l5-prop-tag">方案 C · <b>表格列表页</b> · 平铺视图集群标识对比</div>
+
+<script>
+(function () {
+  'use strict';
+  document.querySelectorAll('a[href="#"]').forEach(function (a) {
+    a.addEventListener('click', function (e) { e.preventDefault(); });
+  });
+})();
+</script>
+</body>
+</html>

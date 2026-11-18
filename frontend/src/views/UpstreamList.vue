@@ -124,6 +124,7 @@
         :table-layout="'fixed'"
         size="middle"
         class="upstream-table grid-table"
+        @change="handleTableChange"
       >
         <template #headerCell="{ column, title }">
           <span class="th-resize-wrap" :class="upstreamWrapClass(column)" @mousedown="startColumnMove($event, column)">
@@ -146,6 +147,12 @@
           <template v-else-if="column.key === 'name'">
             <div class="cell-primary">{{ record.name }}</div>
             <div class="cell-secondary">{{ record.description || '-' }}</div>
+          </template>
+
+          <template v-else-if="column.key === 'cluster'">
+            <span class="cl-cell" :class="clusterHueClass(record.cluster_id)">
+              <i class="cl-dot"></i><span class="cl-name">{{ record.cluster_name || '-' }}</span>
+            </span>
           </template>
 
           <template v-else-if="column.key === 'load_balance'">
@@ -309,6 +316,7 @@ import {
 } from '@/composables/useListClusterGrouping'
 import { compareUpstreamName } from '@/utils/listGroupSorters'
 import { areTargetsVerified, summarizeTargetHealth, targetDot, targetWeightPercents } from '@/utils/upstreamTargets'
+import { clusterHueClass, CLUSTER_COLUMN_MIN_WIDTH, CLUSTER_COLUMN_WIDTH } from '@/utils/clusterHue'
 import TableToolbar from '@/components/TableToolbar.vue'
 import { useFitColumnWidths, toDesignWidths } from '@/composables/useFitColumnWidths'
 import ClusterGroupRow from '@/components/ClusterGroupRow.vue'
@@ -459,6 +467,7 @@ const publishingRecord = ref<any | null>(null)
 const columns: TableColumnsType = [
   { title: '#', key: 'index', width: 45, fixed: 'left' },
   { title: '名称', dataIndex: 'name', key: 'name', width: 176, fixed: 'left' },
+  { title: '集群', key: 'cluster', width: 116, sorter: true }, // 仅平铺可见；服务端 sort_by=cluster
   { title: '负载均衡', key: 'load_balance', width: 120 },
   { title: '目标节点与健康', key: 'targets', width: 314 },
   { title: '协议', key: 'scheme', width: 90 },
@@ -483,23 +492,44 @@ const orderedColumns = computed(() => resolveOrderedColumns(columns, upstreamCol
 
 // 列显隐过滤 + 用户拖拽宽度覆盖默认档（与节点管理同款）
 // 序号列恒展示、不进入列配置弹窗（upstream-list-page 规格钉定；与 table-anatomy 序号列语义一致）
-const popoverColumns = computed(() => columns.filter((c) => String(c.key) !== 'index'))
+const popoverColumns = computed(() => columns.filter((c) => String(c.key) !== 'index' && String(c.key) !== 'cluster'))
 
 // 列宽自适应（r6-② 方案 A）：窄于设计总宽（1079）等比收缩，下限 = 设计最小总宽 1054
 const cardRef = ref<HTMLElement | null>(null)
+// 集群列已在 columns 定义里（仅平铺可见）；分组态不参与列宽缩放
+const designWidths = () => {
+  const base = toDesignWidths(columns)
+  if (viewMode.value === 'flat') return base
+  const { cluster: _cluster, ...rest } = base
+  return rest
+}
 const { widths: fittedColumnWidths, minTableWidth } = useFitColumnWidths({
-  designWidths: () => toDesignWidths(columns),
+  designWidths,
   containerRef: cardRef,
   overrides: () => upstreamColumnWidths.value,
   flexKey: 'targets',
   // 列内容下限（r7-B4）：目标列为弹性列不设下限；scroll.x 下限之和 = 572 → 窗口 ≥ ~960 零横向滚动
-  minWidths: () => ({ index: 40, name: 120, load_balance: 80, scheme: 70, publish_status: 110, actions: 120 }),
+  minWidths: () => ({
+    ...(viewMode.value === 'flat' ? { cluster: CLUSTER_COLUMN_MIN_WIDTH } : {}),
+    index: 40,
+    name: 120,
+    load_balance: 80,
+    scheme: 70,
+    publish_status: 110,
+    actions: 120,
+  }),
 })
 
 const visibleColumns = computed(() => {
   const selected = new Set(columnsSelected.value)
   // 序号列恒展示：它不进弹窗，而 antd CheckboxGroup 交互会把它从已选集合里剔除，故此处兜底
-  const isVisible = (c: { key?: unknown }) => String(c.key) === 'index' || selected.has(String(c.key))
+  const isVisible = (c: { key?: unknown }) => {
+    const k = String(c.key)
+    if (k === 'index') return true
+    // 集群列仅平铺视图存在（分组视图由组头承担），不进列配置弹窗
+    if (k === 'cluster') return viewMode.value === 'flat'
+    return selected.has(k)
+  }
   const groupMode = viewMode.value === 'group'
   // 分组模式剥离 fixed（colSpan 通栏与 sticky 冲突，contract 10.6），平铺保留原状
   const cols = orderedColumns.value.filter(isVisible).map((c, i) => ({
@@ -635,6 +665,36 @@ function handlePagerChange(nextPage: number, nextPageSize: number) {
   loadUpstreams()
 }
 
+// ── 服务端排序（参考 RouteList 优先级实现）：仅「集群」列可排，且仅平铺视图有效 ──
+const SORTABLE_COLUMNS = ['cluster']
+const sortBy = ref('')
+const sortOrder = ref('')
+
+interface SorterEvent {
+  order?: string | null
+  field?: unknown
+  column?: { key?: unknown }
+}
+
+function handleTableChange(
+  pagination: { current?: number; pageSize?: number },
+  _filters: Record<string, unknown>,
+  sorter: SorterEvent | SorterEvent[],
+) {
+  page.value = pagination.current || 1
+  if (pagination.pageSize) pageSize.value = pagination.pageSize
+  const s = Array.isArray(sorter) ? sorter[0] : sorter
+  const field = s && !Array.isArray(s.field) ? String(s.field || s.column?.key || '') : ''
+  if (s?.order && SORTABLE_COLUMNS.includes(field)) {
+    sortBy.value = field
+    sortOrder.value = s.order === 'descend' ? 'desc' : 'asc'
+  } else {
+    sortBy.value = ''
+    sortOrder.value = ''
+  }
+  loadUpstreams()
+}
+
 async function loadUpstreams() {
   loading.value = true
   try {
@@ -643,6 +703,11 @@ async function loadUpstreams() {
     if (lbFilter.value) params.load_balance = lbFilter.value
     if (publishFilter.value) params.publish_status = publishFilter.value
     if (searchText.value) params.search = searchText.value
+    // 分组视图固定按组内顺序（名称），不参与服务端排序
+    if (sortBy.value && viewMode.value === 'flat') {
+      params.sort_by = sortBy.value
+      params.sort_order = sortOrder.value || 'asc'
+    }
     const res = await listUpstreams(params)
     upstreams.value = res.data.items || []
     totalCount.value = res.data.total || 0

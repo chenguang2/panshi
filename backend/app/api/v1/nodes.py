@@ -23,6 +23,8 @@ async def list_or_find_nodes(
     # Pagination
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=MAX_PAGE_SIZE),
+    sort_by: Optional[str] = Query(None, description="Sort field: ip | cluster"),
+    sort_order: Optional[str] = Query("asc", pattern="^(asc|desc)$"),
     # Filters
     group_name: str = Query("__all__"),
     search: Optional[str] = Query(None),
@@ -110,14 +112,9 @@ async def list_or_find_nodes(
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
 
-    # Pagination — numeric IP sort in Python (cross-DB consistent:
-    # SQL string sort would put 192.168.100.114 before 192.168.100.42)
+    # 集群名映射前移：按集群排序需要先拿到集群显示名（下方 items 组装也复用）
     result = await db.execute(query)
     nodes = list(result.scalars().all())
-    nodes.sort(key=lambda n: ip_sort_key(n.ip))
-    page_nodes = nodes[(page - 1) * page_size : page * page_size]
-
-    # Batch load cluster names
     cluster_ids = {n.cluster_id for n in nodes}
     cluster_name_map = {}
     cluster_group_map = {}
@@ -128,6 +125,18 @@ async def list_or_find_nodes(
         for r in c_result.all():
             cluster_name_map[r[0]] = r[1] or r[2]
             cluster_group_map[r[0]] = r[3] or ""
+
+    # 排序：默认按 IP 数值序（Python 侧，跨库一致——SQL 字符串序会把 .114 排到 .42 前）；
+    # sort_by=cluster 时先按集群名、同集群内仍按 IP 数值序
+    if sort_by == "cluster":
+        cluster_order = sorted(cluster_ids, key=lambda cid: (cluster_name_map.get(cid, ""), cid))
+        if sort_order == "desc":
+            cluster_order = list(reversed(cluster_order))
+        rank = {cid: i for i, cid in enumerate(cluster_order)}
+        nodes.sort(key=lambda n: (rank.get(n.cluster_id, 0), ip_sort_key(n.ip)))
+    else:
+        nodes.sort(key=lambda n: ip_sort_key(n.ip), reverse=sort_order == "desc")
+    page_nodes = nodes[(page - 1) * page_size : page * page_size]
 
     items = []
     for n in page_nodes:

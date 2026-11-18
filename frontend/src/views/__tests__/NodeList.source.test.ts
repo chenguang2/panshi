@@ -32,9 +32,14 @@ describe('节点表单状态控件', () => {
 describe('batch2 3.2 假排序守卫', () => {
   it('columns 零客户端 sorter（当前页 localeCompare 字符串序是错的；后端已全量数值 IP 排序）', () => {
     const s = src()
+    // 客户端比较函数一律禁止（antd 只有 sorter 为函数时才本地排序；服务端排序用 sorter: true + @change）
     expect(s).not.toMatch(/sorter:\s*\(/)
-    expect(s).not.toContain('sorter: true')
     expect(s).not.toContain('localeCompare')
+    // 反转（filter-architecture 平铺集群列）：允许「集群」列 sorter: true（服务端 sort_by=cluster），
+    // 其余列仍不得带 sorter
+    const sorterLines = s.split('\n').filter((l) => l.includes('sorter: true'))
+    expect(sorterLines).toHaveLength(1)
+    expect(sorterLines[0]).toContain("key: 'cluster'")
   })
 })
 
