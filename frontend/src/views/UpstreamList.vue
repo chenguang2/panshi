@@ -13,14 +13,20 @@
       <!-- 工具条（list-pages-console-restyle）：共享 TableToolbar，右端簇 = 计数 → 刷新 → 列配置 → 分组|平铺 -->
       <TableToolbar
         v-model:mode="viewMode"
-        class="nowrap"
         :count="totalCount"
         count-unit="个上游"
+        :show-count="false"
         :refreshing="loading"
         @refresh="refreshList"
       >
         <template #filters>
-          <SearchInput v-if="searchVisible" v-model="searchText" placeholder="搜索名称或描述..." @input="onSearch" />
+          <SearchInput
+            v-if="searchVisible"
+            v-model="searchText"
+            placeholder="搜索名称或描述..."
+            :width="150"
+            @input="onSearch"
+          />
           <select v-model="groupFilter" class="l5-select" style="width: 104px" @change="onGroupChange">
             <option value="__all__">全部分组</option>
             <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
@@ -86,6 +92,26 @@
           </button>
         </template>
       </TableToolbar>
+
+      <!-- 状态 chips 附属行（filter-architecture 方案甲 / D1）：上游此前完全没有状态筛选，
+           只能看页头徽标却不能按它筛。计数来自后端聚合端点，点击即设 publishFilter 并重取。 -->
+      <div class="l5-chiprow" data-test="status-chip-row">
+        <span class="chiprow-label">状态</span>
+        <div class="f-chips status-chips">
+          <button
+            v-for="c in statusChips"
+            :key="c.value"
+            type="button"
+            class="f-chip chip-status"
+            :class="{ active: publishFilter === c.value, empty: c.count === 0 }"
+            :aria-pressed="publishFilter === c.value ? 'true' : 'false'"
+            @click="selectPublishStatus(c.value)"
+          >
+            {{ c.label }}<span class="f-count">{{ c.count }}</span>
+          </button>
+        </div>
+        <span class="t-spacer"></span>
+      </div>
 
       <a-table
         :data-source="displayRows"
@@ -263,7 +289,7 @@ import { message, Modal } from 'ant-design-vue'
 import ClusterSelect from '@/components/ClusterSelect.vue'
 import StrokeIcon from '@/components/StrokeIcon.vue'
 import { CaretDownOutlined } from '@ant-design/icons-vue'
-import { listUpstreams } from '@/api/upstreams'
+import { listUpstreams, getUpstreamStatusCounts } from '@/api/upstreams'
 import { listClusters, getClusterNodes } from '@/api/clusters'
 import { PAGE_SIZE_TABLE } from '@/constants'
 import PageHeader from '@/components/PageHeader.vue'
@@ -309,6 +335,7 @@ const { searchText, onSearch: onDebouncedSearch, cancelSearch } = useDebouncedSe
 const clusterFilter = ref<string | number>('')
 const groupFilter = ref('__all__')
 const lbFilter = ref('')
+const publishFilter = ref('')
 
 const groupOptions = computed(() => {
   const names = new Set(clusters.value.map((c) => c.group_name || ''))
@@ -361,41 +388,60 @@ function upstreamCustomRow(record: unknown): Record<string, unknown> {
   return isGroupHeaderRow(record) ? { class: 'l5-group-row' } : {}
 }
 
-// ── 页头轻统计徽标（list-page-header-stats / design D3）：大分页统计副本，仅用于徽标聚合 ──
-const statsUpstreams = ref<any[]>([])
-async function loadUpstreamStats() {
+// ── 页头徽标（filter-architecture D3）：状态分布改由第二行状态 chips 承担（后端权威计数），
+//    页头只留总数；旧实现取 500 抽样当全量，总数 > 500 时会失真（routes 实测 1596 条时偏差 1090）。
+// 页头徽标 = 补充维度「N 目标」（目标节点总数，filter-architecture 决策 G3-甲）：
+// 总数已在 chips「全部 N」与分页条各出现一次；目标数是 chips 无法表达的上游规模指标。
+// 页头徽标 = 补充维度「涉及 N 集群」（filter-architecture 决策 G3-甲）：
+// 总数已在 chips「全部 N」与分页条各出现一次；「N 目标」在本库与总数相等（每上游 1 目标），
+// 故取集群维度以免再次看起来像重复（端点两个都返回，前端按需取）。
+const headerStatItems = computed(() => [{ value: statusCounts.value.cluster_count, label: '集群' }])
+
+/** 状态 chips 计数（决策 D4）：后端聚合端点，与列表业务筛选同口径、不含 publish_status */
+const statusCounts = ref<{
+  total: number
+  published: number
+  pending: number
+  unpublished: number
+  target_count: number
+  cluster_count: number
+}>({
+  total: 0,
+  published: 0,
+  pending: 0,
+  unpublished: 0,
+  target_count: 0,
+  cluster_count: 0,
+})
+async function loadStatusCounts(): Promise<void> {
   try {
-    const params: any = { page: 1, page_size: 500, group_name: groupFilter.value } // MAX_PAGE_SIZE（design D3）
+    const params: Record<string, string | number> = { group_name: groupFilter.value }
     if (clusterFilter.value) params.cluster_id = clusterFilter.value
     if (lbFilter.value) params.load_balance = lbFilter.value
     if (searchText.value) params.search = searchText.value
-    const res = await listUpstreams(params)
-    statsUpstreams.value = res.data.items || []
+    const { data } = await getUpstreamStatusCounts(params)
+    statusCounts.value = data
   } catch {
-    // 徽标统计失败静默（保留上次分布）；列表加载失败由 loadUpstreams 自己提示
+    // 计数失败静默（保留上次值）；列表加载失败由 loadUpstreams 提示
   }
 }
-/** 徽标主数字恒用 totalCount（与页脚「共 N」一致）；状态分布取统计副本（design D3） */
-const headerStatItems = computed(() => {
-  let published = 0
-  let pending = 0
-  for (const r of statsUpstreams.value) {
-    if (r.pending_publish === true) pending++
-    else if (r.current_version != null) published++
-  }
-  const items: Array<{ value: number | string; label: string; tone?: 'ok' | 'warn' | 'bad' }> = [
-    { value: totalCount.value, label: '上游' },
-  ]
-  if (published) items.push({ value: published, label: '已发布', tone: 'ok' })
-  if (pending) items.push({ value: pending, label: '待发布', tone: 'warn' })
-  return items
-})
-
+const statusChips = computed(() => [
+  { value: '', label: '全部', count: statusCounts.value.total },
+  { value: 'unpublished', label: '未发布', count: statusCounts.value.unpublished },
+  { value: 'pending', label: '待发布', count: statusCounts.value.pending },
+  { value: 'published', label: '已发布', count: statusCounts.value.published },
+])
+/** 点状态 chip：设 publishFilter → 顺序刷新列表与计数（计数不含 publish_status，故数字不变） */
+function selectPublishStatus(value: string): void {
+  publishFilter.value = value
+  page.value = 1
+  refreshList()
+}
 /** 刷新语义（design D6）：重拉列表 + 徽标统计；不重置筛选/视图模式。
  *  顺序化执行（先列表后统计）：并发的两个同名端点请求会让「最后一次调用」类断言产生竞态。 */
 async function refreshList(): Promise<void> {
   await loadUpstreams()
-  await loadUpstreamStats()
+  await loadStatusCounts()
 }
 const formModalVisible = ref(false)
 const editingUpstream = ref<any | null>(null)
@@ -595,6 +641,7 @@ async function loadUpstreams() {
     const params: any = { page: page.value, page_size: pageSize.value, group_name: groupFilter.value }
     if (clusterFilter.value) params.cluster_id = clusterFilter.value
     if (lbFilter.value) params.load_balance = lbFilter.value
+    if (publishFilter.value) params.publish_status = publishFilter.value
     if (searchText.value) params.search = searchText.value
     const res = await listUpstreams(params)
     upstreams.value = res.data.items || []

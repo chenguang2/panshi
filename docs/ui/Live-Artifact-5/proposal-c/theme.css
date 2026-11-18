@@ -2186,7 +2186,7 @@ tr.row-disabled {
 .l5-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); }
 
 /* ── 工具条 ── */
-.l5-toolbar { display: flex; align-items: center; gap: 8px; padding: 12px 16px; flex-wrap: wrap; }
+.l5-toolbar { display: flex; align-items: center; gap: 8px; padding: 12px 16px; flex-wrap: wrap;  border-bottom: 1px solid var(--border); }
 .l5-toolbar .t-spacer { flex: 1 1 12px; }
 .l5-count { font-size: 12px; color: var(--muted); white-space: nowrap; }
 .l5-count b { color: var(--fg); font-family: var(--font-mono); font-weight: 600; }
@@ -2453,3 +2453,191 @@ tr.l5-group td { background: var(--bg); padding: 0; border-bottom: 1px solid var
 /* ── 方案角标 ── */
 .l5-prop-tag { position: fixed; right: 14px; bottom: 14px; z-index: 90; display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 12px; border-radius: 999px; background: var(--sidebar-bg); color: oklch(80% 0.01 250); font-size: 11px; letter-spacing: .03em; box-shadow: var(--shadow-md); }
 .l5-prop-tag b { color: #fff; font-weight: 600; }
+
+/* 状态 chips 计数后缀（filter-architecture）：与实现页 style.css 同款 */
+.f-chip .f-count { font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--muted); margin-left: 6px; }
+.f-chip.active .f-count { color: var(--accent); }
+.f-chip.empty { opacity: .55; }
+
+/* ==========================================================
+   卡片型列表页解剖（Live-Artifact-5 · proposal-c 卡片批）
+   唯一入口：插件组 / 插件元数据 / 全局规则 / 静态资源 …
+   页面只挂 .card-grid + .l5-panel，禁止页内重写容器与卡片解剖
+   ========================================================== */
+
+/* ── 卡片网格：3 列 → ≤1200 两列 → ≤768 一列 ── */
+.l5-card .card-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; padding: 16px; align-items: stretch; }
+@media (max-width: 1200px) { .l5-card .card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 768px) { .l5-card .card-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* ── 单卡片 ── */
+.l5-panel { display: flex; flex-direction: column; min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); transition: box-shadow .15s, border-color .15s; }
+.l5-panel:hover { box-shadow: var(--shadow-md); border-color: oklch(56% 0.16 210 / 28%); }
+
+/* 卡片头：主名称 + 身份标签 → 右侧状态区 */
+.lp-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 11px 14px; border-bottom: 1px solid var(--border); }
+.lp-title { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1 1 auto; }
+.lp-name { font-family: var(--font-display); font-size: 15px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.35; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.lp-name.mono { font-family: var(--font-mono); font-size: 14px; letter-spacing: 0; }
+.lp-tag { display: inline-flex; align-items: center; gap: 4px; height: 19px; padding: 0 7px; border-radius: 4px; background: var(--bg); border: 1px solid var(--border); color: var(--muted); font-family: var(--font-mono); font-size: 10.5px; line-height: 1; white-space: nowrap; flex-shrink: 0; }
+.lp-tag.group { background: oklch(50% 0.12 170 / 12%); border-color: oklch(50% 0.12 170 / 25%); color: oklch(45% 0.12 170); font-family: var(--font-body); font-weight: 600; }
+.lp-status { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; flex-shrink: 0; }
+
+/* 卡片体：键值行（2–3 行）+ 插件 chips */
+.lp-body { display: flex; flex-direction: column; gap: 4px; padding: 7px 14px; }
+.lp-row { display: flex; align-items: baseline; gap: 8px; min-width: 0; font-size: 12.5px; line-height: 1.45; }
+.lp-k { flex: 0 0 52px; width: 52px; color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+.lp-v { flex: 1 1 auto; min-width: 0; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lp-v.dim { color: var(--muted); }
+.lp-v.mono { font-family: var(--font-mono); font-size: 12px; }
+.lp-chips { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.lp-chip { display: inline-flex; align-items: center; height: 19px; padding: 0 7px; border-radius: 999px; background: var(--accent-bg); color: var(--accent); font-family: var(--font-mono); font-size: 10.5px; line-height: 1; white-space: nowrap; }
+.lp-chip.off { background: oklch(50% 0.018 240 / 8%); color: var(--muted); }
+.lp-cnt { align-self: center; margin-left: 2px; font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+.lp-cnt::before { content: '·'; margin-right: 5px; color: oklch(50% 0.018 240 / 45%); }
+
+/* 卡片内嵌警示（沿用 .alert 四档配色，紧凑一行、无标题行） */
+.lp-notice { display: flex; align-items: flex-start; gap: 7px; margin: 0 14px 4px; padding: 5px 8px; border-radius: var(--radius-sm); font-size: 12px; line-height: 1.45; }
+.lp-notice .n-ico { flex-shrink: 0; display: inline-flex; margin-top: 1px; }
+.lp-notice .n-txt { flex: 1; min-width: 0; }
+.lp-notice .n-act { flex-shrink: 0; align-self: center; border: none; background: transparent; padding: 0; font: inherit; font-weight: 600; color: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; white-space: nowrap; }
+
+/* 卡片底：主操作 + ⋯ 菜单 */
+.lp-foot { margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 7px 14px; border-top: 1px solid var(--border); }
+
+/* 状态胶囊内的警示图标（部分失败态：实心三角，与卡片内嵌 danger 图标同族） */
+.ps-tag svg { flex-shrink: 0; margin-right: 4px; }
+
+/* ── 字段级警示（12px · --warning · 三角小图标） ── */
+.field-warn { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; line-height: 1.3; color: var(--warning); white-space: nowrap; }
+.field-warn svg { width: 11px; height: 11px; flex-shrink: 0; }
+.field-danger { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; line-height: 1.3; color: var(--danger); white-space: nowrap; }
+.field-danger svg { width: 11px; height: 11px; flex-shrink: 0; }
+
+/* ── 警示徽标别名：.badge-warn ≡ 既有 .badge-warning（.badge-danger 已存在，不重复声明） ── */
+.badge-warn { background: oklch(65% 0.15 85 / 12%); color: var(--warning); }
+
+/* ── 页级横幅右侧动作 ── */
+.alert-act { flex-shrink: 0; align-self: center; }
+.alert .alert-content b { font-weight: 600; }
+
+/* ── 页头补充维度徽标（routes.html 同款，提为共享） ── */
+.ph-lite { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.ph-lite b { font-family: var(--font-mono); color: var(--fg); font-weight: 600; }
+.ph-lite.lite-accent { border-color: oklch(56% 0.16 210 / 30%); background: var(--accent-bg); color: var(--accent); }
+.ph-lite.lite-accent b { color: var(--accent); }
+.ph-lite.lite-warn { border-color: oklch(65% 0.15 85 / 32%); background: oklch(65% 0.15 85 / 10%); color: var(--warning); }
+.ph-lite.lite-warn b { color: var(--warning); }
+.ph-lite.lite-bad { border-color: oklch(55% 0.18 28 / 30%); background: oklch(55% 0.18 28 / 8%); color: var(--danger); }
+.ph-lite.lite-bad b { color: var(--danger); }
+
+/* ── 批次 2 增补：技术名标签 / 启用开关 / 禁用态卡片 / 折叠计数 ── */
+.lp-tag.tech { background: var(--accent-bg); border-color: oklch(56% 0.16 210 / 22%); color: var(--accent); }
+
+/* 右对齐启用开关（开关 + 状态词，禁用态用文字兜住色彩弱化） */
+.lp-swtext { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.lp-status .toggle { flex-shrink: 0; }
+
+/* 禁用态卡片：整体降饱和用灰底 + 弱化主名称（不用 opacity，避免文字发灰不可读） */
+.l5-panel.is-off { background: oklch(97.6% 0.003 250); border-color: oklch(90% 0.006 240); }
+.l5-panel.is-off .lp-head { background: oklch(50% 0.018 240 / 5%); }
+.l5-panel.is-off .lp-name { color: var(--muted); }
+.l5-panel.is-off .lp-tag { background: var(--surface); }
+
+/* 折叠域名计数（+N）在键值行里的间距 */
+.lp-v .m-more { margin-left: 4px; }
+
+/* 值内混排：长文本可省略、尾随徽章不被压掉（证书页「签发 · 到期 [剩余 N 天]」等） */
+.lp-v.split { display: flex; align-items: baseline; gap: 6px; overflow: visible; }
+.lp-v.split > .tr { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lp-v.split > .badge { flex-shrink: 0; }
+
+/* ── 批 3 增补：卡片头部主值（监听端口 / DoH 入口路径）+ 协议 / 算法徽标 ── */
+.lp-hero { font-family: var(--font-mono); font-size: 18px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.3; color: var(--fg); white-space: nowrap; flex-shrink: 0; }
+.lp-hero.sm { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+.lp-proto { display: inline-flex; align-items: center; height: 19px; padding: 0 7px; border-radius: 4px; font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; line-height: 1; white-space: nowrap; flex-shrink: 0; }
+.lp-proto.tcp { background: oklch(55% 0.12 240 / 12%); color: var(--info); }
+.lp-proto.udp { background: oklch(65% 0.15 85 / 14%); color: var(--warning); }
+.lp-proto.tls { background: oklch(55% 0.15 145 / 12%); color: var(--success); }
+.lp-algo { display: inline-flex; align-items: center; height: 19px; padding: 0 8px; border-radius: 999px; background: var(--accent-bg); color: var(--accent); font-family: var(--font-mono); font-size: 10.5px; line-height: 1; white-space: nowrap; flex-shrink: 0; }
+
+/* ==========================================================
+   集群分组视图（卡片页 · 分组 / 平铺双模式）
+   颜色约定：cluster_id 取模 8 → .cluster-c1 … .cluster-c8；
+   同一集群全站同色，禁止按出现顺序随机分配。
+   ========================================================== */
+.cluster-c1 { --cc: oklch(56% 0.16 210); --cc-bg: oklch(56% 0.16 210 / 10%); --cc-bd: oklch(56% 0.16 210 / 34%); }
+.cluster-c2 { --cc: oklch(55% 0.14 300); --cc-bg: oklch(55% 0.14 300 / 10%); --cc-bd: oklch(55% 0.14 300 / 34%); }
+.cluster-c3 { --cc: oklch(55% 0.15 145); --cc-bg: oklch(55% 0.15 145 / 10%); --cc-bd: oklch(55% 0.15 145 / 34%); }
+.cluster-c4 { --cc: oklch(58% 0.16 28);  --cc-bg: oklch(58% 0.16 28 / 10%);  --cc-bd: oklch(58% 0.16 28 / 34%); }
+.cluster-c5 { --cc: oklch(55% 0.12 240); --cc-bg: oklch(55% 0.12 240 / 10%); --cc-bd: oklch(55% 0.12 240 / 34%); }
+.cluster-c6 { --cc: oklch(62% 0.13 95);  --cc-bg: oklch(62% 0.13 95 / 12%);  --cc-bd: oklch(62% 0.13 95 / 36%); }
+.cluster-c7 { --cc: oklch(58% 0.16 330); --cc-bg: oklch(58% 0.16 330 / 10%); --cc-bd: oklch(58% 0.16 330 / 34%); }
+.cluster-c8 { --cc: oklch(58% 0.13 190); --cc-bg: oklch(58% 0.13 190 / 10%); --cc-bd: oklch(58% 0.13 190 / 34%); }
+
+/* 分组带：跨整行、只表达规模（状态分布归顶部 chips，不在此重复） */
+.l5-band { grid-column: 1 / -1; position: relative; display: flex; align-items: center; gap: 8px; padding: 7px 12px 7px 16px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-md); }
+.l5-band::before { content: ''; position: absolute; left: 0; top: 6px; bottom: 6px; width: 3px; border-radius: 0 2px 2px 0; background: var(--cc, var(--accent)); }
+.l5-band .b-name { font-size: 13px; font-weight: 600; color: var(--fg); }
+.l5-band .b-count { font-size: 11px; color: var(--muted); }
+.l5-band .b-spacer { flex: 1; }
+.l5-band .b-hint { font-size: 11px; color: var(--muted); }
+.l5-band .g-chev { color: var(--cc, var(--muted)); }
+
+/* 平铺模式集群角标：色取所在集群的 --cc */
+.lp-tag.lp-cluster { background: var(--cc-bg, var(--bg)); border-color: var(--cc-bd, var(--border)); color: var(--cc, var(--muted)); }
+
+/* 双模式互斥显隐 */
+.l5-card.mode-group .lp-cluster,
+.l5-card.mode-group .lp-group { display: none; }
+.l5-card.mode-group .l5-pager { display: none; }
+.l5-card.mode-flat .l5-band { display: none; }
+.l5-card.mode-flat .l5-panel { border-left: 4px solid var(--cc, var(--border)); }
+.l5-card.mode-flat .l5-panel.is-hidden { display: none; }
+.l5-panel.is-folded { display: none; }
+
+/* 卡头单行模式：空间不足时省略名称而非换行（换行会把卡高顶破 180px） */
+.lp-head.no-wrap { flex-wrap: nowrap; }
+.lp-head.no-wrap .lp-title { min-width: 0; }
+.lp-head.no-wrap .lp-name { flex: 0 1 auto; min-width: 0; }
+.lp-head.no-wrap .lp-status { flex-wrap: nowrap; }
+
+/* 平铺模式的集群角标条（分组模式下由 band 承担，故隐藏；不新增行高负担：
+   负载均衡从卡体移到本条的右端，卡体只剩「目标」一行） */
+.lp-strip { display: none; align-items: center; gap: 6px; padding: 1px 14px; border-bottom: 1px solid var(--border); background: var(--cc-bg, var(--bg)); border-top-left-radius: calc(var(--radius-lg) - 1px); border-top-right-radius: calc(var(--radius-lg) - 1px); }
+.lp-strip .st-algo { margin-left: auto; font-size: 11px; color: var(--muted); }
+.lp-strip .st-algo b { font-family: var(--font-mono); font-weight: 600; color: var(--fg); }
+.l5-card.mode-flat .lp-strip { display: flex; }
+.l5-card.mode-flat .lp-row.group-only { display: none; }
+
+/* 分组可点开合 + 键盘可达：整条 band 是 role="button"（chevron 仍保留、点击不重复触发） */
+.band-cards { display: contents; }
+.l5-band[role="button"] { cursor: pointer; transition: background .15s, border-color .15s; }
+.l5-band[role="button"]:hover { background: var(--surface); border-color: oklch(84% 0.008 240); }
+.l5-band[role="button"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.l5-card.mode-flat .fold-all-btn { display: none; }
+
+/* ── 卡片页批量管理（对齐列表页 .l5-batchbar 规范）── */
+.l5-panel { position: relative; }
+.lp-check { display: none; position: absolute; left: 9px; top: 11px; width: 16px; height: 16px; border: 1px solid var(--border); border-radius: 3px; background: var(--surface); z-index: 2; transition: background .12s, border-color .12s; }
+.l5-card.batch .lp-check { display: block; }
+.l5-card.batch .lp-head, .l5-card.batch .lp-strip { padding-left: 33px; }
+.l5-panel.is-selected { border-color: var(--accent); background: oklch(56% 0.16 210 / 5%); }
+.l5-card.mode-flat .l5-panel.is-selected { border-left-color: var(--accent); }
+.l5-panel.is-selected .lp-check { background: var(--accent); border-color: var(--accent); }
+.l5-panel.is-selected .lp-check::after { content: ''; position: absolute; left: 5px; top: 1.5px; width: 4px; height: 8px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.l5-card:not(.batch) .lp-panel-check { display: none; }
+
+/* band 级全选（仅批量态 + 分组模式出现） */
+.band-select { display: none; font-size: 11.5px; font-weight: 500; color: var(--accent); background: none; border: none; cursor: pointer; padding: 0 2px; font-family: var(--font-body); }
+.l5-card.batch.mode-group .band-select { display: inline-flex; }
+.band-select:hover { text-decoration: underline; }
+.b-selcount { display: none; font-size: 11px; color: var(--accent); font-family: var(--font-mono); }
+.l5-card.batch .b-selcount { display: inline; }
+
+/* 批量条按需出现（仅卡片页样张用；列表页的 batchbar 恒显示，不受影响） */
+.l5-batchbar.batchbar-dynamic { display: none; }
+.l5-card.batch > .l5-batchbar.batchbar-dynamic { display: flex; }
+
+/* 值内联色（strip / 卡体共用，勿替代结构性类） */
+.c-danger { color: var(--danger); font-size: 11.5px; }

@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>路由页方法筛选 · 三方案对比 — 磐石网关管理平台</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+  body { padding: 24px 28px 60px; background: var(--bg); }
+  .demo-head { max-width: 1310px; margin: 0 auto 18px; }
+  .demo-head h1 { font-size: 21px; font-weight: 600; }
+  .demo-head p { margin-top: 6px; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+  .demo-sec { max-width: 1310px; margin: 0 auto 26px; }
+  .demo-sec > h2 { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .demo-sec > h2 .tag { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--accent-bg); color: var(--accent); }
+  .demo-sec > h2 .tag.rec { background: oklch(55% 0.15 145 / 12%); color: var(--success); }
+  .demo-sec > p { font-size: 12px; color: var(--muted); margin-bottom: 10px; line-height: 1.6; }
+
+  /* 宽度模拟器：卡片宽度按视口档位缩放（1600→1310 / 1366→1076 / 1280→990 / 1200→912） */
+  .sim { width: 1310px; transition: width .15s; }
+  .sim-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; color: var(--muted); }
+  .sim-bar .wbtn { height: 24px; padding: 0 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); color: var(--fg); font-size: 12px; cursor: pointer; }
+  .sim-bar .wbtn.active { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); font-weight: 500; }
+  .sim-bar .readout { margin-left: auto; font-family: var(--font-mono); font-size: 11.5px; }
+  .sim-bar .readout b { color: var(--fg); }
+
+  .l5-card.demo { padding: 0; }
+  /* 演示用：区块分隔线（真实页面里 toolbar / chiprow 相邻） */
+  .demo-chiprow-wrap { position: relative; }
+
+  /* 方案 C：chips 溢出时的「+N」折叠按钮 */
+  .f-chip.more { border-style: dashed; }
+  .fchip-pop { position: absolute; z-index: 40; margin-top: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-md); padding: 6px; display: none; }
+  .fchip-pop.open { display: flex; gap: 6px; }
+</style>
+</head>
+<body>
+
+<div class="demo-head">
+  <h1>路由页「方法」筛选 · 三方案对比</h1>
+  <p>
+    三个方案都**取消工具条上的「全部方法」下拉**（省 110px，1440/1366 才能单行放下），差别只在第二行表现为哪种形态。<br>
+    每张卡片可切换宽度档位，右下角实时显示「chips 自然宽 / 可用宽 / 是否换行」。
+  </p>
+</div>
+
+<!-- ═══════════ 方案 A ═══════════ -->
+<section class="demo-sec">
+  <h2><span class="tag rec">推荐</span>方案 A · 全部方法平铺在第二行（10 个 chip）</h2>
+  <p>全部 / GET / POST / PUT / DELETE / PATCH / HEAD / OPTIONS / CONNECT / TRACE 一次列全，无二级入口；实测在 1280 视口仍单行不换行。</p>
+  <div class="sim-bar">
+    <span>模拟视口：</span>
+    <button class="wbtn active" data-w="1310">1600</button>
+    <button class="wbtn" data-w="1076">1366</button>
+    <button class="wbtn" data-w="990">1280</button>
+    <button class="wbtn" data-w="912">1200</button>
+    <span class="readout"></span>
+  </div>
+  <div class="sim" id="simA">
+    <div class="l5-card demo">
+      <!-- 工具条：6 个筛选中去掉「全部方法」，其余统一 104px -->
+      <div class="l5-toolbar nowrap" style="gap:6px;">
+        <div class="l5-search"><input type="text" style="width:150px" placeholder="搜索名称、URI、描述...">
+          <svg class="s-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        </div>
+        <select class="l5-select" style="width:104px"><option>全部分组</option><option>生产环境</option></select>
+        <select class="l5-select" style="width:104px"><option>全部集群</option><option>生产集群</option></select>
+        <select class="l5-select" style="width:104px" disabled title="选择集群后可选择上游"><option>全部上游</option></select>
+        <select class="l5-select" style="width:104px"><option>全部插件</option><option>限流</option></select>
+        <select class="l5-select" style="width:104px"><option>全部状态</option><option>已发布</option></select>
+        <span class="t-spacer"></span>
+        <span class="l5-count">共 <b>31</b> 个路由</span>
+        <button class="tool-btn" title="重新拉取列表"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 11-2.64-6.36"/><path d="M21 3v6h-6"/></svg>刷新</button>
+        <button class="tool-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>列配置</button>
+        <button class="tool-btn fold-all-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7 4 12 9 17 4"/><polyline points="7 20 12 15 17 20"/></svg>全部收起</button>
+        <div class="seg"><span class="seg-opt all active">分组</span><span class="seg-opt">平铺</span></div>
+      </div>
+
+      <!-- 第二行：全部方法平铺 -->
+      <div class="l5-chiprow" data-chips>
+        <span class="chiprow-label">方法</span>
+        <div class="f-chips">
+          <span class="f-chip active">全部</span>
+          <span class="f-chip">GET</span>
+          <span class="f-chip">POST</span>
+          <span class="f-chip">PUT</span>
+          <span class="f-chip">DELETE</span>
+          <span class="f-chip">PATCH</span>
+          <span class="f-chip">HEAD</span>
+          <span class="f-chip">OPTIONS</span>
+          <span class="f-chip">CONNECT</span>
+          <span class="f-chip">TRACE</span>
+        </div>
+        <span class="t-spacer"></span>
+      </div>
+
+      <div class="l5-table-wrap">
+        <table class="l5-table" style="min-width:1130px">
+          <thead><tr><th class="c-c">#</th><th>路由</th><th>请求匹配</th><th class="c-c">优先级</th><th>上游</th><th>发布状态</th><th>创建时间</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr><td class="c-c"><span class="c-idx">1</span></td>
+              <td><div class="cell-stack"><span class="c-strong">订单创建</span><span class="c-sub">下单入口（幂等校验）</span></div></td>
+              <td><div class="match-cell"><span class="m-row"><span class="m-tag POST">POST</span><span class="m-tag PUT">PUT</span></span><span class="pipe-uri">/api/orders</span></div></td>
+              <td class="nw c-c"><span class="prio">P0</span></td>
+              <td class="nw"><span class="pipe-up">order-api<span class="up-n">1 节点</span></span></td>
+              <td class="nw"><span class="pub-cell"><span class="ps-tag ps-pending">待发布</span></span></td>
+              <td class="nw"><span class="c-mono c-dim">2025-08-10</span></td>
+              <td class="ops-cell"><div class="ops"><button class="op-pub">发布</button><button class="op-btn" title="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button></div></td>
+            </tr>
+            <tr><td class="c-c"><span class="c-idx">2</span></td>
+              <td><div class="cell-stack"><span class="c-strong">静态资源</span><span class="c-sub">门户静态文件回源</span></div></td>
+              <td><div class="match-cell"><span class="m-row"><span class="m-tag GET">GET</span><span class="m-tag">HEAD</span></span><span class="pipe-uri">/static/*</span></div></td>
+              <td class="nw c-c"><span class="prio">P0</span></td>
+              <td class="nw"><span class="pipe-up">web-portal<span class="up-n">1 节点</span></span></td>
+              <td class="nw"><span class="pub-cell"><span class="ps-tag ps-pub">v2</span><span class="ps-date">11-05 11:02</span></span></td>
+              <td class="nw"><span class="c-mono c-dim">2025-05-14</span></td>
+              <td class="ops-cell"><div class="ops"><button class="op-pub">发布</button><button class="op-btn" title="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button></div></td>
+            </tr>
+            <tr><td class="c-c"><span class="c-idx">3</span></td>
+              <td><div class="cell-stack"><span class="c-strong">跨域预检</span><span class="c-sub">CORS preflight</span></div></td>
+              <td><div class="match-cell"><span class="m-row"><span class="m-tag">OPTIONS</span></span><span class="pipe-uri">/api/*</span></div></td>
+              <td class="nw c-c"><span class="prio">P0</span></td>
+              <td class="nw"><span class="pipe-up">cors-core<span class="up-n">2 节点</span></span></td>
+              <td class="nw"><span class="pub-cell"><span class="ps-tag ps-pub">v4</span><span class="ps-date">11-10 09:15</span></span></td>
+              <td class="nw"><span class="c-mono c-dim">2025-07-21</span></td>
+              <td class="ops-cell"><div class="ops"><button class="op-pub">发布</button><button class="op-btn" title="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button></div></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 方案 B ═══════════ -->
+<section class="demo-sec">
+  <h2><span class="tag">备选</span>方案 B · 常用 5 个 + 「更多 ▾」下拉</h2>
+  <p>保持现有 5 个高频 chip 不动，尾部加一枚「更多 ▾」，点开是 HEAD / OPTIONS / CONNECT / TRACE；选中后按钮变成该方法名并高亮。</p>
+  <div class="sim-bar">
+    <span>模拟视口：</span>
+    <button class="wbtn active" data-w="1310">1600</button>
+    <button class="wbtn" data-w="1076">1366</button>
+    <button class="wbtn" data-w="990">1280</button>
+    <button class="wbtn" data-w="912">1200</button>
+    <span class="readout"></span>
+  </div>
+  <div class="sim" id="simB">
+    <div class="l5-card demo">
+      <div class="l5-toolbar nowrap" style="gap:6px;">
+        <div class="l5-search"><input type="text" style="width:150px" placeholder="搜索名称、URI、描述...">
+          <svg class="s-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        </div>
+        <select class="l5-select" style="width:104px"><option>全部分组</option></select>
+        <select class="l5-select" style="width:104px"><option>全部集群</option></select>
+        <select class="l5-select" style="width:104px" disabled><option>全部上游</option></select>
+        <select class="l5-select" style="width:104px"><option>全部插件</option></select>
+        <select class="l5-select" style="width:104px"><option>全部状态</option></select>
+        <span class="t-spacer"></span>
+        <span class="l5-count">共 <b>31</b> 个路由</span>
+        <button class="tool-btn">刷新</button>
+        <button class="tool-btn">列配置</button>
+        <button class="tool-btn fold-all-btn">全部收起</button>
+        <div class="seg"><span class="seg-opt all active">分组</span><span class="seg-opt">平铺</span></div>
+      </div>
+      <div class="l5-chiprow" data-chips>
+        <span class="chiprow-label">方法</span>
+        <div class="f-chips">
+          <span class="f-chip active">全部</span>
+          <span class="f-chip">GET</span>
+          <span class="f-chip">POST</span>
+          <span class="f-chip">PUT</span>
+          <span class="f-chip">DELETE</span>
+          <span class="f-chip">PATCH</span>
+          <span class="f-chip more" data-pop="popB">更多
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </span>
+        </div>
+        <span class="t-spacer"></span>
+        <div class="fchip-pop" id="popB">
+          <span class="f-chip">HEAD</span><span class="f-chip">OPTIONS</span><span class="f-chip">CONNECT</span><span class="f-chip">TRACE</span>
+        </div>
+      </div>
+      <div class="l5-table-wrap">
+        <table class="l5-table" style="min-width:1130px">
+          <thead><tr><th class="c-c">#</th><th>路由</th><th>请求匹配</th><th class="c-c">优先级</th><th>上游</th><th>发布状态</th><th>创建时间</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr><td class="c-c"><span class="c-idx">1</span></td>
+              <td><div class="cell-stack"><span class="c-strong">订单创建</span><span class="c-sub">下单入口（幂等校验）</span></div></td>
+              <td><div class="match-cell"><span class="m-row"><span class="m-tag POST">POST</span></span><span class="pipe-uri">/api/orders</span></div></td>
+              <td class="nw c-c"><span class="prio">P0</span></td>
+              <td class="nw"><span class="pipe-up">order-api<span class="up-n">1 节点</span></span></td>
+              <td class="nw"><span class="pub-cell"><span class="ps-tag ps-pending">待发布</span></span></td>
+              <td class="nw"><span class="c-mono c-dim">2025-08-10</span></td>
+              <td class="ops-cell"><div class="ops"><button class="op-pub">发布</button><button class="op-btn" title="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button></div></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 方案 C ═══════════ -->
+<section class="demo-sec">
+  <h2><span class="tag">备选</span>方案 C · 常用 5 个 + 「+4」展开</h2>
+  <p>与 B 相同的信息量，但默认更短：点「+4」原地展开成 9 个方法，再点收起。</p>
+  <div class="sim-bar">
+    <span>模拟视口：</span>
+    <button class="wbtn active" data-w="1310">1600</button>
+    <button class="wbtn" data-w="1076">1366</button>
+    <button class="wbtn" data-w="990">1280</button>
+    <button class="wbtn" data-w="912">1200</button>
+    <span class="readout"></span>
+  </div>
+  <div class="sim" id="simC">
+    <div class="l5-card demo">
+      <div class="l5-toolbar nowrap" style="gap:6px;">
+        <div class="l5-search"><input type="text" style="width:150px" placeholder="搜索名称、URI、描述...">
+          <svg class="s-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        </div>
+        <select class="l5-select" style="width:104px"><option>全部分组</option></select>
+        <select class="l5-select" style="width:104px"><option>全部集群</option></select>
+        <select class="l5-select" style="width:104px" disabled><option>全部上游</option></select>
+        <select class="l5-select" style="width:104px"><option>全部插件</option></select>
+        <select class="l5-select" style="width:104px"><option>全部状态</option></select>
+        <span class="t-spacer"></span>
+        <span class="l5-count">共 <b>31</b> 个路由</span>
+        <button class="tool-btn">刷新</button>
+        <button class="tool-btn">列配置</button>
+        <button class="tool-btn fold-all-btn">全部收起</button>
+        <div class="seg"><span class="seg-opt all active">分组</span><span class="seg-opt">平铺</span></div>
+      </div>
+      <div class="l5-chiprow" data-chips>
+        <span class="chiprow-label">方法</span>
+        <div class="f-chips" id="chipsC">
+          <span class="f-chip active">全部</span>
+          <span class="f-chip">GET</span>
+          <span class="f-chip">POST</span>
+          <span class="f-chip">PUT</span>
+          <span class="f-chip">DELETE</span>
+          <span class="f-chip">PATCH</span>
+          <span class="f-chip more" id="moreC">+4</span>
+        </div>
+        <span class="t-spacer"></span>
+      </div>
+      <div class="l5-table-wrap">
+        <table class="l5-table" style="min-width:1130px">
+          <thead><tr><th class="c-c">#</th><th>路由</th><th>请求匹配</th><th class="c-c">优先级</th><th>上游</th><th>发布状态</th><th>创建时间</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr><td class="c-c"><span class="c-idx">1</span></td>
+              <td><div class="cell-stack"><span class="c-strong">订单创建</span><span class="c-sub">下单入口（幂等校验）</span></div></td>
+              <td><div class="match-cell"><span class="m-row"><span class="m-tag POST">POST</span></span><span class="pipe-uri">/api/orders</span></div></td>
+              <td class="nw c-c"><span class="prio">P0</span></td>
+              <td class="nw"><span class="pipe-up">order-api<span class="up-n">1 节点</span></span></td>
+              <td class="nw"><span class="pub-cell"><span class="ps-tag ps-pending">待发布</span></span></td>
+              <td class="nw"><span class="c-mono c-dim">2025-08-10</span></td>
+              <td class="ops-cell"><div class="ops"><button class="op-pub">发布</button><button class="op-btn" title="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button></div></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+/* 宽度档位切换 + 实时读数 */
+function setup(simId) {
+  const sim = document.getElementById(simId)
+  const bar = sim.previousElementSibling
+  const readout = bar.querySelector('.readout')
+  const chips = sim.querySelector('[data-chips]')
+  bar.querySelectorAll('.wbtn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      bar.querySelectorAll('.wbtn').forEach((b) => b.classList.remove('active'))
+      btn.classList.add('active')
+      sim.style.width = btn.dataset.w + 'px'
+      requestAnimationFrame(() => measure())
+    })
+  })
+  function measure() {
+    const cardW = sim.getBoundingClientRect().width
+    const inner = cardW - 32 // chiprow 左右内距
+    const row = chips.querySelector('.f-chips')
+    const label = chips.querySelector('.chiprow-label')
+    const labelW = label ? label.getBoundingClientRect().width : 0
+    const need = Math.round(row.scrollWidth + labelW + 10)
+    const free = Math.round(inner - need)
+    const wrapped = row.getBoundingClientRect().height > 30
+    readout.innerHTML = `chips 需要 <b>${need}</b> · 可用 <b>${Math.round(inner)}</b> · 余量 <b style="color:${free >= 0 ? 'var(--success)' : 'var(--danger)'}">${free}</b> · ${wrapped ? '<b style="color:var(--danger)">换行</b>' : '<b style="color:var(--success)">单行</b>'}`
+  }
+  new ResizeObserver(measure).observe(sim)
+  measure()
+}
+setup('simA'); setup('simB'); setup('simC')
+
+/* 方案 B：「更多 ▾」弹出四冷门方法 */
+const popB = document.getElementById('popB')
+document.querySelector('[data-pop="popB"]').addEventListener('click', (e) => {
+  e.stopPropagation()
+  popB.classList.toggle('open')
+})
+popB.querySelectorAll('.f-chip').forEach((c) => {
+  c.addEventListener('click', () => {
+    document.querySelectorAll('#simB .f-chip').forEach((x) => x.classList.remove('active'))
+    c.classList.add('active')
+    popB.classList.remove('open')
+  })
+})
+document.addEventListener('click', () => popB.classList.remove('open'))
+
+/* 方案 C：「+4」原地展开 / 收起 */
+const moreC = document.getElementById('moreC')
+let expanded = false
+const extra = ['HEAD', 'OPTIONS', 'CONNECT', 'TRACE']
+moreC.addEventListener('click', () => {
+  const wrap = document.getElementById('chipsC')
+  if (!expanded) {
+    extra.forEach((m) => {
+      const s = document.createElement('span')
+      s.className = 'f-chip'
+      s.textContent = m
+      wrap.insertBefore(s, moreC)
+    })
+    moreC.textContent = '收起'
+    expanded = true
+  } else {
+    wrap.querySelectorAll('.f-chip').forEach((el) => {
+      if (extra.includes(el.textContent)) el.remove()
+    })
+    moreC.textContent = '+4'
+    expanded = false
+  }
+  document.querySelectorAll('#simC').forEach((el) => el.dispatchEvent(new Event('resize')))
+})
+</script>
+</body>
+</html>

@@ -179,3 +179,64 @@
 
 - **WHEN** 打开上游管理页
 - **THEN** 分组/集群/算法三个下拉分别为 104/120/120，搜索框 150，与节点管理页逐值相等
+
+### Requirement: 状态筛选统一为带计数的 chips
+
+五个列表页（节点 / 路由 / 上游 / 四层代理 / DNS 代理）的状态筛选 SHALL 统一为同一形态：
+
+- 形态 = `.f-chip.chip-status` 胶囊（`var(--surface)` 底 + 1px `var(--border)`、圆角 999、12px）、可点、单选；
+- 计数 SHALL 以 `.f-count` 后缀呈现（mono 11px，选中时随字色变 accent）；「全部」chip 显示总数；
+- 计数为 0 的 chip SHALL 保留可点，仅降透明（`.empty`，55%）；
+- 选中态 = `var(--accent-bg)` 底 + accent 边 + accent 字 + 加粗，并同步 `aria-pressed`；
+- 位置 SHALL 为「工具条下方独立 chips 行」（`data-test="status-chip-row"`，节点/路由/上游）或「卡片页头行内」（四层/DNS，`sp-header-actions` 内）；
+- 工具条 SHALL NOT 再提供「全部状态」下拉（状态只能经 chips 筛选，单入口）。
+
+计数 SHALL 来自权威值：分页列表页取后端聚合端点（`GET /routes/status-counts`、`GET /upstreams/status-counts`），
+全量加载页（四层/DNS/节点）取全量数据集前端聚合；SHALL NOT 用 `page_size=500` 抽样估算
+（实测路由 1596 条时「未发布」显示 331 而真实 1421）。
+
+节点页的「已禁用」chip SHALL 标注为管理开关维度（`status === 0`，与运行态可重叠）。
+
+#### Scenario: 点状态 chip 即筛选
+
+- **WHEN** 在上游页点击「待发布 39」
+- **THEN** 列表按 `publish_status=pending` 重新请求、分页条显示「共 39 个上游」，该 chip 高亮，其余 chip 计数不变
+
+#### Scenario: 切换其它筛选后计数随之更新
+
+- **WHEN** 把集群筛选改为某集群（状态 chip 未动）
+- **THEN** 各状态 chip 的计数按该集群重算（计数查询包含集群条件、且不含 publish_status）
+
+### Requirement: 方法筛选单一入口（下拉）
+
+路由页「方法」筛选 SHALL 只有一处入口：工具条「全部方法」下拉（GET/POST/PUT/DELETE/PATCH/HEAD/OPTIONS/CONNECT/TRACE）。
+SHALL NOT 同时保留方法 chips 行（双入口会让同一筛选出现两处、并挤占工具条宽度）。
+
+#### Scenario: 方法修改生效
+
+- **WHEN** 在下拉中选择 `HEAD`
+- **THEN** 列表请求携带 `method=HEAD`，页面上不存在方法 chips 行
+
+### Requirement: 页头统计徽标只留总数
+
+列表页页头 SHALL 只保留一个总数徽标（如「1596 路由」），状态分布 SHALL 由状态 chips 承担；
+SHALL NOT 在页头重复展示「已发布 / 待发布 / 未发布」等状态计数（同一组数字出现两次，且页头版本历史上是抽样估算）。
+
+#### Scenario: 路由页页头
+
+- **WHEN** 打开路由管理
+- **THEN** 页头只有一个「N 路由」徽标，状态分布只出现在第二行 chips
+
+### Requirement: 工具条不压缩契约
+
+列表页工具条（`.l5-toolbar`）SHALL 满足：
+
+- 子元素 `flex-shrink: 0`——声明宽度即最终渲染宽度（缺此项时 flex 会按内容比例各自压缩，实测六个下拉渲染成 113.5/118.4/128.3/140/106.1/106.1）；
+- 模式段 `.seg`（分组/平铺）SHALL NOT 被压缩（缺失时会被压到 2–24px，表现为「平铺看不见」）；
+- 筛选控件宽度统一：分组 104px、集群 120px、状态·算法 120px、搜索框 150px、其余下拉 104px；
+- 空间不足时 SHALL 由 `flex-wrap` 换行兜底（`row-gap` 6px），SHALL NOT 压扁或挤出右侧操作簇。
+
+#### Scenario: 1440 视口单行不溢出
+
+- **WHEN** 1440 视口打开节点/上游/路由任一页
+- **THEN** 工具条单行、`scrollWidth == clientWidth`、`.seg` 宽度 99px（等于其内容宽）

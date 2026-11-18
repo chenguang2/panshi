@@ -1220,9 +1220,23 @@ body.col-move-dragging * {
 .l5-toolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  row-gap: 6px;
   padding: 12px 16px;
   flex-wrap: wrap;
+  /* 筛选行与下一区（状态 chips 行 / 批量条）之间的分隔线（r11）：
+     此前只有节点页经 `.node-filter-bar` 带这条线，路由/上游缺失 → 两行视觉粘连。 */
+  border-bottom: 1px solid var(--border);
+}
+/* 工具条不压缩契约（mockup-parity-standard r8-13.1）：筛选控件声明宽度即最终宽度。
+   缺了这条，flex 会按内容比例各自压缩（实测六个下拉渲染成 113.5/118.4/128.3/140/106.1/106.1），
+   且「分组|平铺」模式段没有 shrink:0 时会被压到 2–24px —— 用户看到的就是「平铺不见了」。
+   空间不足时由 flex-wrap 换行兜底，而不是压扁控件。 */
+.l5-toolbar > * {
+  flex-shrink: 0;
+}
+.l5-toolbar .t-spacer {
+  flex: 1 1 0;
 }
 .l5-toolbar.nowrap {
   flex-wrap: nowrap;
@@ -1600,6 +1614,36 @@ body.col-move-dragging * {
 }
 .f-chip.chip-more {
   border-style: dashed;
+}
+
+/* ── 状态筛选 chips（带计数）：全站唯一形态（四层/DNS/路由/上游/节点共用单点）
+     语义与 .f-chip 相同（可点、可切选中），额外承载计数后缀与「计数 0 降透明」。
+     计数 0 的 chip 仍可点（与旧 .sp-status-tab.empty 行为一致），只降透明提示。 ── */
+.f-chips.status-chips {
+  display: inline-flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.f-chip.chip-status {
+  font-family: inherit;
+  line-height: 1;
+}
+.f-chip.chip-status .f-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-left: 6px;
+}
+.f-chip.chip-status.active .f-count {
+  color: var(--accent);
+}
+.f-chip.chip-status.empty {
+  opacity: 0.55;
+}
+.f-chip.chip-status:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* ── 单元格文字层级（a-table 单元格内直接用，不依赖 .l5-table 前缀） ── */

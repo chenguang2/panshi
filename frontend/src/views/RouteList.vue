@@ -10,11 +10,10 @@
     </PageHeader>
 
     <div ref="cardRef" class="table-container l5-card">
-      <!-- V2 双行工具条（table-toolbar-ux）：第一行 = 纯筛选行（右端簇不含计数，showCount=false）；
-           第二行 = 方法 chips 附属行（紧贴表头上方，「共 N 条路由」随行右置） -->
+      <!-- 双行工具条（filter-architecture 方案甲）：第一行 = 下拉筛选（分组/集群/上游/插件/方法）；
+           第二行 = 发布状态 chips（带权威计数，可点即筛）。方法回归下拉单入口，状态不适合藏在下拉里。 -->
       <TableToolbar
         v-model:mode="viewMode"
-        class="nowrap"
         :count="totalCount"
         count-unit="条路由"
         :show-count="false"
@@ -26,9 +25,10 @@
             v-if="searchVisible"
             v-model="searchText"
             placeholder="搜索名称、URI、描述、域名..."
+            :width="150"
             @input="onSearch"
           />
-          <select v-model="groupFilter" class="l5-select" style="width: 140px" @change="onGroupChange">
+          <select v-model="groupFilter" class="l5-select" style="width: 104px" @change="onGroupChange">
             <option value="__all__">全部分组</option>
             <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
             <option value="__ung__">未分组</option>
@@ -37,36 +37,25 @@
             v-model="clusterFilter"
             :clusters="filteredClusters"
             allow-all
-            style="width: 160px"
+            style="width: 120px"
             @change="onClusterChange"
           />
           <select
             v-model="upstreamFilter"
             class="l5-select"
-            style="width: 160px"
+            style="width: 104px"
             @change="onFilterChange"
             :disabled="!upstreams.length && !clusterFilter"
           >
             <option value="">全部上游</option>
             <option v-for="u in upstreams" :key="u.id" :value="u.id">{{ u.name }}</option>
           </select>
-          <select
-            v-model="pluginFilter"
-            class="l5-select plugin-filter"
-            style="width: 140px; flex-shrink: 0"
-            @change="onFilterChange"
-          >
+          <select v-model="pluginFilter" class="l5-select plugin-filter" style="width: 104px" @change="onFilterChange">
             <option value="">全部插件</option>
             <option v-for="p in pluginOptions" :key="p.name" :value="p.name">{{ p.display_name || p.name }}</option>
           </select>
-          <select v-model="publishFilter" class="l5-select" style="width: 130px" @change="onFilterChange">
-            <option value="">全部状态</option>
-            <option value="published">已发布</option>
-            <option value="pending">待发布</option>
-            <option value="unpublished">未发布</option>
-          </select>
           <!-- 7.3：全量「方法」下拉，与下方 chips 同值联动（chips 只放常驻高频项） -->
-          <select v-model="activeMethod" class="l5-select method-filter" style="width: 130px" @change="onFilterChange">
+          <select v-model="activeMethod" class="l5-select method-filter" style="width: 104px" @change="onFilterChange">
             <option value="">全部方法</option>
             <option v-for="m in methodOptions" :key="m" :value="m">{{ m }}</option>
           </select>
@@ -123,23 +112,24 @@
         </template>
       </TableToolbar>
 
-      <!-- 方法 chips 附属行：紧贴表头上方，计数右置（V2 结构） -->
-      <div class="l5-chiprow" data-test="method-chip-row">
-        <span class="chiprow-label">方法</span>
-        <div class="f-chips">
-          <span
-            v-for="m in methodFilters"
-            :key="m.value"
-            class="f-chip"
-            :class="{ active: activeMethod === m.value }"
-            @click="selectMethod(m.value)"
-            >{{ m.label }}</span
+      <!-- 状态 chips 附属行（filter-architecture D1/D3）：计数来自后端聚合端点（权威值），
+           点击即设 publishFilter 并重取列表；替代页头状态徽标与工具条「全部状态」下拉。 -->
+      <div class="l5-chiprow" data-test="status-chip-row">
+        <span class="chiprow-label">状态</span>
+        <div class="f-chips status-chips">
+          <button
+            v-for="c in statusChips"
+            :key="c.value"
+            type="button"
+            class="f-chip chip-status"
+            :class="{ active: publishFilter === c.value, empty: c.count === 0 }"
+            :aria-pressed="publishFilter === c.value ? 'true' : 'false'"
+            @click="selectPublishStatus(c.value)"
           >
+            {{ c.label }}<span class="f-count">{{ c.count }}</span>
+          </button>
         </div>
         <span class="t-spacer"></span>
-        <span class="l5-count" data-test="route-count"
-          >共 <b>{{ totalCount }}</b> 条路由</span
-        >
       </div>
 
       <a-table
@@ -476,60 +466,61 @@ function isUriSelected(): boolean {
   return columnsSelected.value.includes('uri')
 }
 
-// ── 页头轻统计徽标（list-page-header-stats / design D3）：大分页统计副本，仅用于徽标聚合 ──
-const statsRoutes = ref<any[]>([])
-async function loadRouteStats() {
+// ── 页头徽标（filter-architecture D3）：状态分布移到第二行状态 chips（后端权威计数），
+//    页头只保留总数——同一组数字不再出现两次，也避免 500 抽样当全量（旧实现在 1596 条时
+//    「未发布」显示 331 而真实 1421）。
+// 页头徽标 = 补充维度「涉及 N 上游」（filter-architecture 决策 G3-甲）：
+// 总数已在第二行 chips 的「全部 N」与分页条各出现一次，页头不再重复，改放 chips 表达不了的依赖规模。
+const headerStatItems = computed(() => [{ value: statusCounts.value.upstream_count, label: '上游' }])
+
+/** 状态 chips 计数（决策 D4）：后端聚合端点，与列表业务筛选同口径、不含 publish_status */
+const statusCounts = ref<{
+  total: number
+  published: number
+  pending: number
+  unpublished: number
+  upstream_count: number
+}>({
+  total: 0,
+  published: 0,
+  pending: 0,
+  unpublished: 0,
+  upstream_count: 0,
+})
+async function loadStatusCounts(): Promise<void> {
   try {
-    const params: any = { page: 1, page_size: 500, group_name: groupFilter.value } // MAX_PAGE_SIZE（design D3）
+    const params: Record<string, string | number> = { group_name: groupFilter.value }
     if (clusterFilter.value) params.cluster_id = clusterFilter.value
     if (upstreamFilter.value) params.upstream_id = upstreamFilter.value
     if (activeMethod.value) params.method = activeMethod.value
-    if (publishFilter.value) params.publish_status = publishFilter.value
     if (pluginFilter.value) params.plugin = pluginFilter.value
     if (searchText.value) params.search = searchText.value
-    // 统计副本不带排序参数（仅用于聚合，与列表序无关）
-    const res = await api.get('/routes', { params })
-    statsRoutes.value = res.data.items || []
+    const { data } = await api.get('/routes/status-counts', { params })
+    statusCounts.value = data
   } catch {
-    // 徽标统计失败静默（保留上次分布）；列表加载失败由 loadRoutes 自己提示
+    // 计数失败静默（保留上次值）；列表加载失败由 loadRoutes 提示
   }
 }
-/** 徽标主数字恒用 totalCount（与 chips 行「共 N」一致）；分布取统计副本（design D3）。
- *  口径与规格 list-page-header-stats 一致：N 路由 · 已发布 · 待发布 · 未发布 */
-const headerStatItems = computed(() => {
-  let published = 0
-  let pending = 0
-  let unpublished = 0
-  for (const r of statsRoutes.value) {
-    const state = routePublishState(r)
-    if (state === 'published') published++
-    else if (state === 'pending') pending++
-    else if (state === 'unpublished') unpublished++
-  }
-  const items: Array<{ value: number | string; label: string; tone?: 'ok' | 'warn' | 'bad' }> = [
-    { value: totalCount.value, label: '路由' },
-  ]
-  if (published) items.push({ value: published, label: '已发布', tone: 'ok' })
-  if (pending) items.push({ value: pending, label: '待发布', tone: 'warn' })
-  if (unpublished) items.push({ value: unpublished, label: '未发布' })
-  return items
-})
-
+const statusChips = computed(() => [
+  { value: '', label: '全部', count: statusCounts.value.total },
+  { value: 'unpublished', label: '未发布', count: statusCounts.value.unpublished },
+  { value: 'pending', label: '待发布', count: statusCounts.value.pending },
+  { value: 'published', label: '已发布', count: statusCounts.value.published },
+])
+/** 点状态 chip：设 publishFilter 后按「切换状态 → 重算计数 → 重取列表」顺序刷新
+ *  （计数不带 publish_status，故切换状态不会改变各 chip 数字，但筛选其它维度会）。 */
+function selectPublishStatus(value: string): void {
+  publishFilter.value = value
+  refreshList()
+}
 /** 刷新语义（design D6）：重拉列表 + 徽标统计；不重置筛选/排序键/视图模式。
  *  顺序化执行（先列表后统计）：并发的两个同名端点请求会让「最后一次调用」类断言产生竞态。 */
 async function refreshList(): Promise<void> {
   await loadRoutes()
-  await loadRouteStats()
+  await loadStatusCounts()
 }
 const activeMethod = ref('')
 
-/** 切换 Method 过滤并重新加载。
- *  必须抽为函数：多语句写在模板内联属性里会被 prettier 重排成无分号的多行，
- *  导致 rolldown/vite:vue 解析失败（构建红、vue-tsc 不报）——见约定 #25。 */
-function selectMethod(value: string) {
-  activeMethod.value = value
-  refreshList()
-}
 const publishFilter = ref('')
 const pluginFilter = ref('')
 const pluginOptions = ref<{ name: string; display_name?: string }[]>([])
@@ -678,14 +669,6 @@ function handleResetColumnWidths(): void {
 
 // 7.3：chips 收敛为常驻高频项（全部/GET/POST/PUT/DELETE/PATCH）；全量方法入口
 // 收敛到「方法」下拉（methodOptions，与表单方法集一致）
-const methodFilters = [
-  { label: '全部', value: '' },
-  { label: 'GET', value: 'GET' },
-  { label: 'POST', value: 'POST' },
-  { label: 'PUT', value: 'PUT' },
-  { label: 'DELETE', value: 'DELETE' },
-  { label: 'PATCH', value: 'PATCH' },
-]
 const methodOptions = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS', 'CONNECT', 'TRACE']
 
 // 7.9：DNS 路由行内操作统一指路文案（独立页 tooltip 与 Tab 页 tooltip 共用语义）

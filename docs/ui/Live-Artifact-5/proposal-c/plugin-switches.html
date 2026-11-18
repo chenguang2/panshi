@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>插件开关 · 方案 C（卡片型） — 磐石网关管理平台</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+/* 该页独有：仅页头字号微调，卡片解剖一律走 theme.css 共享类 */
+.page-header h1 { font-size: 21px; }
+</style>
+</head>
+<body>
+<div class="app-layout">
+  <aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="sidebar-logo-icon">磐</div>
+    <span class="sidebar-logo-text">磐石</span>
+    <span class="sidebar-logo-version">v1.0</span>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">核心功能</div>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h5v5H3v-5zm7 0h5v5h-5v-5z"/></svg><span>概览</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h14v5H2V3zm0 7h14v5H2v-5z"/></svg><span>集群管理</span></a>
+      <a class="nav-item" href="routes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l5-7v5h9v4H7v5l-5-7z"/></svg><span>路由管理</span></a>
+      <a class="nav-item" href="upstreams.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>上游管理</span></a>
+      <a class="nav-item" href="nodes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3a2 2 0 110 4 2 2 0 010-4zM3.5 14a2 2 0 110-4 2 2 0 010 4zM14.5 14a2 2 0 110-4 2 2 0 010 4z"/></svg><span>节点管理</span></a>
+      <a class="nav-item" href="plugin-groups.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h12v5H3v-5z"/></svg><span>插件组</span></a>
+      <a class="nav-item" href="plugin-metadata.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h8l3 3v9a1 1 0 01-1 1H5a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M9 7v4M9 13v-1"/></svg><span>插件元数据</span></a>
+      <a class="nav-item" href="global-rules.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l6 3v4c0 3-2.5 5.5-6 7-3.5-1.5-6-4-6-7V5l6-3z"/></svg><span>全局规则</span></a>
+      <a class="nav-item" href="static-resources.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3a1 1 0 011-1h6l4 4v10a1 1 0 01-1 1H6a1 1 0 01-1-1V3zM11 2v4h4"/></svg><span>静态资源</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">证书管理</div>
+      <a class="nav-item" href="ca-certs.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="12.5" r="2.5"/><path d="M8 12.5h7M13 12.5v2.5M15 12.5v2.5"/></svg><span>CA 根证书</span></a>
+      <a class="nav-item" href="server-certs.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="10" height="8" rx="1"/><path d="M6.5 8V6a2.5 2.5 0 015 0v2"/></svg><span>服务器证书</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">边缘网络</div>
+      <a class="nav-item" href="stream-proxies.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="12" height="4" rx="1"/><rect x="4" y="7" width="10" height="4" rx="1"/><rect x="5" y="12" width="8" height="4" rx="1"/></svg><span>四层代理</span></a>
+      <a class="nav-item" href="dns-udp-proxies.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="4" r="2"/><circle cx="4" cy="14" r="2"/><circle cx="14" cy="14" r="2"/><path d="M9 6v3M4 12l2-2M14 12l-2-2"/></svg><span>DNS代理[UDP]</span></a>
+      <a class="nav-item" href="dns-http-proxies.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="4" r="2"/><circle cx="4" cy="14" r="2"/><circle cx="14" cy="14" r="2"/><path d="M9 6v3M4 12l2-2M14 12l-2-2"/></svg><span>DNS代理[HTTP]</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">系统管理</div>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l5 3v6l-5 3-5-3V5l5-3z"/></svg><span>插件管理</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9a3 3 0 100-6 3 3 0 000 6zM3 16c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg><span>用户管理</span></a>
+      <a class="nav-item active" href="plugin-switches.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9h8a4 4 0 010 8H5a4 4 0 010-8zM5 15a2 2 0 110-4 2 2 0 010 4z"/></svg><span>插件开关</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Edge功能</div>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l7 7-7 7-7-7z"/></svg><span>Edge直连</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>数据导入</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h8v8H5V7zM7 7V5h4v2"/></svg><span>工具箱</span></a>
+    </div>
+  </nav>
+</aside>
+
+  <div class="main-area">
+    <header class="top-header">
+      <div class="top-header-breadcrumb"><a href="#">首页</a><span>/</span><span>插件开关</span></div>
+      <div class="top-header-actions">
+        <div class="h-search">
+          <input type="text" placeholder="搜索功能或页面...">
+          <svg class="s-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        </div>
+        <div class="header-user"><div class="header-avatar">管</div><span>管理员</span></div>
+      </div>
+    </header>
+
+    <div class="content-area">
+      <div class="page-header" style="margin-bottom:20px;">
+        <div>
+          <h1>插件开关<span class="ph-inline"><span class="ph-lite lite-accent"><b>6</b> 个分类</span><span class="ph-lite"><b>44</b> 处引用</span></span></h1>
+          <p>控制各插件在新配置中的可选性；禁用不影响既有配置</p>
+        </div>
+        <div class="page-header-actions">
+          <button class="btn btn-secondary"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h14v18H5z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg>操作日志</button>
+        </div>
+      </div>
+
+      <div class="alert alert-info" style="margin-bottom:16px;">
+        <span class="alert-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></span>
+        <div class="alert-content">开关改动后需点<b>「保存配置」</b>才生效；禁用只影响新配置的可选性——既有路由、插件组、全局规则里的引用继续生效。</div>
+      </div>
+
+      <div class="l5-card">
+        <div class="l5-toolbar nowrap" style="gap:4px;">
+          <div class="l5-search">
+            <input type="text" style="width:150px" placeholder="搜索插件名称...">
+            <svg class="s-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          </div>
+          <select class="l5-select" style="width:104px">
+            <option>全部分类</option>
+            <option>流量控制</option>
+            <option>认证</option>
+            <option>安全防护</option>
+            <option>监控</option>
+            <option>数据处理</option>
+            <option>静态资源</option>
+          </select>
+          <span class="t-spacer"></span>
+          <button class="tool-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>全部启用</button>
+          <button class="tool-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/></svg>全部禁用</button>
+          <button class="tool-btn" title="重新拉取列表"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 11-2.64-6.36"/><path d="M21 3v6h-6"/></svg>刷新</button>
+        </div>
+
+        <div class="l5-chiprow">
+          <span class="chiprow-label">状态</span>
+          <div class="f-chips">
+            <span class="f-chip chip-status active">全部<span class="f-count">6</span></span>
+            <span class="f-chip chip-status">已启用<span class="f-count">4</span></span>
+            <span class="f-chip chip-status">已禁用<span class="f-count">2</span></span>
+          </div>
+          <span class="t-spacer"></span>
+        </div>
+
+        <div class="card-grid">
+
+          <!-- ① 已启用 · 被多处引用 -->
+          <article class="l5-panel">
+            <div class="lp-head">
+              <div class="lp-title">
+                <span class="lp-name" title="限流">限流</span>
+                <span class="lp-tag tech">limit-count</span>
+                <span class="lp-tag">流量控制</span>
+              </div>
+              <div class="lp-status">
+                <span class="lp-swtext">已启用</span>
+                <label class="toggle" title="启用 / 禁用"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+              </div>
+            </div>
+            <div class="lp-body">
+              <div class="lp-row"><span class="lp-k">描述</span><span class="lp-v dim" title="基于时间窗口的请求计数限流">基于时间窗口的请求计数限流</span></div>
+              <div class="lp-row"><span class="lp-k">参数</span><span class="lp-v"><span class="c-mono">6 项</span> <span class="badge badge-success">schema 完整</span></span></div>
+              <div class="lp-row"><span class="lp-k">引用</span><span class="lp-v mono">路由 12 · 插件组 3</span></div>
+            </div>
+            <div class="lp-foot">
+              <button class="op-pub">参数定义</button>
+              <div class="menu-anchor">
+                <button class="op-btn" data-menu-btn="ps-0" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
+                <div class="l5-menu" id="ps-0">
+                  <button class="mi"><span class="mi-main">查看引用（路由 12）</span><span class="mi-sub">在路由列表中筛选使用该插件的路由</span></button>
+                  <button class="mi"><span class="mi-main">查看引用（插件组 3）</span></button>
+                  <hr class="menu-sep">
+                  <button class="mi"><span class="mi-main">操作日志</span><span class="mi-sub">该插件的开关变更记录</span></button>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <!-- ② 已启用 -->
+          <article class="l5-panel">
+            <div class="lp-head">
+              <div class="lp-title">
+                <span class="lp-name" title="CORS 跨域">CORS 跨域</span>
+                <span class="lp-tag tech">cors</span>
+                <span class="lp-tag">安全防护</span>
+              </div>
+              <div class="lp-status">
+                <span class="lp-swtext">已启用</span>
+                <label class="toggle" title="启用 / 禁用"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+              </div>
+            </div>
+            <div class="lp-body">
+              <div class="lp-row"><span class="lp-k">描述</span><span class="lp-v dim" title="跨域请求头处理与预检缓存">跨域请求头处理与预检缓存</span></div>
+              <div class="lp-row"><span class="lp-k">参数</span><span class="lp-v"><span class="c-mono">4 项</span> <span class="badge badge-success">schema 完整</span></span></div>
+              <div class="lp-row"><span class="lp-k">引用</span><span class="lp-v mono">路由 9 · 插件组 2</span></div>
+            </div>
+            <div class="lp-foot">
+              <button class="op-pub">参数定义</button>
+              <div class="menu-anchor">
+                <button class="op-btn" data-menu-btn="ps-1" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
+                <div class="l5-menu" id="ps-1">
+                  <button class="mi"><span class="mi-main">查看引用（路由 9）</span><span class="mi-sub">在路由列表中筛选使用该插件的路由</span></button>
+                  <button class="mi"><span class="mi-main">查看引用（插件组 2）</span></button>
+                  <hr class="menu-sep">
+                  <button class="mi"><span class="mi-main">操作日志</span><span class="mi-sub">该插件的开关变更记录</span></button>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <!-- ③ 已启用 -->
+          <article class="l5-panel">
+            <div class="lp-head">
+              <div class="lp-title">
+                <span class="lp-name" title="JWT 鉴权">JWT 鉴权</span>
+                <span class="lp-tag tech">jwt-auth</span>
+                <span class="lp-tag">认证</span>
+              </div>
+              <div class="lp-status">
+                <span class="lp-swtext">已启用</span>
+                <label class="toggle" title="启用 / 禁用"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+              </div>
+            </div>
+            <div class="lp-body">
+              <div class="lp-row"><span class="lp-k">描述</span><span class="lp-v dim" title="校验 JWT 令牌并透传用户身份">校验 JWT 令牌并透传用户身份</span></div>
+              <div class="lp-row"><span class="lp-k">参数</span><span class="lp-v"><span class="c-mono">5 项</span> <span class="badge badge-warn">schema 缺失</span></span></div>
+              <div class="lp-row"><span class="lp-k">引用</span><span class="lp-v mono">路由 6 · 插件组 1</span></div>
+            </div>
+            <div class="lp-foot">
+              <button class="op-pub">参数定义</button>
+              <div class="menu-anchor">
+                <button class="op-btn" data-menu-btn="ps-2" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
+                <div class="l5-menu" id="ps-2">
+                  <button class="mi"><span class="mi-main">查看引用（路由 6）</span><span class="mi-sub">在路由列表中筛选使用该插件的路由</span></button>
+                  <button class="mi"><span class="mi-main">查看引用（插件组 1）</span></button>
+                  <hr class="menu-sep">
+                  <button class="mi"><span class="mi-main">操作日志</span><span class="mi-sub">该插件的开关变更记录</span></button>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <!-- ④ 已禁用 · 仍被引用（卡片内嵌警告） -->
+          <article class="l5-panel is-off">
+            <div class="lp-head">
+              <div class="lp-title">
+                <span class="lp-name" title="指标采集">指标采集</span>
+                <span class="lp-tag tech">prometheus</span>
+                <span class="lp-tag">监控</span>
+              </div>
+              <div class="lp-status">
+                <span class="lp-swtext">已禁用</span>
+                <label class="toggle" title="启用 / 禁用"><input type="checkbox"><span class="toggle-slider"></span></label>
+              </div>
+            </div>
+            <div class="lp-body">
+              <div class="lp-row"><span class="lp-k">描述</span><span class="lp-v dim" title="暴露 Prometheus 指标抓取端点">暴露 Prometheus 指标抓取端点</span></div>
+              <div class="lp-row"><span class="lp-k">参数</span><span class="lp-v"><span class="c-mono">2 项</span> <span class="badge badge-success">schema 完整</span></span></div>
+            </div>
+            <div class="lp-notice alert alert-warning">
+              <span class="n-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+              <span class="n-txt">仍被路由 4 · 插件组 1 引用，既有配置继续生效</span>
+              <button class="n-act">查看引用</button>
+            </div>
+            <div class="lp-foot">
+              <button class="op-pub">参数定义</button>
+              <div class="menu-anchor">
+                <button class="op-btn" data-menu-btn="ps-3" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
+                <div class="l5-menu" id="ps-3">
+                  <button class="mi"><span class="mi-main">查看引用（路由 4）</span><span class="mi-sub">在路由列表中筛选使用该插件的路由</span></button>
+                  <button class="mi"><span class="mi-main">查看引用（插件组 1）</span></button>
+                  <hr class="menu-sep">
+                  <button class="mi"><span class="mi-main">操作日志</span><span class="mi-sub">该插件的开关变更记录</span></button>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <!-- ⑤ 已启用 · 无参数定义 -->
+          <article class="l5-panel">
+            <div class="lp-head">
+              <div class="lp-title">
+                <span class="lp-name" title="日志切割">日志切割</span>
+                <span class="lp-tag tech">log-process</span>
+                <span class="lp-tag">数据处理</span>
+              </div>
+              <div class="lp-status">
+                <span class="lp-swtext">已启用</span>
+                <label class="toggle" title="启用 / 禁用"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+              </div>
+            </div>
+            <div class="lp-body">
+              <div class="lp-row"><span class="lp-k">描述</span><span class="lp-v dim" title="访问日志按天切割与保留">访问日志按天切割与保留</span></div>
+              <div class="lp-row"><span class="lp-k">参数</span><span class="lp-v"><span class="c-mono">0 项</span> <span class="badge badge-neutral">无参数定义</span></span></div>
+              <div class="lp-row"><span class="lp-k">引用</span><span class="lp-v mono">路由 5 · 全局规则 1</span></div>
+            </div>
+            <div class="lp-foot">
+              <button class="op-btn" disabled title="该插件无参数定义">参数定义</button>
+              <div class="menu-anchor">
+                <button class="op-btn" data-menu-btn="ps-4" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
+                <div class="l5-menu" id="ps-4">
+                  <button class="mi"><span class="mi-main">查看引用（路由 5）</span><span class="mi-sub">在路由列表中筛选使用该插件的路由</span></button>
+                  <button class="mi"><span class="mi-main">查看引用（全局规则 1）</span></button>
+                  <hr class="menu-sep">
+                  <button class="mi"><span class="mi-main">操作日志</span><span class="mi-sub">该插件的开关变更记录</span></button>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <!-- ⑥ 已禁用 · 无引用 -->
+          <article class="l5-panel is-off">
+            <div class="lp-head">
+              <div class="lp-title">
+                <span class="lp-name" title="IP 访问控制">IP 访问控制</span>
+                <span class="lp-tag tech">ip-restriction</span>
+                <span class="lp-tag">安全防护</span>
+              </div>
+              <div class="lp-status">
+                <span class="lp-swtext">已禁用</span>
+                <label class="toggle" title="启用 / 禁用"><input type="checkbox"><span class="toggle-slider"></span></label>
+              </div>
+            </div>
+            <div class="lp-body">
+              <div class="lp-row"><span class="lp-k">描述</span><span class="lp-v dim" title="按来源 IP / 网段白名单限制访问">按来源 IP / 网段白名单限制访问</span></div>
+              <div class="lp-row"><span class="lp-k">参数</span><span class="lp-v"><span class="c-mono">3 项</span> <span class="badge badge-success">schema 完整</span></span></div>
+            </div>
+            <div class="lp-notice alert alert-warning">
+              <span class="n-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+              <span class="n-txt">禁用后新配置不可再选择，既有配置不受影响</span>
+            </div>
+            <div class="lp-foot">
+              <button class="op-pub">参数定义</button>
+              <div class="menu-anchor">
+                <button class="op-btn" data-menu-btn="ps-5" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
+                <div class="l5-menu" id="ps-5">
+                  <button class="mi"><span class="mi-main">查看引用</span><span class="mi-sub">当前没有路由或插件组引用该插件</span></button>
+                  <hr class="menu-sep">
+                  <button class="mi"><span class="mi-main">操作日志</span><span class="mi-sub">该插件的开关变更记录</span></button>
+                </div>
+              </div>
+            </div>
+          </article>
+
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="l5-prop-tag">方案 C · <b>卡片型</b> · 插件开关</div>
+
+<script>
+(function () {
+  'use strict';
+  function closeAll() {
+    document.querySelectorAll('.l5-menu.open').forEach(function (m) { m.classList.remove('open'); });
+  }
+  document.querySelectorAll('[data-menu-btn]').forEach(function (btn) {
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var menu = document.getElementById(btn.getAttribute('data-menu-btn'));
+      if (!menu) return;
+      var was = menu.classList.contains('open');
+      closeAll();
+      if (!was) menu.classList.add('open');
+    });
+  });
+  document.addEventListener('click', closeAll);
+  document.querySelectorAll('.l5-chiprow .f-chip').forEach(function (chip) {
+    chip.addEventListener('click', function () {
+      var row = chip.closest('.f-chips');
+      row.querySelectorAll('.f-chip').forEach(function (c) { c.classList.remove('active'); });
+      chip.classList.add('active');
+    });
+  });
+  // 开关示意：点开关同步状态词与卡片降饱和
+  document.querySelectorAll('.lp-status .toggle input').forEach(function (input) {
+    input.addEventListener('change', function () {
+      var card = input.closest('.l5-panel');
+      var text = card.querySelector('.lp-swtext');
+      card.classList.toggle('is-off', !input.checked);
+      if (text) text.textContent = input.checked ? '已启用' : '已禁用';
+    });
+  });
+  document.querySelectorAll('a[href="#"]').forEach(function (a) { a.addEventListener('click', function (e) { e.preventDefault(); }); });
+})();
+</script>
+</body>
+</html>

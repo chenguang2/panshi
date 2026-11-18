@@ -558,7 +558,7 @@ describe('DnsUdpProxyList.vue 四态与分段控件', () => {
       },
     ])
     const w = await mountList()
-    const tabs = w.findAll('.sp-status-tab')
+    const tabs = w.findAll('.chip-status')
     expect(tabs.length).toBeGreaterThanOrEqual(4)
     const pendingTab = tabs.find((t) => t.text().includes('待发布'))!
     expect(pendingTab.text()).toContain('1')

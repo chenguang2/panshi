@@ -12,11 +12,66 @@ from app.schemas.route import RouteListResponse, RouteResponse
 from app.api.v1.cluster_routes import route_to_response
 from app.core.deps import require_permission
 from app.services import edge_sync
+from app.services.status_counts import publish_status_counts, latest_publish_subquery
 
 router = APIRouter(prefix="/routes", tags=["routes"])
 
 ALLOWED_SEARCH_FIELDS = {"name", "uri", "description", "hosts"}
 ALLOWED_SORT_FIELDS = {"name", "uri", "priority", "status", "created_at"}
+
+
+def _apply_route_filters(
+    query,
+    *,
+    group_name: str,
+    search: Optional[str],
+    cluster_id: Optional[int],
+    method: Optional[str],
+    upstream_id: Optional[int],
+    plugin: Optional[str],
+    allowed_ids: Optional[list[int]],
+):
+    """路由列表与状态计数的**唯一**过滤实现（filter-architecture D4）。
+
+    注意：`publish_status` 有意不在这里——状态计数必须统计全部分区，
+    若把状态条件带进计数查询，其余分区会被筛成 0。
+    """
+    if cluster_id is not None:
+        query = query.where(Route.cluster_id == cluster_id)
+
+    if group_name == "__ung__":
+        query = query.join(Cluster, Route.cluster_id == Cluster.id).where(
+            Cluster.group_name.is_(None) | (Cluster.group_name == "")
+        )
+    elif group_name != "__all__":
+        query = query.join(Cluster, Route.cluster_id == Cluster.id).where(Cluster.group_name == group_name)
+
+    if method:
+        query = query.where(Route.methods.ilike(f"%{method}%"))
+
+    if upstream_id is not None:
+        query = query.where(Route.upstream_id == upstream_id)
+
+    if allowed_ids is not None:
+        query = query.where(Route.cluster_id.in_(allowed_ids))
+
+    if search:
+        pattern = f"%{search}%"
+        conditions = [getattr(Route, field).ilike(pattern) for field in ALLOWED_SEARCH_FIELDS if hasattr(Route, field)]
+        query = query.where(or_(*conditions))
+
+    if plugin:
+        query = query.where(exists().where(RoutePlugin.route_id == Route.id, RoutePlugin.plugin_name == plugin))
+
+    return query
+
+
+async def _allowed_cluster_ids(db: AsyncSession, current_user: User) -> Optional[list[int]]:
+    """非管理员 → 其可见集群 id 列表；管理员 → None（不加限制）。"""
+    if current_user.role == "admin":
+        return None
+    result = await db.execute(select(UserCluster.cluster_id).where(UserCluster.user_id == current_user.id))
+    return [r[0] for r in result.all()]
 
 
 @router.get("", response_model=RouteListResponse)
@@ -35,49 +90,19 @@ async def list_all_routes(
     sort_order: Optional[str] = Query("asc"),
     current_user: User = Depends(require_permission('routes')),
 ):
-    query = select(Route)
-
-    # Cluster filter
-    if cluster_id is not None:
-        query = query.where(Route.cluster_id == cluster_id)
-
-    # Group filter — JOIN Cluster table (no relationship defined, use explicit JOIN)
-    if group_name == "__ung__":
-        query = query.join(Cluster, Route.cluster_id == Cluster.id).where(
-            Cluster.group_name.is_(None) | (Cluster.group_name == "")
-        )
-    elif group_name != "__all__":
-        query = query.join(Cluster, Route.cluster_id == Cluster.id).where(
-            Cluster.group_name == group_name
-        )
-
-    # Method filter
-    if method:
-        query = query.where(Route.methods.ilike(f"%{method}%"))
-
-    # Upstream filter
-    if upstream_id is not None:
-        query = query.where(Route.upstream_id == upstream_id)
-
-    # Permission filter
-    if current_user.role != "admin":
-        uc_result = await db.execute(
-            select(UserCluster.cluster_id).where(UserCluster.user_id == current_user.id)
-        )
-        allowed_ids = [r[0] for r in uc_result.all()]
-        if not allowed_ids:
-            return RouteListResponse(total=0, page=page, page_size=page_size, items=[])
-        query = query.where(Route.cluster_id.in_(allowed_ids))
-
-    # Search
-    if search:
-        pattern = f"%{search}%"
-        conditions = [
-            getattr(Route, field).ilike(pattern)
-            for field in ALLOWED_SEARCH_FIELDS
-            if hasattr(Route, field)
-        ]
-        query = query.where(or_(*conditions))
+    allowed_ids = await _allowed_cluster_ids(db, current_user)
+    if allowed_ids == []:
+        return RouteListResponse(total=0, page=page, page_size=page_size, items=[])
+    query = _apply_route_filters(
+        select(Route),
+        group_name=group_name,
+        search=search,
+        cluster_id=cluster_id,
+        method=method,
+        upstream_id=upstream_id,
+        plugin=plugin,
+        allowed_ids=allowed_ids,
+    )
 
     # Publish status filter — 互斥三分区（batch1 组4 4.5，评审裁决 A3）：
     #   published   = 有 current_version 且非 pending；
@@ -92,15 +117,7 @@ async def list_all_routes(
                 status_code=422,
                 detail="publish_status 仅支持 published/pending/unpublished",
             )
-        latest_pub_sq = (
-            select(
-                ConfigVersion.resource_id,
-                func.max(ConfigVersion.created_at).label("latest_ts"),
-            )
-            .where(ConfigVersion.resource_type == "route")
-            .group_by(ConfigVersion.resource_id)
-            .subquery()
-        )
+        latest_pub_sq = latest_publish_subquery("route")
         query = query.outerjoin(latest_pub_sq, Route.id == latest_pub_sq.c.resource_id)
         is_pending = Route.updated_at > latest_pub_sq.c.latest_ts
         if publish_status == "unpublished":
@@ -115,15 +132,6 @@ async def list_all_routes(
                     Route.updated_at <= latest_pub_sq.c.latest_ts,
                 ),
             )
-
-    # Plugin filter (EXISTS subquery — only runs when plugin param is provided)
-    if plugin:
-        query = query.where(
-            exists().where(
-                RoutePlugin.route_id == Route.id,
-                RoutePlugin.plugin_name == plugin
-            )
-        )
 
     # Sort
     if sort_by and sort_by in ALLOWED_SORT_FIELDS:
@@ -205,6 +213,54 @@ async def list_all_routes(
         items.append(item_dict)
 
     return RouteListResponse(total=total, page=page, page_size=page_size, items=items)
+
+
+@router.get("/status-counts")
+async def route_status_counts(
+    db: AsyncSession = Depends(get_db),
+    group_name: str = Query("__all__"),
+    search: Optional[str] = Query(None),
+    cluster_id: Optional[int] = Query(None),
+    method: Optional[str] = Query(None),
+    upstream_id: Optional[int] = Query(None),
+    plugin: Optional[str] = Query(None),
+    current_user: User = Depends(require_permission('routes')),
+):
+    """路由发布状态三分区的**权威计数**（与列表 publish_status 过滤同口径）。
+
+    取代前端 `page_size=500` 抽样估算：抽样在路由数超过 500 时会严重失真
+    （实测 1596 条时「未发布」331 vs 真实 1421），而状态 chips 需要可点 + 可见计数。
+    支持与列表相同的业务筛选（分组/集群/搜索/方法/上游/插件/权限），
+    但**不含** publish_status（否则其余分区被筛成 0）。
+    """
+    allowed_ids = await _allowed_cluster_ids(db, current_user)
+    if allowed_ids == []:
+        return {"total": 0, "published": 0, "pending": 0, "unpublished": 0}
+    base = _apply_route_filters(
+        select(Route),
+        group_name=group_name,
+        search=search,
+        cluster_id=cluster_id,
+        method=method,
+        upstream_id=upstream_id,
+        plugin=plugin,
+        allowed_ids=allowed_ids,
+    )
+    counts = await publish_status_counts(db, model=Route, resource_type="route", base_filter=base)
+    # 页头「涉及 N 上游」补充维度（filter-architecture 决策 G3-甲）：与计数同筛选口径
+    upstream_q = _apply_route_filters(
+        select(Route.upstream_id).distinct(),
+        group_name=group_name,
+        search=search,
+        cluster_id=cluster_id,
+        method=method,
+        upstream_id=upstream_id,
+        plugin=plugin,
+        allowed_ids=allowed_ids,
+    ).where(Route.upstream_id.isnot(None))
+    upstream_rows = await db.execute(upstream_q)
+    counts["upstream_count"] = len(upstream_rows.all())
+    return counts
 
 
 @router.post("/by-edge-uuids", response_model=RouteListResponse)

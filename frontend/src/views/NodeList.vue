@@ -19,11 +19,18 @@
         class="node-filter-bar nowrap"
         :count="totalCount"
         count-unit="个节点"
+        :show-count="false"
         :refreshing="loading"
         @refresh="refreshList"
       >
         <template #filters>
-          <SearchInput v-if="nodeSearchVisible" v-model="searchText" placeholder="搜索 IP..." @input="onSearchInput" />
+          <SearchInput
+            v-if="nodeSearchVisible"
+            v-model="searchText"
+            placeholder="搜索 IP..."
+            :width="150"
+            @input="onSearchInput"
+          />
           <select v-model="groupFilter" class="l5-select" style="width: 104px" @change="onGroupChange">
             <option value="__all__">全部分组</option>
             <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
@@ -36,12 +43,6 @@
             style="width: 120px"
             @change="onFilterChange"
           />
-          <select v-model="statusFilter" class="l5-select" style="width: 104px" @change="onFilterChange">
-            <option value="">全部状态</option>
-            <option value="running">运行中</option>
-            <option value="stopped">已停止</option>
-            <option value="unchecked">未检测</option>
-          </select>
           <span v-if="statusFilter" class="text-muted text-sm">筛出 {{ displayedNodes.length }} 个</span>
         </template>
         <template #config>
@@ -98,6 +99,28 @@
           </button>
         </template>
       </TableToolbar>
+
+      <!-- 状态 chips 行（filter-architecture 方案甲 / D1 / D5）：替代原状态下拉；
+           「运行中/已停止/未检测」按 nginxState 互斥三分区，「已禁用」按管理开关 status===0
+           过滤（跨维度，单选的第五条路径）——两者在行内是两枚并排徽章，语义不合并。 -->
+      <div class="l5-chiprow" data-test="status-chip-row">
+        <span class="chiprow-label">状态</span>
+        <div class="f-chips status-chips">
+          <button
+            v-for="c in statusChips"
+            :key="c.value"
+            type="button"
+            class="f-chip chip-status"
+            :class="{ active: statusFilter === c.value, empty: c.count === 0 }"
+            :aria-pressed="statusFilter === c.value ? 'true' : 'false'"
+            :title="c.value === 'disabled' ? '管理开关维度（status=0）：与运行态可重叠，可同时为运行中/已停止' : ''"
+            @click="selectStatus(c.value)"
+          >
+            {{ c.label }}<span class="f-count">{{ c.count }}</span>
+          </button>
+        </div>
+        <span class="t-spacer"></span>
+      </div>
 
       <!-- 批量工具栏（mockup .l5-batchbar：选中态 accent 强调 + 右端清除选择；batch3 2.1 动作集不变） -->
       <div class="l5-batchbar" :class="{ 'has-sel': selectedNodeKeys.length > 0 }">
@@ -991,8 +1014,10 @@ const viewMode = ref<ListViewMode>('group')
 /** 运行态三元过滤（batch2 3.1 / D5）：按 nginxState 判定，不按管理开关字段。
  *  抽出纯函数：displayedNodes 与 loadNodes 的 loadAll 计数共用同一口径（规格要求
  *  「徽标/计数随筛选数据集更新」，loadAll 模式 totalCount 须为过滤后全量而非载入全量）。 */
-function applyStatusFilter<T extends Parameters<typeof nginxState>[0]>(list: T[]): T[] {
+function applyStatusFilter<T extends Parameters<typeof nginxState>[0] & { status?: number }>(list: T[]): T[] {
   if (!statusFilter.value) return list
+  // 「已禁用」是管理开关维度（status === 0），与运行态三态正交：单选的第五条路径
+  if (statusFilter.value === 'disabled') return list.filter((n) => n.status === 0)
   return list.filter((n) => nginxState(n) === statusFilter.value)
 }
 const displayedNodes = computed(() => applyStatusFilter(nodes.value))
@@ -1029,44 +1054,59 @@ const { displayRows, sequenceOf, isRowSelectable, toggleFold, pageHasFolded, tog
   chips: nodeGroupChips,
 })
 
-// ── 页头轻统计徽标（list-page-header-stats / design D3）：大分页统计副本，仅用于徽标聚合 ──
+// ── 页头徽标 + 状态 chips 计数（filter-architecture D1/D3/D5）：同一份「全量节点」数据集，
+//    页头只留总数（状态分布改由 chips 承担，避免同一组数字出现两次）。
+//    节点运行态来自 status_detail.nginx.nginx_running（JSON），无法 SQL 聚合；部署规模
+//    （≤18 集群 × ≤3 节点）下一次 pageSize=500 拉全量即精确。
 const statsNodes = ref<any[]>([])
 async function loadNodeStats() {
   try {
     const res = await listNodes({
       groupName: groupFilter.value,
       page: 1,
-      pageSize: 500, // MAX_PAGE_SIZE：部署规模（≤18 集群 × ≤3 节点）内恒全量（design D3）
+      pageSize: PAGE_SIZE_DROPDOWN, // MAX_PAGE_SIZE：全量一次取回（与节点规模匹配）
       search: searchText.value || undefined,
       clusterId: clusterFilter.value ? Number(clusterFilter.value) : undefined,
       status: undefined,
     })
     statsNodes.value = res.data.items || []
   } catch {
-    // 徽标统计失败静默（保留上次分布）；列表加载失败由 loadNodes 自己提示
+    // 统计失败静默（保留上次计数）；列表加载失败由 loadNodes 自己提示
   }
 }
-/** 徽标取数：状态筛选态 = 客户端过滤后的全量（loadAll）；其余 = 统计副本（design D3）。
- *  主统计数字恒用 totalCount，保证与页脚「共 N」一致（规格一致性要求）。 */
-const headerStatItems = computed(() => {
-  const rows = statusFilter.value ? displayedNodes.value : statsNodes.value
+/** chips 计数：运行态三分区 + 已禁用（管理开关 status===0，跨维度单选路径） */
+const statusCounts = computed(() => {
   let running = 0
   let stopped = 0
   let unchecked = 0
-  for (const n of rows) {
+  let disabled = 0
+  for (const n of statsNodes.value) {
     const state = nginxState(n as Parameters<typeof nginxState>[0])
     if (state === 'running') running++
     else if (state === 'stopped') stopped++
     else unchecked++
+    if (n.status === 0) disabled++
   }
-  const items: Array<{ value: number | string; label: string; tone?: 'ok' | 'warn' | 'bad' }> = [
-    { value: totalCount.value, label: '节点' },
-  ]
-  if (running) items.push({ value: running, label: '运行中', tone: 'ok' })
-  if (stopped) items.push({ value: stopped, label: '已停止', tone: 'bad' })
-  if (unchecked) items.push({ value: unchecked, label: '未检测', tone: 'warn' })
-  return items
+  return { total: statsNodes.value.length, running, stopped, unchecked, disabled }
 })
+const statusChips = computed(() => [
+  { value: '', label: '全部', count: statusCounts.value.total },
+  { value: 'running', label: '运行中', count: statusCounts.value.running },
+  { value: 'stopped', label: '已停止', count: statusCounts.value.stopped },
+  { value: 'unchecked', label: '未检测', count: statusCounts.value.unchecked },
+  { value: 'disabled', label: '已禁用', count: statusCounts.value.disabled },
+])
+/** 点状态 chip：设 statusFilter（'disabled' 走管理开关维度）并重查 */
+function selectStatus(value: string): void {
+  statusFilter.value = value
+  page.value = 1
+  refreshList()
+}
+// 页头徽标 = 补充维度「涉及 N 集群」（filter-architecture 决策 G3-甲）：
+// 总数已在 chips「全部 N」与分页条各出现一次，页头改放 chips 表达不了的规模信息。
+const headerStatItems = computed(() => [
+  { value: new Set(statsNodes.value.map((n: Record<string, unknown>) => n.cluster_id)).size, label: '集群' },
+])
 
 /** 刷新语义（design D6）：重拉列表 + 徽标统计；不重置筛选/排序键/视图模式。
  *  顺序化执行（先列表后统计）：并发的两个同名端点请求会让「最后一次调用」类断言产生竞态，
@@ -1932,7 +1972,6 @@ defineExpose({ viewMode })
    本类仅承载卡内贴合与源码守卫依赖的换行语义（NodeList.source.test.ts 断言 flex-wrap: wrap） */
 .node-filter-bar {
   flex-wrap: wrap;
-  border-bottom: 1px solid var(--border);
 }
 
 /* 安装路径合并列的值省略（contract 10.1：完整值悬浮可见，title 已挂） */

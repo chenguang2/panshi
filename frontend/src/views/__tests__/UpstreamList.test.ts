@@ -173,13 +173,14 @@ describe('UpstreamList.vue', () => {
     expect(mockApiGet).toHaveBeenCalledWith('/clusters', { params: {} })
   })
 
-  it('renders upstream count（工具条右端计数）', async () => {
+  it('工具栏不再渲染计数（filter-architecture 决策 G2：总数只留 chips「全部 N」+ 分页条）', async () => {
     const UpstreamList = (await import('../UpstreamList.vue')).default
     const wrapper = mount(UpstreamList, { global: { stubs } })
     await flushPromises()
     await wrapper.vm.$nextTick()
-    // 反转（list-pages-console-restyle）：计数迁到工具条右端簇 [data-test=toolbar-count]
-    expect(wrapper.find('[data-test="toolbar-count"]').text()).toBe('共 2 个上游')
+    expect(wrapper.find('[data-test="toolbar-count"]').exists()).toBe(false)
+    // 分页条仍显示命中数（语义不同）
+    expect(wrapper.text()).toContain('共 2 个上游')
   })
 
   // ── 2.6 列表改版：列集合 / 假排序移除 ──────────────────────────────────
@@ -953,13 +954,18 @@ describe('UpstreamList.vue 集群分组与双模式（list-pages-console-restyle
     wrapper.unmount()
   })
 
-  it('页头徽标 = 工具条计数同口径（共 N 个上游 ↔ N 上游），分布来自统计副本', async () => {
+  it('页头只留总数徽标，状态分布改由第二行状态 chips 承担（filter-architecture D1/D3）', async () => {
     const wrapper = await mountPage()
-    expect(wrapper.find('[data-test="toolbar-count"]').text()).toContain('共 3 个上游')
+    expect(wrapper.find('[data-test="toolbar-count"]').exists()).toBe(false)
     const stats = wrapper.findAll('[data-test="page-stat"]').map((s) => s.text())
-    expect(stats[0]).toContain('3 上游')
-    expect(stats.join(' ')).toContain('1 已发布')
-    expect(stats.join(' ')).toContain('2 待发布')
+    // 页头 = 补充维度「N 目标」（G3-甲），不再重复总数与状态分布
+    expect(stats[0]).toContain('集群')
+    expect(stats.join(' ')).not.toContain('已发布')
+    expect(stats.join(' ')).not.toContain('待发布')
+    expect(stats.join(' ')).not.toContain('3 上游')
+    // 第二行是状态 chips（上游此前完全没有状态筛选）
+    const chips = wrapper.findAll('.chip-status').map((c) => c.text().replace(/\d+/g, '').trim())
+    expect(chips).toEqual(['全部', '未发布', '待发布', '已发布'])
     wrapper.unmount()
   })
 

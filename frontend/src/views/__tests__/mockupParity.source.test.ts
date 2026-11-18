@@ -392,3 +392,121 @@ describe('mockup-parity r7（parity-audit-upstreams-r7：目标健康列 / 发�
     }
   })
 })
+
+describe('mockup-parity r9（filter-architecture 方案甲：状态 chips / 方法下拉 / 页头瘦身 / 计数权威）', () => {
+  it('r9-① 四层/DNS/路由/上游/节点五页状态筛选统一为 .f-chip.chip-status（+ .f-count 计数）', () => {
+    for (const f of [
+      'NodeList.vue',
+      'RouteList.vue',
+      'UpstreamList.vue',
+      'StreamProxyList.vue',
+      'DnsUdpProxyList.vue',
+    ]) {
+      const s = page(f)
+      expect(s, f).toContain('chip-status')
+      expect(s, f).toContain('class="f-count"')
+      // 旧形态退场（匹配模板里的 class 用法，注释里提到历史类名不算）
+      expect(s, f).not.toMatch(/class="sp-status-tab/)
+    }
+    expect(css).toContain('.f-chip.chip-status')
+    expect(css).toContain('.f-chip.chip-status .f-count')
+  })
+
+  it('r9-② 路由/上游/节点的「全部状态」下拉已下线（状态只能通过 chips 筛选）', () => {
+    for (const f of ['NodeList.vue', 'RouteList.vue']) {
+      // 「全部状态」作为下拉选项文本退场（注释里的说明文字不算）
+      expect(page(f), f).not.toMatch(/>\s*全部状态\s*</)
+    }
+    // 上游此前完全没有状态筛选，现在有 chips 行
+    expect(page('UpstreamList.vue')).toContain('data-test="status-chip-row"')
+  })
+
+  it('r9-③ 方法只有「全部方法」下拉一个入口：方法 chips 行已删除', () => {
+    const s = page('RouteList.vue')
+    expect(s).toContain('全部方法')
+    expect(s).not.toContain('methodFilters')
+    expect(s).not.toContain('data-test="method-chip-row"')
+  })
+
+  it('r9-④ 页头只留总数徽标：状态分布不再出现在页头（避免与 chips 重复 + 500 抽样失真）', () => {
+    for (const f of ['NodeList.vue', 'RouteList.vue', 'UpstreamList.vue']) {
+      const s = page(f)
+      // headerStatItems 只构造一个 label 项
+      const start = s.indexOf('const headerStatItems')
+      expect(start, f).toBeGreaterThan(-1)
+      const block = s.slice(start, s.indexOf('\n', s.indexOf('])', start)))
+      expect(block.match(/label:/g)?.length ?? 0, `${f} 页头徽标应只有 1 项`).toBe(1)
+    }
+  })
+
+  it('r9-⑤ 计数走权威聚合端点（禁用 page_size=500 抽样）', () => {
+    expect(page('RouteList.vue')).toContain("'/routes/status-counts'")
+    expect(page('UpstreamList.vue')).toContain('getUpstreamStatusCounts')
+    for (const f of ['NodeList.vue', 'RouteList.vue', 'UpstreamList.vue']) {
+      expect(page(f), f).not.toContain('loadRouteStats')
+      expect(page(f), f).not.toContain('loadUpstreamStats')
+    }
+  })
+
+  it('r9-⑥ 工具条不压缩契约：子元素 shrink:0、spacer 独占余量、gap 6、不再 nowrap 硬锁', () => {
+    expect(css).toMatch(/\.l5-toolbar > \* \{[^}]*flex-shrink: 0/)
+    expect(css).toMatch(/\.l5-toolbar \{[\s\S]*?gap: 6px/)
+    for (const f of ['NodeList.vue', 'UpstreamList.vue', 'RouteList.vue']) {
+      const s = page(f)
+      expect(s, f).not.toContain('class="nowrap"')
+      expect(s, f).toContain(':width="150"') // 搜索框：外层 200px 曾把工具条挤爆
+    }
+  })
+
+  it('r9-⑦ 节点「已禁用」chip 标注跨维度语义（管理开关，与运行态可重叠）', () => {
+    const s = page('NodeList.vue')
+    expect(s).toContain('管理开关维度（status=0）：与运行态可重叠')
+  })
+})
+
+describe('mockup-parity r10（filter-architecture G 批：状态行位置 / 工具栏计数下线 / 页头补充维度）', () => {
+  it('r10-① 节点页卡片内顺序 = 工具条 → 状态行 → 批量条 → 表格（筛选面连续、三页同构）', () => {
+    const s = page('NodeList.vue')
+    const iToolbar = s.indexOf('</TableToolbar>')
+    const iChips = s.indexOf('data-test="status-chip-row"')
+    const iBatch = s.indexOf('class="l5-batchbar"')
+    const iTable = s.indexOf('<a-table')
+    expect(iToolbar).toBeGreaterThan(-1)
+    expect(iChips).toBeGreaterThan(iToolbar)
+    expect(iBatch).toBeGreaterThan(iChips)
+    expect(iTable).toBeGreaterThan(iBatch)
+  })
+
+  it('r10-② 三页工具栏不再显示计数（showCount=false；总数只留 chips「全部 N」+ 分页条）', () => {
+    for (const f of ['NodeList.vue', 'UpstreamList.vue', 'RouteList.vue']) {
+      expect(page(f), f).toContain(':show-count="false"')
+    }
+  })
+
+  it('r10-③ 页头徽标 = 补充维度（节点/上游「N 集群」、路由「N 上游」），不再重复总数', () => {
+    expect(page('NodeList.vue')).toContain("label: '集群'")
+    expect(page('UpstreamList.vue')).toContain("label: '集群'")
+    expect(page('RouteList.vue')).toContain("label: '上游'")
+    // 计数端点提供补充维度
+    expect(page('RouteList.vue')).toContain('upstream_count')
+    expect(page('UpstreamList.vue')).toContain('cluster_count')
+  })
+})
+
+describe('mockup-parity r11（筛选行与状态行之间的分隔线）', () => {
+  it('r11-① .l5-toolbar 自带下边线（三页统一；此前仅节点页经 .node-filter-bar 有）', () => {
+    const toolbar = css.slice(css.indexOf('.l5-toolbar {'), css.indexOf('}', css.indexOf('.l5-toolbar {')))
+    expect(toolbar).toContain('border-bottom: 1px solid var(--border)')
+  })
+  it('r11-② 节点页不再在页面级重复声明该线（单点在 style.css）', () => {
+    expect(page('NodeList.vue')).toMatch(/\.node-filter-bar \{[^}]*\}/)
+    const block = page('NodeList.vue').slice(page('NodeList.vue').indexOf('.node-filter-bar {'))
+    const body = block.slice(0, block.indexOf('}'))
+    expect(body).not.toContain('border-bottom')
+  })
+  it('r11-③ 三页状态行仍在工具条之后（分隔线的对象存在）', () => {
+    for (const f of ['NodeList.vue', 'RouteList.vue', 'UpstreamList.vue']) {
+      expect(page(f), f).toContain('data-test="status-chip-row"')
+    }
+  })
+})

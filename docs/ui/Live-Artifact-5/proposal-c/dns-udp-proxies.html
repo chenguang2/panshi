@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DNS 代理（UDP） · 方案 C（卡片型） — 磐石网关管理平台</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+/* 该页独有：仅页头字号微调，卡片解剖一律走 theme.css 共享类 */
+.page-header h1 { font-size: 21px; }
+</style>
+</head>
+<body>
+<div class="app-layout">
+  <aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="sidebar-logo-icon">磐</div>
+    <span class="sidebar-logo-text">磐石</span>
+    <span class="sidebar-logo-version">v1.0</span>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">核心功能</div>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h5v5H3v-5zm7 0h5v5h-5v-5z"/></svg><span>概览</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h14v5H2V3zm0 7h14v5H2v-5z"/></svg><span>集群管理</span></a>
+      <a class="nav-item" href="routes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l5-7v5h9v4H7v5l-5-7z"/></svg><span>路由管理</span></a>
+      <a class="nav-item" href="upstreams.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>上游管理</span></a>
+      <a class="nav-item" href="nodes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3a2 2 0 110 4 2 2 0 010-4zM3.5 14a2 2 0 110-4 2 2 0 010 4zM14.5 14a2 2 0 110-4 2 2 0 010 4z"/></svg><span>节点管理</span></a>
+      <a class="nav-item" href="plugin-groups.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h12v5H3v-5z"/></svg><span>插件组</span></a>
+      <a class="nav-item" href="plugin-metadata.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h8l3 3v9a1 1 0 01-1 1H5a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M9 7v4M9 13v-1"/></svg><span>插件元数据</span></a>
+      <a class="nav-item" href="global-rules.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l6 3v4c0 3-2.5 5.5-6 7-3.5-1.5-6-4-6-7V5l6-3z"/></svg><span>全局规则</span></a>
+      <a class="nav-item" href="static-resources.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3a1 1 0 011-1h6l4 4v10a1 1 0 01-1 1H6a1 1 0 01-1-1V3zM11 2v4h4"/></svg><span>静态资源</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">证书管理</div>
+      <a class="nav-item" href="ca-certs.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="12.5" r="2.5"/><path d="M8 12.5h7M13 12.5v2.5M15 12.5v2.5"/></svg><span>CA 根证书</span></a>
+      <a class="nav-item" href="server-certs.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="10" height="8" rx="1"/><path d="M6.5 8V6a2.5 2.5 0 015 0v2"/></svg><span>服务器证书</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">边缘网络</div>
+      <a class="nav-item" href="stream-proxies.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="12" height="4" rx="1"/><rect x="4" y="7" width="10" height="4" rx="1"/><rect x="5" y="12" width="8" height="4" rx="1"/></svg><span>四层代理</span></a>
+      <a class="nav-item active" href="dns-udp-proxies.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="4" r="2"/><circle cx="4" cy="14" r="2"/><circle cx="14" cy="14" r="2"/><path d="M9 6v3M4 12l2-2M14 12l-2-2"/></svg><span>DNS代理[UDP]</span></a>
+      <a class="nav-item" href="dns-http-proxies.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="4" r="2"/><circle cx="4" cy="14" r="2"/><circle cx="14" cy="14" r="2"/><path d="M9 6v3M4 12l2-2M14 12l-2-2"/></svg><span>DNS代理[HTTP]</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">系统管理</div>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l5 3v6l-5 3-5-3V5l5-3z"/></svg><span>插件管理</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9a3 3 0 100-6 3 3 0 000 6zM3 16c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg><span>用户管理</span></a>
+      <a class="nav-item" href="plugin-switches.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9h8a4 4 0 010 8H5a4 4 0 010-8zM5 15a2 2 0 110-4 2 2 0 010 4z"/></svg><span>插件开关</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Edge功能</div>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l7 7-7 7-7-7z"/></svg><span>Edge直连</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>数据导入</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h8v8H5V7zM7 7V5h4v2"/></svg><span>工具箱</span></a>
+    </div>
+  </nav>
+</aside>
+
+  <div class="main-area">
+    <header class="top-header">
+      <div class="top-header-breadcrumb"><a href="#">首页</a><span>/</span><span>DNS 代理（UDP）</span></div>
+      <div class="top-header-actions">
+        <div class="h-search">
+          <input type="text" placeholder="搜索功能或页面...">
+          <svg class="s-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        </div>
+        <div class="header-user"><div class="header-avatar">管</div><span>管理员</span></div>
+      </div>
+    </header>
+
+    <div class="content-area">
+      <div class="page-header" style="margin-bottom:20px;">
+        <div>
+          <h1>DNS 代理（UDP）<span class="ph-inline"><span class="ph-lite lite-accent"><b>3</b> 集群</span><span class="ph-lite"><b>11</b> 个域名</span></span></h1>
+          <p>在 Edge 节点上监听 UDP 端口，把内网域名解析到指定上游</p>
+        </div>
+        <div class="page-header-actions">
+          <button class="btn btn-secondary" id="batchToggle" aria-pressed="false">批量管理</button>
+          <button class="btn btn-primary"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>新建 DNS 代理</button>
+        </div>
+      </div>
+
+      <div class="alert alert-info" style="margin-bottom:16px;">
+        <span class="alert-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></span>
+        <div class="alert-content"><b>DNS 路由请在本页管理</b>：本页每条记录都会在「路由管理」里生成一条只读的 UDP 路由条目，改配置请回到本页，路由页无法编辑。</div>
+        <a class="btn btn-secondary btn-sm alert-act" href="routes.html">去路由管理</a>
+      </div>
+
+      <div class="l5-card mode-group" id="l5card">
+        <div class="l5-toolbar nowrap" style="gap:4px;">
+          <div class="l5-search">
+            <input type="text" style="width:150px" placeholder="搜索 DNS 代理...">
+            <svg class="s-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          </div>
+          <select class="l5-select" style="width:104px">
+            <option>全部分组</option>
+            <option>生产环境</option>
+            <option>预发环境</option>
+            <option>开发环境</option>
+            <option>未分组</option>
+          </select>
+          <select class="l5-select" style="width:120px">
+            <option>全部集群</option>
+            <option>生产集群</option>
+            <option>预发集群</option>
+            <option>开发集群</option>
+          </select>
+          <span class="t-spacer"></span>
+          <button class="tool-btn" title="重新拉取列表"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 11-2.64-6.36"/><path d="M21 3v6h-6"/></svg>刷新</button><button class="tool-btn fold-all-btn" data-fold-all title="收起当页全部分组"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7 4 12 9 17 4"/><polyline points="7 20 12 15 17 20"/></svg>全部收起</button><div class="seg" id="modeSeg"><span class="seg-opt all active" data-mode="group">分组</span><span class="seg-opt all" data-mode="flat">平铺</span></div>
+        </div>
+
+        <div class="l5-chiprow">
+          <span class="chiprow-label">状态</span>
+          <div class="f-chips">
+            <span class="f-chip chip-status active">全部<span class="f-count">6</span></span>
+            <span class="f-chip chip-status">未发布<span class="f-count">1</span></span>
+            <span class="f-chip chip-status">待发布<span class="f-count">1</span></span>
+            <span class="f-chip chip-status">已发布<span class="f-count">4</span></span>
+          </div>
+          <span class="t-spacer"></span>
+        </div>
+
+                <div class="l5-batchbar batchbar-dynamic" id="batchBar">
+          <span class="b-count">已选 0 项</span>
+          <span class="b-sep"></span>
+          <button class="btn btn-ghost btn-sm need-sel"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg> 批量发布</button>
+          <button class="btn btn-danger btn-sm need-sel"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg> 批量删除</button>
+          <span class="b-spacer"></span>
+          <button class="btn btn-ghost btn-sm" id="clearSel">清除选择</button>
+        </div>
+
+<div class="card-grid">
+          <div class="l5-band cluster-c1" data-fold="c1" role="button" tabindex="0" aria-expanded="true" aria-controls="band-c1">
+            <button class="g-chev" data-band="c1" aria-expanded="true" title="收起本组" aria-label="折叠 / 展开本组"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button>
+            <span class="b-name">生产集群</span>
+            <span class="b-count">3 条 DNS 代理</span>
+            <span class="b-spacer"></span><span class="b-selcount" data-selcount="c1"></span><button class="band-select" data-band-select="c1" title="全选本组 / 取消本组">全选本组</button>
+            <span class="b-hint">上游 · <b>2</b> 组</span>
+          </div>
+          <div class="band-cards" id="band-c1">
+<article class="l5-panel cluster-c1" data-group="c1">
+            <span class="lp-check" aria-hidden="true"></span>
+            <div class="lp-strip"><span class="lp-tag lp-cluster">生产集群</span><span class="st-algo">上游 · <b>10.0.0.53:53</b> <span class="c-dim">+1</span></span></div>
+            <div class="lp-head">
+              <div class="lp-title">
+                <span class="lp-hero sm">0.0.0.0:53</span>
+                <span class="lp-name" title="内网 DNS">内网 DNS</span>
+              </div>
+              <div class="lp-status">
+                
+                <span class="ps-tag ps-pub">v5</span>
+              </div>
+            </div>
+            <div class="lp-body">
+              <div class="lp-row"><span class="lp-k">域名</span><span class="lp-v split"><span class="tr mono" title="api.internal、www.internal、intranet.internal">api.internal<span class="m-more" title="另含 2 个域名">+2</span></span><span class="lp-algo">轮询</span></span></div>
+              <div class="lp-row group-only"><span class="lp-k">上游</span><div class="lp-chips"><span class="tg-chip">10.0.0.53:53</span><span class="tg-chip">10.0.0.54:53</span></div></div>
+            </div>
+            <div class="lp-foot">
+              <button class="op-pub">发布</button>
+              <div class="menu-anchor">
+                <button class="op-btn" data-menu-btn="du-0" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
+                <div class="l5-menu" id="du-0">
+                  <button class="mi"><span class="mi-main">编辑</span></button>
+                  <button class="mi"><span class="mi-main">版本管理</span><span class="mi-sub">历史版本查看与回滚</span></button>
+                  <button class="mi"><span class="mi-main">复制</span></button>
+                  <hr class="menu-sep">
+                  <button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 监听规则与只读路由条目（弹窗可选）</span></button>
+                </div>
+              </div>
+            </div>
+          </article>
+<article class="l5-panel cluster-c1" data-group="c1">
+            <span class="lp-check" aria-hidden="true"></span>
+            <div class="lp-strip"><span class="lp-tag lp-cluster">生产集群</span><span class="st-algo">上游 · <b>10.0.0.54:53</b></span></div>
+            <div class="lp-head">
+              <div class="lp-title">
+                <span class="lp-hero sm">0.0.0.0:5353</span>
+                <span class="lp-name" title="备用解析">备用解析</span>
+              </div>
+              <div class="lp-status">
+                
+                <span class="ps-tag ps-pub">v2</span>
+              </div>
+            </div>
+            <div class="lp-body">
+              <div class="lp-row"><span class="lp-k">域名</span><span class="lp-v split"><span class="tr mono">backup.internal</span><span class="lp-algo">轮询</span></span></div>
+              <div class="lp-row group-only"><span class="lp-k">上游</span><div class="lp-chips"><span class="tg-chip">10.0.0.54:53</span></div></div>
+            </div>
+            <div class="lp-notice alert alert-warning">
+              <span class="n-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+              <span class="n-txt">监听端口非 53，终端需显式配置 :5353</span>
+            </div>
+            <div class="lp-foot">
+              <button class="op-pub">发布</button>
+              <div class="menu-anchor">
+                <button class="op-btn" data-menu-btn="du-2" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
+                <div class="l5-menu" id="du-2">
+                  <button class="mi"><span class="mi-main">编辑</span></button>
+                  <button class="mi"><span class="mi-main">版本管理</span><span class="mi-sub">历史版本查看与回滚</span></button>
+                  <button class="mi"><span class="mi-main">复制</span></button>
+                  <hr class="menu-sep">
+                  <button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 监听规则与只读路由条目（弹窗可选）</span></button>
+                </div>
+              </div>
+            </div>
+          </article>
+<article class="l5-panel cluster-c1" data-group="c1">
+            <span class="lp-check" aria-hidden="true"></span>
+            <div class="lp-strip"><span class="lp-tag lp-cluster">生产集群</span><span class="st-algo">上游 · <b title="该卡片未配置上游，见警示行">—</b></span></div>
+            <div class="lp-head">
+              <div class="lp-title">
+                <span class="lp-hero sm">0.0.0.0:53</span>
+                <span class="lp-name" title="容器 DNS">容器 DNS</span>
+              </div>
+              <div class="lp-status">
+                
+                <span class="ps-tag ps-partial"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3.2 21.4 20H2.6L12 3.2z" fill="currentColor"/><path d="M12 9.4v4M12 16.6v.1" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>v4 · 部分失败</span>
+                <button class="diff-btn" title="查看发布差异" aria-label="查看发布差异"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button>
+              </div>
+            </div>
+            <div class="lp-body">
+              <div class="lp-row"><span class="lp-k">域名</span><span class="lp-v split"><span class="tr mono" title="ctr.internal、svc.internal">ctr.internal<span class="m-more" title="另含 1 个域名">+1</span></span><span class="lp-algo">轮询</span></span></div>
+            </div>
+            <div class="lp-notice alert alert-error">
+              <span class="n-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3.2 21.4 20H2.6L12 3.2z" fill="currentColor"/><path d="M12 9.4v4M12 16.6v.1" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></span>
+              <span class="n-txt">3 个节点中 1 个未生效（10.0.0.14 超时）</span>
+              <button class="n-act">查看差异</button>
+            </div>
+            <div class="lp-foot">
+              <button class="op-pub">重新发布</button>
+              <div class="menu-anchor">
+                <button class="op-btn" data-menu-btn="du-3" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
+                <div class="l5-menu" id="du-3">
+                  <button class="mi"><span class="mi-main">编辑</span></button>
+                  <button class="mi"><span class="mi-main">版本管理</span><span class="mi-sub">历史版本查看与回滚</span></button>
+                  <button class="mi"><span class="mi-main">复制</span></button>
+                  <hr class="menu-sep">
+                  <button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 监听规则与只读路由条目（弹窗可选）</span></button>
+                </div>
+              </div>
+            </div>
+          </article>
+          </div>
+          <div class="l5-band cluster-c2" data-fold="c2" role="button" tabindex="0" aria-expanded="true" aria-controls="band-c2">
+            <button class="g-chev" data-band="c2" aria-expanded="true" title="收起本组" aria-label="折叠 / 展开本组"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button>
+            <span class="b-name">预发集群</span>
+            <span class="b-count">2 条 DNS 代理</span>
+            <span class="b-spacer"></span><span class="b-selcount" data-selcount="c2"></span><button class="band-select" data-band-select="c2" title="全选本组 / 取消本组">全选本组</button>
+            <span class="b-hint">上游 · <b>2</b> 组</span>
+          </div>
+          <div class="band-cards" id="band-c2">
+<article class="l5-panel cluster-c2" data-group="c2">
+            <span class="lp-check" aria-hidden="true"></span>
+            <div class="lp-strip"><span class="lp-tag lp-cluster">预发集群</span><span class="st-algo">上游 · <b>10.0.1.53:53</b></span></div>
+            <div class="lp-head">
+              <div class="lp-title">
+                <span class="lp-hero sm">0.0.0.0:53</span>
+                <span class="lp-name" title="办公区 DNS">办公区 DNS</span>
+              </div>
+              <div class="lp-status">
+                
+                <span class="ps-tag ps-pending">待发布</span>
+                <button class="diff-btn" title="查看发布差异" aria-label="查看发布差异"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button>
+              </div>
+            </div>
+            <div class="lp-body">
+              <div class="lp-row"><span class="lp-k">域名</span><span class="lp-v split"><span class="tr mono" title="corp.internal、vdn.internal">corp.internal<span class="m-more" title="另含 1 个域名">+1</span></span><span class="lp-algo">一致性哈希</span></span></div>
+              <div class="lp-row group-only"><span class="lp-k">上游</span><div class="lp-chips"><span class="tg-chip">10.0.1.53:53</span></div></div>
+            </div>
+            <div class="lp-foot">
+              <button class="op-pub">发布</button>
+              <div class="menu-anchor">
+                <button class="op-btn" data-menu-btn="du-1" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
+                <div class="l5-menu" id="du-1">
+                  <button class="mi"><span class="mi-main">编辑</span></button>
+                  <button class="mi"><span class="mi-main">版本管理</span><span class="mi-sub">历史版本查看与回滚</span></button>
+                  <button class="mi"><span class="mi-main">复制</span></button>
+                  <hr class="menu-sep">
+                  <button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 监听规则与只读路由条目（弹窗可选）</span></button>
+                </div>
+              </div>
+            </div>
+          </article>
+<article class="l5-panel cluster-c2" data-group="c2">
+            <span class="lp-check" aria-hidden="true"></span>
+            <div class="lp-strip"><span class="lp-tag lp-cluster">预发集群</span><span class="st-algo">上游 · <b>http://10.0.3.21:8080</b></span></div>
+            <div class="lp-head">
+              <div class="lp-title">
+                <span class="lp-hero sm">0.0.0.0:53</span>
+                <span class="lp-name" title="合作方 DNS">合作方 DNS</span>
+              </div>
+              <div class="lp-status">
+                
+                <span class="ps-tag ps-pub">v1</span>
+              </div>
+            </div>
+            <div class="lp-body">
+              <div class="lp-row"><span class="lp-k">域名</span><span class="lp-v split"><span class="tr mono">partner.internal</span><span class="lp-algo">最少连接</span></span></div>
+              <div class="lp-row group-only"><span class="lp-k">上游</span><div class="lp-chips"><span class="tg-chip">http://10.0.3.21:8080</span></div></div>
+            </div>
+            <div class="lp-notice alert alert-warning">
+              <span class="n-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+              <span class="n-txt">上游不是 DNS 服务，解析将超时</span>
+              <button class="n-act">改上游</button>
+            </div>
+            <div class="lp-foot">
+              <button class="op-pub">发布</button>
+              <div class="menu-anchor">
+                <button class="op-btn" data-menu-btn="du-5" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
+                <div class="l5-menu" id="du-5">
+                  <button class="mi"><span class="mi-main">编辑</span></button>
+                  <button class="mi"><span class="mi-main">版本管理</span><span class="mi-sub">历史版本查看与回滚</span></button>
+                  <button class="mi"><span class="mi-main">复制</span></button>
+                  <hr class="menu-sep">
+                  <button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 监听规则与只读路由条目（弹窗可选）</span></button>
+                </div>
+              </div>
+            </div>
+          </article>
+          </div>
+          <div class="l5-band cluster-c3" data-fold="c3" role="button" tabindex="0" aria-expanded="true" aria-controls="band-c3">
+            <button class="g-chev" data-band="c3" aria-expanded="true" title="收起本组" aria-label="折叠 / 展开本组"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button>
+            <span class="b-name">开发集群</span>
+            <span class="b-count">1 条 DNS 代理</span>
+            <span class="b-spacer"></span><span class="b-selcount" data-selcount="c3"></span><button class="band-select" data-band-select="c3" title="全选本组 / 取消本组">全选本组</button>
+            <span class="b-hint">上游 · <b>10.0.2.53:53</b></span>
+          </div>
+          <div class="band-cards" id="band-c3">
+<article class="l5-panel cluster-c3" data-group="c3">
+            <span class="lp-check" aria-hidden="true"></span>
+            <div class="lp-strip"><span class="lp-tag lp-cluster">开发集群</span><span class="st-algo">上游 · <b>10.0.2.53:53</b></span></div>
+            <div class="lp-head">
+              <div class="lp-title">
+                <span class="lp-hero sm">10.0.2.1:53</span>
+                <span class="lp-name" title="开发 DNS">开发 DNS</span>
+              </div>
+              <div class="lp-status">
+                
+                <span class="ps-tag ps-unpub">未发布</span>
+              </div>
+            </div>
+            <div class="lp-body">
+              <div class="lp-row"><span class="lp-k">域名</span><span class="lp-v split"><span class="tr mono" title="dev.internal、test.internal">dev.internal<span class="m-more" title="另含 1 个域名">+1</span></span><span class="lp-algo">轮询</span></span></div>
+              <div class="lp-row group-only"><span class="lp-k">上游</span><div class="lp-chips"><span class="tg-chip">10.0.2.53:53</span></div></div>
+            </div>
+            <div class="lp-foot">
+              <button class="op-pub">发布</button>
+              <div class="menu-anchor">
+                <button class="op-btn" data-menu-btn="du-4" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
+                <div class="l5-menu" id="du-4">
+                  <button class="mi"><span class="mi-main">编辑</span></button>
+                  <button class="mi"><span class="mi-main">版本管理</span><span class="mi-sub">历史版本查看与回滚</span></button>
+                  <button class="mi"><span class="mi-main">复制</span></button>
+                  <hr class="menu-sep">
+                  <button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 监听规则与只读路由条目（弹窗可选）</span></button>
+                </div>
+              </div>
+            </div>
+          </article>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="l5-prop-tag">方案 C · <b>卡片型</b> · DNS 代理（UDP）</div>
+
+<script>
+(function () {
+  'use strict';
+  function closeAll() {
+    document.querySelectorAll('.l5-menu.open').forEach(function (m) { m.classList.remove('open'); });
+  }
+  document.querySelectorAll('[data-menu-btn]').forEach(function (btn) {
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var menu = document.getElementById(btn.getAttribute('data-menu-btn'));
+      if (!menu) return;
+      var was = menu.classList.contains('open');
+      closeAll();
+      if (!was) menu.classList.add('open');
+    });
+  });
+  document.addEventListener('click', closeAll);
+  document.querySelectorAll('.l5-chiprow .f-chip').forEach(function (chip) {
+    chip.addEventListener('click', function () {
+      var row = chip.closest('.f-chips');
+      row.querySelectorAll('.f-chip').forEach(function (c) { c.classList.remove('active'); });
+      chip.classList.add('active');
+    });
+  });
+  document.querySelectorAll('a[href="#"]').forEach(function (a) { a.addEventListener('click', function (e) { e.preventDefault(); }); });
+})();
+</script>
+
+<script>
+(function () {
+  'use strict';
+  var card = document.getElementById('l5card');
+  var FOLD_ALL = document.querySelector('.fold-all-btn');
+  var CHEV_EXPANDED = '<polyline points="7 4 12 9 17 4"/><polyline points="7 20 12 15 17 20"/>';
+  var CHEV_FOLDED = '<polyline points="7 9 12 4 17 9"/><polyline points="7 15 12 20 17 15"/>';
+
+  // ── 分组 / 平铺 ──
+  document.querySelectorAll('#modeSeg .seg-opt').forEach(function (opt) {
+    opt.addEventListener('click', function () {
+      var mode = opt.getAttribute('data-mode');
+      card.classList.toggle('mode-group', mode === 'group');
+      card.classList.toggle('mode-flat', mode === 'flat');
+      document.querySelectorAll('#modeSeg .seg-opt').forEach(function (o) {
+        o.classList.toggle('active', o === opt);
+      });
+      applyFolds();
+    });
+  });
+
+  // ── 折叠：整条 band 可点，chevron 不双触发 ──
+  // 模式切换后重算折叠可见性：平铺态无 band，卡片一律展示
+  function applyFolds() {
+    var flat = card.classList.contains('mode-flat');
+    document.querySelectorAll('.l5-band[data-fold]').forEach(function (band) {
+      var key = band.getAttribute('data-fold');
+      var folded = !flat && band.getAttribute('aria-expanded') === 'false';
+      document.querySelectorAll('.band-cards[id="band-' + key + '"] .l5-panel').forEach(function (p) {
+        p.classList.toggle('is-folded', folded);
+      });
+    });
+  }
+  function isFolded(band) { return band.getAttribute('aria-expanded') === 'false'; }
+  function setBand(band, folded) {
+    var key = band.getAttribute('data-fold');
+    var chev = band.querySelector('.g-chev');
+    band.setAttribute('aria-expanded', folded ? 'false' : 'true');
+    if (chev) {
+      chev.classList.toggle('folded', folded);
+      chev.setAttribute('aria-expanded', folded ? 'false' : 'true');
+      chev.title = folded ? '展开本组' : '收起本组';
+    }
+    document.querySelectorAll('.band-cards[id="band-' + key + '"] .l5-panel').forEach(function (p) {
+      p.classList.toggle('is-folded', folded);
+    });
+  }
+  function paintFoldAll() {
+    if (!FOLD_ALL) return;
+    var bands = document.querySelectorAll('.l5-band[data-fold]');
+    var anyFolded = Array.prototype.some.call(bands, isFolded);
+    var svg = FOLD_ALL.querySelector('svg');
+    if (svg) svg.innerHTML = anyFolded ? CHEV_EXPANDED : CHEV_FOLDED;
+    FOLD_ALL.lastChild.textContent = anyFolded ? '全部展开' : '全部收起';
+    FOLD_ALL.title = anyFolded ? '展开当页全部分组' : '收起当页全部分组';
+  }
+  function toggleBand(band) { setBand(band, !isFolded(band)); paintFoldAll(); }
+
+  document.querySelectorAll('.l5-band[data-fold]').forEach(function (band) {
+    band.addEventListener('click', function (e) {
+      if (e.target.closest('.g-chev, .band-select')) return;
+      toggleBand(band);
+    });
+    band.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+      e.preventDefault();
+      toggleBand(band);
+    });
+  });
+  document.querySelectorAll('.g-chev[data-band]').forEach(function (btn) {
+    btn.addEventListener('click', function (e) { e.stopPropagation(); toggleBand(btn.closest('.l5-band')); });
+    btn.addEventListener('keydown', function (e) { e.stopPropagation(); });
+  });
+  if (FOLD_ALL) {
+    FOLD_ALL.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var bands = document.querySelectorAll('.l5-band[data-fold]');
+      var wantFold = !Array.prototype.some.call(bands, isFolded);
+      Array.prototype.forEach.call(bands, function (b) { setBand(b, wantFold); });
+      paintFoldAll();
+    });
+    paintFoldAll();
+  }
+
+  // ── 批量管理（仅实现已有该能力的页）──
+  var BATCH_BTN = document.getElementById('batchToggle');
+  var BATCH_BAR = document.getElementById('batchBar');
+  var CLEAR_SEL = document.getElementById('clearSel');
+  function allCards() { return Array.prototype.slice.call(document.querySelectorAll('.l5-panel')); }
+  function refreshBatch() {
+    if (!BATCH_BAR) return;
+    var n = document.querySelectorAll('.l5-panel.is-selected').length;
+    BATCH_BAR.classList.toggle('has-sel', n > 0);
+    BATCH_BAR.querySelector('.b-count').textContent = '已选 ' + n + ' 项';
+    document.querySelectorAll('.l5-band[data-fold]').forEach(function (band) {
+      var key = band.getAttribute('data-fold');
+      var cards = Array.prototype.slice.call(document.querySelectorAll('.band-cards[id="band-' + key + '"] .l5-panel'));
+      var k = cards.filter(function (c) { return c.classList.contains('is-selected'); }).length;
+      var cnt = band.querySelector('.b-selcount');
+      var btn = band.querySelector('.band-select');
+      if (cnt) cnt.textContent = '已选 ' + k + ' / ' + cards.length;
+      if (btn) btn.textContent = (cards.length > 0 && k === cards.length) ? '取消本组' : '全选本组';
+    });
+  }
+  function setBatch(on) {
+    card.classList.toggle('batch', on);
+    if (BATCH_BTN) {
+      BATCH_BTN.textContent = on ? '退出批量管理' : '批量管理';
+      BATCH_BTN.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+    if (!on) allCards().forEach(function (c) { c.classList.remove('is-selected'); });
+    refreshBatch();
+  }
+  if (BATCH_BTN) {
+    BATCH_BTN.addEventListener('click', function () { setBatch(!card.classList.contains('batch')); });
+    allCards().forEach(function (c) {
+      c.addEventListener('click', function (e) {
+        if (!card.classList.contains('batch')) return;
+        if (e.target.closest('button, .menu-anchor, .l5-menu')) return;
+        c.classList.toggle('is-selected');
+        refreshBatch();
+      });
+    });
+    document.querySelectorAll('.band-select').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var key = btn.getAttribute('data-band-select');
+        var cards = Array.prototype.slice.call(document.querySelectorAll('.band-cards[id="band-' + key + '"] .l5-panel'));
+        var allSel = cards.length > 0 && cards.every(function (c) { return c.classList.contains('is-selected'); });
+        cards.forEach(function (c) { c.classList.toggle('is-selected', !allSel); });
+        refreshBatch();
+      });
+    });
+    if (CLEAR_SEL) CLEAR_SEL.addEventListener('click', function () {
+      allCards().forEach(function (c) { c.classList.remove('is-selected'); });
+      refreshBatch();
+    });
+    refreshBatch();
+  }
+
+  // ── 更多菜单 ──
+  function closeAll() {
+    document.querySelectorAll('.l5-menu.open').forEach(function (m) { m.classList.remove('open'); });
+  }
+  document.querySelectorAll('[data-menu-btn]').forEach(function (btn) {
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var menu = document.getElementById(btn.getAttribute('data-menu-btn'));
+      if (!menu) return;
+      var was = menu.classList.contains('open');
+      closeAll();
+      if (!was) menu.classList.add('open');
+    });
+  });
+  document.addEventListener('click', closeAll);
+
+  // ── 状态 chips ──
+  document.querySelectorAll('.l5-chiprow .f-chip').forEach(function (chip) {
+    chip.addEventListener('click', function () {
+      var row = chip.closest('.f-chips');
+      row.querySelectorAll('.f-chip').forEach(function (c) { c.classList.remove('active'); });
+      chip.classList.add('active');
+    });
+  });
+
+  document.querySelectorAll('a[href="#"]').forEach(function (a) { a.addEventListener('click', function (e) { e.preventDefault(); }); });
+})();
+</script>
+</body>
+</html>

@@ -583,21 +583,18 @@ describe('NodeList.vue batch1 快修', () => {
       return Promise.reject(new Error('unknown url: ' + url))
     })
     const wrapper = await mountPage()
-    // 反转（list-pages-console-restyle）：工具条右端计数恒显（共 N 个节点），不再是「未筛选无计数」
-    expect(wrapper.find('[data-test="toolbar-count"]').text()).toContain('共 2 个节点')
+    // 反转（filter-architecture G2）：工具栏计数已下线，总数只留 chips「全部 N」+ 分页条
+    expect(wrapper.find('[data-test="toolbar-count"]').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('筛出')
 
-    const statusSelect = wrapper.findAll('select').find((s) => s.text().includes('全部状态'))
-    expect(statusSelect).toBeDefined()
-    const selectEl = statusSelect!.element as HTMLSelectElement
-    selectEl.value = 'running'
-    selectEl.dispatchEvent(new Event('change'))
+    const runningChip = wrapper.findAll('.chip-status').find((c) => c.text().includes('运行中'))
+    await runningChip!.trigger('click')
     await flushPromises()
     await wrapper.vm.$nextTick()
     expect(wrapper.text()).toContain('筛出 1 个')
     expect(wrapper.text()).not.toContain('筛出 2 个')
-    // 计数随数据集更新（状态筛选走 loadAll：totalCount = 筛选后全量）
-    expect(wrapper.find('[data-test="toolbar-count"]').text()).toContain('共 1 个节点')
+    // 命中数随数据集更新（状态筛选走 loadAll：totalCount = 筛选后全量），显示在分页条
+    expect(wrapper.text()).toContain('共 1 个节点')
     wrapper.unmount()
   })
 
@@ -871,12 +868,11 @@ describe('NodeList.vue batch2 状态筛选三态', () => {
     return wrapper
   }
 
-  it('筛选下拉含「未检测」选项（全部状态/运行中/已停止/未检测）', async () => {
+  it('状态 chips 五枚（全部/运行中/已停止/未检测/已禁用），状态下拉已下线（filter-architecture D1/D5）', async () => {
     const wrapper = await mountPage()
-    const statusSelect = wrapper.findAll('select').find((s) => s.text().includes('全部状态'))
-    expect(statusSelect).toBeDefined()
-    const optionTexts = statusSelect!.findAll('option').map((o) => o.text())
-    expect(optionTexts).toEqual(['全部状态', '运行中', '已停止', '未检测'])
+    expect(wrapper.findAll('select').find((s) => s.text().includes('全部状态'))).toBeUndefined()
+    const chips = wrapper.findAll('.chip-status').map((c) => c.text().replace(/\d+/g, '').trim())
+    expect(chips).toEqual(['全部', '运行中', '已停止', '未检测', '已禁用'])
     wrapper.unmount()
   })
 
@@ -918,10 +914,8 @@ describe('NodeList.vue batch2 状态筛选三态', () => {
       return Promise.reject(new Error('unknown url: ' + url))
     })
     const wrapper = await mountPage()
-    const statusSelect = wrapper.findAll('select').find((s) => s.text().includes('全部状态'))
-    const selectEl = statusSelect!.element as HTMLSelectElement
-    selectEl.value = 'unchecked'
-    selectEl.dispatchEvent(new Event('change'))
+    const uncheckedChip = wrapper.findAll('.chip-status').find((c) => c.text().includes('未检测'))
+    await uncheckedChip!.trigger('click')
     await flushPromises()
     await wrapper.vm.$nextTick()
     expect(wrapper.text()).toContain('筛出 1 个')
@@ -1920,10 +1914,8 @@ describe('NodeList.vue 集群分组与双模式（list-pages-console-restyle）'
 
   it('空组不显示：状态筛选后无命中行的集群组头消失', async () => {
     const wrapper = await mountPage()
-    const statusSelect = wrapper.findAll('select').find((s) => s.text().includes('全部状态'))
-    const selectEl = statusSelect!.element as HTMLSelectElement
-    selectEl.value = 'stopped'
-    selectEl.dispatchEvent(new Event('change'))
+    const stoppedChip = wrapper.findAll('.chip-status').find((c) => c.text().includes('已停止'))
+    await stoppedChip!.trigger('click')
     await flushPromises()
     await wrapper.vm.$nextTick()
     const headers = wrapper.findAll('[data-test="group-header"]')
@@ -1933,24 +1925,22 @@ describe('NodeList.vue 集群分组与双模式（list-pages-console-restyle）'
     wrapper.unmount()
   })
 
-  it('页头徽标 = 工具条计数同口径（共 N 个节点 ↔ N 节点），状态分布来自统计副本', async () => {
+  it('页头只留总数徽标，状态分布改由第二行 chips 承担（filter-architecture D3）', async () => {
     const wrapper = await mountPage()
-    expect(wrapper.find('[data-test="toolbar-count"]').text()).toContain('共 3 个节点')
     const stats = wrapper.findAll('[data-test="page-stat"]').map((s) => s.text())
-    expect(stats[0]).toContain('3 节点')
-    expect(stats).toHaveLength(4) // 3 节点 · 1 运行中 · 1 已停止 · 1 未检测
-    expect(stats.join(' ')).toContain('1 运行中')
-    expect(stats.join(' ')).toContain('1 已停止')
-    expect(stats.join(' ')).toContain('1 未检测')
+    // 页头 = 补充维度「N 集群」（G3-甲），不再重复总数
+    expect(stats).toHaveLength(1)
+    expect(stats[0]).toContain('集群')
+    expect(stats.join(' ')).not.toContain('运行中')
+    expect(stats.join(' ')).not.toContain('已停止')
+    expect(stats.join(' ')).not.toContain('未检测')
     wrapper.unmount()
   })
 
   it('工具条刷新：重拉列表+统计副本，不重置筛选与视图模式（D6）', async () => {
     const wrapper = await mountPage()
-    const statusSelect = wrapper.findAll('select').find((s) => s.text().includes('全部状态'))
-    const selectEl = statusSelect!.element as HTMLSelectElement
-    selectEl.value = 'stopped'
-    selectEl.dispatchEvent(new Event('change'))
+    const stoppedChip = wrapper.findAll('.chip-status').find((c) => c.text().includes('已停止'))
+    await stoppedChip!.trigger('click')
     await flushPromises()
     const callsBefore = mockApiGet.mock.calls.filter((c: unknown[]) => c[0] === '/nodes').length
     await wrapper.find('[data-test="toolbar-refresh"]').trigger('click')

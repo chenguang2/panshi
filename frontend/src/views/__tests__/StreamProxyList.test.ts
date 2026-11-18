@@ -563,7 +563,7 @@ describe('StreamProxyList.vue 四态状态（ssl 外域对齐 upstream）', () =
       },
     ])
     const w = await mountList()
-    const tabs = w.findAll('.sp-status-tab')
+    const tabs = w.findAll('.chip-status')
     expect(tabs.length).toBeGreaterThanOrEqual(4)
     const pendingTab = tabs.find((t) => t.text().includes('待发布'))!
     expect(pendingTab.text()).toContain('1')
@@ -597,7 +597,7 @@ describe('StreamProxyList.vue 四态状态（ssl 外域对齐 upstream）', () =
       },
     ])
     const w = await mountList()
-    const tabs = w.findAll('.sp-status-tab')
+    const tabs = w.findAll('.chip-status')
     const allTab = tabs.find((t) => t.text().includes('全部'))!
     const unpublishedTab = tabs.find((t) => t.text().includes('未发布'))!
     // 初始：全部=active

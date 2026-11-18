@@ -464,19 +464,20 @@ describe('RouteList.vue 发布状态列与筛选（batch1 组4）', () => {
     expect(rows[2].text()).toContain('未发布')
   })
 
-  it('发布状态筛选含「待发布」选项（值 pending），选择后请求携带 publish_status=pending', async () => {
+  it('状态 chips（filter-architecture D1）：点「待发布」→ 请求携带 publish_status=pending 且该 chip 高亮', async () => {
     const RouteList = (await import('../RouteList.vue')).default
     const wrapper = mount(RouteList, { global: { stubs: pubStateStubs } })
     await flushPromises()
-    const publishSelect = wrapper.findAll('select').find((s) => s.text().includes('已发布'))
-    expect(publishSelect).toBeDefined()
-    const pendingOption = publishSelect!.findAll('option').find((o) => o.element.value === 'pending')
-    expect(pendingOption?.text()).toBe('待发布')
-    await publishSelect!.setValue('pending')
+    // 状态下拉已下线，改为第二行 chips（全部/未发布/待发布/已发布）
+    expect(wrapper.findAll('select').find((s) => s.text().includes('已发布'))).toBeUndefined()
+    const chip = wrapper.findAll('.chip-status').find((c) => c.text().includes('待发布'))
+    expect(chip, '应有「待发布」状态 chip').toBeDefined()
+    await chip!.trigger('click')
     await flushPromises()
     const calls = mockApiGet.mock.calls.filter((c: unknown[]) => c[0] === '/routes')
     const params = (calls[calls.length - 1][1] as { params: Record<string, unknown> }).params
     expect(params.publish_status).toBe('pending')
+    expect(wrapper.findAll('.chip-status.active').map((c) => c.text().includes('待发布'))).toEqual([true])
   })
 })
 
@@ -943,8 +944,8 @@ describe('RouteList.vue 空态双形态与清空筛选（batch1 7.2）', () => {
 
   it('有筛选空态：显示「没有符合条件路由」+ 清空筛选按钮', async () => {
     const wrapper = await mountEmpty()
-    const publishSelect = wrapper.findAll('select').find((s) => s.text().includes('已发布'))
-    await publishSelect!.setValue('published')
+    const publishedChip = wrapper.findAll('.chip-status').find((c) => c.text().includes('已发布'))
+    await publishedChip!.trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('没有符合条件路由')
     expect(wrapper.text()).not.toContain('尚未创建路由')
@@ -956,16 +957,16 @@ describe('RouteList.vue 空态双形态与清空筛选（batch1 7.2）', () => {
   it('清空筛选：重置全部筛选（含分组下拉回「全部分组」，C8）并重查', async () => {
     const wrapper = await mountEmpty()
 
-    // 设置三个筛选：分组=线上、发布状态=已发布、方法 chip=GET
+    // 设置三个筛选：分组=线上、发布状态=已发布（chip）、方法=GET（下拉）
     const groupSelect = wrapper.findAll('select').find((s) => s.text().includes('全部分组'))
     await groupSelect!.setValue('线上')
     await flushPromises()
     expect(lastRouteParams().group_name).toBe('线上')
-    const publishSelect = wrapper.findAll('select').find((s) => s.text().includes('已发布'))
-    await publishSelect!.setValue('published')
+    const publishedChip = wrapper.findAll('.chip-status').find((c) => c.text().includes('已发布'))
+    await publishedChip!.trigger('click')
     await flushPromises()
-    const getChip = wrapper.findAll('.f-chip').find((c) => c.text() === 'GET')
-    await getChip!.trigger('click')
+    const methodSelect = wrapper.find('select.method-filter')
+    await methodSelect.setValue('GET')
     await flushPromises()
     expect(lastRouteParams().publish_status).toBe('published')
     expect(lastRouteParams().method).toBe('GET')
@@ -1019,14 +1020,16 @@ describe('RouteList.vue 方法筛选收敛与全量下拉（batch1 7.3）', () =
     return wrapper.findAll('.f-chip.active').map((c) => c.text().trim())
   }
 
-  it('chips 收敛为常驻 6 个：全部/GET/POST/PUT/DELETE/PATCH', async () => {
+  it('第二行改为状态 chips（4 枚，带计数后缀），方法 chips 已下线', async () => {
     const wrapper = await mountPage()
-    const chips = wrapper.findAll('.f-chip').map((c) => c.text().trim())
-    expect(chips).toEqual(['全部', 'GET', 'POST', 'PUT', 'DELETE', 'PATCH'])
+    const chips = wrapper.findAll('.chip-status').map((c) => c.text().replace(/\d+/g, '').trim())
+    expect(chips).toEqual(['全部', '未发布', '待发布', '已发布'])
+    // 方法不再是 chips：chip 行内不出现 GET/POST 等
+    expect(wrapper.find('[data-test="status-chip-row"]').text()).not.toContain('GET')
     wrapper.unmount()
   })
 
-  it('「方法」下拉含全量方法，与 chips 同值双向联动', async () => {
+  it('「方法」下拉是方法的唯一入口：含全量 10 项，选中即带 method 参数', async () => {
     const wrapper = await mountPage()
 
     const methodSelect = wrapper.find('select.method-filter')
@@ -1046,24 +1049,13 @@ describe('RouteList.vue 方法筛选收敛与全量下拉（batch1 7.3）', () =
     ])
     expect(options[0].text().trim()).toBe('全部方法')
 
-    // chips → 下拉：点 POST chip，下拉值同步为 POST
-    const postChip = wrapper.findAll('.f-chip').find((c) => c.text() === 'POST')
-    await postChip!.trigger('click')
-    await flushPromises()
-    expect((methodSelect.element as HTMLSelectElement).value).toBe('POST')
-    expect(lastRouteParams().method).toBe('POST')
-
-    // 下拉 → chips：选 HEAD（无对应 chip）→ 无任何 chip 高亮（「全部」仅在 method 为空时亮）
     await methodSelect.setValue('HEAD')
     await flushPromises()
     expect(lastRouteParams().method).toBe('HEAD')
-    expect(activeChipLabels(wrapper)).toEqual([])
 
-    // 下拉 → chips：清回「全部方法」→「全部」chip 高亮、参数不带 method
     await methodSelect.setValue('')
     await flushPromises()
     expect(lastRouteParams().method).toBeUndefined()
-    expect(activeChipLabels(wrapper)).toEqual(['全部'])
     wrapper.unmount()
   })
 })
@@ -1904,16 +1896,17 @@ describe('RouteList.vue 集群分组与双模式（list-pages-console-restyle）
     wrapper.unmount()
   })
 
-  it('页头徽标与 chips 行计数同口径（共 N 条路由 ↔ N 路由）', async () => {
+  it('页头只留总数徽标，状态分布交给第二行 chips（filter-architecture D3）', async () => {
     const wrapper = await mountPage()
-    expect(wrapper.find('[data-test="route-count"]').text()).toContain('共 4 条路由')
-    // 工具条右端簇不含计数（V2：showCount=false）
-    expect(wrapper.find('[data-test="toolbar-count"]').exists()).toBe(false)
     const stats = wrapper.findAll('[data-test="page-stat"]').map((s) => s.text())
-    expect(stats[0]).toContain('4 路由')
-    expect(stats.join(' ')).toContain('1 已发布')
-    expect(stats.join(' ')).toContain('1 待发布')
-    expect(stats.join(' ')).toContain('1 未发布')
+    // 页头 = 补充维度「涉及 N 上游」（G3-甲）
+    expect(stats[0]).toContain('上游')
+    expect(stats.join(' ')).not.toContain('已发布')
+    expect(stats.join(' ')).not.toContain('待发布')
+    expect(stats.join(' ')).not.toContain('未发布')
+    // chips 行不再承载「共 N 条路由」（与分页条重复，r8-3.2 裁决）
+    expect(wrapper.find('[data-test="route-count"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="toolbar-count"]').exists()).toBe(false)
     wrapper.unmount()
   })
 

@@ -10,21 +10,23 @@
     </PageHeader>
 
     <div class="sp-header-actions">
-      <div class="sp-status-tabs" role="group" aria-label="按发布状态筛选">
+      <!-- 状态筛选 chips（filter-architecture 方案甲）：与路由/上游/节点同款 .f-chip.chip-status，
+           点击行为与旧 .sp-status-tab 完全一致（goStatus → statusFilter → 服务端重取），仅换造型 -->
+      <div class="f-chips status-chips" role="group" aria-label="按发布状态筛选">
         <button
           v-for="t in statusTabs"
           :key="t.key"
-          class="sp-status-tab"
+          type="button"
+          class="f-chip chip-status"
           :class="{ active: statusFilter === t.key, empty: t.count === 0 }"
           :aria-pressed="statusFilter === t.key ? 'true' : 'false'"
           @click="goStatus(t.key)"
         >
-          {{ t.label }}
-          <span class="sp-status-count">{{ t.count }}</span>
+          {{ t.label }}<span class="f-count">{{ t.count }}</span>
         </button>
       </div>
       <SearchInput v-model="searchText" placeholder="搜索 DNS 代理..." @input="onSearch" />
-      <select v-model="groupFilter" class="form-input" style="width: 140px; flex-shrink: 0" @change="onGroupChange">
+      <select v-model="groupFilter" class="form-input" style="width: 104px; flex-shrink: 0" @change="onGroupChange">
         <option value="__all__">全部分组</option>
         <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
         <option value="__ung__">未分组</option>
@@ -33,7 +35,7 @@
         v-model="clusterFilter"
         :clusters="filteredClusters"
         allow-all
-        style="width: 160px; flex-shrink: 0"
+        style="width: 120px; flex-shrink: 0"
         @change="loadProxies"
       />
       <span class="text-sm text-muted">共 {{ totalCount }} 个 DNS 代理</span>
@@ -556,70 +558,6 @@ loadProxies()
   padding-bottom: 80px;
 }
 /* ── 状态分段控件（连接式 segmented，与四层代理页同款）──────────────── */
-.sp-status-tabs {
-  display: inline-flex;
-  align-items: center;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 3px;
-  gap: 2px;
-  flex-shrink: 0;
-}
-
-.sp-status-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  font-size: 13px;
-  font-family: inherit;
-  padding: 5px 13px;
-  border-radius: 7px;
-  cursor: pointer;
-  transition:
-    background 0.15s,
-    color 0.15s,
-    opacity 0.15s;
-}
-
-.sp-status-tab:hover {
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-  color: var(--fg);
-}
-
-.sp-status-tab.active {
-  background: var(--accent);
-  color: #fff;
-  cursor: default;
-  font-weight: 500;
-  box-shadow: 0 1px 3px color-mix(in srgb, var(--accent) 35%, transparent);
-}
-
-.sp-status-count {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1;
-  padding: 3px 6px;
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--muted) 14%, transparent);
-  color: var(--muted);
-}
-
-.sp-status-tab.active .sp-status-count {
-  background: rgba(255, 255, 255, 0.22);
-  color: #fff;
-}
-
-.sp-status-tab.empty {
-  opacity: 0.55;
-}
-
-.sp-status-tab.empty:hover {
-  opacity: 1;
-}
 
 .sp-header-actions {
   display: flex;
