@@ -2,6 +2,7 @@ import json as _json
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Dict, Any, Literal
 from datetime import datetime
+from app.schemas.publish_detail import PublishDetailField
 
 
 class TargetSchema(BaseModel):
@@ -75,6 +76,8 @@ class StreamProxyResponse(StreamProxyBase):
     # 四态发布状态（stream-proxy-ux-review-fixes D2，upstream 同款）
     pending_publish: bool = False
     last_publish_status: Optional[str] = None
+    # republish-failed-nodes 方案 B：上次发布逐节点失败明细（str→dict 容错）
+    last_publish_detail: PublishDetailField = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 

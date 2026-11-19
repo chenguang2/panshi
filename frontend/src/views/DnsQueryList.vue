@@ -187,6 +187,15 @@
                 <span v-if="upstreamGroups(r).length" class="lp-cnt">{{ upstreamGroups(r).length }} 组</span>
               </div>
             </div>
+            <!-- 部分失败：文案两态（republish-failed-nodes D3/D4）+ 重发 / 查看差异双动作 -->
+            <div v-if="r.last_publish_status === 'partial' && !r.pending_publish" class="lp-notice alert alert-error">
+              <span class="n-ico"><StrokeIcon name="warning" :size="13" /></span>
+              <span class="n-txt">{{ partialNoticeText(r) }}</span>
+              <button class="n-act" :disabled="republishLoading" @click.stop="republishFailedNodes(r)">
+                {{ republishLoading ? '获取失败节点…' : '重发失败节点' }}
+              </button>
+              <button class="n-act ghost" @click.stop="openPublishPreview(r)">查看差异</button>
+            </div>
             <div class="lp-foot" @click.stop>
               <button class="op-pub" @click="publishRouteAction(r)">发布</button>
               <div class="menu-anchor">
@@ -245,8 +254,18 @@
       v-model:visible="publishVisible"
       title="发布 DNS 代理路由"
       :cluster-id="publishClusterId"
+      :preselected-node-ids="publishPreselected"
       @confirm="onPublishConfirm"
       @cancel="publishVisible = false"
+    />
+
+    <PublishPreviewModal
+      v-model:open="previewVisible"
+      :cluster-id="previewRecord?.cluster_id ?? null"
+      :resource-type="'route'"
+      :resource-id="previewRecord?.id ?? null"
+      :resource-name="previewRecord?.name"
+      @publish="onPreviewPublish"
     />
 
     <!-- View Drawer -->
@@ -348,8 +367,10 @@ import TableToolbar from '@/components/TableToolbar.vue'
 import ClusterBand from '@/components/ClusterBand.vue'
 import StrokeIcon from '@/components/StrokeIcon.vue'
 import PublishDiffButton from '@/components/PublishDiffButton.vue'
+import PublishPreviewModal from '@/components/PublishPreviewModal.vue'
 import { useCardClusterGrouping } from '@/composables/useCardClusterGrouping'
 import { useBatchDelete } from '@/composables/useBatchDelete'
+import { useRepublishFailedNodes, noticeTextFromPublishDetail } from '@/composables/useRepublishFailedNodes'
 import { clusterHueClass } from '@/utils/clusterHue'
 import { getClusterNodes } from '@/api/clusters'
 import { PAGE_SIZE_DROPDOWN } from '@/constants'
@@ -573,10 +594,57 @@ const publishVisible = ref(false)
 const publishClusterId = ref(0)
 const publishingRoute = ref<any | null>(null)
 
+// ── 重发失败节点（republish-failed-nodes：预览取失败集合并预选，单一实现）──
+const { loading: republishLoading, resolve: resolveFailedNodes } = useRepublishFailedNodes()
+// 解析成功后的具体文案缓存（会话内按资源 id；主键全库唯一）
+const republishNotices = ref<Record<number, string>>({})
+const publishPreselected = ref<number[]>([])
+
+/** 卡内「发布未完全生效」文案：默认泛化；解析成功后升级为具体失败节点 */
+function partialNoticeText(r: any): string {
+  // 三级回退（D11）：持久化明细（方案 B，打开即见）→ 会话内预览解析缓存 → 泛化
+  return (
+    noticeTextFromPublishDetail(r?.last_publish_detail) ??
+    republishNotices.value[r?.id] ??
+    '发布未完全生效，请查看发布差异'
+  )
+}
+
+async function republishFailedNodes(r: any): Promise<void> {
+  const outcome = await resolveFailedNodes({ id: r.id, cluster_id: r.cluster_id }, 'route')
+  if (!outcome) return
+  if (outcome.ok && outcome.noticeText) {
+    republishNotices.value[r.id] = outcome.noticeText
+    publishingRoute.value = r
+    publishClusterId.value = r.cluster_id
+    publishPreselected.value = outcome.failedNodeIds
+    publishVisible.value = true
+  } else {
+    message.warning('未能获取失败节点，请通过「查看差异」排查')
+  }
+}
+
 function publishRouteAction(r: any) {
   publishingRoute.value = r
   publishClusterId.value = r.cluster_id
+  // 常规发布不带预选（仅「重发失败节点」入口设置；防上一次重发残留）
+  publishPreselected.value = []
   publishVisible.value = true
+}
+
+// 发布差异预览（publish-diff-preview）：修复死按钮——此前只有 openPublishPreview 置 ref、模板无弹窗
+const previewVisible = ref(false)
+const previewRecord = ref<any | null>(null)
+
+function openPublishPreview(r: any) {
+  previewRecord.value = r
+  previewVisible.value = true
+}
+
+function onPreviewPublish() {
+  const r = previewRecord.value
+  previewVisible.value = false
+  if (r) publishRouteAction(r)
 }
 
 async function onPublishConfirm(nodeIds: number[]) {
@@ -622,23 +690,25 @@ async function deleteRoute(r: any) {
 }
 
 // ── 发布状态 chips（带计数；本页全量拉取，前端聚合）──
-type StatusKey = 'all' | 'unpublished' | 'pending' | 'published'
+type StatusKey = 'all' | 'unpublished' | 'pending' | 'published' | 'partial'
 const statusFilter = ref<StatusKey>('all')
 
 function statusOf(r: any): Exclude<StatusKey, 'all'> {
   if (r.pending_publish === true) return 'pending'
+  if (r.last_publish_status === 'partial') return 'partial'
   if (r.current_version) return 'published'
   return 'unpublished'
 }
 
 const statusChips = computed(() => {
-  const c = { unpublished: 0, pending: 0, published: 0 }
+  const c = { unpublished: 0, pending: 0, published: 0, partial: 0 }
   routes.value.forEach((r: any) => c[statusOf(r)]++)
   return [
     { key: 'all' as StatusKey, label: '全部', count: totalCount.value },
     { key: 'unpublished' as StatusKey, label: '未发布', count: c.unpublished },
     { key: 'pending' as StatusKey, label: '待发布', count: c.pending },
     { key: 'published' as StatusKey, label: '已发布', count: c.published },
+    { key: 'partial' as StatusKey, label: '部分失败', count: c.partial },
   ]
 })
 
@@ -798,12 +868,6 @@ function menuDelete(r: any): void {
 }
 
 /** 发布差异预览（与 ⋯ 菜单并列的圆形按钮） */
-const previewVisible = ref(false)
-const previewRoute = ref<any | null>(null)
-function openPublishPreview(r: any): void {
-  previewRoute.value = r
-  previewVisible.value = true
-}
 
 // ── Lifecycle ──
 

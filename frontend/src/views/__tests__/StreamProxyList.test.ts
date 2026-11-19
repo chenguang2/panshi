@@ -547,12 +547,25 @@ describe('StreamProxyList.vue 四态状态（ssl 外域对齐 upstream）', () =
         published_at: '2026-10-23T01:00:00Z',
         pending_publish: false,
         last_publish_status: 'partial',
+        // 方案 B（D10）：持久化明细 → 打开页面即显示具体失败节点
+        last_publish_detail: {
+          total: 2,
+          success: 1,
+          failed: 1,
+          failed_nodes: [{ node: '192.168.0.15:16620', error: 'Edge API error 403: 目标不在该局网关白名单' }],
+        },
         ...base,
       },
     ])
     const w = await mountList()
     const card = w.findAll('.sp-card').find((c) => c.text().includes('partial-one'))!
-    expect(card.text()).toContain('发布未完全生效')
+    // 三级回退 D11：持久化明细优先——打开即见具体节点与原因
+    expect(card.text()).toContain('1 个节点分发失败（192.168.0.15:16620 Edge API error 403: 目标不在该局网关白名单）')
+    // republish-failed-nodes：双动作提示条（重发失败节点 + 查看差异）
+    const notice = card.find('.lp-notice')
+    expect(notice.exists()).toBe(true)
+    expect(notice.text()).toContain('重发失败节点')
+    expect(notice.text()).toContain('查看差异')
   })
 
   it('状态 Tab 渲染计数，点击「待发布」过滤列表', async () => {

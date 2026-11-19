@@ -748,9 +748,99 @@ describe('r22/r24 批量删除统一入口（契约统一 U2）', () => {
       '../backend/app/api/v1/routes.py',
       '../backend/app/api/v1/plugin_configs.py',
       '../backend/app/api/v1/global_rules.py',
+      '../backend/app/api/v1/static_resources.py',
     ]) {
       const src = readFileSync(resolve(process.cwd(), f), 'utf-8')
       expect(src).toContain('batch_delete.batch_delete(')
     }
+  })
+})
+
+describe('mockup-parity · 静态资源卡片页推广（21.9b，2026-11-19）', () => {
+  const s = page('StaticResourceList.vue')
+
+  it('卡片走设计解剖 + 双模式 + 色相按行（r14/r17 同款）', () => {
+    for (const cls of ['l5-panel', 'lp-strip', 'lp-head', 'lp-body', 'lp-foot', 'lp-check'])
+      expect(s, `缺少 ${cls}`).toContain(cls)
+    expect(s).toContain('<TableToolbar')
+    expect(s).toContain("from '@/composables/useCardClusterGrouping'")
+    expect(s).toContain('<ClusterBand')
+    expect(s).toContain('l5-card')
+    expect(s).toMatch(/mode-\$\{cardMode\}/)
+    expect(s).toContain('clusterHueClass(sr.cluster_id)')
+    // 旧自造卡头退场
+    expect(s).not.toContain('sr-card-topbar')
+    expect(s).not.toContain('sr-card-actions')
+  })
+
+  it('状态行 chips（分发五态）+ 批量条 + 页头按钮序（r15 同款）', () => {
+    expect(s).toContain('class="l5-chiprow"')
+    expect(s).toContain('class="chiprow-label"')
+    expect(s).toContain('class="l5-batchbar batchbar-dynamic"')
+    expect(s).toContain(':show-count="false"')
+    expect(s).toContain('批量管理')
+    // 「共 N 个静态资源」计数行退场（#86：总数只由 chips「全部 N」承担）
+    expect(s).not.toContain('unfilteredTotal')
+    expect(s).not.toContain('filterActive')
+    // 批量条在 card-grid 之前
+    const barIdx = s.indexOf('l5-batchbar')
+    const gridIdx = s.indexOf('card-grid')
+    expect(gridIdx).toBeGreaterThan(barIdx)
+  })
+
+  it('动作收进 ⋯ 菜单：危险项独立 + 常驻解释 + broken 态收敛（AGENTS #81）', () => {
+    expect(s).toContain('class="l5-menu"')
+    expect(s).toContain('class="mi danger"')
+    expect(s).toContain('删平台配置，可同步删 Edge 已分发文件（弹窗可选）')
+    expect(s).not.toMatch(/@click="\s*closeCardMenu\(\)/)
+    // broken 态：只留禁用编辑 + 删除（菜单），发布禁用带指路 title
+    expect(s).toContain("staticResourceState(sr) !== 'broken'")
+    expect(s).toContain('关联路由不存在，请先重建路由')
+  })
+
+  it('批量删除契约：全局 ids 端点 + 逐条权限由后端兜底', () => {
+    expect(s).toContain("endpoint: '/static_resources'")
+    expect(s).toContain("idField: 'static_resource_ids'")
+    expect(s).toContain("nameField: 'resource_name'")
+    expect(s).toContain('subsetConsequence')
+  })
+})
+
+describe('mockup-parity · 重发失败节点六页接线（republish-failed-nodes）', () => {
+  const REPUBLISH_PAGES = [
+    'StreamProxyList.vue',
+    'DnsUdpProxyList.vue',
+    'DnsQueryList.vue',
+    'PluginConfigList.vue',
+    'GlobalRuleList.vue',
+    'PluginMetadataList.vue',
+  ]
+
+  it('六页均接共享 useRepublishFailedNodes（禁页面内自解析预览响应）', () => {
+    for (const f of REPUBLISH_PAGES) {
+      const s = page(f)
+      expect(s, `${f} 缺 useRepublishFailedNodes`).toContain("from '@/composables/useRepublishFailedNodes'")
+      // 页面只接线：不发预览请求（单一实现在 composable 内经 getPublishPreview 取数）
+      expect(s, `${f} 页面内直连预览接口`).not.toContain('getPublishPreview')
+      // 解析成功文案缓存 + 双动作按钮
+      expect(s, `${f} 缺 republishNotices 缓存`).toContain('republishNotices')
+      expect(s, `${f} 缺重发按钮`).toContain('重发失败节点')
+      expect(s, `${f} 缺查看差异次动作`).toContain('class="n-act ghost"')
+      expect(s, `${f} 弹窗未接预选`).toContain(':preselected-node-ids="publishPreselected"')
+    }
+  })
+
+  it('常规发布入口复位预选（防上一次重发残留泄漏到常规发布）', () => {
+    for (const f of REPUBLISH_PAGES) {
+      const s = page(f)
+      // 重发入口设置、常规入口清空——至少一处「复位」存在
+      expect(s, `${f} 缺预选复位`).toContain('publishPreselected.value = []')
+    }
+  })
+
+  it('静态资源页不迁移（D7：取持久化明细，语义更精确）；notice 双动作样式走 style.css 单点', () => {
+    expect(page('StaticResourceList.vue')).not.toContain('useRepublishFailedNodes')
+    const css = readFileSync(resolve(process.cwd(), 'src/style.css'), 'utf-8')
+    expect(css).toContain('.lp-notice .n-act.ghost')
   })
 })

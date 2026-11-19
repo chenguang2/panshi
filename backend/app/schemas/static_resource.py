@@ -25,6 +25,9 @@ class StaticResourceResponse(BaseModel):
     file_size: Optional[int] = None
     storage_path: Optional[str] = None
     current_version: Optional[int] = None
+    # 绑定路由展示（卡页「绑定 · 路由名」；路由改名后与 resource.name 可能漂移，故从 Route 现取）
+    route_name: Optional[str] = None
+    route_uri: Optional[str] = None
     # static-resources-ux-close-loop 组 5：发布结果持久化读回（detail 为解析后的 JSON 对象）
     last_publish_ok: Optional[bool] = None
     last_published_at: Optional[str] = None

@@ -268,3 +268,51 @@ describe('PluginConfigList 批量管理（r20 新增）', () => {
     expect((del.element as HTMLButtonElement).disabled).toBe(false)
   })
 })
+
+describe('PluginConfigList 部分失败提示条（republish-failed-nodes 批 2.4）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/plugin_configs') {
+        return Promise.resolve({
+          data: {
+            total: 1,
+            page: 1,
+            page_size: 20,
+            items: [
+              {
+                id: 3,
+                name: 'partial-config',
+                cluster_id: 1,
+                cluster_name: '生产集群',
+                description: '',
+                plugins: { cors: {} },
+                current_version: 2,
+                published_at: '2025-06-01T00:00:00Z',
+                last_publish_status: 'partial',
+                pending_publish: false,
+                reference_count: 0,
+              },
+            ],
+          },
+        })
+      }
+      if (url === '/clusters')
+        return Promise.resolve({ data: { items: [{ id: 1, display_name: '生产集群', group_name: '' }] } })
+      return Promise.reject(new Error('unknown url'))
+    })
+  })
+
+  it('partial 卡显示双动作提示条（重发失败节点 + 查看差异）；不直连预览接口', async () => {
+    const PluginConfigList = (await import('../PluginConfigList.vue')).default
+    const wrapper = mount(PluginConfigList, { global: { stubs } })
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    const card = wrapper.findAll('.pc-card').find((c) => c.text().includes('partial-config'))!
+    const notice = card.find('.lp-notice')
+    expect(notice.exists()).toBe(true)
+    expect(notice.text()).toContain('发布未完全生效')
+    expect(notice.text()).toContain('重发失败节点')
+    expect(notice.text()).toContain('查看差异')
+  })
+})

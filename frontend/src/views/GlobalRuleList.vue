@@ -182,9 +182,14 @@
                 <span class="lp-v mono">全部路由 · {{ pc.route_count ?? 0 }} 条</span>
               </div>
             </div>
+            <!-- 部分失败：文案两态（republish-failed-nodes D3/D4）+ 重发 / 查看差异双动作 -->
             <div v-if="pc.last_publish_status === 'partial' && !pc.pending_publish" class="lp-notice alert alert-error">
               <span class="n-ico"><StrokeIcon name="warning" :size="13" /></span>
-              <span class="n-txt">发布未完全生效，请查看发布差异</span>
+              <span class="n-txt">{{ partialNoticeText(pc) }}</span>
+              <button class="n-act" :disabled="republishLoading" @click.stop="republishFailedNodes(pc)">
+                {{ republishLoading ? '获取失败节点…' : '重发失败节点' }}
+              </button>
+              <button class="n-act ghost" @click.stop="openPublishPreview(pc)">查看差异</button>
             </div>
             <div class="lp-foot" @click.stop>
               <button class="op-pub" @click="publishRule(pc)">发布</button>
@@ -251,6 +256,7 @@
       v-model:visible="publishVisible"
       :title="publishTitle"
       :cluster-id="publishClusterId"
+      :preselected-node-ids="publishPreselected"
       @confirm="onPublishConfirm"
       @cancel="publishVisible = false"
     />
@@ -358,6 +364,37 @@ const publishingRecord = ref<any | null>(null)
 /** 本次发布完成后的刷新动作：卡片发布刷新列表；版本弹窗出口条发布额外重开弹窗重载版本列表 */
 const publishRefreshFn = ref<() => Promise<void>>(loadRules)
 
+// ── 重发失败节点（republish-failed-nodes：预览取失败集合并预选，单一实现）──
+const { loading: republishLoading, resolve: resolveFailedNodes } = useRepublishFailedNodes()
+// 解析成功后的具体文案缓存（会话内按资源 id；主键全库唯一）
+const republishNotices = ref<Record<number, string>>({})
+const publishPreselected = ref<number[]>([])
+
+/** 卡内「发布未完全生效」文案：默认泛化；解析成功后升级为具体失败节点 */
+function partialNoticeText(pc: any): string {
+  // 三级回退（D11）：持久化明细（方案 B，打开即见）→ 会话内预览解析缓存 → 泛化
+  return (
+    noticeTextFromPublishDetail(pc?.last_publish_detail) ??
+    republishNotices.value[pc?.id] ??
+    '发布未完全生效，请查看发布差异'
+  )
+}
+
+async function republishFailedNodes(pc: any): Promise<void> {
+  const outcome = await resolveFailedNodes({ id: pc.id, cluster_id: pc.cluster_id }, 'global_rule')
+  if (!outcome) return
+  if (outcome.ok && outcome.noticeText) {
+    republishNotices.value[pc.id] = outcome.noticeText
+    publishingRecord.value = pc
+    publishClusterId.value = pc.cluster_id
+    publishRefreshFn.value = loadRules
+    publishPreselected.value = outcome.failedNodeIds
+    publishVisible.value = true
+  } else {
+    message.warning('未能获取失败节点，请通过「查看差异」排查')
+  }
+}
+
 /** 7.1：发布确认弹窗标题携带资源名 */
 const publishTitle = computed(() =>
   publishingRecord.value ? `发布全局规则: ${publishingRecord.value.name}` : '发布全局规则',
@@ -426,6 +463,7 @@ function onFormPublishRequested(payload: {
     current_version: payload.currentVersion,
   }
   publishClusterId.value = payload.clusterId as number
+  publishPreselected.value = []
   publishVisible.value = true
 }
 
@@ -469,6 +507,8 @@ function publishRule(pc: any) {
   publishingRecord.value = pc
   publishClusterId.value = pc.cluster_id
   publishRefreshFn.value = loadRules
+  // 常规发布不带预选（仅「重发失败节点」入口设置；防上一次重发残留）
+  publishPreselected.value = []
   publishVisible.value = true
 }
 
@@ -510,6 +550,7 @@ function onVmPublishRequested() {
     await loadRules()
     vmVisible.value = true
   }
+  publishPreselected.value = []
   vmVisible.value = false
   publishVisible.value = true
 }
@@ -534,29 +575,32 @@ onUnmounted(() => {
 
 import { clusterHueClass } from '@/utils/clusterHue'
 import { useBatchDelete } from '@/composables/useBatchDelete'
+import { useRepublishFailedNodes, noticeTextFromPublishDetail } from '@/composables/useRepublishFailedNodes'
 import { useCardClusterGrouping } from '@/composables/useCardClusterGrouping'
 import StrokeIcon from '@/components/StrokeIcon.vue'
 import ClusterBand from '@/components/ClusterBand.vue'
 import TableToolbar from '@/components/TableToolbar.vue'
 
 // ── 状态 chips（本页全量拉取，前端聚合）──
-type StatusKey = 'all' | 'unpublished' | 'pending' | 'published'
+type StatusKey = 'all' | 'unpublished' | 'pending' | 'published' | 'partial'
 const statusFilter = ref<StatusKey>('all')
 
 function statusOf(row: any): Exclude<StatusKey, 'all'> {
   if (row.pending_publish === true) return 'pending'
+  if (row.last_publish_status === 'partial') return 'partial'
   if (row.current_version) return 'published'
   return 'unpublished'
 }
 
 const statusChips = computed(() => {
-  const c = { unpublished: 0, pending: 0, published: 0 }
+  const c = { unpublished: 0, pending: 0, published: 0, partial: 0 }
   rules.value.forEach((row: any) => c[statusOf(row)]++)
   return [
     { key: 'all' as StatusKey, label: '全部', count: totalCount.value },
     { key: 'unpublished' as StatusKey, label: '未发布', count: c.unpublished },
     { key: 'pending' as StatusKey, label: '待发布', count: c.pending },
     { key: 'published' as StatusKey, label: '已发布', count: c.published },
+    { key: 'partial' as StatusKey, label: '部分失败', count: c.partial },
   ]
 })
 

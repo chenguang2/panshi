@@ -838,3 +838,57 @@ describe('PluginMetadataList 插件筛选下拉（r28）', () => {
     expect(calls2[calls2.length - 1][1].params.plugin_name).toBeUndefined()
   })
 })
+
+describe('PluginMetadataList 部分失败提示条（republish-failed-nodes 批 2.6 新增）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/plugin_metadata') {
+        return Promise.resolve({
+          data: {
+            total: 1,
+            page: 1,
+            page_size: 20,
+            items: [
+              {
+                id: 9,
+                plugin_name: 'jwt-auth',
+                cluster_id: 1,
+                cluster_name: '生产集群',
+                cluster_group_name: '',
+                config_data: { secret: 'abc' },
+                current_version: 3,
+                published_at: '2025-01-02T03:04:05Z',
+                last_publish_status: 'partial',
+                pending_publish: false,
+              },
+            ],
+          },
+        })
+      }
+      if (url === '/clusters')
+        return Promise.resolve({ data: { items: [{ id: 1, display_name: '生产集群', group_name: '线上' }] } })
+      if (url === '/plugins/builtin')
+        return Promise.resolve({ data: { plugins: [{ name: 'jwt-auth', description: 'JWT 认证' }] } })
+      if (url === '/system/features')
+        return Promise.resolve({
+          data: { features: {}, enabled_plugins: [], global_rule_plugins: [], plugin_metadata_plugins: [] },
+        })
+      return Promise.reject(new Error('unknown url'))
+    })
+  })
+
+  it('partial 卡显示双动作提示条（重发失败节点 + 查看差异）', async () => {
+    const PluginMetadataList = (await import('../PluginMetadataList.vue')).default
+    const wrapper = mount(PluginMetadataList, { global: { stubs } })
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    const card = wrapper.findAll('.pml-card').find((c) => c.text().includes('jwt-auth'))!
+    const notice = card.find('.lp-notice')
+    expect(notice.exists()).toBe(true)
+    expect(notice.text()).toContain('发布未完全生效')
+    expect(notice.text()).toContain('重发失败节点')
+    expect(notice.text()).toContain('查看差异')
+  })
+})

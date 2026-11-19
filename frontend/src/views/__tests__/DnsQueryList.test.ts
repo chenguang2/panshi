@@ -8,7 +8,9 @@ vi.mock('@/api', () => ({
   default: { get: (...args: any[]) => mockApiGet(...args) },
 }))
 vi.mock('ant-design-vue', () => ({
-  message: { error: (...a: any[]) => mockMessageError(...a), success: vi.fn() },
+  message: { error: (...a: any[]) => mockMessageError(...a), success: vi.fn(), warning: vi.fn() },
+  // AppModal（PublishPreviewModal 挂载，republish-failed-nodes 批 2.3）经 Modal 渲染：给可渲染桩，open=false 不产出内容
+  Modal: { template: '<div v-if="open"><slot /></div>', props: ['open'] },
 }))
 vi.mock('vue-router', () => ({
   useRoute: () => ({ query: {} as Record<string, string> }),
@@ -206,5 +208,51 @@ describe('DnsQueryList 批量管理（r19 新增）', () => {
       .trigger('click')
     await w.vm.$nextTick()
     expect(w.find('.l5-batchbar').text()).toContain('已选 0 项')
+  })
+})
+
+describe('DnsQueryList 部分失败提示条（republish-failed-nodes 批 2.3 新增）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/routes') {
+        return Promise.resolve({
+          data: {
+            items: [
+              {
+                id: 21,
+                name: 'doh',
+                uri: '/dns-query',
+                cluster_id: 1,
+                cluster_name: 'test',
+                cluster_group_name: '',
+                current_version: 5,
+                published_at: '2026-11-01T01:00:00Z',
+                last_publish_status: 'partial',
+                pending_publish: false,
+                plugins: [],
+              },
+            ],
+            total: 1,
+          },
+        })
+      }
+      if (url === '/clusters') {
+        return Promise.resolve({ data: { items: [{ id: 1, name: 'test', display_name: 'test 集群' }] } })
+      }
+      return Promise.reject(new Error('unknown ' + url))
+    })
+  })
+
+  it('partial 卡显示双动作提示条（重发失败节点 + 查看差异）；PublishPreviewModal 已接线（修复死按钮）', async () => {
+    const w = await openList()
+    const card = w.findAll('.dq-card').find((c) => c.text().includes('doh'))!
+    const notice = card.find('.lp-notice')
+    expect(notice.exists()).toBe(true)
+    expect(notice.text()).toContain('发布未完全生效')
+    expect(notice.text()).toContain('重发失败节点')
+    expect(notice.text()).toContain('查看差异')
+    // 此前只有 openPublishPreview 置 ref、模板无弹窗（死按钮）——现在弹窗存在
+    expect(w.findComponent({ name: 'PublishPreviewModal' }).exists()).toBe(true)
   })
 })

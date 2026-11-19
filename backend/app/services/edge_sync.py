@@ -107,6 +107,9 @@ async def rollback_resource(
     # 回滚路径不特判 pending 输入（与 D1 正交）。
     if hasattr(resource, "last_publish_status"):
         resource.last_publish_status = None
+        # republish-failed-nodes D10：回滚同时清失败明细（与状态同点，保持「无发布痕迹」语义）
+        if hasattr(resource, "last_publish_detail"):
+            resource.last_publish_detail = None
     await db.commit()
     return resource
 
@@ -223,6 +226,13 @@ async def publish_resource(
     # 显式赋值才真正胜出。
     if hasattr(resource, "last_publish_status"):
         resource.last_publish_status = "partial" if fail_count else None
+        # republish-failed-nodes 方案 B（D10）：partial 同步落逐节点失败明细
+        # （与静态资源 last_publish_detail 同构：{total, success, failed, failed_nodes, route}），
+        # 全部成功清 NULL——卡片页打开即见具体失败节点，无需进预览。
+        if hasattr(resource, "last_publish_detail"):
+            resource.last_publish_detail = (
+                _build_publish_detail(results, success_count, fail_count) if fail_count else None
+            )
         if publish_ts is not None and hasattr(resource, "updated_at"):
             resource.updated_at = publish_ts
             flag_modified(resource, "updated_at")
@@ -558,6 +568,28 @@ async def publish_to_nodes(
         results.append(node_result)
 
     return results, success_count, fail_count
+
+
+def _build_publish_detail(results: list[dict], success_count: int, fail_count: int) -> str:
+    """上次发布逐节点失败明细 JSON（republish-failed-nodes 方案 B，D10）。
+
+    形态与静态资源页 ``last_publish_detail`` 同构：``{total, success, failed,
+    failed_nodes: [{node, error}], route}``（省去静态资源特有的 node_results）。
+    仅在 ``fail_count > 0`` 时被调用；JSON 字符串直接落 TEXT 列。
+    """
+    failed_nodes = [
+        {"node": r.get("node") or "", "error": r.get("error") or ""}
+        for r in results
+        if r.get("status") == "failed"
+    ]
+    detail = {
+        "total": len(results),
+        "success": success_count,
+        "failed": fail_count,
+        "failed_nodes": failed_nodes,
+        "route": next((r.get("route") for r in results if r.get("route")), None),
+    }
+    return json.dumps(detail, ensure_ascii=False)
 
 
 def build_publish_response(

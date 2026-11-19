@@ -100,6 +100,11 @@ class Route(Base):
     # publish_resource/rollback_resource 既有 hasattr 能力探测单点写回，加列即自动接入。
     # 须同步注册 core/migrate.py COLUMN_MIGRATIONS（漏注册会启动 crash-loop）。
     last_publish_status = Column(String(16), nullable=True)
+    # 上次发布逐节点失败明细（republish-failed-nodes 方案 B，D10）：JSON 字符串
+    # {total, success, failed, failed_nodes: [{node, error}], route}；全部成功/回滚清 NULL。
+    # 写回/清除走 publish_resource/rollback_resource 的 hasattr 能力探测单点。
+    # 须同步注册 core/migrate.py COLUMN_MIGRATIONS（约定 #118）。
+    last_publish_detail = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -170,6 +175,11 @@ class PluginMetadata(Base):
     # 加列即自动接入。须同步注册 core/migrate.py COLUMN_MIGRATIONS，
     # 漏注册会启动 crash-loop——与 PluginConfig/GlobalRule 同款先例）
     last_publish_status = Column(String(16), nullable=True)
+    # 上次发布逐节点失败明细（republish-failed-nodes 方案 B，D10）：JSON 字符串
+    # {total, success, failed, failed_nodes: [{node, error}], route}；全部成功/回滚清 NULL。
+    # 写回/清除走 publish_resource/rollback_resource 的 hasattr 能力探测单点。
+    # 须同步注册 core/migrate.py COLUMN_MIGRATIONS（约定 #118）。
+    last_publish_detail = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -191,6 +201,11 @@ class PluginConfig(Base):
     # 全部成功清 NULL。publish_resource/rollback_resource 经 hasattr 能力探测写回/清除，
     # 加列即自动接入。须同步注册 core/migrate.py COLUMN_MIGRATIONS（漏注册会启动 crash-loop）。
     last_publish_status = Column(String(16), nullable=True)
+    # 上次发布逐节点失败明细（republish-failed-nodes 方案 B，D10）：JSON 字符串
+    # {total, success, failed, failed_nodes: [{node, error}], route}；全部成功/回滚清 NULL。
+    # 写回/清除走 publish_resource/rollback_resource 的 hasattr 能力探测单点。
+    # 须同步注册 core/migrate.py COLUMN_MIGRATIONS（约定 #118）。
+    last_publish_detail = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -211,6 +226,11 @@ class GlobalRule(Base):
     # 上次发布结果：'partial'=部分/全部节点失败；全部成功为 NULL
     # （publish_resource 既有 hasattr 能力探测单点写回，加列即自动接入）
     last_publish_status = Column(String(16), nullable=True)
+    # 上次发布逐节点失败明细（republish-failed-nodes 方案 B，D10）：JSON 字符串
+    # {total, success, failed, failed_nodes: [{node, error}], route}；全部成功/回滚清 NULL。
+    # 写回/清除走 publish_resource/rollback_resource 的 hasattr 能力探测单点。
+    # 须同步注册 core/migrate.py COLUMN_MIGRATIONS（约定 #118）。
+    last_publish_detail = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -245,6 +265,11 @@ class StreamProxy(Base):
     # 上次发布结果：'partial'=部分/全部节点失败；全部成功为 NULL
     # （publish_resource/rollback_resource 既有 hasattr 能力探测单点写回，加列即自动接入）
     last_publish_status = Column(String(16), nullable=True)
+    # 上次发布逐节点失败明细（republish-failed-nodes 方案 B，D10）：JSON 字符串
+    # {total, success, failed, failed_nodes: [{node, error}], route}；全部成功/回滚清 NULL。
+    # 写回/清除走 publish_resource/rollback_resource 的 hasattr 能力探测单点。
+    # 须同步注册 core/migrate.py COLUMN_MIGRATIONS（约定 #118）。
+    last_publish_detail = Column(Text, nullable=True)
     dns_config = Column(Text, nullable=True)     # JSON: DNS 域名映射配置（proxy_type=dns 时使用）
     status = Column(Integer, nullable=False, default=1)
     current_version = Column(Integer, nullable=True)

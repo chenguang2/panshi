@@ -37,14 +37,17 @@ export function useStreamProxyList(proxyType: Ref<'normal' | 'dns'>) {
   })
 
   // ssl 外域四态对齐（stream-proxy-ux-review-fixes D2）：状态 Tab 过滤与计数
-  const statusFilter = ref<'all' | 'unpublished' | 'pending' | 'published'>('all')
-  const statusOf = (p: any): 'unpublished' | 'pending' | 'published' => {
+  // republish-failed-nodes 批 5：partial 从「已发布」拆出为独立 chip 档（待发布优先于 partial，
+  // 与 PublishStatusTag 的 pending+partial 同传语义一致）
+  const statusFilter = ref<'all' | 'unpublished' | 'pending' | 'published' | 'partial'>('all')
+  const statusOf = (p: any): 'unpublished' | 'pending' | 'published' | 'partial' => {
     if (p.pending_publish === true) return 'pending'
+    if (p.last_publish_status === 'partial') return 'partial'
     if (p.current_version) return 'published'
     return 'unpublished'
   }
   const statusCounts = computed(() => {
-    const c = { unpublished: 0, pending: 0, published: 0 }
+    const c = { unpublished: 0, pending: 0, published: 0, partial: 0 }
     for (const p of proxies.value) c[statusOf(p) as keyof typeof c]++
     return c
   })

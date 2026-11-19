@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Demo · 「分发失败」卡片提示推广到各发布卡片页 — 磐石网关管理平台</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+body { background: var(--bg); font-family: var(--font-body); color: var(--fg); margin: 0; padding: 28px 32px 60px; }
+.demo-wrap { max-width: 1180px; margin: 0 auto; }
+h1 { font-size: 19px; margin: 0 0 6px; }
+p.desc { font-size: 13px; color: var(--muted); margin: 0 0 24px; line-height: 1.6; }
+.demo-section { margin-bottom: 36px; }
+.demo-label { display: flex; align-items: baseline; gap: 10px; margin: 0 0 12px; }
+.demo-label b { font-size: 14px; }
+.demo-label span { font-size: 12px; color: var(--muted); }
+.demo-label .tag-now, .demo-label .tag-new { font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; }
+.tag-now { background: oklch(50% 0.018 240 / 10%); color: var(--muted); }
+.tag-new { background: oklch(56% 0.16 210 / 14%); color: var(--accent); }
+.demo-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 1100px) { .demo-grid { grid-template-columns: 1fr; } }
+/* 建议方案：notice 内双动作（主 = 重发失败节点，次 = 查看差异走文字弱化） */
+.lp-notice .n-act.ghost { font-weight: 500; opacity: 0.75; margin-left: 10px; }
+.demo-note { font-size: 12px; color: var(--muted); margin-top: 10px; line-height: 1.6; }
+.demo-note b { color: var(--fg); }
+</style>
+</head>
+<body>
+<div class="demo-wrap">
+  <h1>「分发失败」卡片提示：从静态资源页推广到各发布卡片页</h1>
+  <p class="desc">
+    现状：四层代理 / DNS-UDP / 插件组 / 全局规则四张卡片页在「部分失败」时已有一条 <b>.lp-notice</b>，
+    但文案是泛化的「发布未完全生效」，看不出<b>哪个节点</b>失败、失败原因，也没有一键重发——
+    只有静态资源页（本批 21.9b1）因为有持久化的 failed_nodes 明细，能给出具体节点 + 「重发失败节点」。
+    本页对比两种形态，供裁决推广方案。
+  </p>
+
+  <div class="demo-section">
+    <div class="demo-label"><b>现状（四页既有）</b><span class="tag-now">as-is</span><span>泛化文案 + 只能进差异预览自己找节点</span></div>
+    <div class="demo-grid">
+      <article class="l5-panel cluster-c1">
+        <span class="lp-check" aria-hidden="true"></span>
+        <div class="lp-strip"><span class="lp-tag lp-cluster">生产集群</span><span class="st-algo">上游 · <b>10.0.0.53:53</b> <span class="c-dim">+1</span></span></div>
+        <div class="lp-head">
+          <div class="lp-title">
+            <span class="lp-hero sm">0.0.0.0:53</span>
+            <span class="lp-name" title="内网 DNS">内网 DNS</span>
+          </div>
+          <div class="lp-status"><span class="ps-tag ps-partial">v5 · 部分失败</span></div>
+        </div>
+        <div class="lp-body">
+          <div class="lp-row"><span class="lp-k">域名</span><span class="lp-v split"><span class="tr mono" title="api.internal、www.internal">api.internal<span class="m-more">+1</span></span><span class="lp-algo">轮询</span></span></div>
+        </div>
+        <div class="lp-notice alert alert-error">
+          <span class="n-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3.2 21.4 20H2.6L12 3.2z" fill="currentColor"/><path d="M12 9.4v4M12 16.6v.1" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></span>
+          <span class="n-txt">发布未完全生效，请查看发布差异</span>
+          <button class="n-act">查看差异</button>
+        </div>
+        <div class="lp-foot">
+          <button class="op-pub">发布</button>
+          <div class="menu-anchor">
+            <button class="op-btn" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
+          </div>
+        </div>
+      </article>
+      <div class="demo-note">
+        用户视角：<b>「没生效，但不知道是哪台、为什么」</b>——要重发只能点「查看差异」→ 在预览矩阵里找到落后节点 →
+        关掉弹窗 → 点「发布」→ 在节点列表里手动取消勾选健康节点。四步，且跨两个弹窗。
+      </div>
+    </div>
+  </div>
+
+  <div class="demo-section">
+    <div class="demo-label"><b>建议方案 A（零 schema 变更）</b><span class="tag-new">to-be</span><span>具体节点 + 一键「重发失败节点」（预选失败节点）+ 查看差异保留</span></div>
+    <div class="demo-grid">
+      <article class="l5-panel cluster-c1">
+        <span class="lp-check" aria-hidden="true"></span>
+        <div class="lp-strip"><span class="lp-tag lp-cluster">生产集群</span><span class="st-algo">上游 · <b>10.0.0.53:53</b> <span class="c-dim">+1</span></span></div>
+        <div class="lp-head">
+          <div class="lp-title">
+            <span class="lp-hero sm">0.0.0.0:53</span>
+            <span class="lp-name" title="内网 DNS">内网 DNS</span>
+          </div>
+          <div class="lp-status"><span class="ps-tag ps-partial">v5 · 部分失败</span></div>
+        </div>
+        <div class="lp-body">
+          <div class="lp-row"><span class="lp-k">域名</span><span class="lp-v split"><span class="tr mono" title="api.internal、www.internal">api.internal<span class="m-more">+1</span></span><span class="lp-algo">轮询</span></span></div>
+        </div>
+        <div class="lp-notice alert alert-error">
+          <span class="n-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3.2 21.4 20H2.6L12 3.2z" fill="currentColor"/><path d="M12 9.4v4M12 16.6v.1" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></span>
+          <span class="n-txt">1 个节点分发失败（192.168.0.15:16620 连接超时）</span>
+          <button class="n-act">重发失败节点</button>
+          <button class="n-act ghost">查看差异</button>
+        </div>
+        <div class="lp-foot">
+          <button class="op-pub">发布</button>
+          <div class="menu-anchor">
+            <button class="op-btn" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
+          </div>
+        </div>
+      </article>
+      <article class="l5-panel cluster-c2">
+        <span class="lp-check" aria-hidden="true"></span>
+        <div class="lp-strip"><span class="lp-tag lp-cluster">预发集群</span><span class="st-algo">上游 · <b>10.0.0.54:53</b></span></div>
+        <div class="lp-head">
+          <div class="lp-title">
+            <span class="lp-hero sm">0.0.0.0:5353</span>
+            <span class="lp-name" title="测试 DNS">测试 DNS</span>
+          </div>
+          <div class="lp-status"><span class="ps-tag ps-partial">v3 · 部分失败</span></div>
+        </div>
+        <div class="lp-body">
+          <div class="lp-row"><span class="lp-k">域名</span><span class="lp-v split"><span class="tr mono">test.internal</span><span class="lp-algo">轮询</span></span></div>
+        </div>
+        <div class="lp-notice alert alert-error">
+          <span class="n-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3.2 21.4 20H2.6L12 3.2z" fill="currentColor"/><path d="M12 9.4v4M12 16.6v.1" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></span>
+          <span class="n-txt">2 个节点分发失败（192.168.0.13:16620 目标不在该局网关白名单，请执行配置下发 等）</span>
+          <button class="n-act">重发失败节点</button>
+          <button class="n-act ghost">查看差异</button>
+        </div>
+        <div class="lp-foot">
+          <button class="op-pub">发布</button>
+          <div class="menu-anchor">
+            <button class="op-btn" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
+          </div>
+        </div>
+      </article>
+    </div>
+    <div class="demo-note">
+      <b>数据从哪来</b>：不新增持久化——点开该资源的发布差异预览（<b>已有</b>「落后节点」分组，含节点 IP + 原因），
+      把落后节点集合回填到 notice 文案与「重发失败节点」预选（PublishConfirmModal 已支持 <b>preselectedNodeIds</b>）。
+      打开卡片页不自动预取，保持首屏轻；notice 先渲染现有泛化文案，点「重发失败节点」时拉预览取失败集合并直开发布弹窗（预览接口已在，幂等只读）。
+    </div>
+  </div>
+
+  <div class="demo-section">
+    <div class="demo-label"><b>适用面与边界</b></div>
+    <div class="demo-note">
+      ① <b>四层代理 / DNS-UDP / 插件组 / 全局规则</b>：已有 .lp-notice，改文案 + 加动作即接入（方案 A 直接覆盖）。
+      ② <b>DNS-HTTP / 插件元数据</b>：连泛化 notice 都没有，推广时一并补齐（同批）。
+      ③ <b>静态资源页</b>：保持现状不动——它有真正的持久化 failed_nodes（zip 分发语义），文案取库不取预览，比方案 A 更精确，无需改。
+      ④ 列表页（路由 / 上游 / 节点 / SSL）：走表格行 + PublishDiffButton 既有形态，本方案不涉及。
+      ⑤ 若后续要「页面打开即显示具体失败节点」（不点按钮就能看到），才需要方案 B：publish_resource 持久化 failed_nodes 明细（各资源加列 + 迁移），成本显著更高，建议不做。
+    </div>
+  </div>
+</div>
+</body>
+</html>

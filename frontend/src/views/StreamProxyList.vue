@@ -194,11 +194,15 @@
                 <span v-if="p.targets && p.targets.length" class="lp-cnt">{{ p.targets.length }} 个</span>
               </div>
             </div>
-            <!-- 发布未完全生效：卡内危险提示（四档警示语义：危险 = 实心红三角 + 可执行动作） -->
+            <!-- 发布未完全生效：卡内危险提示（四档警示语义：危险 = 实心红三角 + 可执行动作）。
+                 文案两态（republish-failed-nodes D3/D4）：默认泛化；点「重发失败节点」解析成功后升级为具体节点 -->
             <div v-if="p.last_publish_status === 'partial' && !p.pending_publish" class="lp-notice alert alert-error">
               <span class="n-ico"><StrokeIcon name="warning" :size="13" /></span>
               <span class="n-txt">{{ partialNoticeText(p) }}</span>
-              <button class="n-act" @click.stop="openPublishPreview(p)">查看差异</button>
+              <button class="n-act" :disabled="republishLoading" @click.stop="republishFailedNodes(p)">
+                {{ republishLoading ? '获取失败节点…' : '重发失败节点' }}
+              </button>
+              <button class="n-act ghost" @click.stop="openPublishPreview(p)">查看差异</button>
             </div>
             <!-- DNS mode: show dns_upstream hosts info -->
             <template v-if="p.proxy_type === 'dns'">
@@ -288,6 +292,7 @@
       :title="`发布四层代理「${publishingProxy?.name ?? ''}」`"
       :cluster-id="publishClusterId"
       :current-version="publishingProxy?.current_version ?? null"
+      :preselected-node-ids="publishPreselected"
       @confirm="onPublishConfirm"
       @cancel="publishVisible = false"
     />
@@ -326,6 +331,7 @@ import { executePublish, showDeleteConfirm, executeDeleteWithProgress, routeLabe
 import { getGroupColorStyle, getCardBorderStyle } from '@/composables/useGroupColors'
 import { formatDateTime as formatDate } from '@/utils/format'
 import { useStreamProxyList } from '@/composables/useStreamProxyList'
+import { useRepublishFailedNodes, noticeTextFromPublishDetail } from '@/composables/useRepublishFailedNodes'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
 import PublishStatusTag from '@/components/PublishStatusTag.vue'
 import PublishDiffButton from '@/components/PublishDiffButton.vue'
@@ -463,16 +469,15 @@ function menuDelete(p: StreamProxy): void {
   deleteProxy(p)
 }
 
-/** 卡内「发布未完全生效」文案：取失败节点摘要（last_publish_detail 是结构化对象） */
+/** 卡内「发布未完全生效」文案：默认泛化；「重发失败节点」解析成功后升级为具体失败节点（republishNotices 会话缓存）。
+ *  （历史注：此函数曾按 last_publish_detail.failed_nodes 拼文案，但 StreamProxy 无该列、列表也不下发——恒走泛化兜底） */
 function partialNoticeText(p: ProxyCardRow): string {
-  const d = p.last_publish_detail
-  const failed = d?.failed_nodes ?? []
-  if (!failed.length) return `发布未完全生效（${d?.success ?? 0}/${d?.total ?? 0} 节点成功）`
-  const first = failed[0]
-  const reason = first?.error ? `（${first.node} ${first.error}）` : `（${first?.node ?? ''} 超时）`
-  return failed.length === 1
-    ? `1 个节点未生效${reason}`
-    : `${d?.total ?? 0} 个节点中 ${failed.length} 个未生效${reason}`
+  // 三级回退（D11）：持久化明细（方案 B，打开即见）→ 会话内预览解析缓存 → 泛化
+  return (
+    noticeTextFromPublishDetail(p?.last_publish_detail) ??
+    republishNotices.value[p.id] ??
+    '发布未完全生效，请查看发布差异'
+  )
 }
 
 /** 协议标签与色调（设计 .lp-proto 三态：tcp / udp / tls） */
@@ -528,6 +533,27 @@ const publishClusterId = ref(0)
 const publishingProxy = ref<StreamProxy | null>(null)
 // 版本弹窗出口链：发布完成后的刷新回调可注入「重开版本弹窗」（RouteList 同款范式）
 const publishRefreshFn = ref<() => Promise<void>>(loadProxies)
+
+// ── 重发失败节点（republish-failed-nodes：预览取失败集合并预选，AGENTS D5 单一实现）──
+const { loading: republishLoading, resolve: resolveFailedNodes } = useRepublishFailedNodes()
+// 解析成功后的具体文案缓存（会话内按资源 id；主键全库唯一）
+const republishNotices = ref<Record<number, string>>({})
+const publishPreselected = ref<number[]>([])
+
+async function republishFailedNodes(p: StreamProxy): Promise<void> {
+  const outcome = await resolveFailedNodes({ id: p.id, cluster_id: p.cluster_id }, 'stream_proxy')
+  if (!outcome) return
+  if (outcome.ok && outcome.noticeText) {
+    republishNotices.value[p.id] = outcome.noticeText
+    publishingProxy.value = p
+    publishClusterId.value = p.cluster_id
+    publishRefreshFn.value = loadProxies
+    publishPreselected.value = outcome.failedNodeIds
+    publishVisible.value = true
+  } else {
+    message.warning('未能获取失败节点，请通过「查看差异」排查')
+  }
+}
 
 // ── Helpers ──
 
@@ -610,6 +636,7 @@ function onWizardPublishRequested(payload: { clusterId: number; proxyId: number 
     name: payload.name,
   } as StreamProxy
   publishClusterId.value = payload.clusterId
+  publishPreselected.value = []
   publishVisible.value = true
 }
 
@@ -658,6 +685,8 @@ function publishProxyAction(p: StreamProxy) {
   publishingProxy.value = p
   publishClusterId.value = p.cluster_id
   publishRefreshFn.value = loadProxies
+  // 常规发布不带预选（仅「重发失败节点」入口设置；防上一次重发残留）
+  publishPreselected.value = []
   publishVisible.value = true
 }
 
@@ -680,12 +709,13 @@ function goStatus(key: StatusKey) {
   statusFilter.value = key
 }
 
-type StatusKey = 'all' | 'unpublished' | 'pending' | 'published'
+type StatusKey = 'all' | 'unpublished' | 'pending' | 'published' | 'partial'
 const statusTabs = computed<{ key: StatusKey; label: string; count: number }[]>(() => [
   { key: 'all', label: '全部', count: totalCount.value },
   { key: 'unpublished', label: '未发布', count: statusCounts.value.unpublished },
   { key: 'pending', label: '待发布', count: statusCounts.value.pending },
   { key: 'published', label: '已发布', count: statusCounts.value.published },
+  { key: 'partial', label: '部分失败', count: statusCounts.value.partial },
 ])
 
 // 版本弹窗「立即发布恢复的配置」出口：先关版本弹窗再打开发布确认弹窗（不同屏），
@@ -699,6 +729,7 @@ function onVmPublishRequested() {
     await loadProxies()
     vmVisible.value = true
   }
+  publishPreselected.value = []
   vmVisible.value = false
   publishVisible.value = true
 }

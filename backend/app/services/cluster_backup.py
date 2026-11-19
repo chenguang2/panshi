@@ -257,7 +257,7 @@ _NESTED_KEYS = ("targets", "plugins", "content_base64")
 # 集群 status=1 同语义）。这些列的时间值经导出序列化是 ISO 字符串，若原样
 # 绑定 DateTime 列会在 commit 时炸出 StatementError（change:
 # cluster-backup-restore-fix P0 根因），故在 static_resources 分支显式丢弃。
-_RUNTIME_STATE_KEYS = ("last_publish_ok", "last_publish_detail", "last_published_at")
+_RUNTIME_STATE_KEYS = ("last_publish_ok", "last_publish_detail", "last_published_at", "last_publish_status")
 
 
 def _coerce_datetime_fields(kwargs: dict, model: type) -> dict:
@@ -296,6 +296,12 @@ def _entity_kwargs(item: dict, cluster_id: int, model: type | None = None) -> di
     kwargs = {k: v for k, v in item.items()
               if k not in _DROP_KEYS and k not in _NESTED_KEYS}
     kwargs["cluster_id"] = cluster_id
+    # republish-failed-nodes D12：运行态发布状态跨分支统一丢弃——导入集群
+    # SHALL NOT 继承源集群的发布痕迹。此前仅 static_resources 分支显式丢弃，
+    # 其余模型经列白名单会把 last_publish_status（及新增 last_publish_detail）
+    # 一并带进导入，属缺口；各分支的显式 pop 变为幂等 no-op，不回退。
+    for rk in _RUNTIME_STATE_KEYS:
+        kwargs.pop(rk, None)
     if model is not None:
         mapper = sa_inspect(model)
         allowed = set(mapper.attrs.keys()) | {c.name for c in mapper.columns}

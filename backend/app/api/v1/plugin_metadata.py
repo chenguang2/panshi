@@ -10,6 +10,7 @@ from app.models.cluster import PluginMetadata, Cluster
 from app.models.user import User, UserCluster
 from app.services import batch_delete, edge_sync
 from app.core.deps import require_permission
+from app.schemas.publish_detail import parse_publish_detail
 from app.schemas.cluster import BatchDeletePluginMetadataRequest
 
 router = APIRouter(prefix="/plugin_metadata", tags=["plugin_metadata"])
@@ -104,6 +105,8 @@ async def list_all_plugin_metadata(
                 last_publish_status=r.last_publish_status,
             ),
             "last_publish_status": r.last_publish_status,
+            # republish-failed-nodes 方案 B：逐节点失败明细（解析对象）
+            "last_publish_detail": parse_publish_detail(r.last_publish_detail),
         })
 
     return {"total": total, "page": page, "page_size": page_size, "items": resp_items}

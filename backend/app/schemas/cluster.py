@@ -3,6 +3,7 @@ import re
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
+from app.schemas.publish_detail import PublishDetailField
 
 NAME_PATTERN = re.compile(r'^[a-z0-9]([a-z0-9-]*[a-z0-9])?$')
 NAME_ERROR_MSG = "集群名称只能包含小写字母、数字和中划线，中划线不能在首尾"
@@ -454,6 +455,8 @@ class PluginConfigResponse(BaseModel):
     pending_publish: bool = False
     # 上次发布结果：'partial'=部分/全部节点失败；全部成功为 None
     last_publish_status: Optional[str] = None
+    # republish-failed-nodes 方案 B：上次发布逐节点失败明细（str→dict 容错）
+    last_publish_detail: PublishDetailField = None
     updated_at: Optional[str] = None
     created_at: Optional[str] = None
 
@@ -501,6 +504,8 @@ class GlobalRuleResponse(BaseModel):
     pending_publish: bool = False
     # 上次发布结果：'partial'=部分/全部节点失败；全部成功为 None
     last_publish_status: Optional[str] = None
+    # republish-failed-nodes 方案 B：上次发布逐节点失败明细（str→dict 容错）
+    last_publish_detail: PublishDetailField = None
     updated_at: Optional[str] = None
     created_at: Optional[str] = None
 

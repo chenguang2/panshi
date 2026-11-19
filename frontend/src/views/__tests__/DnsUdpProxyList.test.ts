@@ -551,6 +551,20 @@ describe('DnsUdpProxyList.vue 四态与分段控件', () => {
     const w = await mountList()
     const card = w.findAll('.sp-card').find((c) => c.text().includes('dns-partial'))!
     expect(card.text()).toContain('发布未完全生效')
+    // republish-failed-nodes：双动作提示条（重发失败节点 + 查看差异）
+    const notice = card.find('.lp-notice')
+    expect(notice.exists()).toBe(true)
+    expect(notice.text()).toContain('重发失败节点')
+    expect(notice.text()).toContain('查看差异')
+    // 批 5：partial 从「已发布」拆出为独立 chip 档并可筛选
+    const chip = w.findAll('.f-chip.chip-status').find((c) => c.text().includes('部分失败'))
+    expect(chip).toBeDefined()
+    expect(chip!.text()).toContain('1')
+    await chip!.trigger('click')
+    await w.vm.$nextTick()
+    const visible = w.findAll('.sp-card')
+    expect(visible.length).toBe(1)
+    expect(visible[0].text()).toContain('dns-partial')
   })
 
   it('状态分段控件渲染计数并过滤；激活段 aria-pressed；空段降透明可点', async () => {

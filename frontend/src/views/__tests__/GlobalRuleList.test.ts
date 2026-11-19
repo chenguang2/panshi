@@ -507,3 +507,50 @@ describe('GlobalRuleList 批量管理（r21 新增）', () => {
     expect(w.find('.l5-batchbar').text()).toContain('已选 0 项')
   })
 })
+
+describe('GlobalRuleList 部分失败提示条（republish-failed-nodes 批 2.5）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/global_rules') {
+        return Promise.resolve({
+          data: {
+            total: 1,
+            page: 1,
+            page_size: 20,
+            items: [
+              {
+                id: 3,
+                name: 'partial-rule',
+                cluster_id: 1,
+                cluster_name: '生产集群',
+                description: '',
+                plugins: {},
+                current_version: 2,
+                published_at: '2026-06-01T00:00:00Z',
+                last_publish_status: 'partial',
+                pending_publish: false,
+              },
+            ],
+          },
+        })
+      }
+      if (url === '/clusters')
+        return Promise.resolve({ data: { items: [{ id: 1, display_name: '生产集群', group_name: '' }] } })
+      return Promise.reject(new Error('unknown url'))
+    })
+  })
+
+  it('partial 卡显示双动作提示条（重发失败节点 + 查看差异）', async () => {
+    const GlobalRuleList = (await import('../GlobalRuleList.vue')).default
+    const wrapper = mount(GlobalRuleList, { global: { stubs } })
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    const card = wrapper.findAll('.gr-card').find((c) => c.text().includes('partial-rule'))!
+    const notice = card.find('.lp-notice')
+    expect(notice.exists()).toBe(true)
+    expect(notice.text()).toContain('发布未完全生效')
+    expect(notice.text()).toContain('重发失败节点')
+    expect(notice.text()).toContain('查看差异')
+  })
+})

@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
+from app.schemas.publish_detail import PublishDetailField
 
 
 class RouteBase(BaseModel):
@@ -50,6 +51,8 @@ class RouteResponse(RouteBase):
     # 上次发布结果（publish-status-unify）：'partial'=部分/全部节点失败，全部成功为 NULL；
     # 由两个列表端点透传，详情端点保持 None（对齐 B1：发布状态展示只走列表）
     last_publish_status: Optional[str] = None
+    # republish-failed-nodes 方案 B：上次发布逐节点失败明细（str→dict 容错）
+    last_publish_detail: PublishDetailField = None
     # 发布状态语义由后端单点推导（edge_sync.derive_pending_publish），前端不本地推导；
     # 两个列表端点组装时传入，详情端点有意不推导（B1），默认 False
     pending_publish: bool = False

@@ -11,6 +11,7 @@ test_plugin_config_publish_status.py 的组织方式）：
    hasattr 能力探测单点，加列即自动接入）；
 4. 回滚语义：updated_at onupdate 自然置 pending（不特判回滚路径）。
 """
+import json
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
@@ -273,6 +274,10 @@ class TestPartialWriteBack:
 
         await test_db.refresh(gr)
         assert gr.last_publish_status == "partial"
+        # republish-failed-nodes 方案 B（D10）：失败明细同步落库（与静态资源页同构）
+        detail = json.loads(gr.last_publish_detail)
+        assert detail["total"] == 2 and detail["success"] == 1 and detail["failed"] == 1
+        assert detail["failed_nodes"] == [{"node": "10.9.2.1:9180", "error": "connection refused"}]
         # 关键断言：partial 写回是第二次 UPDATE，updated_at 必须重钉回发布时间戳
         assert gr.updated_at == cvs[0].created_at
 
@@ -303,6 +308,8 @@ class TestPartialWriteBack:
         assert second["status"] == "ok"
         await test_db.refresh(gr)
         assert gr.last_publish_status is None
+        # 方案 B：全部成功同时清失败明细
+        assert gr.last_publish_detail is None
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -341,3 +348,40 @@ class TestRollbackSemantics:
         m1, m2 = await _fetch_both_lists(async_authed_client)
         for m in (m1, m2):
             assert m["zz-rollback-gr"]["pending_publish"] is True
+
+    @pytest.mark.asyncio
+    async def test_rollback_clears_publish_detail(self, async_authed_client, isolated_session):
+        """republish-failed-nodes 方案 B（D10）：回滚与状态同点清失败明细。"""
+        from app.models.cluster import GlobalRule as GR
+        from sqlalchemy import select as _select
+
+        async with isolated_session() as s:
+            s.add(Node(cluster_id=1, ip="10.9.2.5", service_port=80,
+                       management_port=9180, edge_path="/edge", status=1))
+            gr = GR(
+                cluster_id=1, name="zz-rb-detail", current_version=2,
+                last_publish_status="partial",
+                last_publish_detail=json.dumps(
+                    {"total": 2, "success": 1, "failed": 1,
+                     "failed_nodes": [{"node": "10.9.2.5:9180", "error": "boom"}]},
+                    ensure_ascii=False,
+                ),
+            )
+            s.add(gr)
+            await s.flush()
+            s.add(ConfigVersion(
+                cluster_id=1, resource_type="global_rule", resource_id=gr.id,
+                version=1, config=json.dumps({"name": "zz-rb-detail"}),
+            ))
+            await s.commit()
+            grid = (
+                await s.execute(_select(GR.id).where(GR.name == "zz-rb-detail"))
+            ).scalar_one()
+
+        rb = await async_authed_client.post(f"/api/v1/clusters/1/global_rules/{grid}/rollback/1")
+        assert rb.status_code == 200, rb.text
+
+        async with isolated_session() as s:
+            row = (await s.execute(_select(GR).where(GR.id == grid))).scalar_one()
+            assert row.last_publish_status is None
+            assert row.last_publish_detail is None

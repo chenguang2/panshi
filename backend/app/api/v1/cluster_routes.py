@@ -8,6 +8,7 @@ import uuid
 from app.core.database import get_db
 from app.config import MAX_PAGE_SIZE
 from app.models.cluster import Cluster, Route, RoutePlugin, ConfigVersion, Upstream, Node
+from app.schemas.publish_detail import parse_publish_detail
 from app.schemas.route import RouteCreate, RouteUpdate, RouteResponse, RouteListResponse, PluginUpdateRequest
 from app.schemas.cluster import DeleteClusterRequest, BatchDeleteRoutesRequest, PublishRequest
 from app.services import batch_delete, edge_sync
@@ -54,6 +55,8 @@ def route_to_response(r: Route, current_version: int | None = None, published_at
         "pending_publish": pending_publish,
         # partial 持久化（publish-status-unify 批 2）：同由两个列表端点透传，能力探测写回。
         "last_publish_status": last_publish_status,
+        # republish-failed-nodes 方案 B：逐节点失败明细（解析对象；方案 B 落库后打开即见）
+        "last_publish_detail": parse_publish_detail(r.last_publish_detail),
         "created_at": r.created_at.isoformat() if r.created_at else None,
         "plugins": plugins or [],
     }
