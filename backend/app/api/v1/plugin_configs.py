@@ -9,6 +9,7 @@ from app.models.cluster import Cluster, PluginConfig, Route
 from app.models.user import User, UserCluster
 from app.schemas.cluster import BatchDeletePluginConfigsRequest, PluginConfigResponse
 from app.services import batch_delete, edge_sync, plugin_config_refs
+from app.services.plugin_config_refs import plugin_ref_like_pattern
 from app.core.deps import require_permission
 
 router = APIRouter(prefix="/plugin_configs", tags=["plugin_configs"])
@@ -22,6 +23,8 @@ async def list_all_plugin_configs(
     group_name: str = Query("__all__"),
     search: Optional[str] = Query(None),
     cluster_id: Optional[int] = Query(None),
+    # 插件引用过滤（plugin-ref-filter D1/D5）：plugins JSON 键精确 LIKE，缺省不过滤
+    plugin: Optional[str] = Query(None, description="按插件引用过滤（JSON 键精确匹配）"),
     current_user: User = Depends(require_permission('plugin_groups')),
 ):
     query = select(PluginConfig)
@@ -50,6 +53,9 @@ async def list_all_plugin_configs(
     if search:
         pattern = f"%{search}%"
         query = query.where(PluginConfig.name.ilike(pattern))
+
+    if plugin:
+        query = query.where(PluginConfig.plugins.like(plugin_ref_like_pattern(plugin), escape="\\"))
 
     count_query = select(func.count()).select_from(query.subquery())
     total_result = await db.execute(count_query)

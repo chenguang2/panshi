@@ -45,3 +45,16 @@ def count_by_uuid(raw_refs: Iterable[Any]) -> dict[str, int]:
         for uuid in extract_refs(raw):
             counts[uuid] = counts.get(uuid, 0) + 1
     return counts
+
+
+def plugin_ref_like_pattern(name: str) -> str:
+    """插件引用 JSON 键精确 LIKE 形态（plugin-ref-filter D1）。
+
+    ``plugins`` TEXT 列存 JSON 对象（键 = 插件标识名）。序列化形态固定为
+    ``"name":``（紧凑与带空格分隔符均以 ``"name":`` 开头），故以键形态做
+    LIKE 精确匹配——冒号后缀天然规避前缀串碰撞（``jwt-auth`` 不会命中
+    ``jwt-auth-v2`` 的引用行）；值位置出现同名串不会命中（值序列化无冒号）。
+    对 name 做 LIKE 通配转义（防御未来目录出现 %/_）。
+    """
+    escaped = name.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f'%"{escaped}":%'

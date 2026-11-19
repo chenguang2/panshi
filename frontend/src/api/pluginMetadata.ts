@@ -9,8 +9,8 @@ export function listGlobalPluginMetadata(params: Record<string, unknown> = {}) {
   return api.get<{ total: number; items: Array<Record<string, unknown>> }>('/plugin_metadata', { params })
 }
 
-export function listBuiltinPlugins() {
-  return api.get<{ plugins: Array<Record<string, unknown>> }>('/plugins/builtin')
+export function listBuiltinPlugins(params: Record<string, unknown> = {}) {
+  return api.get<{ plugins: Array<Record<string, unknown>> }>('/plugins/builtin', { params })
 }
 
 export function listClusterPluginMetadata(clusterId: number) {

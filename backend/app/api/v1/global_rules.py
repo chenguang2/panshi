@@ -9,6 +9,7 @@ from app.models.cluster import Cluster, GlobalRule, Route
 from app.models.user import User, UserCluster
 from app.schemas.cluster import GlobalRuleResponse, BatchDeleteGlobalRulesRequest
 from app.services import edge_sync, batch_delete
+from app.services.plugin_config_refs import plugin_ref_like_pattern
 from app.core.deps import require_permission
 
 router = APIRouter(prefix="/global_rules", tags=["global_rules"])
@@ -22,6 +23,8 @@ async def list_all_global_rules(
     group_name: str = Query("__all__"),
     search: Optional[str] = Query(None),
     cluster_id: Optional[int] = Query(None),
+    # 插件引用过滤（plugin-ref-filter D1/D5）：plugins JSON 键精确 LIKE，缺省不过滤
+    plugin: Optional[str] = Query(None, description="按插件引用过滤（JSON 键精确匹配）"),
     current_user: User = Depends(require_permission('global_rules')),
 ):
     query = select(GlobalRule)
@@ -50,6 +53,9 @@ async def list_all_global_rules(
     if search:
         pattern = f"%{search}%"
         query = query.where(GlobalRule.name.ilike(pattern))
+
+    if plugin:
+        query = query.where(GlobalRule.plugins.like(plugin_ref_like_pattern(plugin), escape="\\"))
 
     count_query = select(func.count()).select_from(query.subquery())
     total_result = await db.execute(count_query)

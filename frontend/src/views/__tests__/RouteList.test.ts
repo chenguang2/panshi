@@ -576,11 +576,11 @@ describe('RouteList.vue 服务端排序（batch1 组5）', () => {
     wrapper.unmount()
   })
 
-  it('列宽：发布状态定宽 200（partial 态标签+▾ 预览按钮放得下；日期超宽走省略+tooltip）、操作列 110 容纳行内发布+菜单（拍平后不挤）', async () => {
+  it('列宽：发布状态定宽 220（批 7「差异」胶囊：partial 态标签 ~170 + 胶囊 ~42 放得下；日期超宽走省略+tooltip）、操作列 110 容纳行内发布+菜单（拍平后不挤）', async () => {
     const wrapper = await mountPage()
     const cols = (wrapper.vm as any).columns as Array<Record<string, unknown>>
     const byKey = (k: string) => cols.find((c) => c.key === k) as Record<string, unknown> | undefined
-    expect(byKey('publish_status')?.width).toBe(200)
+    expect(byKey('publish_status')?.width).toBe(220)
     expect(byKey('actions')?.width).toBe(110)
     wrapper.unmount()
   })
@@ -1534,8 +1534,8 @@ describe('RouteList 列个性化（column-personalization-rollout）', () => {
     ;(wrapper.vm as any).viewMode = 'flat'
     await wrapper.vm.$nextTick()
     const table = wrapper.findComponent({ name: 'ColDragTableStub' })
-    // 平铺态多一列「集群」（设计宽 116 / 缩放下限 96，分组视图无此列）→ 最小宽 652 + 96 = 748
-    expect(table.props('scroll')).toEqual({ x: 748 })
+    // 平铺态多一列「集群」（设计宽 116 / 缩放下限 96，分组视图无此列）→ 最小宽 762 + 96 = 858（批 7 publish_status 110→220）
+    expect(table.props('scroll')).toEqual({ x: 858 })
     expect(table.props('tableLayout')).toBe('fixed')
     const cols = table.props('columns') as Array<{ key: unknown; width?: number; fixed?: string }>
     const byKey = Object.fromEntries(cols.map((c) => [String(c.key), c]))
@@ -1920,6 +1920,38 @@ describe('RouteList.vue 集群分组与双模式（list-pages-console-restyle）
     const callsAfter = mockApiGet.mock.calls.filter((c: unknown[]) => c[0] === '/routes').length
     expect(callsAfter).toBeGreaterThan(callsBefore)
     expect((wrapper.vm as any).viewMode).toBe('group')
+    wrapper.unmount()
+  })
+})
+
+describe('RouteList 插件引用深链（批 7 bug4A：?plugin= 预选「全部插件」下拉）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/routes') return Promise.resolve({ data: { total: 0, page: 1, page_size: 20, items: [] } })
+      if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, display_name: '生产集群' }] } })
+      // 插件下拉选项集 = /plugins/builtin（约束 #204：深链值必须命中 option 才有选中态）
+      if (url === '/plugins/builtin')
+        return Promise.resolve({ data: { plugins: [{ name: 'cors', display_name: 'CORS' }] } })
+      return Promise.reject(new Error('unexpected GET: ' + url))
+    })
+  })
+
+  it('?plugin=<name> → pluginFilter 预选 + 首屏请求携带 plugin 参数（服务端过滤）', async () => {
+    mockRouteQuery = { plugin: 'cors' }
+    const RouteList = (await import('../RouteList.vue')).default
+    const wrapper = mount(RouteList, { global: { stubs } })
+    await flushPromises()
+    // 下拉预选（原生 select.l5-select，值 = 插件名）
+    const pluginSelect = wrapper.findAll('select').find((s) => s.text().includes('全部插件'))
+    expect(pluginSelect).toBeDefined()
+    expect((pluginSelect!.element as HTMLSelectElement).value).toBe('cors')
+    // 请求带 plugin 参数（服务端过滤）
+    const calls = mockApiGet.mock.calls.filter((c: unknown[]) => c[0] === '/routes')
+    expect(calls.length).toBeGreaterThan(0)
+    expect((calls[calls.length - 1][1] as { params: Record<string, unknown> }).params).toMatchObject({ plugin: 'cors' })
+    mockRouteQuery = {}
     wrapper.unmount()
   })
 })

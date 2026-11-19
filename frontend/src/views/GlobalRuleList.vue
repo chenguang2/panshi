@@ -282,6 +282,7 @@ const route = useRoute()
 import { message } from 'ant-design-vue'
 import { PAGE_SIZE_CARD_GRID, PAGE_SIZE_DROPDOWN } from '@/constants'
 import { listGlobalRules } from '@/api/globalRules'
+import { listBuiltinPlugins } from '@/api/pluginMetadata'
 import { listClusters, getClusterNodes } from '@/api/clusters'
 import PageHeader from '@/components/PageHeader.vue'
 import PluginEntityFormModal from '@/components/PluginEntityFormModal.vue'
@@ -315,6 +316,32 @@ const filteredClusters = computed(() => {
   if (groupFilter.value === '__ung__') return clusters.value.filter((c) => !c.group_name)
   return clusters.value.filter((c) => c.group_name === groupFilter.value)
 })
+
+// ── 插件引用过滤（plugin-ref-filter D3/D4）：常驻「插件」下拉（服务端过滤）──
+// 选项 = /plugins/builtin?all=1（含已禁用插件）：禁用插件的既有引用是「查看引用」
+// 高频场景——与 RouteList（仅启用）有意不同构，勿「统一」掉。
+const pluginFilter = ref('')
+const pluginOptions = ref<{ name: string; display_name?: string }[]>([])
+
+async function loadPluginOptions() {
+  try {
+    const res = await listBuiltinPlugins({ all: 1 })
+    const opts = (res.data?.plugins || []) as { name: string; display_name?: string }[]
+    // 深链兜底（约束 #204：值必须命中 option 才有选中态）：features.yaml enabled_plugins
+    // 白名单是 all=1 也绕不开的硬上限——历史引用的插件可能不在部署契约内，深链值
+    // 不在选项集时追加裸名选项（display 缺省回落标识名），否则下拉空白。
+    if (pluginFilter.value && !opts.some((o) => o.name === pluginFilter.value)) {
+      opts.push({ name: pluginFilter.value })
+    }
+    pluginOptions.value = opts
+  } catch {
+    /* ignore */
+  }
+}
+
+function onPluginFilterChange() {
+  loadRules()
+}
 
 function onGroupChange() {
   clusterFilter.value = ''
@@ -412,6 +439,7 @@ async function loadRules() {
     const params: any = { page_size: PAGE_SIZE_CARD_GRID, group_name: groupFilter.value }
     if (clusterFilter.value) params.cluster_id = clusterFilter.value
     if (searchText.value) params.search = searchText.value
+    if (pluginFilter.value) params.plugin = pluginFilter.value
     const res = await listGlobalRules(params)
     rules.value = res.data.items || []
     totalCount.value = res.data.total || 0
@@ -563,9 +591,13 @@ function openVersionManagement(pc: any) {
 }
 
 onMounted(() => {
+  // 深链预选（D4）：?plugin=<name> → 预选「插件」下拉（服务端过滤），批 7A 客户端过滤退场
+  const pluginQuery = route.query.plugin as string | undefined
+  if (pluginQuery) pluginFilter.value = pluginQuery
   const clusterId = route.query.cluster_id as string | undefined
   if (clusterId) clusterFilter.value = clusterId
   loadClusters()
+  loadPluginOptions()
   loadRules()
 })
 

@@ -316,3 +316,89 @@ describe('PluginConfigList 部分失败提示条（republish-failed-nodes 批 2.
     expect(notice.text()).toContain('查看差异')
   })
 })
+
+describe('PluginConfigList 插件引用服务端过滤（plugin-ref-filter）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/plugin_configs') {
+        return Promise.resolve({
+          data: {
+            total: 2,
+            page: 1,
+            page_size: 20,
+            items: [
+              {
+                id: 1,
+                name: 'with-cors',
+                cluster_id: 1,
+                cluster_name: '生产集群',
+                plugins: { cors: {} },
+                current_version: 1,
+              },
+              {
+                id: 2,
+                name: 'without-cors',
+                cluster_id: 1,
+                cluster_name: '生产集群',
+                plugins: { 'ip-restriction': {} },
+                current_version: 1,
+              },
+            ],
+          },
+        })
+      }
+      if (url === '/clusters')
+        return Promise.resolve({ data: { items: [{ id: 1, display_name: '生产集群', group_name: '' }] } })
+      if (url === '/plugins/builtin')
+        return Promise.resolve({
+          data: {
+            plugins: [
+              { name: 'cors', display_name: 'CORS 跨域' },
+              { name: 'ip-restriction', display_name: 'IP 访问控制' },
+            ],
+          },
+        })
+      return Promise.reject(new Error('unknown url'))
+    })
+  })
+
+  it('下拉选择插件 → 请求携带 plugin=（服务端过滤，#85⑤ 三要件）', async () => {
+    const PluginConfigList = (await import('../PluginConfigList.vue')).default
+    const wrapper = mount(PluginConfigList, { global: { stubs } })
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    const sel = wrapper.find('select.plugin-filter')
+    expect(sel.exists()).toBe(true)
+    // (c) 断言：选择后请求带该参数
+    await sel.setValue('cors')
+    await flushPromises()
+    const calls = mockApiGet.mock.calls.filter((c: unknown[]) => c[0] === '/plugin_configs')
+    console.log('DEBUG calls:', JSON.stringify(calls.map((c) => (c[1] as any)?.params)))
+    console.log('DEBUG pluginFilter see vm:', (wrapper.vm as any).pluginFilter)
+    expect((calls[calls.length - 1][1] as { params: Record<string, unknown> }).params).toMatchObject({ plugin: 'cors' })
+    // (b) 值语义 = 插件标识名（非显示名）
+    const values = sel.findAll('option').map((o) => (o.element as HTMLOptionElement).value)
+    expect(values).toContain('cors')
+    expect(values).not.toContain('CORS 跨域')
+  })
+
+  it('?plugin=<name> 深链 → 预选下拉 + 请求带参（D4：批 7A 客户端过滤退场）', async () => {
+    vi.resetModules()
+    vi.doMock('vue-router', () => ({
+      useRoute: () => ({ name: 'PluginConfigList', query: { plugin: 'cors' } }),
+      useRouter: () => ({ push: vi.fn() }),
+      onBeforeRouteLeave: vi.fn(),
+    }))
+    const PluginConfigList = (await import('../PluginConfigList.vue')).default
+    const wrapper = mount(PluginConfigList, { global: { stubs } })
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    const sel = wrapper.find('select.plugin-filter')
+    expect((sel.element as HTMLSelectElement).value).toBe('cors')
+    const calls = mockApiGet.mock.calls.filter((c: unknown[]) => c[0] === '/plugin_configs')
+    expect((calls[calls.length - 1][1] as { params: Record<string, unknown> }).params).toMatchObject({ plugin: 'cors' })
+    wrapper.unmount()
+    vi.doUnmock('vue-router')
+  })
+})

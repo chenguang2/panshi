@@ -876,3 +876,24 @@ describe('mockup-parity · 重发失败节点六页接线（republish-failed-nod
     expect(css).toContain('.lp-notice .n-act.ghost')
   })
 })
+
+describe('plugin-ref-filter · 插件引用服务端过滤（插件组/全局规则两页）', () => {
+  it('常驻「插件」下拉接线：值 = 标识名、请求带 plugin=（#85⑤ 三要件）', () => {
+    for (const f of ['PluginConfigList.vue', 'GlobalRuleList.vue']) {
+      const s = page(f)
+      expect(s, `${f} 缺常驻插件下拉`).toContain('class="l5-select plugin-filter"')
+      expect(s, `${f} 请求未带 plugin 参数`).toContain('params.plugin = pluginFilter.value')
+      expect(s, `${f} 下拉值语义非标识名`).toContain(':value="pl.name"')
+      // D3：选项源含禁用插件（all=1，与 RouteList 有意不同构）
+      expect(s, `${f} 选项源应带 all=1`).toContain('{ all: 1 }')
+    }
+  })
+
+  it('批 7A 客户端过滤退场（禁回潮）', () => {
+    for (const f of ['PluginConfigList.vue', 'GlobalRuleList.vue']) {
+      const s = page(f)
+      expect(s, `${f} matchPluginRef 客户端过滤回潮`).not.toContain('matchPluginRef')
+      expect(s, `${f} pluginRefFilter 回潮`).not.toContain('pluginRefFilter')
+    }
+  })
+})

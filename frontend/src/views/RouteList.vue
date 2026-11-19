@@ -1018,6 +1018,10 @@ onMounted(() => {
   // 预填搜索框，随首屏请求过滤（useDebouncedSearch 初始值随 loadRoutes 带 search 参数）
   const searchQuery = route.query.search as string | undefined
   if (searchQuery) searchText.value = searchQuery
+  // republish/插件开关 批 7 bug4：「查看引用（路由）」深链——/routes?plugin=<name>
+  // 预选「全部插件」下拉（pluginFilter，服务端 ?plugin= 参数过滤），不走搜索框
+  const pluginQuery = route.query.plugin as string | undefined
+  if (pluginQuery) pluginFilter.value = pluginQuery
   loadClusters()
     .then(() => {
       deepLinkedClusterId.value = resolveDeepLinkClusterId()
