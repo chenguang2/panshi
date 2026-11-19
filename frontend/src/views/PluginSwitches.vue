@@ -11,94 +11,161 @@
       </template>
     </PageHeader>
 
-    <!-- Status Bar -->
-    <div class="switch-status-bar">
-      <div class="ssb-left">
-        <span class="ssb-count"
-          >已启用 <strong>{{ totalEnabled }}</strong> / <strong>{{ allPlugins.length }}</strong> 个插件</span
+    <!-- 工具条 + 状态行（AGENTS #88：与卡片页同构；本页无集群维度 → 无分组/平铺、无列配置） -->
+    <div class="l5-card ps-card-page">
+      <TableToolbar
+        :count="filteredPlugins.length"
+        count-unit="个插件"
+        :show-count="false"
+        :show-mode="false"
+        :refreshing="loading"
+        @refresh="loadSwitches"
+      >
+        <template #filters>
+          <SearchInput v-model="searchText" placeholder="搜索插件名称..." :width="150" />
+          <select
+            v-model="activeCategory"
+            :title="
+              activeCategory === 'all'
+                ? ''
+                : categoryList.find((c) => c.key === activeCategory)?.label || activeCategory
+            "
+            class="l5-select"
+            style="width: 104px"
+          >
+            <option value="all">全部分类</option>
+            <option v-for="cat in categoryList" :key="cat.key" :value="cat.key">{{ cat.label }}</option>
+          </select>
+        </template>
+        <template #extra>
+          <button type="button" class="tool-btn" data-test="enable-all" @click="confirmEnableAll">
+            <StrokeIcon name="check" :size="13" /> 全部启用
+          </button>
+          <button type="button" class="tool-btn" data-test="disable-all" @click="confirmDisableAll">
+            <StrokeIcon name="minus" :size="13" /> 全部禁用
+          </button>
+        </template>
+      </TableToolbar>
+
+      <div class="l5-chiprow" data-test="status-chip-row">
+        <span class="chiprow-label">状态</span>
+        <div class="f-chips status-chips" role="group" aria-label="按启用状态筛选">
+          <button
+            v-for="t in statusTabs"
+            :key="t.key"
+            type="button"
+            class="f-chip chip-status"
+            :class="{ active: statusFilter === t.key, empty: t.count === 0 }"
+            :aria-pressed="statusFilter === t.key ? 'true' : 'false'"
+            @click="statusFilter = t.key"
+          >
+            {{ t.label }}<span class="f-count">{{ t.count }}</span>
+          </button>
+        </div>
+        <span class="t-spacer"></span>
+      </div>
+
+      <div v-if="loading" class="loading-state">加载中...</div>
+
+      <div v-else-if="filteredPlugins.length === 0" class="empty-state">
+        <div class="empty-state-icon">▲</div>
+        <p>暂无匹配的插件</p>
+      </div>
+
+      <!-- 卡片网格（r14 解剖：l5-panel；无集群维度 → 无 strip/色相/band） -->
+      <div v-else class="ps-grid card-grid l5-card ps-cards">
+        <div
+          v-for="item in filteredPlugins"
+          :key="item.plugin_name"
+          class="ps-card std-card l5-panel"
+          :class="{ 'is-off': !item.enabled, 'unsaved-disabled': !item.enabled && isUnsaved(item) }"
         >
-      </div>
-      <div style="display: flex; gap: 8px">
-        <a-button size="small" @click="confirmEnableAll">全部启用</a-button>
-        <a-button size="small" @click="confirmDisableAll">全部禁用</a-button>
-      </div>
-    </div>
-
-    <!-- Category Pills -->
-    <div class="plugin-categories">
-      <span class="plugin-cat" :class="{ active: activeCategory === 'all' }" @click="activeCategory = 'all'">全部</span>
-      <span
-        v-for="cat in categoryList"
-        :key="cat.key"
-        class="plugin-cat"
-        :class="{ active: activeCategory === cat.key }"
-        @click="activeCategory = cat.key"
-        >{{ cat.label }}</span
-      >
-    </div>
-
-    <!-- Filter Bar（双计数已合并：计数仅在上方状态条展示） -->
-    <div class="plugin-filter-bar">
-      <SearchInput v-model="searchText" placeholder="搜索插件名称..." />
-      <a-select v-model:value="statusFilter" style="width: 120px">
-        <a-select-option value="all">全部状态</a-select-option>
-        <a-select-option value="enabled">已启用</a-select-option>
-        <a-select-option value="disabled">已禁用</a-select-option>
-      </a-select>
-    </div>
-
-    <!-- Loading -->
-    <div v-if="loading" class="loading-state">加载中...</div>
-
-    <!-- Empty -->
-    <div v-else-if="filteredPlugins.length === 0" class="empty-state">
-      <div class="empty-state-icon">▲</div>
-      <p>暂无匹配的插件</p>
-    </div>
-
-    <!-- Grid -->
-    <div v-else class="plugin-grid card-grid">
-      <div
-        v-for="item in filteredPlugins"
-        :key="item.plugin_name"
-        class="plugin-card std-card"
-        :class="{ 'disabled-state': !item.enabled, 'unsaved-disabled': !item.enabled && isUnsaved(item) }"
-      >
-        <div class="plugin-card-header">
-          <div class="plugin-card-info">
-            <div class="plugin-card-name">
-              {{ item.display_name || item.plugin_name }}
-              <span class="plugin-card-category">{{ getCategoryLabel(item.category) }}</span>
+          <div class="lp-head">
+            <div class="lp-title">
+              <span class="lp-name" :title="item.display_name || item.plugin_name">{{
+                item.display_name || item.plugin_name
+              }}</span>
+              <span class="lp-tag tech" :title="'技术名（API 标识）'">{{ item.plugin_name }}</span>
+              <span class="lp-tag">{{ getCategoryLabel(item.category) }}</span>
             </div>
-            <div class="plugin-card-desc">{{ item.description }}</div>
+            <div class="lp-status status-cell-flex">
+              <span class="lp-swtext" :class="{ off: !item.enabled }">{{ item.enabled ? '已启用' : '已禁用' }}</span>
+              <a-switch size="small" :checked="item.enabled" @change="(v: boolean) => toggleSwitch(item, v)" />
+            </div>
           </div>
-        </div>
-
-        <!-- 引用影响前移（批 2）：禁用被引用插件时的行内即时警示 -->
-        <div v-if="!item.enabled && refsTotal(item) > 0" class="plugin-ref-warning">
-          该插件仍被 {{ refSummary(item) }} 引用；禁用后新配置不可选，既有配置不受影响
-        </div>
-
-        <div class="plugin-card-footer">
-          <div class="plugin-card-actions">
-            <span class="plugin-tech" title="技术名（API 标识）"
-              ><span class="tech-label">技术名</span>{{ item.plugin_name }}</span
-            >
-            <span v-if="refsTotal(item) > 0" class="plugin-refs">被引用 {{ refSummary(item) }}</span>
-            <span
-              v-if="item.schema && item.schema !== '{}'"
-              class="plugin-schema-toggle"
-              title="插件参数定义（只读）"
+          <div class="lp-body">
+            <div class="lp-row">
+              <span class="lp-k">描述</span>
+              <span class="lp-v dim">{{ item.description || '—' }}</span>
+            </div>
+            <div class="lp-row">
+              <span class="lp-k">引用</span>
+              <span v-if="refsTotal(item) > 0" class="lp-v mono">{{ refSummary(item) }}</span>
+              <span v-else class="lp-v dim">未引用</span>
+            </div>
+            <div class="lp-row">
+              <span class="lp-k">参数</span>
+              <span v-if="schemaPropCount(item) > 0" class="lp-v"
+                ><span class="c-mono">{{ schemaPropCount(item) }} 项</span></span
+              >
+              <span v-else class="lp-v dim">无参数</span>
+            </div>
+          </div>
+          <!-- 禁用且仍被引用：卡内警示（四档语义 warning）+ 查看引用出口 -->
+          <div v-if="!item.enabled && refsTotal(item) > 0" class="lp-notice alert alert-warning">
+            <span class="n-ico"><StrokeIcon name="warning" :size="13" /></span>
+            <span class="n-txt">仍被 {{ refSummary(item) }} 引用，既有配置继续生效；新配置不可再选择</span>
+            <router-link class="n-act" :to="`/routes?search=${item.plugin_name}`" @click.stop>查看引用</router-link>
+          </div>
+          <div class="lp-foot" @click.stop>
+            <!-- 恒渲染（设计稿）：无参数定义时 disabled + 指路，脚部布局不因分支塌陷（⋯ 恒置右） -->
+            <button
+              class="op-pub"
+              :disabled="schemaPropCount(item) === 0"
+              :title="schemaPropCount(item) === 0 ? '该插件无参数定义' : ''"
               @click="toggleSchema(item.plugin_name)"
-              >⚙ 配置结构</span
             >
-            <span v-else class="plugin-schema-none">无参数</span>
+              {{ openSchemas[item.plugin_name] ? '收起参数' : '参数定义' }}
+            </button>
+            <div class="menu-anchor">
+              <button
+                type="button"
+                class="op-btn"
+                title="更多操作"
+                aria-label="更多操作"
+                @click.stop="toggleCardMenu(item.plugin_name, $event)"
+              >
+                <StrokeIcon name="dots" :size="14" />
+              </button>
+              <div class="l5-menu" :class="{ open: openMenuId === item.plugin_name, 'flip-up': menuFlipUp }">
+                <button v-if="(item.refs?.routes ?? 0) > 0" class="mi" @click="menuViewRef(item, 'routes')">
+                  <span class="mi-main">查看引用（路由 {{ item.refs!.routes }}）</span>
+                  <span class="mi-sub">在路由列表中按「全部插件」下拉筛选该插件</span>
+                </button>
+                <button
+                  v-if="(item.refs?.plugin_configs ?? 0) > 0"
+                  class="mi"
+                  @click="menuViewRef(item, 'plugin_configs')"
+                >
+                  <span class="mi-main">查看引用（插件组 {{ item.refs!.plugin_configs }}）</span>
+                  <span class="mi-sub">在插件组列表中筛选挂载该插件的插件组</span>
+                </button>
+                <button v-if="(item.refs?.global_rules ?? 0) > 0" class="mi" @click="menuViewRef(item, 'global_rules')">
+                  <span class="mi-main">查看引用（全局规则 {{ item.refs!.global_rules }}）</span>
+                  <span class="mi-sub">在全局规则列表中筛选使用该插件的全局规则</span>
+                </button>
+                <hr class="menu-sep" />
+                <button v-if="canViewAudit" class="mi" @click="menuAudit()">
+                  <span class="mi-main">操作日志</span>
+                  <span class="mi-sub">插件开关变更审计（页面级）</span>
+                </button>
+              </div>
+            </div>
           </div>
-          <a-switch size="small" :checked="item.enabled" @change="(v: boolean) => toggleSwitch(item, v)" />
-        </div>
-
-        <div v-if="openSchemas[item.plugin_name]" class="plugin-schema-box visible">
-          {{ formatSchema(item.schema) }}
+          <!-- 参数定义折叠块：在按钮**之后**（卡底）展开，避免视口跳动 -->
+          <pre v-if="schemaPropCount(item) > 0 && openSchemas[item.plugin_name]" class="lp-json" @click.stop>{{
+            formatSchema(item.schema)
+          }}</pre>
         </div>
       </div>
     </div>
@@ -183,8 +250,11 @@ import { message } from 'ant-design-vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import api from '@/api'
 import PageHeader from '@/components/PageHeader.vue'
-import { useAuthStore } from '@/stores/auth'
+import TableToolbar from '@/components/TableToolbar.vue'
+import StrokeIcon from '@/components/StrokeIcon.vue'
 import SearchInput from '@/components/SearchInput.vue'
+import { useAuthStore } from '@/stores/auth'
+import { useRouter } from 'vue-router'
 
 interface RefCounts {
   routes: number
@@ -215,8 +285,8 @@ const originalPlugins = ref<PluginItem[]>([])
 
 const searchText = ref('')
 const activeCategory = ref('all')
-const statusFilter = ref('all')
 const openSchemas = reactive<Record<string, boolean>>({})
+const router = useRouter()
 
 /** 「操作日志」入口仅对持 audit_logs 权限的用户可见（审计页路由同门控） */
 const authStore = useAuthStore()
@@ -248,6 +318,19 @@ function getCategoryLabel(cat: string): string {
   return CATEGORY_CONFIG[cat] || cat
 }
 
+// ── 状态分段（filter-architecture：chips 单一形态；分类归工具条下拉）──
+type StatusKey = 'all' | 'enabled' | 'disabled'
+const statusFilter = ref<StatusKey>('all')
+const statusTabs = computed<{ key: StatusKey; label: string; count: number }[]>(() => {
+  const enabled = allPlugins.value.filter((p) => p.enabled).length
+  const total = allPlugins.value.length
+  return [
+    { key: 'all', label: '全部', count: total },
+    { key: 'enabled', label: '已启用', count: enabled },
+    { key: 'disabled', label: '已禁用', count: total - enabled },
+  ]
+})
+
 const filteredPlugins = computed(() => {
   return allPlugins.value.filter((p) => {
     if (activeCategory.value !== 'all' && p.category !== activeCategory.value) return false
@@ -262,7 +345,6 @@ const filteredPlugins = computed(() => {
   })
 })
 
-const totalEnabled = computed(() => allPlugins.value.filter((p) => p.enabled).length)
 const hasUnsavedChanges = computed(() => unsavedCount.value > 0)
 const unsavedCount = computed(() => {
   const original = new Map(originalPlugins.value.map((p) => [p.plugin_name, p.enabled]))
@@ -291,6 +373,17 @@ function refSummaryFromCounts(r: RefCounts): string {
     .join(' · ')
 }
 
+/** 参数定义属性数（r29：目录级静态属性不出徽标，只出中性计数） */
+function schemaPropCount(item: PluginItem): number {
+  if (!item.schema || item.schema === '{}') return 0
+  try {
+    const parsed = JSON.parse(item.schema)
+    return typeof parsed === 'object' && parsed ? Object.keys(parsed).length : 0
+  } catch {
+    return 0
+  }
+}
+
 function toggleSwitch(item: PluginItem, val: boolean) {
   item.enabled = val
 }
@@ -306,6 +399,43 @@ function formatSchema(schema?: string): string {
   } catch {
     return schema
   }
+}
+
+// ── 卡片 ⋯ 菜单（flip-up + 文档级关闭，AGENTS #81）──
+const openMenuId = ref<string | null>(null)
+const menuFlipUp = ref(false)
+function toggleCardMenu(id: string, event?: MouseEvent): void {
+  if (openMenuId.value === id) {
+    openMenuId.value = null
+    return
+  }
+  openMenuId.value = id
+  const rect = (event?.currentTarget as HTMLElement | null)?.getBoundingClientRect()
+  menuFlipUp.value = rect ? rect.bottom + 200 > window.innerHeight : false
+}
+function closeCardMenu(): void {
+  openMenuId.value = null
+}
+function onDocClick(): void {
+  if (openMenuId.value !== null) openMenuId.value = null
+}
+onMounted(() => document.addEventListener('click', onDocClick))
+onUnmounted(() => document.removeEventListener('click', onDocClick))
+
+/** 查看引用深链（批 4A，用户裁决）：路由腿走「全部插件」下拉（服务端 ?plugin=）；
+ *  插件组/全局规则腿为客户端行过滤深链（?plugin=，两页全量加载 ≤500 条）。 */
+const REF_TARGETS: Record<keyof RefCounts, string> = {
+  routes: '/routes',
+  plugin_configs: '/plugin-configs',
+  global_rules: '/global-rules',
+}
+function menuViewRef(item: PluginItem, refType: keyof RefCounts): void {
+  closeCardMenu()
+  router.push(`${REF_TARGETS[refType]}?plugin=${item.plugin_name}`)
+}
+function menuAudit(): void {
+  closeCardMenu()
+  router.push({ path: '/audit-log', query: { resource: 'plugin_switch' } })
 }
 
 // ── 批量操作闸门（批 1）：确认后仅改本地态，需保存生效 ────────────────────
@@ -482,69 +612,6 @@ defineExpose({ requestLeave })
 </script>
 
 <style scoped>
-.switch-status-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 20px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  margin-bottom: 20px;
-}
-
-.ssb-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.ssb-count {
-  font-size: 13px;
-  color: var(--muted);
-}
-.ssb-count strong {
-  font-family: var(--font-mono);
-}
-
-.plugin-categories {
-  display: flex;
-  gap: 6px;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-}
-
-.plugin-cat {
-  padding: 5px 14px;
-  border-radius: 16px;
-  font-size: 12px;
-  cursor: pointer;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--muted);
-  transition: all 0.15s;
-  user-select: none;
-}
-
-.plugin-cat:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.plugin-cat.active {
-  background: oklch(56% 0.16 210 / 10%);
-  border-color: var(--accent);
-  color: var(--accent);
-  font-weight: 600;
-}
-
-.plugin-filter-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-}
-
 .loading-state,
 .empty-state {
   text-align: center;
@@ -558,146 +625,29 @@ defineExpose({ requestLeave })
   margin-bottom: 8px;
 }
 
-.plugin-card {
-  /* 容器四件套/hover 已上移共享 .std-card（style.css）；本页保留特有内边距 */
-  padding: 16px 20px;
+/* 卡片解剖样式已上移共享 .l5-panel / .lp-*（style.css 单点）；本页保留特有状态 */
+.ps-card {
+  cursor: default;
 }
 
-/* 禁用态（批 3）：仅标题微淡，名称与描述保持可读 */
-.plugin-card.disabled-state .plugin-card-name {
+/* 禁用态：标题微淡 + swtext 变灰（名称与描述保持可读，批 3 语义不变） */
+.ps-card.is-off .lp-name {
   opacity: 0.75;
 }
+.lp-swtext {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--success);
+  white-space: nowrap;
+}
+.lp-swtext.off {
+  color: var(--muted);
+}
 
-/* 未保存的禁用（批 3）：虚线框 + 开关旁圆点，与已保存禁用区分 */
-.plugin-card.unsaved-disabled {
+/* 未保存的禁用（批 3）：虚线框，与已保存禁用区分 */
+.ps-card.unsaved-disabled {
   border-style: dashed;
   border-color: var(--accent);
-}
-
-.plugin-card-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-
-.plugin-card-info {
-  flex: 1;
-}
-
-.plugin-card-name {
-  font-size: 14px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.plugin-card-category {
-  font-size: 11px;
-  padding: 1px 7px;
-  border-radius: 8px;
-  font-weight: 500;
-  background: var(--bg);
-  color: var(--muted);
-  border: 1px solid var(--border);
-  white-space: nowrap;
-}
-
-.plugin-card-desc {
-  font-size: 12px;
-  color: var(--muted);
-  margin-top: 4px;
-  line-height: 1.5;
-  flex: 1;
-}
-
-/* 引用影响行内警示（批 2） */
-.plugin-ref-warning {
-  margin-top: 8px;
-  padding: 6px 10px;
-  border-radius: var(--radius-md);
-  background: oklch(75% 0.13 75 / 12%);
-  border: 1px solid oklch(75% 0.13 75 / 40%);
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.plugin-card-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-}
-
-.plugin-card-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.plugin-tech {
-  font-size: 11px;
-  color: var(--muted);
-  font-family: var(--font-mono);
-}
-.plugin-tech .tech-label {
-  font-family: inherit;
-  color: var(--muted);
-  opacity: 0.7;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 0 4px;
-  margin-right: 4px;
-  font-size: 10px;
-}
-
-.plugin-refs {
-  font-size: 11px;
-  color: var(--accent);
-  background: oklch(56% 0.16 210 / 8%);
-  border: 1px solid oklch(56% 0.16 210 / 20%);
-  border-radius: 8px;
-  padding: 1px 7px;
-  white-space: nowrap;
-}
-
-.plugin-schema-toggle {
-  font-size: 11px;
-  color: var(--accent);
-  cursor: pointer;
-}
-
-.plugin-schema-toggle:hover {
-  text-decoration: underline;
-}
-
-.plugin-schema-none {
-  font-size: 11px;
-  color: var(--muted);
-  opacity: 0.6;
-}
-
-.plugin-schema-box {
-  display: none;
-  margin-top: 8px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 10px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  max-height: 150px;
-  overflow-y: auto;
-  white-space: pre-wrap;
-}
-
-.plugin-schema-box.visible {
-  display: block;
 }
 
 /* Sticky 保存条（批 1） */
@@ -743,22 +693,5 @@ defineExpose({ requestLeave })
 }
 .ref-view-link:hover {
   text-decoration: underline;
-}
-
-@media (max-width: 768px) {
-  .plugin-filter-bar {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .plugin-categories {
-    overflow-x: auto;
-    flex-wrap: nowrap;
-    padding-bottom: 4px;
-  }
-  .switch-status-bar {
-    flex-direction: column;
-    gap: 8px;
-    align-items: stretch;
-  }
 }
 </style>

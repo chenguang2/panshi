@@ -46,6 +46,9 @@ const ICON_PATHS = {
   collapseAll: '<polyline points="7 4 12 9 17 4" /><polyline points="7 20 12 15 17 20" />',
   // 批量删除（设计 .l5-batchbar 的批量删除图标：垃圾桶轮廓）
   trash: '<path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" />',
+  // 插件开关工具条「全部启用/全部禁用」（设计稿原 path，批 7 bug3）
+  check: '<path d="M20 6 9 17l-5-5" />',
+  minus: '<line x1="5" y1="12" x2="19" y2="12" />',
   // 警示三角（四档警示语义：危险 = 实心三角 + 感叹号，设计 .lp-notice .n-ico）
   warning:
     '<path d="M12 3.2 21.4 20H2.6L12 3.2z" fill="currentColor" stroke="none" /><path d="M12 9.4v4M12 16.6v.1" stroke="#fff" stroke-width="2" stroke-linecap="round" />',

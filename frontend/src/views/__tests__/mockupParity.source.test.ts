@@ -809,6 +809,35 @@ describe('mockup-parity · 静态资源卡片页推广（21.9b，2026-11-19）',
   })
 })
 
+describe('mockup-parity · 插件开关卡片页推广（21.9b2，2026-11-19）', () => {
+  const s = page('PluginSwitches.vue')
+
+  it('卡片走 l5-panel 解剖 + 工具条/chips（无集群维度：无 band、无分组|平铺，#87 ⑥）', () => {
+    for (const cls of ['l5-panel', 'lp-head', 'lp-body', 'lp-foot', 'lp-swtext'])
+      expect(s, `缺少 ${cls}`).toContain(cls)
+    expect(s).toContain('<TableToolbar')
+    expect(s).toContain(':show-mode="false"')
+    expect(s).toContain('class="l5-chiprow"')
+    // 无集群维度：无 ClusterBand / clusterHueClass / 分组|平铺
+    expect(s).not.toContain('<ClusterBand')
+    expect(s).not.toContain('clusterHueClass')
+    // 旧外壳退场：状态条 / 分类 pills / 过滤条
+    expect(s).not.toContain('switch-status-bar')
+    expect(s).not.toContain('plugin-cat')
+    expect(s).not.toContain('plugin-filter-bar')
+  })
+
+  it('r29 推论：目录级静态属性不出徽标（无 schema 完整/缺失 badge）；行内警示走共享 lp-notice', () => {
+    expect(s).not.toContain('schema 完整')
+    expect(s).not.toContain('badge-success')
+    expect(s).toContain('class="lp-notice alert alert-warning"')
+    // 参数定义 = lp-foot op-pub（折叠块入口）；全部启用/禁用留在工具条
+    expect(s).toContain('参数定义')
+    expect(s).toContain('data-test="enable-all"')
+    expect(s).toContain('data-test="disable-all"')
+  })
+})
+
 describe('mockup-parity · 重发失败节点六页接线（republish-failed-nodes）', () => {
   const REPUBLISH_PAGES = [
     'StreamProxyList.vue',
