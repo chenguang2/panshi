@@ -2,121 +2,266 @@
   <div class="sr-page">
     <PageHeader title="静态资源" description="管理 ZIP 格式的静态资源文件，上传后通过路由分发">
       <template #actions>
+        <!-- 序与设计页一致（AGENTS #88 ⑦）：批量管理（secondary）在「新建」（primary）左侧 -->
+        <button class="btn btn-secondary" :aria-pressed="batchMode" @click="toggleBatchMode">
+          {{ batchMode ? '退出批量管理' : '批量管理' }}
+        </button>
         <button class="btn btn-primary" @click="openAddModal">+ 添加静态资源</button>
       </template>
     </PageHeader>
 
-    <div class="sr-header-actions">
-      <SearchInput v-model="searchText" placeholder="搜索名称..." @input="onSearch" @clear="loadResources" />
-      <select v-model="groupFilter" class="form-input" style="width: 140px; flex-shrink: 0" @change="onGroupChange">
-        <option value="__all__">全部分组</option>
-        <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
-        <option value="__ung__">未分组</option>
-      </select>
-      <ClusterSelect
-        v-model="clusterFilter"
-        :clusters="filteredClusters"
-        allow-all
-        style="width: 160px; flex-shrink: 0"
-        @change="loadResources"
-      />
-      <!-- 4.7：过滤激活时并行无过滤 count 请求取 Y；无过滤保持「共 X 个静态资源」 -->
-      <span class="text-sm text-muted">
-        <template v-if="filterActive">匹配 {{ totalCount }} / 共 {{ unfilteredTotal }} 个静态资源</template>
-        <template v-else>共 {{ totalCount }} 个静态资源</template>
-      </span>
-    </div>
+    <!-- 工具条 + 状态行（AGENTS #88：与列表页同构）：第一行共享 TableToolbar，第二行 .l5-chiprow -->
+    <div class="l5-card sr-card-page">
+      <TableToolbar
+        v-model:mode="cardMode"
+        :count="totalCount"
+        count-unit="个静态资源"
+        :show-count="false"
+        :refreshing="loading"
+        @refresh="refreshList"
+      >
+        <template #filters>
+          <SearchInput v-model="searchText" placeholder="搜索名称..." :width="150" @input="onSearch" />
+          <select v-model="groupFilter" class="l5-select" style="width: 104px" @change="onGroupChange">
+            <option value="__all__">全部分组</option>
+            <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
+            <option value="__ung__">未分组</option>
+          </select>
+          <ClusterSelect
+            v-model="clusterFilter"
+            :clusters="filteredClusters"
+            allow-all
+            style="width: 120px"
+            @change="onClusterChange"
+          />
+        </template>
+        <template #mode-extra>
+          <button
+            v-if="cardMode === 'group'"
+            type="button"
+            class="tool-btn fold-all-btn"
+            data-test="card-fold-all"
+            :title="pageHasFolded ? '展开全部集群组' : '收起全部集群组'"
+            @click="toggleFoldAll"
+          >
+            <StrokeIcon :name="pageHasFolded ? 'expandAll' : 'collapseAll'" :size="13" />
+            <span class="fold-all-label">{{ pageHasFolded ? '全部展开' : '全部收起' }}</span>
+          </button>
+        </template>
+      </TableToolbar>
 
-    <div v-if="loading" class="loading-state">加载中...</div>
-    <div v-else-if="displayedResources.length === 0" class="sr-empty">
-      <div class="sr-empty-icon">▣</div>
-      <div class="sr-empty-text">暂无静态资源</div>
-      <button class="btn btn-primary" style="margin-top: 12px" @click="openAddModal">+ 添加静态资源</button>
-    </div>
-    <div v-else class="sr-grid card-grid">
-      <div
-        v-for="sr in displayedResources"
-        :key="sr.id"
-        class="sr-card std-card"
-        :style="getCardBorderStyle(sr.cluster_group_name)"
-      >
-        <div class="sr-card-topbar" :style="getGroupColorStyle(sr.cluster_group_name)">
-          <span>{{ sr.cluster_name || '-' }}</span>
-          <span v-if="sr.cluster_group_name" class="group-badge">{{ sr.cluster_group_name }}</span>
+      <div class="l5-chiprow" data-test="status-chip-row">
+        <span class="chiprow-label">状态</span>
+        <div class="f-chips status-chips" role="group" aria-label="按分发状态筛选">
+          <button
+            v-for="t in statusTabs"
+            :key="t.key"
+            type="button"
+            class="f-chip chip-status"
+            :class="{ active: statusFilter === t.key, empty: t.count === 0 }"
+            :aria-pressed="statusFilter === t.key ? 'true' : 'false'"
+            @click="goStatus(t.key)"
+          >
+            {{ t.label }}<span class="f-count">{{ t.count }}</span>
+          </button>
         </div>
-        <div class="sr-card-header">
-          <div>
-            <strong class="sr-card-name">{{ sr.name }}</strong>
-            <div class="sr-card-path">{{ sr.url_path }}</div>
-          </div>
-          <div class="sr-card-meta">
-            <StaticResourceStateTag
-              :current-version="sr.current_version"
-              :last-publish-ok="sr.last_publish_ok ?? null"
-              :route-exists="sr.route_exists ?? null"
-              :updated-at="sr.updated_at"
-              :last-published-at="sr.last_published_at"
-              :publish-detail="sr.last_publish_detail"
-            />
-            <div v-if="sr.current_version" class="sr-version-text">上传时间: {{ formatDateTime(sr.updated_at) }}</div>
-          </div>
-        </div>
-        <div v-if="sr.description" class="sr-card-desc">{{ sr.description }}</div>
-        <div v-if="sr.file_size" class="sr-size">大小: {{ formatFileSize(sr.file_size) }}</div>
-        <div class="sr-card-actions">
-          <template v-if="staticResourceState(sr) === 'broken'">
-            <!-- static-resources-ux-close-loop 7.3：配置异常态操作收敛为删除，其余禁用 + 指路 -->
-            <button class="btn btn-ghost btn-sm" disabled :title="BROKEN_ROUTE_TIP">查看</button>
-            <button class="btn btn-ghost btn-sm" disabled :title="BROKEN_ROUTE_TIP">编辑</button>
-            <button class="btn btn-ghost btn-sm" disabled :title="BROKEN_ROUTE_TIP">上传 ZIP</button>
-            <button class="btn btn-ghost btn-sm" style="color: var(--danger)" @click="deleteResource(sr)" title="删除">
-              删除
-            </button>
-            <span style="flex: 1"></span>
-            <button class="btn btn-secondary btn-sm" disabled :title="BROKEN_ROUTE_TIP">发布</button>
-            <button class="btn btn-secondary btn-sm" disabled :title="BROKEN_ROUTE_TIP">版本管理</button>
-          </template>
-          <template v-else>
-            <button
-              class="btn btn-ghost btn-sm"
-              @click="viewZipContents(sr)"
-              :disabled="!sr.file_size"
-              :title="!sr.file_size ? '暂未上传 ZIP 文件' : '查看 ZIP 内容'"
-            >
-              查看
-            </button>
-            <button class="btn btn-ghost btn-sm" @click="editResource(sr)" title="编辑">编辑</button>
-            <button class="btn btn-ghost btn-sm" @click="uploadStaticResource(sr)" :disabled="srUploading || !sr.id">
-              上传 ZIP
-            </button>
-            <button class="btn btn-ghost btn-sm" style="color: var(--danger)" @click="deleteResource(sr)" title="删除">
-              删除
-            </button>
-            <span style="flex: 1"></span>
-            <button
-              v-if="staticResourceState(sr) === 'failed'"
-              class="btn btn-secondary btn-sm"
-              @click="publishResource(sr)"
-              title="仅重发上次分发失败的节点"
-            >
-              重发失败节点
-            </button>
-            <button class="btn btn-secondary btn-sm" @click="publishResource(sr)" :disabled="!sr.file_size">
-              发布
-            </button>
-            <button class="btn btn-secondary btn-sm" @click="openVersionManagement(sr)" :disabled="!sr.current_version">
-              版本管理
-            </button>
-          </template>
-        </div>
+        <span class="t-spacer"></span>
       </div>
-      <!-- 4.8：单页全量加载触顶提示（PAGE_SIZE_CARD_GRID=500） -->
+
+      <!-- 批量条（AGENTS #88 ③）：状态行下、网格上、随流；按钮集无「批量发布」 -->
+      <div v-if="batchMode" class="l5-batchbar batchbar-dynamic" :class="{ 'has-sel': selectedResourceIds.length > 0 }">
+        <span class="b-count">已选 {{ selectedResourceIds.length }} 项</span>
+        <span class="b-sep"></span>
+        <button
+          class="btn btn-danger btn-sm need-sel"
+          :disabled="selectedResourceIds.length === 0"
+          @click="batchDelete"
+        >
+          <StrokeIcon name="trash" :size="12" /> 批量删除
+        </button>
+        <span class="b-spacer"></span>
+        <button v-if="showGroupSelectAll" class="link-btn" @click="toggleSelectAllGroup">
+          {{ allGroupSelected ? '取消全选分组' : '全选当前分组' }}
+        </button>
+        <button class="link-btn" @click="toggleSelectAllFiltered">
+          {{ allFilteredSelected ? '取消全选结果' : '全选当前筛选结果' }}
+        </button>
+        <button class="link-btn" @click="clearSelection">清除选择</button>
+      </div>
+
+      <div v-if="loading" class="loading-state">加载中...</div>
+      <div v-else-if="rowsFiltered.length === 0" class="sr-empty">
+        <div class="sr-empty-icon">▣</div>
+        <div class="sr-empty-text">暂无静态资源</div>
+        <button class="btn btn-primary" style="margin-top: 12px" @click="openAddModal">+ 添加静态资源</button>
+      </div>
       <div
-        v-if="totalCount >= PAGE_SIZE_CARD_GRID"
-        class="text-sm text-muted"
-        style="width: 100%; text-align: center; padding: 12px 0"
+        v-else
+        class="sr-grid card-grid l5-card sr-cards"
+        :class="[`mode-${cardMode}`, { 'batch-mode': batchMode, batch: batchMode }]"
       >
-        仅显示前 {{ PAGE_SIZE_CARD_GRID }} 个静态资源，请使用搜索缩小范围
+        <template v-for="g in renderGroups" :key="g.clusterId">
+          <ClusterBand
+            v-if="cardMode === 'group'"
+            :name="g.clusterName"
+            :group="g.groupName"
+            :count-label="countLabelOf(g.count)"
+            :secondary="secondaryOf(g.rows)"
+            :hue-class="g.hueClass"
+            :folded="isFolded(g.clusterId)"
+            :batch="batchMode"
+            :selected-count="selectedCountInGroup(g.rows)"
+            @toggle="toggleFold(g.clusterId)"
+            @toggle-select="toggleGroupSelect(g.rows)"
+          />
+          <div
+            v-for="sr in g.rows"
+            :key="sr.id"
+            class="sr-card std-card l5-panel"
+            :class="[
+              clusterHueClass(sr.cluster_id),
+              {
+                selected: selectedResourceIds.includes(sr.id),
+                'is-selected': selectedResourceIds.includes(sr.id),
+                'is-folded': cardMode === 'group' && !groupVisible(g.clusterId),
+              },
+            ]"
+            @click="batchMode && toggleSelect(sr.id)"
+          >
+            <span class="lp-check" aria-hidden="true"></span>
+            <div class="lp-strip">
+              <span class="lp-tag lp-cluster">{{ sr.cluster_name || '-' }}</span>
+              <span v-if="sr.cluster_group_name" class="lp-tag group lp-group">{{ sr.cluster_group_name }}</span>
+              <span class="st-algo"
+                >绑定 ·
+                <b :class="{ 'c-danger': sr.route_exists === false }">{{
+                  sr.route_exists === false ? '已删除' : sr.route_name || sr.name
+                }}</b></span
+              >
+            </div>
+            <div class="lp-head">
+              <div class="lp-title">
+                <span class="lp-name" :title="sr.name">{{ sr.name }}</span>
+                <span v-if="sr.file_size" class="lp-tag">{{ formatFileSize(sr.file_size) }}</span>
+              </div>
+              <div class="lp-status">
+                <StaticResourceStateTag
+                  :current-version="sr.current_version"
+                  :last-publish-ok="sr.last_publish_ok ?? null"
+                  :route-exists="sr.route_exists ?? null"
+                  :updated-at="sr.updated_at"
+                  :last-published-at="sr.last_published_at"
+                  :publish-detail="sr.last_publish_detail"
+                />
+              </div>
+            </div>
+            <div class="lp-body">
+              <div class="lp-row">
+                <span class="lp-k">路径</span>
+                <span class="lp-v mono" :title="sr.url_path">{{ sr.url_path || '—' }}</span>
+              </div>
+              <!-- 绑定行仅分组视图显示（strip 右端两态都显示绑定路由名，BRIEF §九附） -->
+              <div class="lp-row group-only">
+                <span class="lp-k">绑定</span>
+                <span v-if="sr.route_exists === false" class="lp-v"
+                  ><span class="field-danger">关联路由已删除</span></span
+                >
+                <span v-else class="lp-v"
+                  >{{ sr.route_name || sr.name }}
+                  <span class="c-dim">{{ sr.route_uri || sr.url_path || '—' }}</span></span
+                >
+              </div>
+              <div v-if="sr.description" class="lp-row">
+                <span class="lp-k">描述</span>
+                <span class="lp-v dim">{{ sr.description }}</span>
+              </div>
+              <div class="lp-row">
+                <span class="lp-k">上传</span>
+                <span class="lp-v mono dim">{{ sr.updated_at ? formatDateTime(sr.updated_at) : '—' }}</span>
+              </div>
+            </div>
+            <!-- 四档提示（BRIEF §4.2）：路由被删 → 配置异常；分发失败 → 附「重发」出口 -->
+            <div v-if="staticResourceState(sr) === 'broken'" class="lp-notice alert alert-error">
+              <span class="n-ico"><StrokeIcon name="warning" :size="13" /></span>
+              <span class="n-txt">关联路由已不存在，该资源不可访问</span>
+            </div>
+            <div v-else-if="staticResourceState(sr) === 'failed'" class="lp-notice alert alert-error">
+              <span class="n-ico"><StrokeIcon name="warning" :size="13" /></span>
+              <span class="n-txt">{{ failedNoticeText(sr) }}</span>
+              <button class="n-act" @click.stop="publishResource(sr)">重发</button>
+            </div>
+            <div class="lp-foot" @click.stop>
+              <button v-if="staticResourceState(sr) === 'failed'" class="op-pub" @click="publishResource(sr)">
+                重发失败节点
+              </button>
+              <button
+                v-else
+                class="op-pub"
+                :disabled="staticResourceState(sr) === 'broken' || !sr.file_size"
+                :title="
+                  staticResourceState(sr) === 'broken' ? BROKEN_ROUTE_TIP : !sr.file_size ? '暂未上传 ZIP 文件' : ''
+                "
+                @click="publishResource(sr)"
+              >
+                发布
+              </button>
+              <div class="menu-anchor">
+                <button
+                  type="button"
+                  class="op-btn"
+                  title="更多操作"
+                  aria-label="更多操作"
+                  @click.stop="toggleCardMenu(sr.id, $event)"
+                >
+                  <StrokeIcon name="dots" :size="14" />
+                </button>
+                <div class="l5-menu" :class="{ open: openMenuId === sr.id, 'flip-up': menuFlipUp }">
+                  <template v-if="staticResourceState(sr) !== 'broken'">
+                    <button
+                      class="mi"
+                      :disabled="!sr.file_size"
+                      :title="!sr.file_size ? '暂未上传 ZIP 文件' : ''"
+                      @click="menuView(sr)"
+                    >
+                      <span class="mi-main">查看 ZIP 内容</span>
+                      <span class="mi-sub">只读列出包内文件</span>
+                    </button>
+                    <button class="mi" @click="menuEdit(sr)">
+                      <span class="mi-main">编辑</span>
+                      <span class="mi-sub">改绑路由需重新上传并发布</span>
+                    </button>
+                    <button class="mi" :disabled="srUploading || !sr.id" @click="menuUpload(sr)">
+                      <span class="mi-main">{{ sr.current_version ? '替换 ZIP' : '上传 ZIP' }}</span>
+                    </button>
+                    <button class="mi" :disabled="!sr.current_version" @click="menuVersion(sr)">
+                      <span class="mi-main">版本管理</span>
+                      <span class="mi-sub">历史版本查看与回滚</span>
+                    </button>
+                  </template>
+                  <template v-else>
+                    <button class="mi" disabled>
+                      <span class="mi-main">编辑</span>
+                      <span class="mi-sub">关联路由不存在，请先重建路由</span>
+                    </button>
+                  </template>
+                  <hr class="menu-sep" />
+                  <button class="mi danger" @click="menuDelete(sr)">
+                    <span class="mi-main">删除</span>
+                    <span class="mi-sub">删平台配置，可同步删 Edge 已分发文件（弹窗可选）</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+        <!-- 单页全量加载触顶提示（PAGE_SIZE_CARD_GRID=500） -->
+        <div
+          v-if="totalCount >= PAGE_SIZE_CARD_GRID"
+          class="text-sm text-muted"
+          style="width: 100%; text-align: center; padding: 12px 0"
+        >
+          仅显示前 {{ PAGE_SIZE_CARD_GRID }} 个静态资源，请使用搜索缩小范围
+        </div>
       </div>
     </div>
 
@@ -277,6 +422,9 @@ import { PAGE_SIZE_CARD_GRID, PAGE_SIZE_DROPDOWN } from '@/constants'
 import api from '@/api'
 import type { Cluster } from '@/types'
 import PageHeader from '@/components/PageHeader.vue'
+import TableToolbar from '@/components/TableToolbar.vue'
+import ClusterBand from '@/components/ClusterBand.vue'
+import StrokeIcon from '@/components/StrokeIcon.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import StaticResourceStateTag from '@/components/StaticResourceStateTag.vue'
@@ -288,9 +436,11 @@ import {
   routeLabel,
   resultStatusLabel,
 } from '@/composables/useClusterUtils'
-import { getGroupColorStyle, getCardBorderStyle } from '@/composables/useGroupColors'
-import { showDangerConfirm } from '@/composables/useOverlayModal'
 import { useClusterStaticResources } from '@/composables/useClusterStaticResources'
+import { showDangerConfirm } from '@/composables/useOverlayModal'
+import { useCardClusterGrouping } from '@/composables/useCardClusterGrouping'
+import { useBatchDelete } from '@/composables/useBatchDelete'
+import { clusterHueClass } from '@/utils/clusterHue'
 import type { VersionModalState } from '@/composables/useClusterPluginConfigs'
 import SearchInput from '@/components/SearchInput.vue'
 
@@ -299,14 +449,6 @@ const clusters = ref<any[]>([])
 const totalCount = ref(0)
 const loading = ref(false)
 const { searchText, onSearch: onDebouncedSearch, cancelSearch } = useDebouncedSearch()
-// 4.7：无过滤全量总数（并行 count 请求）+ 过滤激活判定（搜索/分组/集群任一；__all__ 哨兵不算激活）
-const unfilteredTotal = ref(0)
-const filterActive = computed(
-  () =>
-    Boolean(searchText.value) ||
-    Boolean(clusterFilter.value) ||
-    (Boolean(groupFilter.value) && groupFilter.value !== '__all__'),
-)
 const clusterFilter = ref<string | number>('')
 const groupFilter = ref('__all__')
 
@@ -326,15 +468,242 @@ function onGroupChange() {
   loadResources()
 }
 
-const displayedResources = computed(() => {
-  return [...resources.value].sort((a, b) => {
-    const ga = a.cluster_group_name || ''
-    const gb = b.cluster_group_name || ''
-    if (ga && !gb) return 1
-    if (!ga && gb) return -1
-    return ga.localeCompare(gb)
+function onClusterChange(): void {
+  loadResources()
+}
+
+async function refreshList(): Promise<void> {
+  await loadClusters()
+  await loadResources()
+}
+
+function onSearch() {
+  onDebouncedSearch(() => {
+    loadResources()
   })
+}
+
+async function loadResources() {
+  loading.value = true
+  try {
+    const params: any = { page_size: PAGE_SIZE_CARD_GRID, group_name: groupFilter.value }
+    if (clusterFilter.value) params.cluster_id = clusterFilter.value
+    if (searchText.value) params.search = searchText.value
+    const res = await api.get('/static_resources', { params })
+    resources.value = res.data.items || []
+    totalCount.value = res.data.total || 0
+  } catch {
+    message.error('加载静态资源失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadClusters() {
+  try {
+    const res = await api.get('/clusters')
+    clusters.value = res.data?.items || res.data || []
+  } catch {
+    /* ignore */
+  }
+}
+
+// ── 状态分段（filter-architecture 方案甲：chips 全站单一形态，前端聚合全量页）──
+type StatusKey = 'all' | 'pending_upload' | 'pending_dispatch' | 'dispatched' | 'failed' | 'broken'
+const statusFilter = ref<StatusKey>('all')
+const statusTabs = computed<{ key: StatusKey; label: string; count: number }[]>(() => {
+  const c: Record<Exclude<StatusKey, 'all'>, number> = {
+    pending_upload: 0,
+    pending_dispatch: 0,
+    dispatched: 0,
+    failed: 0,
+    broken: 0,
+  }
+  for (const sr of resources.value) c[staticResourceState(sr)]++
+  return [
+    { key: 'all', label: '全部', count: totalCount.value },
+    { key: 'pending_upload', label: '待上传', count: c.pending_upload },
+    { key: 'pending_dispatch', label: '待分发', count: c.pending_dispatch },
+    { key: 'dispatched', label: '已分发', count: c.dispatched },
+    { key: 'failed', label: '分发失败', count: c.failed },
+    { key: 'broken', label: '配置异常', count: c.broken },
+  ]
 })
+function goStatus(key: StatusKey) {
+  statusFilter.value = key
+}
+
+const rowsFiltered = computed(() =>
+  statusFilter.value === 'all'
+    ? resources.value
+    : resources.value.filter((sr: any) => staticResourceState(sr) === statusFilter.value),
+)
+
+// ── 集群分组 / 平铺双模式（共享组合式 + ClusterBand，AGENTS #87/#88）──
+const {
+  mode: cardMode,
+  groups: cardGroups,
+  countLabel: countLabelOf,
+  secondaryOf,
+  isFolded,
+  toggleFold,
+  pageHasFolded,
+  toggleFoldAll,
+  groupVisible,
+} = useCardClusterGrouping<any>({
+  rows: () => rowsFiltered.value,
+  unit: '个资源',
+  clusterIdOf: (sr) => sr.cluster_id,
+  clusterNameOf: (sr) => sr.cluster_name,
+  groupNameOf: (sr) => sr.cluster_group_name,
+  secondary: (rows) => {
+    const total = rows.reduce((acc: number, sr: any) => acc + (sr.file_size || 0), 0)
+    return total > 0 ? `大小 · ${formatFileSize(total)}` : '大小 · —'
+  },
+})
+
+const renderGroups = computed(() =>
+  cardMode.value === 'group'
+    ? cardGroups.value
+    : [
+        {
+          clusterId: -1,
+          clusterName: '',
+          groupName: '',
+          hueClass: 'cluster-c1',
+          rows: rowsFiltered.value,
+          count: rowsFiltered.value.length,
+        },
+      ],
+)
+
+// ── 批量管理模式 ──
+const batchMode = ref(false)
+const selectedResourceIds = ref<number[]>([])
+
+function toggleBatchMode(): void {
+  batchMode.value = !batchMode.value
+  if (!batchMode.value) clearSelection()
+}
+function toggleSelect(id: number): void {
+  const i = selectedResourceIds.value.indexOf(id)
+  if (i >= 0) selectedResourceIds.value.splice(i, 1)
+  else selectedResourceIds.value.push(id)
+}
+function clearSelection(): void {
+  selectedResourceIds.value = []
+}
+function selectedCountInGroup(rows: any[]): number {
+  return rows.filter((sr) => selectedResourceIds.value.includes(sr.id)).length
+}
+function toggleGroupSelect(rows: any[]): void {
+  const ids = rows.map((sr) => sr.id)
+  const all = ids.every((id) => selectedResourceIds.value.includes(id))
+  selectedResourceIds.value = all
+    ? selectedResourceIds.value.filter((id) => !ids.includes(id))
+    : [...new Set([...selectedResourceIds.value, ...ids])]
+}
+const allFilteredSelected = computed(
+  () => rowsFiltered.value.length > 0 && rowsFiltered.value.every((sr) => selectedResourceIds.value.includes(sr.id)),
+)
+function toggleSelectAllFiltered(): void {
+  if (allFilteredSelected.value) {
+    clearSelection()
+  } else {
+    selectedResourceIds.value = [...new Set([...selectedResourceIds.value, ...rowsFiltered.value.map((sr) => sr.id)])]
+  }
+}
+const showGroupSelectAll = computed(() => batchMode.value && cardMode.value === 'group')
+const allGroupSelected = computed(() => {
+  const ids = cardGroups.value.flatMap((g) => g.rows.map((sr: any) => sr.id))
+  return ids.length > 0 && ids.every((id) => selectedResourceIds.value.includes(id))
+})
+function toggleSelectAllGroup(): void {
+  const ids = cardGroups.value.flatMap((g) => g.rows.map((sr: any) => sr.id))
+  if (allGroupSelected.value) {
+    selectedResourceIds.value = selectedResourceIds.value.filter((id) => !ids.includes(id))
+  } else {
+    selectedResourceIds.value = [...new Set([...selectedResourceIds.value, ...ids])]
+  }
+}
+
+/** 集群 id → 显示名（批量删除节点清单标注归属集群） */
+function clusterNameById(id: number): string {
+  const c = clusters.value.find((x: any) => x.id === id)
+  return c ? c.display_name || c.name || `集群 ${id}` : `集群 ${id}`
+}
+
+/** 批量删除（统一入口 composable/useBatchDelete，AGENTS #88 ⑪） */
+const batchDelete = useBatchDelete<any>({
+  label: '静态资源',
+  endpoint: '/static_resources',
+  idField: 'static_resource_ids',
+  nameField: 'resource_name',
+  rows: () => resources.value.filter((sr: any) => selectedResourceIds.value.includes(sr.id)),
+  ids: () => selectedResourceIds.value,
+  nameOf: (sr: any) => sr.name,
+  clusterIdOf: (sr: any) => sr.cluster_id,
+  clusterNameOf: clusterNameById,
+  refresh: loadResources,
+  clearSelection: () => clearSelection(),
+  exitBatch: () => toggleBatchMode(),
+  subsetConsequence: '未选中的 {n} 个节点将保留已分发的静态资源文件',
+})
+
+// ── 卡片 ⋯ 菜单（flip-up + 文档级关闭，AGENTS #81 三栏结构）──
+const openMenuId = ref<number | null>(null)
+const menuFlipUp = ref(false)
+function toggleCardMenu(id: number, event?: MouseEvent): void {
+  if (openMenuId.value === id) {
+    openMenuId.value = null
+    return
+  }
+  openMenuId.value = id
+  const rect = (event?.currentTarget as HTMLElement | null)?.getBoundingClientRect()
+  menuFlipUp.value = rect ? rect.bottom + 200 > window.innerHeight : false
+}
+function closeCardMenu(): void {
+  openMenuId.value = null
+}
+function onDocClick(): void {
+  if (openMenuId.value !== null) openMenuId.value = null
+}
+onMounted(() => document.addEventListener('click', onDocClick))
+onUnmounted(() => {
+  document.removeEventListener('click', onDocClick)
+  cancelSearch()
+})
+
+function menuView(sr: any): void {
+  closeCardMenu()
+  viewZipContents(sr)
+}
+function menuEdit(sr: any): void {
+  closeCardMenu()
+  editResource(sr)
+}
+function menuUpload(sr: any): void {
+  closeCardMenu()
+  uploadStaticResource(sr)
+}
+function menuVersion(sr: any): void {
+  closeCardMenu()
+  openVersionManagement(sr)
+}
+function menuDelete(sr: any): void {
+  closeCardMenu()
+  deleteResource(sr)
+}
+
+/** 分发失败警示文案（failed_nodes 取真实持久化 detail，#43：形状以端点实现为准） */
+function failedNoticeText(sr: any): string {
+  const failed = sr.last_publish_detail?.failed_nodes || []
+  if (!failed.length) return '部分节点分发失败'
+  const first = failed[0]
+  const detail = first.error ? `${first.node} ${first.error}` : first.node
+  return `${failed.length} 个节点分发失败（${detail}${failed.length > 1 ? ' 等' : ''}）`
+}
+
 const vmVisible = ref(false)
 const vmId = ref<number | null>(null)
 const vmClusterId = ref<number | null>(null)
@@ -427,42 +796,6 @@ const { uploadStaticResource, uploading: srUploading } = useClusterStaticResourc
   loadRoutes: async () => {},
   afterUpload: () => loadResources(),
 })
-
-function onSearch() {
-  onDebouncedSearch(() => {
-    loadResources()
-  })
-}
-
-async function loadResources() {
-  loading.value = true
-  try {
-    const params: any = { page_size: PAGE_SIZE_CARD_GRID, group_name: groupFilter.value }
-    if (clusterFilter.value) params.cluster_id = clusterFilter.value
-    if (searchText.value) params.search = searchText.value
-    // 4.7：并行无过滤 count 请求（仅取 total），供「匹配 X / 共 Y」的 Y
-    const [res, allRes] = await Promise.all([
-      api.get('/static_resources', { params }),
-      api.get('/static_resources', { params: { page_size: 1 } }),
-    ])
-    resources.value = res.data.items || []
-    totalCount.value = res.data.total || 0
-    unfilteredTotal.value = allRes.data.total || 0
-  } catch {
-    message.error('加载静态资源失败')
-  } finally {
-    loading.value = false
-  }
-}
-
-async function loadClusters() {
-  try {
-    const res = await api.get('/clusters')
-    clusters.value = res.data?.items || res.data || []
-  } catch {
-    /* ignore */
-  }
-}
 
 async function openAddModal() {
   formMode.value = 'add'
@@ -689,20 +1022,9 @@ onMounted(() => {
   loadClusters()
   loadResources()
 })
-
-onUnmounted(() => {
-  cancelSearch()
-})
 </script>
 
 <style scoped>
-.sr-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 20px;
-  flex-wrap: nowrap;
-}
 .loading-state {
   text-align: center;
   padding: 60px 0;
@@ -726,81 +1048,16 @@ onUnmounted(() => {
   font-size: 14px;
   color: var(--muted);
 }
-/* 网格与卡片容器样式已上移共享 .card-grid / .std-card（style.css 卡片一致性单点） */
-.sr-card-topbar {
-  padding: 4px 16px;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--accent);
-  background: oklch(56% 0.16 210 / 8%);
-  border-bottom: 1px solid oklch(56% 0.16 210 / 12%);
-  display: flex;
-  align-items: center;
-  gap: 6px;
+/* 网格/卡片解剖样式已上移共享 .card-grid / .std-card / .l5-panel（style.css 单点） */
+.sr-card {
+  cursor: default;
 }
-.group-badge {
-  display: inline-block;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 1px 6px;
-  border-radius: 8px;
-  background: var(--badge-bg, oklch(50% 0.12 170 / 15%));
-  color: var(--badge-fg, oklch(45% 0.12 170));
-  border: 1px solid var(--badge-border, oklch(50% 0.12 170 / 25%));
-  line-height: 1.4;
-  flex-shrink: 0;
+.sr-card.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px oklch(56% 0.16 210 / 35%);
 }
-.sr-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  padding: 12px 20px 0;
-  margin-bottom: 8px;
-}
-.sr-card-name {
-  font-size: 14px;
-  font-weight: 600;
-}
-.sr-card-path {
-  font-size: 12px;
-  color: var(--accent);
-  font-family: var(--font-mono);
-  margin-top: 2px;
-}
-.sr-card-meta {
-  text-align: right;
-  flex-shrink: 0;
-  margin-left: 12px;
-}
-.sr-version-text {
-  white-space: nowrap;
-  font-size: 11px;
-  color: var(--muted);
-  margin-top: 4px;
-  font-family: var(--font-mono);
-}
-.sr-card-desc {
-  font-size: 12px;
-  color: var(--muted);
-  margin-top: 2px;
-  line-height: 1.5;
-  padding: 0 20px;
-}
-.sr-size {
-  font-size: 11px;
-  color: var(--muted);
-  font-family: var(--font-mono);
-  padding: 0 20px;
-  margin-bottom: 8px;
-}
-.sr-card-actions {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  flex-wrap: wrap;
-  margin-top: auto;
-  padding: 10px 20px 16px;
-  border-top: 1px solid var(--border);
+.batch-mode .sr-card {
+  cursor: pointer;
 }
 .text-sm {
   font-size: 12px;
@@ -873,6 +1130,4 @@ onUnmounted(() => {
 .zip-table tbody tr:hover {
   background: oklch(50% 0 0 / 4%);
 }
-
-/* 网格/卡片容器断点已上移共享 .card-grid（style.css） */
 </style>

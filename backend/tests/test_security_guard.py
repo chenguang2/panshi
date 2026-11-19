@@ -26,6 +26,9 @@ UNAUTHENTICATED_SAMPLES = [
     ("get", "/api/v1/clusters/1/global_rules"),
     ("get", "/api/v1/clusters/1/plugin-metadata"),
     ("get", "/api/v1/clusters/1/static-resources"),
+    ("get", "/api/v1/static_resources"),
+    # 静态资源跨集群批量删除（2026-11-19 静态资源卡片页推广，rule #19）
+    ("delete", "/api/v1/static_resources"),
     ("get", "/api/v1/clusters/1/stream-proxies"),
     ("get", "/api/v1/stream-proxies"),
     ("get", "/api/v1/clusters/1/dns-proxies"),

@@ -86,7 +86,11 @@ def _rebuild_node_results(detail: Optional[dict]) -> dict:
     return results
 
 
-def resource_to_response(r: StaticResource, route_exists: Optional[bool] = None) -> StaticResourceResponse:
+def resource_to_response(
+    r: StaticResource,
+    route_exists: Optional[bool] = None,
+    route_info: Optional[dict] = None,
+) -> StaticResourceResponse:
     return StaticResourceResponse(
         id=r.id,
         cluster_id=r.cluster_id,
@@ -98,6 +102,8 @@ def resource_to_response(r: StaticResource, route_exists: Optional[bool] = None)
         file_size=r.file_size,
         storage_path=r.storage_path,
         current_version=r.current_version,
+        route_name=(route_info or {}).get("name"),
+        route_uri=(route_info or {}).get("uri"),
         last_publish_ok=r.last_publish_ok,
         last_published_at=r.last_published_at.isoformat() + "Z" if r.last_published_at else None,
         route_exists=route_exists,
@@ -145,6 +151,15 @@ async def _route_exists_map(db: AsyncSession, resources: list[StaticResource]) -
     return {rid: rid in existing for rid in route_ids}
 
 
+async def _route_info_map(db: AsyncSession, resources: list[StaticResource]) -> dict[int, dict]:
+    """route_id → {name, uri} 映射（卡页「绑定 · 路由名」展示；孤儿路由无条目）。"""
+    route_ids = {r.route_id for r in resources if r.route_id is not None}
+    if not route_ids:
+        return {}
+    rows = await db.execute(select(Route.id, Route.name, Route.uri).where(Route.id.in_(route_ids)))
+    return {row[0]: {"name": row[1], "uri": row[2]} for row in rows.all()}
+
+
 @router.get("", response_model=StaticResourceListResponse)
 async def list_static_resources(
     cluster_id: int,
@@ -187,10 +202,18 @@ async def list_static_resources(
     resources = result.scalars().all()
 
     exists_map = await _route_exists_map(db, resources)
+    route_info_map = await _route_info_map(db, resources)
 
     return StaticResourceListResponse(
         total=total,
-        items=[resource_to_response(r, route_exists=exists_map.get(r.route_id, False)) for r in resources],
+        items=[
+            resource_to_response(
+                r,
+                route_exists=exists_map.get(r.route_id, False),
+                route_info=route_info_map.get(r.route_id),
+            )
+            for r in resources
+        ],
     )
 
 

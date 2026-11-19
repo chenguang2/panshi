@@ -283,6 +283,9 @@ export interface StaticResource {
   description?: string
   route_id?: number
   edge_uuid?: string | null
+  /** 绑定路由现名/现路径（列表端点经 Route 联查；孤儿路由为空。卡页「绑定 · 路由名」展示） */
+  route_name?: string | null
+  route_uri?: string | null
   storage_path?: string
   file_size?: number
   current_version?: number | null

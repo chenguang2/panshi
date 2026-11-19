@@ -22,7 +22,12 @@ vi.mock('vue-router', () => ({
 
 vi.mock('@/composables/useClusterUtils', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/composables/useClusterUtils')>()
-  return { ...actual, executePublish: vi.fn() }
+  return {
+    ...actual,
+    executePublish: vi.fn(),
+    executeDeleteWithProgress: vi.fn(),
+    showDeleteConfirm: vi.fn(),
+  }
 })
 
 const stubs = {
@@ -144,7 +149,7 @@ describe('StaticResourceList.vue', () => {
     groupParamAssert: 'sentinel',
   })
 
-  it('does not conditionally display count on group filter — always uses totalCount from server', async () => {
+  it('status chips carry the total — count row removed by filter-architecture G (#86)', async () => {
     mockApiGet.mockImplementation((url: string, config?: any) => {
       if (url === '/static_resources') {
         const groupName = config?.params?.group_name
@@ -186,18 +191,39 @@ describe('StaticResourceList.vue', () => {
     await flushPromises()
     await wrapper.vm.$nextTick()
 
-    // Initially shows count from default mock (total=2)
-    expect(wrapper.text()).toContain('共 2 个静态资源')
+    // 「共 N 个静态资源」文本行退场：总数只由状态 chips「全部 N」承担（#86）
+    expect(wrapper.text()).not.toContain('共 2 个静态资源')
+    expect(wrapper.find('.l5-chiprow').exists()).toBe(true)
+    const allChip = wrapper.findAll('.f-chip.chip-status').find((c) => c.text().includes('全部'))
+    expect(allChip).toBeDefined()
+    expect(allChip!.text()).toContain('2')
 
-    // Change group filter to trigger reload with group_name='线上'
+    // 换分组筛选后重载：chips「全部」跟随服务器过滤后的 total
     const groupSelect = wrapper.findAll('select').find((s) => s.text().includes('全部分组'))
     expect(groupSelect).toBeDefined()
     await groupSelect!.setValue('线上')
     await flushPromises()
     await wrapper.vm.$nextTick()
+    expect(allChip!.text()).toContain('99')
+  })
 
-    // 过滤激活：X = 服务器过滤后总数（99）；Y = 并行无过滤请求基线（2）
-    expect(wrapper.text()).toContain('匹配 99 / 共 2 个静态资源')
+  it('status chips aggregate the five dispatch states and filter rows', async () => {
+    const StaticResourceList = (await import('../StaticResourceList.vue')).default
+    const wrapper = mount(StaticResourceList, { global: { stubs } })
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+
+    // static-files: current_version=3, last_publish_ok=null → 待分发；docs: 无版本 → 待上传
+    const labels = wrapper.findAll('.f-chip.chip-status').map((c) => c.text())
+    expect(labels.some((t) => t.includes('待分发') && t.includes('1'))).toBe(true)
+    expect(labels.some((t) => t.includes('待上传') && t.includes('1'))).toBe(true)
+    expect(labels.some((t) => t.includes('已分发') && t.includes('0'))).toBe(true)
+
+    // 点「已分发」chip → 卡片列表过滤为空（空态）
+    const dispatchedChip = wrapper.findAll('.f-chip.chip-status').find((c) => c.text().includes('已分发'))!
+    await dispatchedChip.trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.text()).toContain('暂无静态资源')
   })
 })
 
@@ -232,7 +258,7 @@ describe('StaticResourceList.vue · 版本弹窗「立即发布恢复的配置�
     const wrapper = mount(StaticResourceList, { global: { stubs: vmStubs } })
     await flushPromises()
     const card = wrapper.findAll('.sr-card').find((c) => c.text().includes('static-files'))!
-    const vmBtn = card.findAll('button').find((b) => b.text().trim() === '版本管理')!
+    const vmBtn = card.findAll('button').find((b) => b.text().includes('版本管理'))!
     expect(vmBtn).toBeTruthy()
     await vmBtn.trigger('click')
     return wrapper
@@ -415,7 +441,7 @@ describe('StaticResourceList.vue 上传走共享流（static-resources-ux-close-
       this.dispatchEvent(new Event('change'))
     })
     try {
-      const uploadBtn = wrapper.findAll('button').find((b) => b.text().includes('上传 ZIP'))
+      const uploadBtn = wrapper.findAll('button').find((b) => b.text().includes('替换 ZIP'))
       expect(uploadBtn).toBeTruthy()
       await uploadBtn!.trigger('click')
       // 共享流内有 200ms 启动延时（真实计时器），等待其走完再断言
@@ -435,5 +461,102 @@ describe('StaticResourceList.vue 上传走共享流（static-resources-ux-close-
     } finally {
       clickSpy.mockRestore()
     }
+  })
+})
+
+describe('StaticResourceList.vue 批量管理（21.9b：useBatchDelete 统一入口）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/static_resources') return Promise.resolve({ data: MOCK_DATA })
+      if (url === '/clusters')
+        return Promise.resolve({
+          data: { items: [{ id: 1, display_name: '生产集群', group_name: '线上' }] },
+        })
+      if (url === '/clusters/1/nodes')
+        return Promise.resolve({ data: { items: [{ id: 7, ip: '10.0.0.1', management_port: 9180, status: 1 }] } })
+      return Promise.reject(new Error('unknown url'))
+    })
+  })
+
+  async function enterBatchMode() {
+    const StaticResourceList = (await import('../StaticResourceList.vue')).default
+    const wrapper = mount(StaticResourceList, { global: { stubs } })
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    const batchBtn = wrapper.findAll('button').find((b) => b.text().includes('批量管理'))!
+    // 页头按钮序（#88 ⑦）：批量管理在「新建」左侧
+    const createIdx = wrapper.findAll('button').findIndex((b) => b.text().includes('添加静态资源'))
+    const batchIdx = wrapper.findAll('button').findIndex((b) => b.text().includes('批量管理'))
+    expect(batchIdx).toBeLessThan(createIdx)
+    await batchBtn.trigger('click')
+    await wrapper.vm.$nextTick()
+    return wrapper
+  }
+
+  it('开启后显示批量条（状态行下、网格前），全选/清空联动计数', async () => {
+    const wrapper = await enterBatchMode()
+    const bar = wrapper.find('.l5-batchbar')
+    expect(bar.exists()).toBe(true)
+    expect(bar.text()).toContain('已选 0 项')
+    expect(bar.classes()).not.toContain('has-sel')
+
+    await bar
+      .findAll('button')
+      .find((b) => b.text().includes('全选当前筛选结果'))!
+      .trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(bar.text()).toContain('已选 2 项')
+    expect(bar.classes()).toContain('has-sel')
+
+    await bar
+      .findAll('button')
+      .find((b) => b.text().includes('清除选择'))!
+      .trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(bar.text()).toContain('已选 0 项')
+  })
+
+  it('批量删除走全局 ids 端点契约（U2）：resourceKey + 节点并集 + 退出批量', async () => {
+    const { showDeleteConfirm, executeDeleteWithProgress } = await import('@/composables/useClusterUtils')
+    const wrapper = await enterBatchMode()
+    const bar = wrapper.find('.l5-batchbar')
+    await bar
+      .findAll('button')
+      .find((b) => b.text().includes('全选当前筛选结果'))!
+      .trigger('click')
+    await wrapper.vm.$nextTick()
+    await bar
+      .findAll('button')
+      .find((b) => b.text().includes('批量删除'))!
+      .trigger('click')
+    await flushPromises()
+
+    expect(showDeleteConfirm).toHaveBeenCalledTimes(1)
+    const opts = vi.mocked(showDeleteConfirm).mock.calls[0][0] as any
+    // 节点并集 + 归属集群标注 + 默认全选在线 + 子集后果（硬约束，禁 noNodeSelection）
+    expect(opts.nodes).toEqual([{ id: 7, ip: '10.0.0.1', management_port: 9180, status: 1, clusterName: '生产集群' }])
+    expect(opts.defaultSelectOnline).toBe(true)
+    expect(opts.subsetConsequence).toContain('未选中的 {n} 个节点')
+
+    await opts.onOk(true, true, [7])
+    await flushPromises()
+    expect(executeDeleteWithProgress).toHaveBeenCalledTimes(1)
+    const del = vi.mocked(executeDeleteWithProgress).mock.calls[0][0] as any
+    expect(del.apiEndpoint).toBe('/static_resources')
+    expect(del.resourceKey).toEqual({
+      field: 'static_resource_ids',
+      label: '静态资源',
+      nameField: 'resource_name',
+      keys: [1, 2],
+    })
+    expect(del.deleteDb).toBe(true)
+    expect(del.deleteEdge).toBe(true)
+    expect(del.nodeIds).toEqual([7])
+    // 完成后清选 + 退出批量（clearSelectedFn）
+    del.clearSelectedFn()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('.l5-batchbar').exists()).toBe(false)
   })
 })

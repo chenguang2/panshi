@@ -708,13 +708,14 @@ describe('mockup-parity r18（让位规则收窄 / 卡体 chips 呈现）', () =
 describe('r22/r24 批量删除统一入口（契约统一 U2）', () => {
   const read = (rel: string) => readFileSync(resolve(process.cwd(), 'src/views', rel.replace(/^\.\.\//, '')), 'utf-8')
 
-  it('五页批量删除统一走 useBatchDelete（禁页面内自造确认/请求/进度）', () => {
+  it('六页批量删除统一走 useBatchDelete（禁页面内自造确认/请求/进度）', () => {
     for (const f of [
       '../StreamProxyList.vue',
       '../DnsUdpProxyList.vue',
       '../DnsQueryList.vue',
       '../PluginConfigList.vue',
       '../GlobalRuleList.vue',
+      '../StaticResourceList.vue',
     ]) {
       const s = read(f)
       expect(s).toContain('useBatchDelete<any>(')

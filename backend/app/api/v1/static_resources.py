@@ -5,10 +5,13 @@ from sqlalchemy import select, func
 
 from app.core.database import get_db
 from app.config import MAX_PAGE_SIZE
-from app.models.cluster import Cluster, ConfigVersion
+from app.models.cluster import Cluster, ConfigVersion, Route
 from app.models.static_resource import StaticResource
 from app.models.user import User, UserCluster
+from app.schemas.cluster import BatchDeleteStaticResourcesRequest
 from app.schemas.static_resource import StaticResourceResponse
+from app.api.v1.cluster_static_resources import _route_exists_map, _parse_publish_detail, _route_info_map
+from app.services import batch_delete
 from app.core.deps import require_permission
 
 router = APIRouter(prefix="/static_resources", tags=["static_resources"])
@@ -73,9 +76,8 @@ async def list_all_static_resources(
             cluster_group_map[row[0]] = row[3] or ""
 
     # static-resources-ux-close-loop 组 5：route_exists（孤儿路由=false）与发布三列读回
-    from app.api.v1.cluster_static_resources import _route_exists_map, _parse_publish_detail
-
     exists_map = await _route_exists_map(db, resources)
+    route_info_map = await _route_info_map(db, resources)
 
     items = []
     for r in resources:
@@ -84,9 +86,34 @@ async def list_all_static_resources(
         d["cluster_name"] = cluster_name_map.get(r.cluster_id, "")
         d["cluster_group_name"] = cluster_group_map.get(r.cluster_id, "")
         d["route_exists"] = exists_map.get(r.route_id, False)
+        info = route_info_map.get(r.route_id)
+        d["route_name"] = (info or {}).get("name")
+        d["route_uri"] = (info or {}).get("uri")
         d["last_publish_detail"] = _parse_publish_detail(r.last_publish_detail)
         if d.get("file_size"):
             d["file_size_kb"] = round(d["file_size"] / 1024, 1)
         items.append(d)
 
     return {"total": total, "page": page, "page_size": page_size, "items": items}
+
+
+@router.delete("", response_model=dict)
+async def delete_static_resources_global(
+    body: BatchDeleteStaticResourcesRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("static_resources")),
+):
+    """批量删除静态资源（跨集群，全局视图）——契约统一入口（U2）。
+
+    存储目录越界防护由 services/batch_delete.py 的 precheck 按条判定，
+    单条失败不阻断其余条目。
+    """
+    return await batch_delete.batch_delete(
+        "static_resource",
+        list(body.static_resource_ids),
+        db=db,
+        delete_db=body.delete_db,
+        delete_edge=body.delete_edge,
+        node_ids=body.node_ids,
+        user=current_user,
+    )

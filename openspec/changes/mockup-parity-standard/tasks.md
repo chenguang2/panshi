@@ -254,6 +254,7 @@
 - [x] 21.8 附带：「全部协议」筛选下拉、工具条 gap 4（卡片页）、页头 `ph-inline` 徽标（集群数 / 目标数）
 - [x] 21.9a **DNS-UDP 卡片页推广（2026-11-19）**：接 `TableToolbar`（搜索150/分组104/集群120，无第 4 下拉）+ `.l5-chiprow` + `.l5-batchbar`（`批量删除/全选筛选结果/清除选择`）+ 卡片解剖（hero = `remote_addr` 回落 `0.0.0.0:监听端口`、域名行 = 首域名 + `+N` + 算法胶囊、上游行 = 去重 chips + `N 组`、内外网分离走 `.lp-tag.tech`）+ band 次要指标 = 组内去重上游组数；色相按行 `clusterHueClass`；⋯ 菜单含 flip-up。真机实测：5 band（5 色）/13 卡/平铺 13 strip 带 per-cluster 左缘色/批量条 static 无重叠/菜单 215 宽在视口内。
 - [ ] 21.9b 其余卡片页推广（DNS-HTTP、插件组、插件元数据、全局规则、静态资源、服务器证书），标准已写入 AGENTS #87/#88 与 BRIEF §九
+- [x] 21.9b1 **静态资源卡片页推广（2026-11-19）**：接 `TableToolbar`（搜索150/分组104/集群120）+ `.l5-chiprow`（分发五态 chips：待上传/待分发/已分发/分发失败/配置异常，前端聚合）+ `.l5-batchbar` + 卡片解剖（strip 右端 = `绑定 · 路由名`（新增 `route_name/route_uri` 读回，孤儿路由红字「已删除」）、卡体 = 路径/绑定(group-only)/描述(可选)/上传、大小走 `lp-tag`）+ band 次要指标 = 组内总大小；色相按行 `clusterHueClass`；⋯ 菜单三栏（查看 ZIP/编辑/上传·替换 ZIP/版本管理 → 删除；broken 态收敛为禁用编辑+删除）。**批量**：后端 `DELETE /static_resources` 全局端点（`batch_delete.py` 新增 `static_resource` kind：precheck=存储目录越界防护先行、purge=本地 zip+目录清理、Edge 走 raw_delete query 参数）+ 前端 `useBatchDelete`；列表端点补 `route_name/route_uri`。真机实测（1600）：6 卡/3 band/chips 计数正确/批量条随流/broken 菜单 215px 无 console 错误。附带修复：`DELETE /api/v1/plugin_metadata` 审计盲区（同款下划线路径推断不到，0e7a1851 引入）
 
 > 21.x 落地记录（2026-11-18，真机 1600 验收）：
 > - 工具条：`.l5-toolbar` 高 57 / 内距 12-16 / 1px 下边框 / gap 6；序 = 搜索150 → 分组104 → 集群120 → **协议104** → spacer → 刷新 → 全部收起 → seg（与路由页逐项一致）；`show-count=false`（总数归 chips「全部 N」）。

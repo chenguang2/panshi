@@ -196,6 +196,10 @@ ROUTE_MAP: dict[tuple[str, str], tuple[str, str, bool]] = {
     # Edge 导入 / 全局四层代理
     ("POST", "/api/v1/edge-import/execute"): ("edge_import", "execute", False),
     ("DELETE", "/api/v1/stream-proxies"): ("stream_proxy", "batch_delete", True),
+    # 全局静态资源批量删除（词汇表只有 static-resources 连字符段，下划线路径推断不到）
+    ("DELETE", "/api/v1/static_resources"): ("static_resource", "batch_delete", True),
+    # 全局插件元数据批量删除（同款下划线路径推断盲区，0e7a1851 引入）
+    ("DELETE", "/api/v1/plugin_metadata"): ("plugin_metadata", "batch_delete", True),
     # Edge 直连：四层代理写操作（词汇推断会落到 edge_node_*，语义错误，故显式映射）
     ("POST", "/api/v1/edge-client/nodes/{ip}/{port}/stream-routes"): ("edge_stream_route", "create", False),
     ("PUT", "/api/v1/edge-client/nodes/{ip}/{port}/stream-routes/{route_id}"): ("edge_stream_route", "update", False),

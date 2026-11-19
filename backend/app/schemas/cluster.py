@@ -286,6 +286,15 @@ class BatchDeleteStreamProxiesRequest(DeleteClusterRequest):
     proxy_ids: List[int] = Field(...)
 
 
+class BatchDeleteStaticResourcesRequest(DeleteClusterRequest):
+    """批量删除静态资源请求：继承单删字段，额外指定 static_resource_ids。
+
+    注意：不做 min_length=1 约束——空列表由端点显式返回 400（与其他批量端点同构）；
+    存储目录越界防护由 services/batch_delete.py 的 precheck 按条判定（单条失败不阻断）。
+    """
+    static_resource_ids: List[int] = Field(...)
+
+
 class NodeCreate(NodeBase):
     cluster_id: Optional[int] = None
 

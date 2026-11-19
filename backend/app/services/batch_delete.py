@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.cluster import (
     ConfigVersion, GlobalRule, PluginConfig, PluginMetadata, Route, RoutePlugin,
 )
+from app.models.static_resource import StaticResource
 from app.models.user import User, UserCluster
 from app.services import edge_sync, plugin_config_refs
 
@@ -59,6 +60,40 @@ async def _plugin_config_precheck(config: Any, db: AsyncSession) -> Optional[str
     names = [r.name for r in referencing]
     shown = ", ".join(names[:3]) + ("等" if len(names) > 3 else "")
     return f"被 {len(names)} 条路由引用（{shown}），请先解除引用"
+
+
+async def _static_resource_precheck(resource: Any, db: AsyncSession) -> Optional[str]:
+    """静态资源删除前置校验：存储目录越界防护（与单删端点同款，2026-09 安全缺陷修复）。
+
+    edge_uuid 可能是历史脏数据（如经恶意备份导入的 ../..）；批量流程在任何删除
+    （本地文件 / ConfigVersion / 库行）发生**之前**拒绝该条，失败不波及其余条目。
+    """
+    import os
+
+    del_dir_name = resource.edge_uuid or str(resource.route_id)
+    # 函数级 import（api 层是 BASE_STORAGE_DIR 的单一事实源，避免服务层重复定义漂移）
+    from app.api.v1.cluster_static_resources import BASE_STORAGE_DIR
+
+    route_dir = os.path.realpath(os.path.join(BASE_STORAGE_DIR, del_dir_name))
+    real_base = os.path.realpath(BASE_STORAGE_DIR)
+    if route_dir == real_base or not route_dir.startswith(real_base + os.sep):
+        return "静态资源存储目录越界，已拒绝删除（目录不在数据存储根内）"
+    return None
+
+
+async def _purge_static_resource_files(resource: Any, db: AsyncSession) -> None:
+    """静态资源本地文件清理（zip 文件 + 存储目录），与单删端点 delete_db 段同语义。"""
+    import os
+    import shutil
+
+    from app.api.v1.cluster_static_resources import BASE_STORAGE_DIR
+
+    if resource.storage_path and os.path.exists(resource.storage_path):
+        os.remove(resource.storage_path)
+    del_dir_name = resource.edge_uuid or str(resource.route_id)
+    route_dir = os.path.join(BASE_STORAGE_DIR, del_dir_name)
+    if os.path.exists(route_dir):
+        shutil.rmtree(route_dir)
 
 
 KINDS: dict[str, KindSpec] = {
@@ -101,6 +136,20 @@ KINDS: dict[str, KindSpec] = {
         name_key="rule_name",
         edge_delete=lambda client, uuid: client.delete_global_rule(uuid),
         missing_detail="全局规则不存在",
+    ),
+    "static_resource": KindSpec(
+        kind="static_resource",
+        model=StaticResource,
+        resource_type="static_resource",
+        id_key="static_resource_id",
+        name_key="resource_name",
+        # Edge 侧按 query 参数 edge_uuid 定位（raw_delete），与单删端点一致
+        edge_delete=lambda client, uuid: client.raw_delete(
+            f"/edge/panshi/admin_static_resources?edge_uuid={uuid}"
+        ),
+        missing_detail="静态资源不存在",
+        precheck=_static_resource_precheck,
+        purge_related=_purge_static_resource_files,
     ),
 }
 
