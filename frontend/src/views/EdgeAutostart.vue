@@ -15,7 +15,13 @@
     </PageHeader>
 
     <div class="toolbar">
-      <select v-model="groupFilter" class="form-input" style="width: 140px" @change="onGroupChange">
+      <select
+        v-model="groupFilter"
+        :title="groupFilter.startsWith('__') ? '' : groupFilter"
+        class="form-input"
+        style="width: 140px"
+        @change="onGroupChange"
+      >
         <option value="__all__">全部分组</option>
         <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
         <option value="__ung__">未分组</option>

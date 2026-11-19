@@ -28,7 +28,13 @@
             :width="150"
             @input="onSearch"
           />
-          <select v-model="groupFilter" class="l5-select" style="width: 104px" @change="onGroupChange">
+          <select
+            v-model="groupFilter"
+            :title="groupFilter.startsWith('__') ? '' : groupFilter"
+            class="l5-select"
+            style="width: 104px"
+            @change="onGroupChange"
+          >
             <option value="__all__">全部分组</option>
             <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
             <option value="__ung__">未分组</option>
@@ -42,6 +48,7 @@
           />
           <select
             v-model="upstreamFilter"
+            :title="upstreams.find((u: any) => u.id === Number(upstreamFilter))?.name || ''"
             class="l5-select"
             style="width: 104px"
             @change="onFilterChange"
@@ -50,7 +57,13 @@
             <option value="">全部上游</option>
             <option v-for="u in upstreams" :key="u.id" :value="u.id">{{ u.name }}</option>
           </select>
-          <select v-model="pluginFilter" class="l5-select plugin-filter" style="width: 104px" @change="onFilterChange">
+          <select
+            v-model="pluginFilter"
+            :title="pluginOptions.find((pl) => pl.name === pluginFilter)?.display_name || pluginFilter"
+            class="l5-select plugin-filter"
+            style="width: 104px"
+            @change="onFilterChange"
+          >
             <option value="">全部插件</option>
             <option v-for="p in pluginOptions" :key="p.name" :value="p.name">{{ p.display_name || p.name }}</option>
           </select>

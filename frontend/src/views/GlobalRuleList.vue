@@ -28,7 +28,13 @@
             @input="onSearch"
             @clear="loadRules"
           />
-          <select v-model="groupFilter" class="l5-select" style="width: 104px" @change="onGroupChange">
+          <select
+            v-model="groupFilter"
+            :title="groupFilter.startsWith('__') ? '' : groupFilter"
+            class="l5-select"
+            style="width: 104px"
+            @change="onGroupChange"
+          >
             <option value="__all__">全部分组</option>
             <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
             <option value="__ung__">未分组</option>
@@ -40,6 +46,18 @@
             style="width: 120px"
             @change="loadRules"
           />
+          <select
+            v-model="pluginFilter"
+            :title="pluginOptions.find((pl) => pl.name === pluginFilter)?.display_name || pluginFilter"
+            class="l5-select plugin-filter"
+            style="width: 104px"
+            @change="onPluginFilterChange"
+          >
+            <option value="">全部插件</option>
+            <option v-for="pl in pluginOptions" :key="pl.name" :value="pl.name">
+              {{ pl.display_name || pl.name }}
+            </option>
+          </select>
         </template>
         <template #mode-extra>
           <button

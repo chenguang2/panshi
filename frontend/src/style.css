@@ -1279,6 +1279,8 @@ body.col-move-dragging * {
   color: var(--fg);
   outline: none;
   appearance: none;
+  /* 长选项名硬裁 → 省略号（2026-11-19 用户实测：原生 select 默认 clip） */
+  text-overflow: ellipsis;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 8px center;
@@ -1295,6 +1297,14 @@ body.col-move-dragging * {
   color: var(--muted);
   background-color: var(--bg);
   cursor: not-allowed;
+}
+/* ClusterSelect（antd a-select）在工具条语境的字号归一（2026-11-19 用户实测）：
+   antd token 未设 fontSize → a-select 渲染 14px，比原生 .l5-select（12.5px）大一档。
+   仅作用 .l5-toolbar 内实例（触发器选中项/占位符）；表单弹窗内的 ClusterSelect
+   保持 antd 缺省（与 .form-input 同语境）。 */
+.l5-toolbar .cluster-select .ant-select-selection-item,
+.l5-toolbar .cluster-select .ant-select-selection-placeholder {
+  font-size: 12.5px;
 }
 /* 备用搜索形态（mockup 原生 .l5-search；现网三页统一用 SearchInput，保留供页面兜底） */
 .l5-search {

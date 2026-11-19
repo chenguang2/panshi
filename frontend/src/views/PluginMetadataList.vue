@@ -22,7 +22,13 @@
       >
         <template #filters>
           <SearchInput v-model="searchText" placeholder="搜索插件名称..." :width="150" @input="onSearch" />
-          <select v-model="groupFilter" class="l5-select" style="width: 104px" @change="onGroupChange">
+          <select
+            v-model="groupFilter"
+            :title="groupFilter.startsWith('__') ? '' : groupFilter"
+            class="l5-select"
+            style="width: 104px"
+            @change="onGroupChange"
+          >
             <option value="__all__">全部分组</option>
             <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
             <option value="__ung__">未分组</option>
@@ -35,7 +41,16 @@
             @change="onClusterFilterChange"
           />
           <!-- 插件筛选（r28）：选项 = 插件元数据可用的插件（目录 ∩ features.metadataPlugins） -->
-          <select v-model="pluginFilter" class="l5-select" style="width: 104px" @change="onPluginFilterChange">
+          <select
+            v-model="pluginFilter"
+            :title="
+              pluginFilterOptions.find((p: { name: string; label: string }) => p.name === pluginFilter)?.label ||
+              pluginFilter
+            "
+            class="l5-select"
+            style="width: 104px"
+            @change="onPluginFilterChange"
+          >
             <option value="">全部插件</option>
             <option v-for="p in pluginFilterOptions" :key="p.name" :value="p.name">{{ p.label }}</option>
           </select>
