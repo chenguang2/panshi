@@ -8,10 +8,11 @@ from app.core.database import get_db
 from app.config import MAX_PAGE_SIZE
 from app.models.cluster import Cluster, Route, RoutePlugin, ConfigVersion, Upstream
 from app.models.user import User, UserCluster
+from app.schemas.cluster import BatchDeleteRoutesRequest
 from app.schemas.route import RouteListResponse, RouteResponse
 from app.api.v1.cluster_routes import route_to_response
 from app.core.deps import require_permission
-from app.services import edge_sync
+from app.services import batch_delete, edge_sync
 from app.services.status_counts import publish_status_counts, latest_publish_subquery
 
 router = APIRouter(prefix="/routes", tags=["routes"])
@@ -305,3 +306,20 @@ async def get_routes_by_edge_uuids(
 
     return RouteListResponse(total=len(routes), page=1, page_size=len(routes), items=items)
 
+
+@router.delete("", response_model=dict)
+async def delete_routes_global(
+    body: BatchDeleteRoutesRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("routes")),
+):
+    """批量删除路由（跨集群，全局视图）——契约统一入口（U2）。"""
+    return await batch_delete.batch_delete(
+        "route",
+        list(body.route_ids),
+        db=db,
+        delete_db=body.delete_db,
+        delete_edge=body.delete_edge,
+        node_ids=body.node_ids,
+        user=current_user,
+    )

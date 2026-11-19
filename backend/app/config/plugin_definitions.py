@@ -4,7 +4,6 @@ BUILTIN_PLUGINS = [
         "display_name": "代理重写",
         "category": "rewrite",
         "description": "代理重写（修改请求 URI、Header、Host、协议）",
-        "enable_metadata": False,
         "schema": {
             "uri": {
                 "type": "string",
@@ -53,7 +52,6 @@ BUILTIN_PLUGINS = [
         "display_name": "响应体重写",
         "category": "rewrite",
         "description": "响应体重写（修改状态码、Body、Header）",
-        "enable_metadata": False,
         "schema": {
             "status": {
                 "type": "integer",
@@ -127,7 +125,6 @@ BUILTIN_PLUGINS = [
         "display_name": "流量分发",
         "category": "flow",
         "description": "流量分发（按条件将请求分发到不同的上游）",
-        "enable_metadata": False,
         "schema": {
             "splits": {
                 "type": "array",
@@ -191,7 +188,6 @@ BUILTIN_PLUGINS = [
         "display_name": "数据中心",
         "category": "process",
         "description": "数据中心（集中管理其他插件的数据属性）",
-        "enable_metadata": True,
         "schema": {}
     },
     {
@@ -199,7 +195,6 @@ BUILTIN_PLUGINS = [
         "display_name": "日志记录",
         "category": "process",
         "description": "日志记录（将请求信息按指定格式记录到文件）",
-        "enable_metadata": True,
         "schema": {
             "logs": {
                 "type": "array",
@@ -251,7 +246,6 @@ BUILTIN_PLUGINS = [
         "display_name": "请求数限流",
         "category": "flow",
         "description": "时间窗口请求数限制（按 key 计数限流）",
-        "enable_metadata": False,
         "schema": {
             "limits": {
                 "type": "array",
@@ -380,7 +374,6 @@ BUILTIN_PLUGINS = [
         "display_name": "自定义预处理",
         "category": "process",
         "description": "自定义预处理方法（在指定阶段执行 Lua 函数）",
-        "enable_metadata": False,
         "schema": {
             "rewrite": {
                 "type": "array",
@@ -424,7 +417,6 @@ BUILTIN_PLUGINS = [
         "display_name": "自定义预处理(旧版)",
         "category": "process",
         "description": "自定义预处理方法(旧版) — 通过 functions 数组和 phase 指定阶段执行 Lua 函数，兼容老客户配置",
-        "enable_metadata": False,
         "schema": {
             "functions": {
                 "type": "array",
@@ -447,7 +439,6 @@ BUILTIN_PLUGINS = [
         "display_name": "TraceID 追踪",
         "category": "monitor",
         "description": "TraceID 追踪（在请求头中注入唯一追踪 ID）",
-        "enable_metadata": False,
         "schema": {
             "header_name": {
                 "type": "string",
@@ -477,7 +468,6 @@ BUILTIN_PLUGINS = [
         "display_name": "监控统计",
         "category": "monitor",
         "description": "监控统计（收集请求指标数据）",
-        "enable_metadata": False,
         "schema": {
             "prefer_name": {
                 "type": "boolean",
@@ -493,7 +483,6 @@ BUILTIN_PLUGINS = [
         "display_name": "静态资源服务",
         "category": "static",
         "description": "静态资源服务（从本地文件系统响应静态文件请求，支持缓存控制和 MIME 类型）",
-        "enable_metadata": False,
         "schema": {
             "cache_max_age": {
                 "type": "integer",
@@ -530,7 +519,6 @@ BUILTIN_PLUGINS = [
         "display_name": "Body 检查",
         "category": "security",
         "description": "安全防护 - Body 检查（对请求体内容进行关键字匹配和拦截）",
-        "enable_metadata": True,
         "schema": {
             "denylist": {
                 "type": "array",
@@ -573,7 +561,6 @@ BUILTIN_PLUGINS = [
         "display_name": "WAF 安全引擎",
         "category": "security",
         "description": "安全防护 - OWASP Core Rule Set 安全引擎（WAF）",
-        "enable_metadata": True,
         "schema": {
             "status": {
                 "type": "integer",
@@ -639,7 +626,6 @@ BUILTIN_PLUGINS = [
         "display_name": "Basic 认证",
         "category": "auth",
         "description": "Basic 认证",
-        "enable_metadata": False,
         "schema": {
             "hide_credentials": {
                 "type": "boolean",
@@ -655,7 +641,6 @@ BUILTIN_PLUGINS = [
         "display_name": "Key 认证",
         "category": "auth",
         "description": "Key 认证",
-        "enable_metadata": False,
         "schema": {
             "header": {
                 "type": "string",
@@ -685,7 +670,6 @@ BUILTIN_PLUGINS = [
         "display_name": "跨域资源共享",
         "category": "rewrite",
         "description": "跨域资源共享（CORS）",
-        "enable_metadata": False,
         "schema": {
             "allow_origins": {
                 "type": "string",
@@ -743,7 +727,6 @@ BUILTIN_PLUGINS = [
         "display_name": "请求参数检查",
         "category": "security",
         "description": "安全防护 - 请求参数检查（对请求参数进行关键字匹配和拦截）",
-        "enable_metadata": True,
         "schema": {
             "denylist": {
                 "type": "array",
@@ -772,7 +755,6 @@ BUILTIN_PLUGINS = [
         "display_name": "Cookie 检查",
         "category": "security",
         "description": "安全防护 - Cookie 检查（对请求 Cookie 进行关键字匹配和拦截）",
-        "enable_metadata": True,
         "schema": {
             "denylist": {
                 "type": "array",
@@ -808,7 +790,6 @@ BUILTIN_PLUGINS = [
         "display_name": "Referer 检查",
         "category": "security",
         "description": "安全防护 - Referer 检查（对请求 Referer 进行关键字匹配和拦截）",
-        "enable_metadata": True,
         "schema": {
             "denylist": {
                 "type": "array",
@@ -851,7 +832,6 @@ BUILTIN_PLUGINS = [
         "display_name": "URI 检查",
         "category": "security",
         "description": "安全防护 - URI 检查（对请求 URI 进行关键字匹配和拦截）",
-        "enable_metadata": True,
         "schema": {
             "denylist": {
                 "type": "array",
@@ -880,7 +860,6 @@ BUILTIN_PLUGINS = [
         "display_name": "User-Agent 检查",
         "category": "security",
         "description": "安全防护 - User-Agent 检查（对请求 User-Agent 进行关键字匹配和拦截）",
-        "enable_metadata": True,
         "schema": {
             "denylist": {
                 "type": "array",
@@ -916,7 +895,6 @@ BUILTIN_PLUGINS = [
         "display_name": "IP 黑白名单",
         "category": "security",
         "description": "安全防护 - IP 黑白名单（通过黑白名单限制 IP 访问）",
-        "enable_metadata": True,
         "schema": {
             "blacklist": {
                 "type": "array",
@@ -973,7 +951,6 @@ BUILTIN_PLUGINS = [
         "display_name": "URI 白名单",
         "category": "security",
         "description": "安全防护 - URI 白名单（限制不在指定列表里的请求）",
-        "enable_metadata": True,
         "schema": {
             "whitelist": {
                 "type": "array",
@@ -1023,7 +1000,6 @@ BUILTIN_PLUGINS = [
         "display_name": "表单限制",
         "category": "security",
         "description": "安全防护 - 表单限制（限制 multipart/form-data 类型的请求）",
-        "enable_metadata": True,
         "schema": {
             "body_size": {
                 "type": "integer",
@@ -1184,7 +1160,6 @@ BUILTIN_PLUGINS = [
         "display_name": "高级 IP",
         "category": "security",
         "description": "安全防护 - 高级 IP（指定 IP 不受其他插件限制）",
-        "enable_metadata": True,
         "schema": {
             "superlist": {
                 "type": "array",
@@ -1213,7 +1188,6 @@ BUILTIN_PLUGINS = [
         "display_name": "高级用户",
         "category": "security",
         "description": "安全防护 - 高级用户（指定用户不受其他插件限制）",
-        "enable_metadata": True,
         "schema": {
             "superlist": {
                 "type": "array",
@@ -1242,7 +1216,6 @@ BUILTIN_PLUGINS = [
         "display_name": "DNS 上游解析",
         "category": "process",
         "description": "智能 DNS 域名解析及动态负载调度（在 HTTP 路由中覆盖 DNS 解析行为）",
-        "enable_metadata": False,
         "schema": {
             "disable": {
                 "type": "boolean",
@@ -1264,7 +1237,6 @@ BUILTIN_PLUGINS = [
         "display_name": "重定向",
         "category": "rewrite",
         "description": "HTTP 重定向（HTTP→HTTPS 强制跳转、URI 重写、正则匹配重定向）",
-        "enable_metadata": False,
         "schema": {
             "http_to_https": {
                 "type": "boolean",

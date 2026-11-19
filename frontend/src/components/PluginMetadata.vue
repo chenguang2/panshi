@@ -155,12 +155,12 @@ import { formatDate } from '@/utils/format'
 import type { PluginMetadata } from '@/types'
 import { showDeleteConfirm, executePublish, executeDeleteWithProgress } from '@/composables/useClusterUtils'
 import { showOverlayModal } from '@/composables/useOverlayModal'
+import { useFeaturesStore } from '@/stores/features'
 
 interface Plugin {
   name: string
   description: string
   category?: string
-  enable_metadata?: boolean
   metadata_schema?: Record<string, any>
   schema: Record<string, any>
 }
@@ -257,12 +257,23 @@ const editingPluginInfo = ref<Partial<Plugin> | null>(null)
 const versionModalVisible = ref(false)
 const versionModalPluginName = ref('')
 
+const featuresStore = useFeaturesStore()
+
 const availablePlugins = computed(() => {
   const configuredNames = new Set(configuredPlugins.value.map((p) => p.plugin_name))
-  return allPlugins.value.filter((p) => p.enable_metadata === true && !configuredNames.has(p.name))
+  // plugin-metadata-plugins-config：可选 = 目录 ∩ features.yaml 专用清单
+  // plugin_metadata_plugins（空/未配置 = 不限制），再做「未配置去重」；
+  // 与独立页 PluginMetadataList 同一份清单（旧 Python 写死开关已退役，
+  // 见 openspec plugin-metadata-plugins-config）。
+  const allowed = featuresStore.metadataPlugins
+  return allPlugins.value.filter(
+    (p) => (allowed.length === 0 || allowed.includes(p.name)) && !configuredNames.has(p.name),
+  )
 })
 
 const loadPlugins = async () => {
+  // features 清单兜底加载（main.ts 启动已预载；失败静默 = 不限制）
+  featuresStore.load().catch(() => {})
   try {
     const res = await api.get('/plugins/builtin')
     allPlugins.value = res.data.plugins || []

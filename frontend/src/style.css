@@ -1539,6 +1539,82 @@ body.col-move-dragging * {
 .l5-batchbar.has-sel .b-count {
   color: var(--accent);
 }
+/* 卡片内「配置 JSON」折叠块（plugin-metadata，方案 C）：
+   收起时只显示「N 项」触控，展开后渲染缩进 2 空格的完整 JSON；
+   块内滚动（不是裁剪）——长配置可滚动读完，卡片高度有上限。 */
+/* 卡片身份：中文显示名 + 弱化的插件标识（`.lp-key`，mono 11.5px muted） */
+.lp-key {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 5px;
+  line-height: 1.6;
+  align-self: center;
+}
+
+.lp-json-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.4;
+  padding: 1px 6px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.lp-json-toggle:hover {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: oklch(56% 0.16 210 / 5%);
+}
+.lp-json {
+  margin: 2px 0 8px 40px;
+  padding: 8px 10px;
+  max-height: 220px;
+  overflow: auto;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--fg);
+  white-space: pre;
+}
+.lp-row-config {
+  align-items: center;
+}
+
+/* 文本链接按钮（批量条「全选当前筛选结果/清除选择」、空态「清除筛选」等共用）
+   —— 单一来源（2026-11-19 fix）：曾只定义在四层代理/DNS-UDP 的 scoped 样式里，
+   DNS-HTTP 与插件组缺失 → 批量条里渲染成系统默认按钮（字体/底色都不对） */
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.link-btn:hover {
+  background: oklch(56% 0.16 210 / 8%);
+}
+/* 批量条内的「清除选择」用中性色（与「全选」区分主次） */
+.l5-batchbar .btn-ghost.link-btn,
+.l5-batchbar .btn-ghost {
+  color: var(--muted);
+}
+
 .l5-batchbar .b-sep {
   width: 1px;
   height: 16px;
@@ -3172,6 +3248,7 @@ th.resizable {
   gap: 4px;
   min-width: 0;
 }
+/* r19：卡体 chips 一律完整呈现（目标/上游 IP 可能多条，需逐条可读），不做裁剪或单行化 */
 .lp-chip {
   display: inline-flex;
   align-items: center;
@@ -3413,6 +3490,8 @@ th.resizable {
 .l5-card.mode-flat .lp-strip {
   display: flex;
 }
+/* 平铺让位（r18-A 收窄）：**仅低信息量单值行**可让位（如四层代理「负载均衡」，strip 已承载）；
+   列表型关键信息（目标 / 上游 IP）SHALL 两态都显示，否则平铺读不到关键数据 */
 .l5-card.mode-flat .lp-row.group-only {
   display: none;
 }

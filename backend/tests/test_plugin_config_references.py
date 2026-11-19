@@ -101,3 +101,75 @@ class TestReferencesEndpoint:
         resp = await _fetch_references(async_authed_client, group["id"])
         assert resp.status_code == 200, resp.text
         assert resp.json()["referenced_by"] == []
+
+
+class TestGlobalListReferenceCount:
+    """全局 `GET /plugin_configs` 的 `reference_count`（设计页「被 N 条路由引用」数据源）。
+
+    契约：① 半页一次扫描补齐（禁 N+1）；② 计数只统计**同集群**路由；
+    ③ 未被引用 = 0（前端据此标「未引用」并可安全删除）。
+    """
+
+    async def test_reference_count_matches_referencing_routes(self, async_authed_client):
+        client = async_authed_client
+        referenced = await _create_group(client, "rc-referenced")
+        unused = await _create_group(client, "rc-unused")
+        await _create_route(client, "rc-r1", [referenced["edge_uuid"]])
+        await _create_route(client, "rc-r2", [referenced["edge_uuid"], unused["edge_uuid"]])
+
+        r = await client.get("/api/v1/plugin_configs", params={"page_size": 100})
+        assert r.status_code == 200, r.text
+        by_id = {it["id"]: it for it in r.json()["items"]}
+
+        assert by_id[referenced["id"]]["reference_count"] == 2
+        assert by_id[unused["id"]]["reference_count"] == 1
+
+    async def test_reference_count_zero_when_not_referenced(self, async_authed_client):
+        client = async_authed_client
+        g = await _create_group(client, "rc-lonely")
+        r = await client.get("/api/v1/plugin_configs", params={"page_size": 100})
+        by_id = {it["id"]: it for it in r.json()["items"]}
+        assert by_id[g["id"]]["reference_count"] == 0
+
+
+class TestPluginConfigRefsHelper:
+    """解析规则单点（services/plugin_config_refs）：畸形 JSON 一律视为「不含引用」。"""
+
+    def test_extract_refs_tolerates_malformed(self):
+        from app.services import plugin_config_refs as refs
+
+        assert refs.extract_refs(None) == []
+        assert refs.extract_refs("") == []
+        assert refs.extract_refs("not-json") == []
+        assert refs.extract_refs('{"a": 1}') == []
+        assert refs.extract_refs('["u1", "u2"]') == ["u1", "u2"]
+        assert refs.extract_refs(["u3"]) == ["u3"]
+
+    def test_count_by_uuid_counts_occurrences(self):
+        from app.services import plugin_config_refs as refs
+
+        counts = refs.count_by_uuid(['["a"]', '["a","b"]', "bad-json", None])
+        assert counts == {"a": 2, "b": 1}
+
+
+class TestGlobalRuleRouteCount:
+    """全局规则列表的 `route_count`（设计「生效 全部路由 · N 条」数据源）。
+
+    全局规则对本集群**全部**路由生效 → 计数 = 该集群路由总数；一次 group by 补齐（禁 N+1）。
+    """
+
+    async def test_route_count_equals_cluster_route_total(self, async_authed_client):
+        client = async_authed_client
+        rule = await client.post("/api/v1/clusters/1/global_rules", json={"name": "rc-rule", "plugins": {}})
+        assert rule.status_code == 200, rule.text
+
+        before = await client.get("/api/v1/global_rules", params={"page_size": 100})
+        by_id = {it["id"]: it for it in before.json()["items"]}
+        base = by_id[rule.json()["id"]]["route_count"]
+
+        await _create_route(client, "rc-gr-1", [])
+        await _create_route(client, "rc-gr-2", [])
+
+        after = await client.get("/api/v1/global_rules", params={"page_size": 100})
+        by_id2 = {it["id"]: it for it in after.json()["items"]}
+        assert by_id2[rule.json()["id"]]["route_count"] == base + 2

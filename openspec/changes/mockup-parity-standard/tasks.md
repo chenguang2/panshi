@@ -252,7 +252,8 @@
 - [x] 21.6 页头按钮序：批量管理在「新建」左侧
 - [x] 21.7 批量条改 `.l5-batchbar`（状态行下、随流；已选 N 项 / 批量发布 / 批量删除 / 清除选择；未选时 45% 透明），删除 `.sp-batch-bar` 底部固定条与 `padding-bottom` hack
 - [x] 21.8 附带：「全部协议」筛选下拉、工具条 gap 4（卡片页）、页头 `ph-inline` 徽标（集群数 / 目标数）
-- [ ] 21.9 同一套改造推广到 DNS-UDP / DNS-HTTP（同有批量）与其余卡片页；标准写入 AGENTS（新条目）与 BRIEF §九
+- [x] 21.9a **DNS-UDP 卡片页推广（2026-11-19）**：接 `TableToolbar`（搜索150/分组104/集群120，无第 4 下拉）+ `.l5-chiprow` + `.l5-batchbar`（`批量删除/全选筛选结果/清除选择`）+ 卡片解剖（hero = `remote_addr` 回落 `0.0.0.0:监听端口`、域名行 = 首域名 + `+N` + 算法胶囊、上游行 = 去重 chips + `N 组`、内外网分离走 `.lp-tag.tech`）+ band 次要指标 = 组内去重上游组数；色相按行 `clusterHueClass`；⋯ 菜单含 flip-up。真机实测：5 band（5 色）/13 卡/平铺 13 strip 带 per-cluster 左缘色/批量条 static 无重叠/菜单 215 宽在视口内。
+- [ ] 21.9b 其余卡片页推广（DNS-HTTP、插件组、插件元数据、全局规则、静态资源、服务器证书），标准已写入 AGENTS #87/#88 与 BRIEF §九
 
 > 21.x 落地记录（2026-11-18，真机 1600 验收）：
 > - 工具条：`.l5-toolbar` 高 57 / 内距 12-16 / 1px 下边框 / gap 6；序 = 搜索150 → 分组104 → 集群120 → **协议104** → spacer → 刷新 → 全部收起 → seg（与路由页逐项一致）；`show-count=false`（总数归 chips「全部 N」）。
@@ -283,3 +284,108 @@
 - [x] 23.1 **平铺卡片色相按行计算**：卡片根类由分组伪组的 `hueClass` 改为 `clusterHueClass(p.cluster_id)`（伪组把所有卡收成一组 → 平坦全 `cluster-c1`，实测 19 张卡同一种蓝，集群区分失效）；守卫 r17 段
 - [x] 23.2 **band hover = `var(--cc-bg)`（方案 B）**：hover 底与左条同源（该集群 10% 淡色）+ 边框 `--cc-bd`；实测 monitor 集群 hover = `oklch(.55 .15 145 / .1)`、左条 `oklch(.55 .15 145)`
 - [x] 23.3 设计页 `theme.css` 同步（hover 改 `--cc-bg`/`--cc-bd`）；`AGENTS #88 ⑤⑧`、`BRIEF 九 6/9` 记录判据
+
+## 24. 让位规则收窄与卡体 chips 呈现（r18，2026-11-19 已落地）
+
+- [x] 24.1 **让位规则收窄**：`group-only` 仅限「低信息量单值行」（四层代理「负载均衡」）；**列表型关键信息两态都显示**——DNS 上游 IP 行去掉 `group-only`，平铺态可见（此前照搬让位规则导致平铺读不到 IP）
+- [x] 24.2 **chips 呈现**：四层代理「目标」→ `.lp-chips.compact`（限前 2 + `+N`，`title` 全量，最多两行不裁剪）；DNS「上游 IP」→ 完整呈现允许折行（用户裁定不裁剪）
+- [x] 24.3 **卡高目标重算**（按实测构成）：标准卡 ≤180 / chips 折行或含描述 ≤230 / 带警示条 ≤260。实测基线：四层代理 **142–206（两态同值）**、DNS **169–230（分组）/165–252（平铺）**
+- [x] 24.4 守卫 r18 段 2 例；踩坑记录：`flex-wrap:nowrap + overflow:hidden` 的单行硬裁会把 chip 截成 `192.168.0.13:8112 10`（权重被切）→ 改 compact（可折两行）
+
+## 25. r19 定稿（2026-11-19）
+
+- [x] 25.1 **撤销卡高目标**：目标/上游 IP 可能多条且需逐条可见 → 卡体 chips **一律完整呈现、允许折行**；废止 `.lp-chips.compact`（前 2 + `+N`）与 `nowrap+overflow:hidden` 硬裁；卡高由内容决定
+- [x] 25.2 四层代理「目标」chips 恢复完整显示（与 DNS 上游同规则）
+- [x] 25.3 **DNS 代理（HTTP）卡片页推广 + 新增批量功能**：`TableToolbar`（搜索150/分组104/集群120）+ `.l5-chiprow`（全部/未发布/待发布/已发布，前端聚合）+ `.l5-batchbar`（**仅批量删除**）+ 卡片解剖（hero = `uri`、域名行首项 + `+N` + 算法胶囊、上游 chips 完整）+ band（`上游 · N 组`）+ 色相按行 + ⋯ 菜单翻转；批量删除按集群分组逐批调 `DELETE /clusters/{id}/routes`（后端该端点为集群作用域），汇总一条结果提示
+- [x] 25.4 设计页 `dns-http-proxies.html`：补批量态（`#batchToggle`/`#batchBar`/勾选框/band 全选本组）、上游行去 `group-only`；实测 bar 出现、33px 让位、无 group-only
+- [x] 25.5 真机实测（1600）：工具条 57/12-16/1px；4 band 4 色；11 卡；hero `/dns-query`；批量条 static 无重叠；flat 11 strip 带 per-cluster 左缘色；hover 与左条同源（`oklch(.58 .16 28 / .1)`）
+
+## 26. 插件组卡片页推广 + 批量（r20，2026-11-19）
+
+- [x] 26.1 `PluginConfigList.vue` 接 `TableToolbar`（搜索150/分组104/集群120）+ `.l5-chiprow`（全部 20 / 未发布 1 / 待发布 18 / 已发布 1，前端聚合）
+- [x] 26.2 卡片解剖：`.lp-name` 主身份 + 状态 / 插件行（`.lp-chip` 胶囊 + `N 个`）/ 描述行（两态显示）/ 局部失败红提示 / 卡脚「发布 + ⋯」
+- [x] 26.3 **新增批量管理**：页头「批量管理」在「添加插件组」左侧；`.l5-batchbar` 随流，仅「批量删除」；勾选框 33px 让位；band 右端「全选本组 / 已选 k / N」
+- [x] 26.4 批量删除实现：后端无批量端点且**被引用插件组禁止删除（PLG-07）** → 逐条 `DELETE /clusters/{id}/plugin_configs/{id}`，汇总「成功 / 被引用未删除 / 失败」三段结果提示
+- [x] 26.5 设计页 `plugin-groups.html` 同步：批量态（`#batchToggle`/`#batchBar`/勾选框）、`引用 · N 条路由` → `插件 · N 个`（实现无引用数聚合）、去掉 group-only
+- [x] 26.6 **引用数缺口**：设计原稿的「被 N 条路由引用」需后端在 `GET /plugin_configs` 响应带 `reference_count`（一次扫描各路由 `plugin_config_ids` 聚合），前端才能展示；当前用「插件 N 个」替代
+- [x] 26.7 真机实测（1600）：工具条 57 / 6 band 6 色 / 20 卡 / 批量条 static 无重叠 / 平铺 20 strip per-cluster 色 / hover 与左条同源 / ⋯ 菜单 215 宽在视口内
+
+## 27. 引用数与批量条文字修正（2026-11-19）
+
+- [x] 27.1 **后端 `reference_count`**：`GET /plugin_configs` 一次扫描本页涉及集群的全部路由、按 edge_uuid 计数后逐条补齐（禁 N+1）；解析规则收敛到新模块 `services/plugin_config_refs.py`（`extract_refs` / `find_referencing` / `count_by_uuid`），`cluster_plugin_configs._find_referencing_routes` 改为委托，**删除守卫与列表计数永远同语义**；畸形 JSON 一律视为「不含引用」
+- [x] 27.2 前端插件组接入：band 右端 `被 N 条路由引用`、平铺 strip `引用 · N 条路由`、卡体「引用」行（`group-only`，未引用显「未被引用」）；设计页 `plugin-groups.html` 恢复引用语义
+- [x] 27.3 **批量条「全选当前筛选结果」字体修正**：`.link-btn` 原只定义在四层代理/DNS-UDP 的 **scoped** 样式里，DNS-HTTP 与插件组缺失 → 退回浏览器默认按钮样式；提升为 `style.css` 共享类并删掉两份 scoped 重复；「清除选择」四页统一为 `.link-btn`。实测三页 `12px / accent / 无边框 / 透明底 / h=25` 完全一致
+- [x] 27.4 后端用例：`TestGlobalListReferenceCount`（被引用 2 / 1 / 0）+ `TestPluginConfigRefsHelper`（畸形 JSON 容错、计数）；`tests/test_plugin_config_references.py` 9 passed
+
+## 28. 全局规则卡片页推广 + 批量（r21，2026-11-19）
+
+- [x] 28.1 `GlobalRuleList.vue` 接 `TableToolbar`（搜索150/分组104/集群120）+ `.l5-chiprow`（全部 12 / 未发布 2 / 待发布 8 / 已发布 2）
+- [x] 28.2 卡片解剖：名称主身份 + 状态 / 插件行（`lp-chip` + `N 个`，空态「未选择插件」保留 title）/ 描述行 / **生效行 `group-only`**（低信息量单值，平铺由 strip 承担）/ 局部失败红提示 / 卡脚「发布 + ⋯」
+- [x] 28.3 **新增批量管理**：页头「批量管理」在「添加全局规则」左侧；`.l5-batchbar` 随流，仅「批量删除」；勾选框 33px 让位；band 右端「全选本组 / 已选 k / N」
+- [x] 28.4 批量删除：后端无批量端点 → 逐条 `DELETE /clusters/{id}/global_rules/{id}`，结果汇总「成功 N 条 / 失败 m 条」；确认弹窗携带既有集群级 `globalRuleDeleteWarning`
+- [x] 28.5 **后端 `route_count`**：`GET /global_rules` 按集群 `group by` 统计路由数（禁 N+1），前端 band `生效 全部路由 · N 条` / strip `生效 · 全部路由 N 条` / 卡体生效行共用；用例 `TestGlobalRuleRouteCount`（新增路由后计数 +2）
+- [x] 28.6 设计页 `global-rules.html`：补批量态（`#batchToggle`/`#batchBar`/勾选框）；实测 bar flex、勾选框 block、33px 让位无重叠、0 报错
+- [x] 28.7 真机实测（1600）：工具条 57/12-16/1px；**8 band 8 色**；12 卡；hover 与左条同源；批量条 static 无重叠；平铺 12 strip per-cluster 色；⋯ 菜单 215 宽在视口内
+
+## 29. 批量删除真·前台化（r22，2026-11-19，用户裁定方案 A + 节点可选）
+
+- [x] 29.1 **后端批量端点**：`DELETE /clusters/{id}/plugin_configs`（`plugin_config_ids`）、`DELETE /clusters/{id}/global_rules`（`rule_ids`），返回与路由批量**同构**的 `results[]`；单条失败不阻塞其余条；`node_ids` 支持节点子集；插件组 PLG-07 按条 `failed` + 原因（禁整体 400）
+- [x] 29.2 **共享执行器支持多段**：`executeDeleteWithProgress` 新增 `requests?: Array<{apiEndpoint, resourceKey, label}>`——后端批量端点是**集群作用域**，跨集群选择按集群分段、在同一进度面板依次执行并汇总终态（`第 i/N 段` + `aggregateFail`）
+- [x] 29.3 三页（DNS-HTTP / 插件组 / 全局规则）批量删除改走共享进度面板：逐条 `数据库✅/Edge <ip>:<port>✅/❌` 日志、终态成功/异常、`retryable`、完成后刷新；**删除前端 for 循环 + 汇总 toast**（观感「假删除」的根因）
+- [x] 29.4 批量确认弹窗**支持节点可选**：传 `nodes`（跨集群并集）+ `defaultSelectOnline` + `subsetConsequence`（子集后果行），去掉 `noNodeSelection`；Edge 勾选后展开节点清单（在线默认全选、离线可见不选）
+- [x] 29.5 用例：后端 `tests/test_batch_delete_endpoints.py`（8 例：结果形状 / 引用按条失败 / 空 ids 400 / 双 scope 400 / 不存在 id / 节点透传）+ 前端 `mockupParity.source.test.ts` r22 段（4 例：三页走共享面板、节点可选、多段执行器、PLG-07 不被绕过）
+- [x] 29.6 真机 E2E（造数 `zz-batch-1/2` 全局规则）：确认弹窗显示集群级警示 + 节点清单（3 在线 / 1 离线 + 子集后果行）；执行后进度面板逐条 `数据库✅` + `✅ 批量删除完成!`；列表归 0、API 复核 total=0（真删除）
+
+## 30. 批量删除统一（r24，用户裁定 U2 + 节点可选 + 逐条权限）
+
+- [x] 30.1 **后端单一实现** `services/batch_delete.py`：`KINDS` 声明差异（模型 / resource_type / id·name 字段 / Edge 删除函数 / 缺失文案 / precheck / 关联清理），循环体只此一份；`allowed_cluster_ids()` 为非 admin 逐条权限的唯一实现
+- [x] 30.2 **全局跨集群端点**：`DELETE /routes`、`/plugin_configs`、`/global_rules`（与既有 `/stream-proxies` 同构，一条请求一组 results）；集群作用域端点（`/clusters/{id}/routes|plugin_configs|global_rules`）保留对外契约、内部委托同一实现（含 cluster_routes 原批量端点）
+- [x] 30.3 **前端唯一入口** `composables/useBatchDelete.ts`：节点并集（带 `clusterName`、按节点 id 去重）+ 标题折叠 + 确认弹窗（节点可选、默认全选在线、子集后果）+ 共享进度面板 + 清选/退出/刷新；`useClusterUtils` 的 `requests` 分段参数已删除（回到单路径）
+- [x] 30.4 五页接入：四层代理 / DNS 代理（UDP）/ DNS 代理（HTTP）/ 插件组 / 全局规则——页面样板从 54–63 行降到 ~14 行
+- [x] 30.5 共享弹窗补 `nodes[].clusterName`：**跨集群**时节点行渲染集群名徽标（单集群 DOM 不变，无视觉 churn）
+- [x] 30.6 用例：后端 `tests/test_batch_delete_endpoints.py` 11 例（形状 / PLG-07 按条 / 空 ids / 双 scope / 不存在 id / 节点透传 / 全局端点跨集群 / **非 admin 未授权条目 failed 且已授权条目 success**）；前端 `mockupParity.source.test.ts` r22/r24 段 3 例
+- [x] 30.7 真机 E2E：五页批量弹窗均出现节点清单（含在线/离线）；跨集群选择（cluster 1+2 各一条全局规则）节点行显示集群名、进度面板逐条 `数据库✅`、执行后列表归 0（真删）
+
+## 31. 插件元数据卡片页推广 + 批量（r25，2026-11-19）
+
+- [x] 31.1 `PluginMetadataList.vue` 接 `TableToolbar`（搜索150/分组104/集群120）+ `.l5-chiprow`（全部 14 / 未发布 6 / 待发布 2 / 已发布 6，前端聚合）
+- [x] 31.2 卡片解剖：`.lp-name.mono` 插件名 + 状态 / 显示名 / **参数行 `group-only`**（低信息量单值）/ 配置摘要（mono dim，title 全文）/ 卡脚「发布 + ⋯」
+- [x] 31.3 strip 与 band 次要指标 = `参数 · N 项` + **schema 徽标**（能力态，不进 band 状态位）；band 汇总为组内参数总数
+- [x] 31.4 **新增批量管理**：页头「批量管理」在「添加插件元数据」左侧；`.l5-batchbar` 随流、仅「批量删除」；勾选框 33px 让位
+- [x] 31.5 **后端 kind `plugin_metadata`**：`batch_delete.KINDS` 新增（`edge_identifier="plugin_name"`——Edge 侧按插件名定位，非 edge_uuid；`name_key="plugin_name"` 名称字段按 kind 取，不再硬编码 `name`）；新增全局 `DELETE /plugin_metadata`（`metadata_ids`）+ 集群作用域 `DELETE /clusters/{id}/plugin-metadata`（委托同一实现）
+- [x] 31.6 用例：后端 3 例（全局端点形状 / Edge 用 plugin_name / 集群端点委托）；前端 `PluginMetadataList.test.ts` 24 例（新增批量 2 例 + 断言反转：工具栏计数→chips、卡片动作→⋯ 菜单、发布按钮→`.op-pub`、PublishStatusTag 按下标→按版本定位、按插件名定位卡片）
+- [x] 31.7 真机实测（1600）：工具条 57 / 8 band 8 色 / 14 卡 / schema 徽标 / 批量弹窗 20 节点（含集群标注）/ 进度面板逐条 ✅ / 删除后列表归 0
+
+## 32. 插件元数据：schema 徽标退场 + 配置折叠 JSON（r26，2026-11-19 用户裁定）
+
+- [x] 32.1 **`schema 完整/缺失` 徽标退场**：它是**插件目录级静态属性**（`plugin_definitions.py` 的 `schema`），不是记录缺陷，同一插件下所有卡片恒同值，且本库多数插件本就走 JSON 模式（实测 `log_process` / `dns_upstream` / `data_center` 均 `schema: {}`）——保留只会被读成「这条配错了」
+- [x] 32.2 **配置行改折叠式美化 JSON（方案 C）**：收起态显示 `N 项 ⌄` 触控（`aria-expanded` 双向同步、空配置显示「无配置」无触控）；展开渲染 `JSON.stringify(config, null, 2)`（缩进 2 空格 + 等宽字体），块 `max-height:220px` **内滚动不裁剪**——长配置可滚动读完，卡片高度有上限
+- [x] 32.3 `style.css` 单点新增 `.lp-json-toggle` / `.lp-json` / `.lp-row-config`；`theme.css` 同步同名规则（与实现同值）
+- [x] 32.4 设计页 `plugin-metadata.html` 同步：strip/卡体 schema 徽标与「无 schema，只能用 JSON 编辑」警示行整块删除、页头徽标改「4 插件」、配置行改折叠块 + 内联脚本（点击切换 `hidden`、箭头翻转、`aria-expanded`）
+- [x] 32.5 用例（`PluginMetadataList.test.ts` 27 例）：折叠/展开/再收起、空配置无触控显示「无配置」、源码守卫「schema 缺失/完整」零残留
+
+## 33. 配置 JSON 默认全展开 + 工具条全局开关（r27，2026-11-19 用户裁定 A + E）
+
+- [x] 33.1 **默认全部展开**：状态语义改为「记忆被收起的 id」（`configCollapsedIds`），进页即可见配置内容——用户不必点开才知道配了什么（原默认收起，进页只看到「N 项」）
+- [x] 33.2 **工具条全局开关**：`data-test="config-toggle-all"`（`收起配置` / `展开配置`，与分组「全部收起」并列、两视图都显示；无任何配置时不显示），一键开合当页全部卡片
+- [x] 33.3 保留既有：块内 `max-height:220px` 滚动不裁剪；**空配置显示「无配置」且不渲染 JSON 块**（测试抓到残留 `{}` 块——`v-if` 需同时判 `paramCount > 0`）
+- [x] 33.4 设计页 `plugin-metadata.html` 同步：`pre` 默认可见、`aria-expanded=true`、工具条加 `data-config-toggle` + 内联脚本（全开/全收 + 文案与箭头同步）
+- [x] 33.5 用例：默认展开（含缩进断言）、单卡收起/再展开、全局开关两步跑通、空配置无块无触控、schema 零残留
+- [x] 33.6 实测（1600）：实现页 9 个 JSON 块全开、`收起配置` 文案正确、**空块 0**；点全局开关 → 0 块、卡高 373 → 139px；设计页 4/4 全开 → 0 → 4
+
+## 34. 插件元数据：插件筛选下拉（r28，2026-11-19 用户提出）
+
+- [x] 34.1 **后端** `GET /plugin_metadata` 新增 `plugin_name` 查询参数（**精确匹配**，可与 `search`/`cluster_id` 叠加；下拉选项来自插件目录，不需要模糊）
+- [x] 34.2 **前端**工具条「全部集群」右侧新增「全部插件」下拉（`.l5-select` 104px，与 #85 控件宽度口径一致）
+- [x] 34.3 **选项来源 = 插件元数据可用的插件**：`builtinPlugins ∩ features.plugin_metadata_plugins`（白名单为空表示不限制）——**不排除已配置项**，与新建弹窗的 `availablePlugins`（排除已配置）刻意不同，否则筛不到「暂无记录」的插件
+- [x] 34.4 设计页 `plugin-metadata.html` 同步该下拉（`全部插件` + 4 个样例插件）
+- [x] 34.5 用例：后端 2 例（精确匹配 / 子串不命中；与 cluster_id 叠加）；前端 2 例（下拉存在且位于「全部集群」之后、选项来自目录；选择后请求带 `plugin_name`、清空后不带）
+- [x] 34.6 实测（1600）：工具条两个 104px 下拉、无溢出；选项 `data_center / log_process`（受 features 白名单限制）；选 `log_process` → 5 张卡、全部为 log_process、chips 同步为「全部 5 / 未发布 1 / 待发布 1 / 已发布 3」
+
+## 35. 插件名中文化（r29，2026-11-19 用户提出）
+
+- [x] 35.1 **「全部插件」下拉文案用中文名**：`display_name || name`（与路由/上游的 `PluginSelector` 同口径——那里也是 `plugin.display_name || plugin.name`），值仍是插件名；按中文 `localeCompare('zh-CN')` 排序
+- [x] 35.2 **卡片身份同步中文化**：`.lp-name` 显示中文名 + 新增 `.lp-key`（mono 11.5px muted，弱化插件标识，`title` 全文）——中文友好但**不丢精确标识**（搜索/核对/API 仍需裸名）；目录缺失 display_name 时 `.lp-name` 回落 `mono` 显示裸名
+- [x] 35.3 `style.css` 单点新增 `.lp-key`；`theme.css` 同值同步（设计页与实现一致）
+- [x] 35.4 设计页 `plugin-metadata.html`：卡头改「中文名 + 标识」、下拉选项改中文（日志记录 / 请求数限流 / JWT 鉴权 / 数据中心）
+- [x] 35.5 用例：下拉断言改中文（`JWT 鉴权`）；实测（1600）：下拉 `日志记录 / 数据中心`、卡头 `日志记录 [log_process]`、`自定义预处理(旧版) [functions_pre]`

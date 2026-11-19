@@ -152,7 +152,7 @@ export function showDeleteConfirm(opts: {
   onOk: (deleteDb: boolean, deleteEdge: boolean, nodeIds: number[]) => void
   showResourceStats?: boolean
   stats?: Record<string, number>
-  nodes?: { id: number; ip: string; management_port: number }[]
+  nodes?: { id: number; ip: string; management_port: number; status?: number; clusterName?: string }[]
   /** 批量删除专用（V1-A）：不展示逐节点选择，勾选 Edge 即删除全部在线节点 */
   noNodeSelection?: boolean
   /** 集群根资源删除：显示集群专属警示行（黄底）与集群 scope 文案（cluster-ux-close-loop B1） */
@@ -185,6 +185,11 @@ export function showDeleteConfirm(opts: {
   document.body.appendChild(container)
 
   const totalCount = opts.stats ? Object.values(opts.stats).reduce((a, b) => a + b, 0) : 0
+  /** 节点清单跨多个集群时标注归属集群（单集群保持不变，避免既有页面视觉 churn） */
+  const nodeClusters = new Set(
+    (opts.nodes || []).map((n) => (n as { clusterName?: string }).clusterName || '').filter(Boolean),
+  )
+  const showNodeCluster = nodeClusters.size > 1
 
   /** 「仅删平台记录」风险提示的资源中文名：从 apiEndpoint 资源段推断，识别不了返回空（走通用文案）。 */
   const resourceLabel = inferDeleteResourceLabel(opts.apiEndpoint)
@@ -327,6 +332,20 @@ export function showDeleteConfirm(opts: {
                       },
                       style: 'width:14px;height:14px;accent-color:var(--accent);cursor:pointer;',
                     }),
+                    // 跨集群选择时标注归属集群（否则同名/同序 IP 无法分辨，见批量删除 r23）
+                    ...(showNodeCluster
+                      ? [
+                          h(
+                            'span',
+                            {
+                              style:
+                                'font-size:11px;line-height:16px;color:var(--muted);padding:0 6px;border-radius:999px;background:var(--bg);border:1px solid var(--border);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:0 0 auto;',
+                              title: (n as { clusterName?: string }).clusterName || '',
+                            },
+                            (n as { clusterName?: string }).clusterName || '未知集群',
+                          ),
+                        ]
+                      : []),
                     h('span', { style: 'font-family:var(--font-mono);' }, `${n.ip}:${n.management_port}`),
                     // 仅当调用方传 status 字段时渲染在线/离线标识（既有消费方 DOM 不变）
                     ...((n as { status?: number }).status !== undefined
@@ -1126,7 +1145,6 @@ export async function executeDeleteWithProgress(opts: DeleteProgressOptions): Pr
         lastRunRef.dbDeleted = runInfo.dbSuccess
         lastRunRef.failedIds = failedLabelToIds(runInfo.failedLabels, opts)
       }
-
       updateContent()
 
       if (opts.afterDelete) {

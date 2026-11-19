@@ -8,8 +8,9 @@ from app.core.database import get_db
 from app.config import MAX_PAGE_SIZE
 from app.models.cluster import PluginMetadata, Cluster
 from app.models.user import User, UserCluster
-from app.services import edge_sync
+from app.services import batch_delete, edge_sync
 from app.core.deps import require_permission
+from app.schemas.cluster import BatchDeletePluginMetadataRequest
 
 router = APIRouter(prefix="/plugin_metadata", tags=["plugin_metadata"])
 
@@ -22,6 +23,7 @@ async def list_all_plugin_metadata(
     group_name: str = Query("__all__"),
     search: Optional[str] = Query(None),
     cluster_id: Optional[int] = Query(None),
+    plugin_name: Optional[str] = Query(None, description="按插件名精确筛选（工具条「全部插件」下拉）"),
     current_user: User = Depends(require_permission('plugin_metadata')),
 ):
     query = select(PluginMetadata)
@@ -46,6 +48,10 @@ async def list_all_plugin_metadata(
         if not allowed_ids:
             return {"total": 0, "page": page, "page_size": page_size, "items": []}
         query = query.where(PluginMetadata.cluster_id.in_(allowed_ids))
+
+    if plugin_name:
+        # 精确匹配（下拉选项来自插件目录，不需要模糊）：与 search 可叠加
+        query = query.where(PluginMetadata.plugin_name == plugin_name)
 
     if search:
         pattern = f"%{search}%"
@@ -101,3 +107,24 @@ async def list_all_plugin_metadata(
         })
 
     return {"total": total, "page": page, "page_size": page_size, "items": resp_items}
+
+
+@router.delete("", response_model=dict)
+async def delete_plugin_metadata_global(
+    body: BatchDeletePluginMetadataRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("plugin_metadata")),
+):
+    """批量删除插件元数据（跨集群，全局视图）——契约统一入口（U2）。
+
+    唯一实现在 `services/batch_delete.py`；Edge 侧按 plugin_name 定位（非 edge_uuid）。
+    """
+    return await batch_delete.batch_delete(
+        "plugin_metadata",
+        list(body.metadata_ids),
+        db=db,
+        delete_db=body.delete_db,
+        delete_edge=body.delete_edge,
+        node_ids=body.node_ids,
+        user=current_user,
+    )

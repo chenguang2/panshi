@@ -298,7 +298,6 @@
       </div>
     </div>
 
-
     <!-- 新建 / 编辑弹窗（视图级内联弹窗，约定 #25） -->
     <div v-if="modal.open" class="modal-overlay" @click.self="closeModal">
       <div class="modal">
@@ -354,128 +353,128 @@
           </div>
 
           <template v-if="modal.editing">
-          <div class="form-section">
-            <div class="form-section-title"><i class="sec-no">2</i>网关两腿连接</div>
-            <div class="form-section-desc">
-              平台到该局的两条通道。<b>两腿均留空会成为「直连区域」</b>——仅作过渡（如网关地址未定），
-              一般应填写网关机地址；局内本就互通的局无需建中继区域。
+            <div class="form-section">
+              <div class="form-section-title"><i class="sec-no">2</i>网关两腿连接</div>
+              <div class="form-section-desc">
+                平台到该局的两条通道。<b>两腿均留空会成为「直连区域」</b>——仅作过渡（如网关地址未定），
+                一般应填写网关机地址；局内本就互通的局无需建中继区域。
+              </div>
+              <div class="form-grid">
+                <div class="form-group label-top">
+                  <label class="form-label">网关 HTTP 腿 <span class="optional">选填</span></label>
+                  <input
+                    type="text"
+                    class="form-input mono-input"
+                    :class="{ 'has-error': formErrors.http_base_url }"
+                    v-model="form.http_base_url"
+                    placeholder="如 https://10.10.1.1:8443"
+                  />
+                  <span v-if="formErrors.http_base_url" class="form-error">{{ formErrors.http_base_url }}</span>
+                  <span v-else class="form-hint">发布、回滚等管理请求经它进入该局（网关机 8443 反向代理）。</span>
+                </div>
+                <div class="form-group label-top">
+                  <label class="form-label">SSH 跳板 <span class="optional">选填</span></label>
+                  <input
+                    type="text"
+                    class="form-input mono-input"
+                    :class="{ 'has-error': formErrors.ssh_jump }"
+                    v-model="form.ssh_jump"
+                    placeholder="如 tunnel@10.10.1.1:22"
+                  />
+                  <span v-if="formErrors.ssh_jump" class="form-error">{{ formErrors.ssh_jump }}</span>
+                  <span v-else class="form-hint"
+                    >安装、初始化等 SSH
+                    任务先跳到这台网关机再进局内；仅涉及网关机一台，这是通道地址，登录账号在下方「网关机 SSH
+                    凭据」填写（可与跳板账号不同）。</span
+                  >
+                </div>
+                <div class="form-group label-top span-2">
+                  <label class="form-label">OpenResty 前缀 <span class="optional">选填</span></label>
+                  <input
+                    type="text"
+                    class="form-input mono-input"
+                    :class="{ 'has-error': formErrors.openresty_prefix }"
+                    v-model="form.openresty_prefix"
+                    placeholder="如 /work/jboss/tunnel/openresty-1.21.4.1/nginx"
+                  />
+                  <span v-if="formErrors.openresty_prefix" class="form-error">{{ formErrors.openresty_prefix }}</span>
+                  <span v-else class="form-hint"
+                    >网关机上 nginx 的安装目录（含
+                    conf/sbin/logs）；只有要用「初始化网关」时必填，可以先建区域后补。</span
+                  >
+                </div>
+              </div>
             </div>
-            <div class="form-grid">
-              <div class="form-group label-top">
-                <label class="form-label">网关 HTTP 腿 <span class="optional">选填</span></label>
-                <input
-                  type="text"
-                  class="form-input mono-input"
-                  :class="{ 'has-error': formErrors.http_base_url }"
-                  v-model="form.http_base_url"
-                  placeholder="如 https://10.10.1.1:8443"
-                />
-                <span v-if="formErrors.http_base_url" class="form-error">{{ formErrors.http_base_url }}</span>
-                <span v-else class="form-hint">发布、回滚等管理请求经它进入该局（网关机 8443 反向代理）。</span>
-              </div>
-              <div class="form-group label-top">
-                <label class="form-label">SSH 跳板 <span class="optional">选填</span></label>
-                <input
-                  type="text"
-                  class="form-input mono-input"
-                  :class="{ 'has-error': formErrors.ssh_jump }"
-                  v-model="form.ssh_jump"
-                  placeholder="如 tunnel@10.10.1.1:22"
-                />
-                <span v-if="formErrors.ssh_jump" class="form-error">{{ formErrors.ssh_jump }}</span>
-                <span v-else class="form-hint"
-                  >安装、初始化等 SSH
-                  任务先跳到这台网关机再进局内；仅涉及网关机一台，这是通道地址，登录账号在下方「网关机 SSH
-                  凭据」填写（可与跳板账号不同）。</span
-                >
-              </div>
-              <div class="form-group label-top span-2">
-                <label class="form-label">OpenResty 前缀 <span class="optional">选填</span></label>
-                <input
-                  type="text"
-                  class="form-input mono-input"
-                  :class="{ 'has-error': formErrors.openresty_prefix }"
-                  v-model="form.openresty_prefix"
-                  placeholder="如 /work/jboss/tunnel/openresty-1.21.4.1/nginx"
-                />
-                <span v-if="formErrors.openresty_prefix" class="form-error">{{ formErrors.openresty_prefix }}</span>
-                <span v-else class="form-hint"
-                  >网关机上 nginx 的安装目录（含
-                  conf/sbin/logs）；只有要用「初始化网关」时必填，可以先建区域后补。</span
-                >
-              </div>
-            </div>
-          </div>
 
-          <div class="form-section">
-            <div class="form-section-title"><i class="sec-no">3</i>网关机 SSH 凭据</div>
-            <div class="form-section-desc">
-              仅用于登录<b>网关机这一台机器</b>（写入网关清单），与上方「SSH
-              跳板」分工：跳板是进局的通道，这里是登录网关机的账号。 局内<b>各业务节点</b>的账号/口令/端口在【Ansible
-              主机清单】逐台各自配置，与本组无关。
-            </div>
-            <div class="form-grid">
-              <div class="form-group label-top span-2">
-                <label class="form-label">SSH 用户 <span class="required">*</span></label>
-                <input
-                  type="text"
-                  class="form-input"
-                  :class="{ 'has-error': formErrors.ssh_user }"
-                  v-model="form.ssh_user"
-                  placeholder="网关机上的账号，如 jboss / tunnel"
-                />
-                <span v-if="formErrors.ssh_user" class="form-error">{{ formErrors.ssh_user }}</span>
-                <span v-else class="form-hint"
-                  >平台用这个账号登录网关机执行配置（区别于上方只作通道的跳板账号），会写入网关清单；节点各自的账号在【Ansible
-                  主机清单】配置。</span
-                >
+            <div class="form-section">
+              <div class="form-section-title"><i class="sec-no">3</i>网关机 SSH 凭据</div>
+              <div class="form-section-desc">
+                仅用于登录<b>网关机这一台机器</b>（写入网关清单），与上方「SSH
+                跳板」分工：跳板是进局的通道，这里是登录网关机的账号。 局内<b>各业务节点</b>的账号/口令/端口在【Ansible
+                主机清单】逐台各自配置，与本组无关。
               </div>
-              <div class="form-group label-top">
-                <label class="form-label">SSH 口令 <span class="optional">选填</span></label>
-                <input
-                  type="password"
-                  class="form-input"
-                  v-model="form.ssh_password"
-                  :placeholder="modal.editing ? '已从服务端加载（加载动作已记录审计）' : '留空 = 用密钥登录'"
-                  autocomplete="new-password"
-                />
-                <span class="form-hint">口令不出现在列表里；编辑时自动按需加载回填，查看会记录审计。</span>
-              </div>
-              <div class="form-group label-top">
-                <label class="form-label">SSH 端口 <span class="optional">默认 22</span></label>
-                <input type="number" min="1" max="65535" class="form-input" v-model.number="form.ssh_port" />
-                <span class="form-hint">网关机的 SSH 端口，改过才需要填。</span>
-              </div>
-            </div>
-          </div>
-
-          <details class="advanced-section">
-            <summary>高级参数 <span class="adv-tip">（一般不用改）</span></summary>
-            <div class="adv-body">
               <div class="form-grid">
                 <div class="form-group label-top span-2">
-                  <label class="form-label">Python 解释器 <span class="optional">选填</span></label>
+                  <label class="form-label">SSH 用户 <span class="required">*</span></label>
                   <input
                     type="text"
-                    class="form-input mono-input"
-                    v-model="form.ansible_python_interpreter"
-                    placeholder="如 /work/jboss/anaconda3/bin/python3"
+                    class="form-input"
+                    :class="{ 'has-error': formErrors.ssh_user }"
+                    v-model="form.ssh_user"
+                    placeholder="网关机上的账号，如 jboss / tunnel"
                   />
-                  <span class="form-hint">仅当网关机系统默认 Python 低于 3.8（老机器常见）时填写。</span>
+                  <span v-if="formErrors.ssh_user" class="form-error">{{ formErrors.ssh_user }}</span>
+                  <span v-else class="form-hint"
+                    >平台用这个账号登录网关机执行配置（区别于上方只作通道的跳板账号），会写入网关清单；节点各自的账号在【Ansible
+                    主机清单】配置。</span
+                  >
                 </div>
-                <div class="form-group label-top span-2">
-                  <label class="form-label">SSH 公共参数 <span class="optional">选填</span></label>
+                <div class="form-group label-top">
+                  <label class="form-label">SSH 口令 <span class="optional">选填</span></label>
                   <input
-                    type="text"
-                    class="form-input mono-input"
-                    v-model="form.ssh_common_args"
-                    placeholder="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+                    type="password"
+                    class="form-input"
+                    v-model="form.ssh_password"
+                    :placeholder="modal.editing ? '已从服务端加载（加载动作已记录审计）' : '留空 = 用密钥登录'"
+                    autocomplete="new-password"
                   />
-                  <span class="form-hint">追加给每条 SSH 连接的参数；默认已跳过指纹确认，一般无需修改。</span>
+                  <span class="form-hint">口令不出现在列表里；编辑时自动按需加载回填，查看会记录审计。</span>
+                </div>
+                <div class="form-group label-top">
+                  <label class="form-label">SSH 端口 <span class="optional">默认 22</span></label>
+                  <input type="number" min="1" max="65535" class="form-input" v-model.number="form.ssh_port" />
+                  <span class="form-hint">网关机的 SSH 端口，改过才需要填。</span>
                 </div>
               </div>
             </div>
-          </details>
+
+            <details class="advanced-section">
+              <summary>高级参数 <span class="adv-tip">（一般不用改）</span></summary>
+              <div class="adv-body">
+                <div class="form-grid">
+                  <div class="form-group label-top span-2">
+                    <label class="form-label">Python 解释器 <span class="optional">选填</span></label>
+                    <input
+                      type="text"
+                      class="form-input mono-input"
+                      v-model="form.ansible_python_interpreter"
+                      placeholder="如 /work/jboss/anaconda3/bin/python3"
+                    />
+                    <span class="form-hint">仅当网关机系统默认 Python 低于 3.8（老机器常见）时填写。</span>
+                  </div>
+                  <div class="form-group label-top span-2">
+                    <label class="form-label">SSH 公共参数 <span class="optional">选填</span></label>
+                    <input
+                      type="text"
+                      class="form-input mono-input"
+                      v-model="form.ssh_common_args"
+                      placeholder="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+                    />
+                    <span class="form-hint">追加给每条 SSH 连接的参数；默认已跳过指纹确认，一般无需修改。</span>
+                  </div>
+                </div>
+              </div>
+            </details>
           </template>
         </div>
         <div class="modal-footer">
@@ -2589,7 +2588,6 @@ onUnmounted(() => {
   font-size: 12px;
   margin-top: 4px;
 }
-
 
 /* ── 就地 popover（批次三 3.1 引擎，mockup .pop 移植；Teleport 到 body，
       scoped 属性随 vnode 保留；v-html 注记内的元素无 scope 属性，须 :deep()） ── */

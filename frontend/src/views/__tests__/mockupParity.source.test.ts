@@ -682,3 +682,74 @@ describe('mockup-parity r17（平铺卡片按行取集群色相）', () => {
     expect(s).not.toMatch(/class="sp-card[\s\S]{0,200}g\.hueClass/)
   })
 })
+
+describe('mockup-parity r18（让位规则收窄 / 卡体 chips 呈现）', () => {
+  it('r18-① 列表型关键信息两态都显示：DNS 上游行不得用 group-only、不得裁剪', () => {
+    const s = page('DnsUdpProxyList.vue')
+    // 上游 IP 属关键信息 → 不得再挂 group-only（平铺隐藏）也不得 slice 裁剪
+    expect(s).not.toMatch(/class="lp-row group-only"[\s\S]{0,200}上游/)
+    expect(s).not.toMatch(/dnsUpstreams\(p\)\.slice\(/)
+    expect(s).toContain('v-for="(u, i) in dnsUpstreams(p)"')
+  })
+
+  it('r18-②/r19 卡体 chips 不裁剪：四层代理目标完整呈现（禁 slice / 禁 compact 限高）', () => {
+    // r19 用户裁定：目标 IP 可能多条且需逐条核对 → 完整显示、允许折行
+    const s = page('StreamProxyList.vue')
+    expect(s).toContain('v-for="(t, i) in p.targets ?? []"')
+    expect(s).not.toContain('slice(0, 2)')
+    expect(s).not.toContain('lp-chips compact')
+    expect(s).not.toContain('tg-more')
+    // 单行硬裁/限高变体已退场
+    expect(css).not.toMatch(/\.lp-chips\.compact/)
+    expect(css).not.toMatch(/\.lp-chips\.single-line/)
+  })
+})
+
+describe('r22/r24 批量删除统一入口（契约统一 U2）', () => {
+  const read = (rel: string) => readFileSync(resolve(process.cwd(), 'src/views', rel.replace(/^\.\.\//, '')), 'utf-8')
+
+  it('五页批量删除统一走 useBatchDelete（禁页面内自造确认/请求/进度）', () => {
+    for (const f of [
+      '../StreamProxyList.vue',
+      '../DnsUdpProxyList.vue',
+      '../DnsQueryList.vue',
+      '../PluginConfigList.vue',
+      '../GlobalRuleList.vue',
+    ]) {
+      const s = read(f)
+      expect(s).toContain('useBatchDelete<any>(')
+      // 旧实现痕迹：页面内 for 循环逐条删 / 手写 noNodeSelection
+      expect(s).not.toMatch(/await api\.delete\(`\/clusters\/\$\{/)
+      expect(s).not.toContain('noNodeSelection: true')
+    }
+  })
+
+  it('统一入口负责：全局 ids 端点 + 节点并集（含集群名）+ 默认全选在线 + 子集后果', () => {
+    const s = readFileSync(resolve(process.cwd(), 'src/composables/useBatchDelete.ts'), 'utf-8')
+    expect(s).toContain('fetchBatchDeleteNodes')
+    expect(s).toContain('clusterName,')
+    expect(s).toContain('defaultSelectOnline: true')
+    expect(s).toContain('subsetConsequence')
+    expect(s).toContain('executeDeleteWithProgress({')
+    expect(s).toContain('resourceKey:')
+    // 契约统一后不再分段（后端全局 ids 端点）
+    expect(s).not.toContain('requests:')
+  })
+
+  it('后端批量删除单一实现 + 逐条权限校验', () => {
+    const s = readFileSync(resolve(process.cwd(), '../backend/app/services/batch_delete.py'), 'utf-8')
+    expect(s).toContain('async def batch_delete(')
+    expect(s).toContain('allowed_cluster_ids')
+    expect(s).toContain('无权限操作该集群')
+    expect(s).toContain('KINDS')
+    // 三条全局端点都委托同一实现
+    for (const f of [
+      '../backend/app/api/v1/routes.py',
+      '../backend/app/api/v1/plugin_configs.py',
+      '../backend/app/api/v1/global_rules.py',
+    ]) {
+      const src = readFileSync(resolve(process.cwd(), f), 'utf-8')
+      expect(src).toContain('batch_delete.batch_delete(')
+    }
+  })
+})

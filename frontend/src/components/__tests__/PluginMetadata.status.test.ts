@@ -81,9 +81,18 @@ async function mountTab() {
 
 function setupApi() {
   mockApiGet.mockImplementation((url: string) => {
+    if (url === '/system/features')
+      return Promise.resolve({
+        data: {
+          features: {},
+          enabled_plugins: [],
+          global_rule_plugins: [],
+          plugin_metadata_plugins: ['data_center'],
+        },
+      })
     if (url === '/plugins/builtin')
       return Promise.resolve({
-        data: { plugins: [{ name: 'data_center', enable_metadata: true, description: 'DC' }] },
+        data: { plugins: [{ name: 'data_center', description: 'DC', category: 'process' }] },
       })
     if (url === '/clusters/1/plugin-metadata') return Promise.resolve({ data: METADATA_RESPONSE })
     return Promise.reject(new Error('unexpected GET: ' + url))
@@ -121,6 +130,10 @@ describe('PluginMetadata.vue 状态四态单一表达（与独立页同参数，
 
   it('查看抽屉版本行：无发布版本显示「未发布」灰态，不渲染「v未发布」拼接串', async () => {
     mockApiGet.mockImplementation((url: string) => {
+      if (url === '/system/features')
+        return Promise.resolve({
+          data: { features: {}, enabled_plugins: [], plugin_metadata_plugins: ['data_center'] },
+        })
       if (url === '/plugins/builtin') return Promise.resolve({ data: { plugins: [] } })
       if (url === '/clusters/1/plugin-metadata')
         return Promise.resolve({
@@ -210,6 +223,70 @@ describe('PluginMetadata.vue 版本恢复出口条接线（4.1/4.2）', () => {
     expect(listLoads).toBeGreaterThanOrEqual(2)
     // 版本弹窗已重开（重设 open 触发既有 watch → loadHistory 重载版本列表）
     expect(wrapper.find('.mock-vm-modal').exists()).toBe(true)
+    wrapper.unmount()
+  })
+})
+
+// ── plugin-metadata-plugins-config：可用插件面板按 features.yaml 专用清单过滤 ──
+// 与独立页同一份 plugin_metadata_plugins 清单（空/未配置 = 不限制），已配置去重继续生效。
+describe('PluginMetadata.vue 可用插件清单过滤（与独立页同清单）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+  })
+
+  const CATALOG = [
+    { name: 'data_center', description: '数据中心', category: 'process' },
+    { name: 'redirect', description: '重定向', category: 'rewrite' },
+    { name: 'traceid', description: 'TraceID 追踪', category: 'monitor' },
+  ]
+
+  function setupApi(list: string[] | undefined) {
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/system/features')
+        return Promise.resolve({
+          data: {
+            features: {},
+            enabled_plugins: [],
+            ...(list === undefined ? {} : { plugin_metadata_plugins: list }),
+          },
+        })
+      if (url === '/plugins/builtin') return Promise.resolve({ data: { plugins: CATALOG } })
+      if (url === '/clusters/1/plugin-metadata') return Promise.resolve({ data: METADATA_RESPONSE })
+      return Promise.reject(new Error('unexpected GET: ' + url))
+    })
+  }
+
+  it('清单内且未配置才可选：redirect 入选、traceid 清单外被滤、data_center 已配置被去重排除', async () => {
+    setupApi(['data_center', 'redirect'])
+    const wrapper = await mountTab()
+    const availablePanel = wrapper.find('.available-panel')
+    expect(availablePanel.exists()).toBe(true)
+    expect(availablePanel.text()).toContain('(1)')
+    expect(availablePanel.text()).toContain('redirect')
+    expect(availablePanel.text()).not.toContain('traceid')
+    expect(availablePanel.text()).not.toContain('data_center')
+    wrapper.unmount()
+  })
+
+  it('清单空 = 不限制（目录全量可选，仅已配置去重）', async () => {
+    setupApi([])
+    const wrapper = await mountTab()
+    const availablePanel = wrapper.find('.available-panel')
+    expect(availablePanel.text()).toContain('(2)')
+    expect(availablePanel.text()).toContain('redirect')
+    expect(availablePanel.text()).toContain('traceid')
+    expect(availablePanel.text()).not.toContain('data_center')
+    wrapper.unmount()
+  })
+
+  it('清单 key 缺失 = 不限制（向后兼容）', async () => {
+    setupApi(undefined)
+    const wrapper = await mountTab()
+    const availablePanel = wrapper.find('.available-panel')
+    expect(availablePanel.text()).toContain('(2)')
+    expect(availablePanel.text()).toContain('redirect')
+    expect(availablePanel.text()).toContain('traceid')
     wrapper.unmount()
   })
 })

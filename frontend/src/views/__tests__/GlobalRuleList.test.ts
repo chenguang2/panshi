@@ -290,14 +290,20 @@ describe('GlobalRuleList.vue', () => {
 
   // ── 2.5 工具栏计数（D9 本地统计） ──
 
-  it('工具栏计数：「共 2 个 · 未发布 1 · 待发布 0」', async () => {
+  it('状态 chips 权威计数：全部 2 / 未发布 1 / 待发布 0 / 已发布 1', async () => {
+    // AGENTS #86/#88：工具栏不再显示「共 N 个 · 未发布 · 待发布」，计数归状态行 chips
     const w = await mountWithItems(MOCK_DATA.items)
-    expect(w.find('.gr-header-actions').text()).toContain('共 2 个 · 未发布 1 · 待发布 0')
+    expect(w.find('.l5-toolbar').text()).not.toContain('共 2 个')
+    const chipText = w.find('.l5-chiprow').text()
+    expect(chipText).toContain('全部2')
+    expect(chipText).toContain('未发布1')
+    expect(chipText).toContain('待发布0')
   })
 
-  it('工具栏计数：pending_publish 为真计入「待发布」', async () => {
+  it('状态 chips：pending_publish 为真计入「待发布」', async () => {
     const w = await mountWithItems([{ ...MOCK_DATA.items[0], pending_publish: true }, MOCK_DATA.items[1]])
-    expect(w.find('.gr-header-actions').text()).toContain('共 2 个 · 未发布 1 · 待发布 1')
+    const chipText = w.find('.l5-chiprow').text()
+    expect(chipText).toContain('待发布1')
   })
 
   it('7.5 超 500 条截断提示「仅显示前 500 条，请用筛选缩小范围」', async () => {
@@ -383,7 +389,8 @@ describe('GlobalRuleList.vue', () => {
   it('删除链路：节点取数传 page_size 全量，删除确认携带集群级 extraWarning', async () => {
     const w = await mountWithItems(MOCK_DATA.items)
     const card = cardByName(w, 'global-rate-limit')!
-    const delBtn = card.findAll('button').find((b: any) => b.text() === '删除')!
+    await card.find('.op-btn').trigger('click')
+    const delBtn = card.findAll('.mi').find((b: any) => b.text().includes('删除'))!
     await delBtn.trigger('click')
     await flushPromises()
 
@@ -400,8 +407,10 @@ describe('GlobalRuleList.vue', () => {
   // ── 版本管理恢复出口条（4.x：canPublish → 既有发布链路） ──
 
   async function openVersionModal(wrapper: any) {
+    // AGENTS #88：动作收进卡片 ⋯ 菜单 → 先点触发器再点「版本管理」条目
     const card = cardByName(wrapper, 'global-rate-limit')!
-    const vmBtn = card.findAll('button').find((b: any) => b.text() === '版本管理')!
+    await card.find('.op-btn').trigger('click')
+    const vmBtn = card.findAll('.mi').find((b: any) => b.text().includes('版本管理'))!
     await vmBtn.trigger('click')
     await flushPromises()
     return wrapper.findComponent({ name: 'MockVersionManagementModal' })
@@ -447,5 +456,54 @@ describe('GlobalRuleList.vue', () => {
     expect(listLoads).toBeGreaterThanOrEqual(2)
     expect(w.find('.mock-version-modal').exists()).toBe(true)
     w.unmount()
+  })
+})
+
+describe('GlobalRuleList 批量管理（r21 新增）', () => {
+  async function mountBatch() {
+    const GlobalRuleList = (await import('../GlobalRuleList.vue')).default
+    const wrapper = mount(GlobalRuleList, { global: { stubs } })
+    await flushPromises()
+    return wrapper
+  }
+
+  it('页头批量管理在「添加全局规则」左侧；批量条只有「批量删除」', async () => {
+    const w = await mountBatch()
+    const btns = w.findAll('.page-header button')
+    const newIdx = btns.findIndex((b) => b.text().includes('添加全局规则'))
+    const batchIdx = btns.findIndex((b) => b.text().includes('批量管理'))
+    expect(batchIdx).toBeGreaterThan(-1)
+    expect(batchIdx).toBeLessThan(newIdx)
+
+    await btns[batchIdx].trigger('click')
+    await w.vm.$nextTick()
+    expect(w.find('.gr-grid').classes()).toContain('batch')
+    const bar = w.find('.l5-batchbar')
+    expect(bar.exists()).toBe(true)
+    const labels = bar.findAll('button').map((b) => b.text())
+    expect(labels.some((l) => l.includes('批量删除'))).toBe(true)
+    // AGENTS #88 ③：批量发布功能不存在
+    expect(labels.some((l) => l.includes('批量发布'))).toBe(false)
+  })
+
+  it('勾选后计数更新、批量删除启用、清除选择归零', async () => {
+    const w = await mountBatch()
+    await w
+      .findAll('.page-header button')
+      .find((b) => b.text().includes('批量管理'))!
+      .trigger('click')
+    await w.vm.$nextTick()
+    await w.findAll('.lp-check')[0].trigger('click')
+    await w.vm.$nextTick()
+    expect(w.find('.l5-batchbar').text()).toContain('已选 1 项')
+    const del = w.findAll('.l5-batchbar button').find((b) => b.text().includes('批量删除'))!
+    expect((del.element as HTMLButtonElement).disabled).toBe(false)
+
+    await w
+      .findAll('.l5-batchbar button')
+      .find((b) => b.text().includes('清除选择'))!
+      .trigger('click')
+    await w.vm.$nextTick()
+    expect(w.find('.l5-batchbar').text()).toContain('已选 0 项')
   })
 })

@@ -10,7 +10,7 @@ from app.config import MAX_PAGE_SIZE
 from app.models.cluster import Cluster, Route, RoutePlugin, ConfigVersion, Upstream, Node
 from app.schemas.route import RouteCreate, RouteUpdate, RouteResponse, RouteListResponse, PluginUpdateRequest
 from app.schemas.cluster import DeleteClusterRequest, BatchDeleteRoutesRequest, PublishRequest
-from app.services import edge_sync
+from app.services import batch_delete, edge_sync
 from app.services import publish_preview
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 
@@ -318,70 +318,23 @@ async def delete_route(cluster_id: int, route_id: int, body: DeleteClusterReques
 
 @router.delete("")
 async def delete_routes_batch(cluster_id: int, body: BatchDeleteRoutesRequest = Body(...), db: AsyncSession = Depends(get_db), request: Request = None):
-    """批量删除同一集群内的多条路由。
+    """批量删除同一集群内的多条路由——委托 `services/batch_delete.py` 单一实现。
 
-    每条路由独立处理：单条失败（路由不存在 / Edge 同步失败 / 其他异常）
-    不阻塞其余路由。edge_uuid 为空的路由跳过 Edge 同步并记 skipped。
+    每条路由独立处理：单条失败（不存在 / Edge 同步失败 / 其他异常）不阻塞其余路由。
     """
-
-    if not body.route_ids:
-        raise HTTPException(status_code=400, detail="route_ids 不能为空")
-
-    if not body.delete_db and not body.delete_edge:
-        raise HTTPException(status_code=400, detail="请至少选择一项：数据库 或 Edge 节点")
-
     audit = getattr(request.state, "audit", None) if hasattr(request, "state") else None
     if audit is not None:
         ids = sorted(body.route_ids)
         audit.detail = f"批量删除路由: {ids} 共 {len(ids)} 条"
-
-    node_query = select(Node).where(Node.cluster_id == cluster_id, Node.status == 1)
-    if body.node_ids:
-        node_query = node_query.where(Node.id.in_(body.node_ids))
-    nodes_result = await db.execute(node_query)
-    active_nodes = nodes_result.scalars().all()
-
-    results = []
-    for route_id in body.route_ids:
-        route_result: dict = {
-            "route_id": route_id,
-            "route_name": "",
-            "status": "failed",
-            "results": [],
-        }
-        try:
-            route = await edge_sync.get_or_404(db, Route, id=route_id, cluster_id=cluster_id, detail="路由不存在")
-            route_result["route_name"] = route.name
-
-            if body.delete_db:
-                await db.execute(ConfigVersion.__table__.delete().where(ConfigVersion.resource_type == "route", ConfigVersion.resource_id == route_id))
-                await db.execute(RoutePlugin.__table__.delete().where(RoutePlugin.route_id == route_id))
-                await db.delete(route)
-                await db.commit()
-                route_result["results"].append({"scope": "database", "status": "success", "message": "数据库记录已删除"})
-
-            if body.delete_edge:
-                if not route.edge_uuid:
-                    route_result["results"].append({
-                        "scope": "edge", "status": "skipped",
-                        "message": "该路由无 edge_uuid，跳过 Edge 同步",
-                    })
-                else:
-                    edge_results = await edge_sync.delete_on_nodes(
-                        cluster_id, active_nodes, route.edge_uuid,
-                        lambda client, uuid: client.delete_route(uuid)
-                    )
-                    route_result["results"].extend(edge_results)
-
-            route_result["status"] = "success"
-        except HTTPException as e:
-            route_result["error"] = str(e.detail)
-        except Exception as e:  # noqa: BLE001 - 单条失败不阻塞其余
-            await db.rollback()
-            route_result["error"] = str(e)
-        results.append(route_result)
-
-    return {"message": f"批量删除完成: {len(results)} 条路由", "results": results}
+    return await batch_delete.batch_delete(
+        "route",
+        list(body.route_ids),
+        db=db,
+        delete_db=body.delete_db,
+        delete_edge=body.delete_edge,
+        node_ids=body.node_ids,
+        cluster_id=cluster_id,
+    )
 
 
 @router.post("/{route_id}/publish")

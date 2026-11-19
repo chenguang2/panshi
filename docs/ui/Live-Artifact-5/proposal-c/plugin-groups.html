@@ -76,6 +76,7 @@
           <p>插件组是一组可复用的插件配置集合，可被同集群的多个路由引用</p>
         </div>
         <div class="page-header-actions">
+          <button class="btn btn-secondary" id="batchToggle" aria-pressed="false">批量管理</button>
           <button class="btn btn-primary"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>添加插件组</button>
         </div>
       </div>
@@ -120,7 +121,15 @@
           <span class="t-spacer"></span>
         </div>
 
-        <div class="card-grid">
+                <div class="l5-batchbar batchbar-dynamic" id="batchBar">
+          <span class="b-count">已选 0 项</span>
+          <span class="b-sep"></span>
+          <button class="btn btn-danger btn-sm need-sel"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg> 批量删除</button>
+          <span class="b-spacer"></span>
+          <button class="btn btn-ghost btn-sm" id="clearSel">清除选择</button>
+        </div>
+
+<div class="card-grid">
           <div class="l5-band cluster-c1" data-fold="c1" role="button" tabindex="0" aria-expanded="true" aria-controls="band-c1">
             <button class="g-chev" data-band="c1" aria-expanded="true" title="收起本组" aria-label="折叠 / 展开本组"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button>
             <span class="b-name">生产集群</span><span class="lp-tag group b-group">生产环境</span>
@@ -130,6 +139,7 @@
           </div>
           <div class="band-cards" id="band-c1">
 <article class="l5-panel cluster-c1" data-group="c1">
+            <span class="lp-check" aria-hidden="true"></span>
             
             <div class="lp-strip"><span class="lp-tag lp-cluster">生产集群</span><span class="lp-tag group lp-group">生产环境</span><span class="st-algo">引用 · <b>12</b> 条路由</span></div>
             <div class="lp-head">
@@ -165,8 +175,9 @@
             </div>
           </article>
 <article class="l5-panel cluster-c1" data-group="c1">
+            <span class="lp-check" aria-hidden="true"></span>
             
-            <div class="lp-strip"><span class="lp-tag lp-cluster">生产集群</span><span class="lp-tag group lp-group">生产环境</span><span class="st-algo">引用 · <b>3</b> 条路由</span></div>
+            <div class="lp-strip"><span class="lp-tag lp-cluster">生产集群</span><span class="lp-tag group lp-group">生产环境</span><span class="st-algo">引用 · <b>12</b> 条路由</span></div>
             <div class="lp-head">
               <div class="lp-title">
                 <span class="lp-name" title="鉴权基线">鉴权基线</span>
@@ -180,7 +191,7 @@
             </div>
             <div class="lp-body">
               <div class="lp-row"><span class="lp-k">插件</span><div class="lp-chips"><span class="lp-chip">jwt-auth</span><span class="lp-chip">key-auth</span><span class="lp-cnt">2 个</span></div></div>
-              <div class="lp-row group-only"><span class="lp-k">引用</span><span class="lp-v"><span class="field-warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>3 条路由引用 · 改后同时生效</span></span></div>
+              <div class="lp-row group-only"><span class="lp-k">引用</span><span class="lp-v mono">12 条路由</span></div>
               <div class="lp-row"><span class="lp-k">描述</span><span class="lp-v dim" title="生产入口统一鉴权策略">生产入口统一鉴权策略</span></div>
             </div>
             <div class="lp-foot">
@@ -200,8 +211,9 @@
             </div>
           </article>
 <article class="l5-panel cluster-c1" data-group="c1">
+            <span class="lp-check" aria-hidden="true"></span>
             
-            <div class="lp-strip"><span class="lp-tag lp-cluster">生产集群</span><span class="st-algo">引用 · <b title="该卡片未展示该指标，见警示行">—</b></span></div>
+            <div class="lp-strip"><span class="lp-tag lp-cluster">生产集群</span><span class="st-algo">引用 · <b>12</b> 条路由</span></div>
             <div class="lp-head">
               <div class="lp-title">
                 <span class="lp-name" title="观测采集">观测采集</span>
@@ -214,7 +226,8 @@
             </div>
             <div class="lp-body">
               <div class="lp-row"><span class="lp-k">插件</span><div class="lp-chips"><span class="lp-chip">prometheus</span><span class="lp-chip">log-process</span><span class="lp-cnt">2 个</span></div></div>
-              <div class="lp-row group-only"><span class="lp-k">描述</span><span class="lp-v dim" title="指标采集与访问日志落盘">指标采集与访问日志落盘</span></div>
+              <div class="lp-row group-only"><span class="lp-k">引用</span><span class="lp-v mono">12 条路由</span></div>
+              <div class="lp-row"><span class="lp-k">描述</span><span class="lp-v dim" title="指标采集与访问日志落盘">指标采集与访问日志落盘</span></div>
             </div>
             <div class="lp-notice alert alert-error">
               <span class="n-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3.2 21.4 20H2.6L12 3.2z" fill="currentColor"/><path d="M12 9.4v4M12 16.6v.1" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></span>
@@ -243,12 +256,12 @@
             <span class="b-name">预发集群</span><span class="lp-tag group b-group">预发环境</span>
             <span class="b-count">2 个插件组</span>
             <span class="b-spacer"></span>
-            <span class="b-hint">被 <b>7</b> 条路由引用</span>
+            <span class="b-hint">被 <b>15</b> 条路由引用</span>
           </div>
           <div class="band-cards" id="band-c2">
 <article class="l5-panel cluster-c2" data-group="c2">
             
-            <div class="lp-strip"><span class="lp-tag lp-cluster">预发集群</span><span class="lp-tag group lp-group">预发环境</span><span class="st-algo">引用 · <b>3</b> 条路由</span></div>
+            <div class="lp-strip"><span class="lp-tag lp-cluster">预发集群</span><span class="lp-tag group lp-group">预发环境</span><span class="st-algo">引用 · <b>12</b> 条路由</span></div>
             <div class="lp-head">
               <div class="lp-title">
                 <span class="lp-name" title="预发调试">预发调试</span>
@@ -262,7 +275,7 @@
             </div>
             <div class="lp-body">
               <div class="lp-row"><span class="lp-k">插件</span><div class="lp-chips"><span class="lp-chip">prometheus</span><span class="lp-chip">request-id</span><span class="lp-cnt">2 个</span></div></div>
-              <div class="lp-row group-only"><span class="lp-k">引用</span><span class="lp-v mono">3 条路由</span></div>
+              <div class="lp-row group-only"><span class="lp-k">引用</span><span class="lp-v mono">12 条路由</span></div>
               <div class="lp-row"><span class="lp-k">描述</span><span class="lp-v dim" title="预发环境额外开启指标采集与请求链路">预发环境额外开启指标采集与请求链路</span></div>
             </div>
             <div class="lp-foot">
@@ -283,7 +296,7 @@
           </article>
 <article class="l5-panel cluster-c2" data-group="c2">
             
-            <div class="lp-strip"><span class="lp-tag lp-cluster">预发集群</span><span class="lp-tag group lp-group">预发环境</span><span class="st-algo">引用 · <b>4</b> 条路由</span></div>
+            <div class="lp-strip"><span class="lp-tag lp-cluster">预发集群</span><span class="lp-tag group lp-group">预发环境</span><span class="st-algo">引用 · <b>12</b> 条路由</span></div>
             <div class="lp-head">
               <div class="lp-title">
                 <span class="lp-name" title="边缘缓存">边缘缓存</span>
@@ -297,7 +310,7 @@
             </div>
             <div class="lp-body">
               <div class="lp-row"><span class="lp-k">插件</span><div class="lp-chips"><span class="lp-chip">proxy-cache</span><span class="lp-cnt">1 个</span></div></div>
-              <div class="lp-row group-only"><span class="lp-k">引用</span><span class="lp-v mono">4 条路由</span></div>
+              <div class="lp-row group-only"><span class="lp-k">引用</span><span class="lp-v mono">12 条路由</span></div>
               <div class="lp-row"><span class="lp-k">描述</span><span class="lp-v dim" title="静态资源缓存与回源策略">静态资源缓存与回源策略</span></div>
             </div>
             <div class="lp-foot">
@@ -322,12 +335,12 @@
             <span class="b-name">开发集群</span><span class="lp-tag group b-group">开发环境</span>
             <span class="b-count">1 个插件组</span>
             <span class="b-spacer"></span>
-            <span class="b-hint">被 <b>2</b> 条路由引用</span>
+            <span class="b-hint">被 <b>15</b> 条路由引用</span>
           </div>
           <div class="band-cards" id="band-c3">
 <article class="l5-panel cluster-c3" data-group="c3">
             
-            <div class="lp-strip"><span class="lp-tag lp-cluster">开发集群</span><span class="lp-tag group lp-group">开发环境</span><span class="st-algo">引用 · <b>2</b> 条路由</span></div>
+            <div class="lp-strip"><span class="lp-tag lp-cluster">开发集群</span><span class="lp-tag group lp-group">开发环境</span><span class="st-algo">引用 · <b>12</b> 条路由</span></div>
             <div class="lp-head">
               <div class="lp-title">
                 <span class="lp-name" title="开发宽松策略">开发宽松策略</span>
@@ -338,7 +351,7 @@
             </div>
             <div class="lp-body">
               <div class="lp-row"><span class="lp-k">插件</span><div class="lp-chips"><span class="lp-chip">cors</span><span class="lp-cnt">1 个</span></div></div>
-              <div class="lp-row group-only"><span class="lp-k">引用</span><span class="lp-v mono">2 条路由</span></div>
+              <div class="lp-row group-only"><span class="lp-k">引用</span><span class="lp-v mono">12 条路由</span></div>
               <div class="lp-row"><span class="lp-k">描述</span><span class="lp-v dim" title="开发环境放开跨域来源，仅用于联调">开发环境放开跨域来源，仅用于联调</span></div>
             </div>
             <div class="lp-foot">

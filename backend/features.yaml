@@ -46,6 +46,13 @@ enabled_plugins:
 global_rule_plugins:
   - traceid
   - monitor
+# 插件元数据两添加入口可用插件清单（与 enabled_plugins 同级；空/未配置 = 不限制，
+# 目录全量可选）。默认值 = 旧写死字段 enable_metadata=true 的全部插件（现状精确保留：
+# 其中 12 个 security 系仍被 enabled_plugins 平台白名单先行裁掉，实际可见集
+# data_center + log_process 不变）。旧字段已退役，本清单是唯一事实源。
+plugin_metadata_plugins:
+  - data_center
+  - log_process
 # 并发参数：batch_action 为前端批量节点操作并发，max_playbooks 为后端全局
 # ansible 并发上限。前端实际并发为 min(batch_action, max_playbooks)，建议两值联动。
 concurrency:

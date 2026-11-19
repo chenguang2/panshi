@@ -5,10 +5,10 @@ from sqlalchemy import select, func
 
 from app.core.database import get_db
 from app.config import MAX_PAGE_SIZE
-from app.models.cluster import Cluster, GlobalRule
+from app.models.cluster import Cluster, GlobalRule, Route
 from app.models.user import User, UserCluster
-from app.schemas.cluster import GlobalRuleResponse
-from app.services import edge_sync
+from app.schemas.cluster import GlobalRuleResponse, BatchDeleteGlobalRulesRequest
+from app.services import edge_sync, batch_delete
 from app.core.deps import require_permission
 
 router = APIRouter(prefix="/global_rules", tags=["global_rules"])
@@ -77,6 +77,15 @@ async def list_all_global_rules(
     # 推导收敛在 edge_sync 共享单点，与集群子页端点同口径，禁止各自实现）
     pub_map = await edge_sync.load_publish_time_map(db, "global_rule", gr_ids)
 
+    # 生效路由数（设计 `生效 全部路由 · N 条`）：全局规则对本集群**全部**路由生效，
+    # 故一次 group by 统计本页涉及集群的路由数即可（禁逐规则查询）。
+    route_counts: dict[int, int] = {}
+    if cluster_ids:
+        rc_result = await db.execute(
+            select(Route.cluster_id, func.count()).where(Route.cluster_id.in_(cluster_ids)).group_by(Route.cluster_id)
+        )
+        route_counts = {row[0]: row[1] for row in rc_result.all()}
+
     items = []
     for r in rules:
         item = GlobalRuleResponse.model_validate(r)
@@ -91,6 +100,30 @@ async def list_all_global_rules(
         d = item.model_dump()
         d["cluster_name"] = cluster_name_map.get(r.cluster_id, "")
         d["cluster_group_name"] = cluster_group_map.get(r.cluster_id, "")
+        # 生效路由数：该集群全部路由数（1 条全局规则 = 对本集群所有路由生效）
+        d["route_count"] = route_counts.get(r.cluster_id, 0)
         items.append(d)
 
     return {"total": total, "page": page, "page_size": page_size, "items": items}
+
+
+@router.delete("", response_model=dict)
+async def delete_global_rules_global(
+    body: BatchDeleteGlobalRulesRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("global_rules")),
+):
+    """批量删除全局规则（跨集群，全局视图）——契约统一入口（U2）。
+
+    逐条解析所属集群；非 admin 用户逐条校验 `UserCluster` 授权（未授权条目
+    ``status=failed``，不整体 403）。唯一实现在 `services/batch_delete.py`。
+    """
+    return await batch_delete.batch_delete(
+        "global_rule",
+        list(body.rule_ids),
+        db=db,
+        delete_db=body.delete_db,
+        delete_edge=body.delete_edge,
+        node_ids=body.node_ids,
+        user=current_user,
+    )

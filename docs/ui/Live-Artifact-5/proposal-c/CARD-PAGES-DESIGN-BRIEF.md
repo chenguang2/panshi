@@ -20,7 +20,10 @@
 | 6 | `ca-certs.html` | CA 根证书 |
 | 7 | `server-certs.html` | 服务器证书 |
 | 8 | `stream-proxies.html` | 四层代理 |
-| 9 | `dns-udp-proxies.html` | DNS 代理（UDP） |
+| 9 | `dns-udp-proxies.html` | 插件组 | 无 hero（`.lp-name` 即身份） | 插件数 0 时不额外标注 | 插件胶囊（`.lp-chip`）+ `N 个` | 描述（两态显示；非低信息量，不 group-only） | `插件 · N 个` / `插件 · N 个` |
+| 全局规则 | 无 hero（`.lp-name` 即身份） | — | 插件胶囊 + `N 个`（空态「未选择插件」） | 描述（两态）+ **生效行 `group-only`**（低信息量单值） | `生效 全部路由 · N 条`（后端 `route_count`）/ `生效 · 全部路由 N 条` |
+| DNS 代理（HTTP） | `uri`（`.lp-hero.sm`） | — | 域名（首项 + `+N`）+ 算法胶囊 | 上游 chips（完整、可折行）+ `N 组` | `上游 · N 组` / `上游 · addr +N` |
+| DNS 代理（UDP） |
 | 10 | `dns-http-proxies.html` | DNS 代理（HTTP） |
 
 每份 HTML：`<link rel="stylesheet" href="theme.css">`，单文件可直接双击打开（无外链、无 CDN、无框架依赖），
@@ -214,3 +217,15 @@ l5-card
 7. **卡内弹层不得被裁**：卡片容器 SHALL `overflow: visible`（`std-card` 原 `overflow:hidden` 会把 ⋯ 菜单整块裁掉，用户表现为「点 ⋯ 没反应」）；`.l5-menu` 空间不足时加 `.flip-up` 向上弹；菜单打开时所在卡片 `z-index: 5`。
 8. **页头按钮序**：`批量管理（secondary）` 在 `新建…（primary）` 左侧。
 9. **卡片色相按行计算**：卡片根元素的 color 类取 `clusterHueClass(row.cluster_id)`，**不得取分组伪组的 hueClass**——平铺视图把全部卡片收进单个伪组，取伪组会让左缘 4px 条 / 集群角标 / 卡顶条底全部塌成 `cluster-c1`（r17 实测：19 张平铺卡全同一种蓝，集群区分失效）。平铺与分组两态必须显示同一集群同一色相。
+
+
+### 九附 · 各页字段 → 卡片槽位映射（推广时照抄）
+
+| 页面 | 卡头 hero（主身份） | 卡头副信息 | 卡体行 1（两态都显示） | 卡体行 2（两态都显示；仅**低信息量单值**可 `group-only` 让位） | band 次要指标 / strip 右端 |
+|---|---|---|---|---|---|
+| 四层代理 | `:listen_port`（`.lp-hero` 18px） | proto 标签（TCP/UDP/TLS） | 目标 chips（**完整呈现，允许折行**）+ `N 个` | 负载均衡（`group-only`，低信息量单值） | `目标 N 个` / `负载均衡 · X` |
+| DNS 代理（UDP） | `remote_addr` 回落 `0.0.0.0:监听端口`（`.lp-hero.sm` 15px） | 内外网分离 → `.lp-tag.tech` | 域名（首项 + `+N`）+ 算法胶囊 | **上游 chips（完整呈现、允许折行，不裁剪）** + `N 组` | `上游 · N 组` / `上游 · addr +N` |
+
+**原则**：hero 放「一眼区分行」的地址类标识；能力/开关态用 `.lp-tag.tech`；枚举值（协议/算法）用胶囊；标识（IP/端口/域名/上游地址）用 mono 文本。
+
+**让位与 chips 呈现（r18 / r19 定稿）**：`group-only` 只能用于**低信息量单值**（负载均衡）；**列表型关键信息（目标 / 上游 IP）两态都显示，且完整呈现、允许折行**——不裁剪、不单行化、不设卡高上限（r18 的 `.compact`（前 2 + `+N`）与 `nowrap+overflow:hidden` 硬裁均废止：前者藏信息，后者把 chip 截成 `192.168.0.13:8112 10`）。

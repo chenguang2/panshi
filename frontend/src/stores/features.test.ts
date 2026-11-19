@@ -66,6 +66,33 @@ describe('features store', () => {
     expect(store.globalRulePlugins).toEqual([])
   })
 
+  it('load() parses plugin_metadata_plugins list（plugin-metadata-plugins-config 新 key）', async () => {
+    mockFeaturesGet({
+      features: {},
+      enabled_plugins: [],
+      plugin_metadata_plugins: ['data_center', 'log_process'],
+    })
+
+    const store = useFeaturesStore()
+    await store.load()
+
+    expect(store.metadataPlugins).toEqual(['data_center', 'log_process'])
+  })
+
+  it('plugin_metadata_plugins 缺失时默认 []（空/未配置 = 不限制，向后兼容）', async () => {
+    mockFeaturesGet({ features: {}, enabled_plugins: [] })
+
+    const store = useFeaturesStore()
+    await store.load()
+
+    expect(store.metadataPlugins).toEqual([])
+  })
+
+  it('plugin_metadata_plugins 未加载前为 []（fail-open）', () => {
+    const store = useFeaturesStore()
+    expect(store.metadataPlugins).toEqual([])
+  })
+
   it('load() does not re-fetch if already loaded', async () => {
     mockFeaturesGet({ features: {}, enabled_plugins: [] })
 

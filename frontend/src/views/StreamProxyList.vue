@@ -90,7 +90,7 @@
         <button class="link-btn" @click="toggleSelectAllFiltered">
           {{ allFilteredSelected ? '取消全选结果' : '全选当前筛选结果' }}
         </button>
-        <button class="btn btn-ghost btn-sm" @click="clearSelection">清除选择</button>
+        <button class="link-btn" @click="clearSelection">清除选择</button>
       </div>
 
       <div v-if="loading" class="loading-state">加载中...</div>
@@ -184,8 +184,9 @@
               </div>
               <div class="lp-row">
                 <span class="lp-k">目标</span>
+                <!-- 目标 IP 可能多条且需逐条核对 → 完整呈现、允许折行（r19：不做单行化/裁剪） -->
                 <div class="lp-chips">
-                  <span v-for="(t, i) in p.targets" :key="i" class="tg-chip"
+                  <span v-for="(t, i) in p.targets ?? []" :key="i" class="tg-chip"
                     >{{ t.target }}<span class="tg-w">{{ t.weight }}</span></span
                   >
                   <span v-if="!p.targets || p.targets.length === 0" class="lp-v dim">无目标</span>
@@ -312,6 +313,7 @@ import ClusterSelect from '@/components/ClusterSelect.vue'
 import ClusterBand from '@/components/ClusterBand.vue'
 import StrokeIcon from '@/components/StrokeIcon.vue'
 import { useCardClusterGrouping } from '@/composables/useCardClusterGrouping'
+import { useBatchDelete } from '@/composables/useBatchDelete'
 import { clusterHueClass } from '@/utils/clusterHue'
 import type { StreamProxy } from '@/types'
 import api from '@/api'
@@ -700,35 +702,28 @@ function onVmPublishRequested() {
   publishVisible.value = true
 }
 
-function batchDelete() {
-  const proxies = selectedProxies.value
-  if (proxies.length === 0) return
-  const names = proxies.map((p: any) => p.name)
-  const title =
-    names.length > 3
-      ? `确定要删除选中的 ${names.length} 个四层代理吗？${names.slice(0, 3).join('、')} 等 ${names.length} 个`
-      : `确定要删除选中的 ${names.length} 个四层代理吗？${names.join('、')}`
-  showDeleteConfirm({
-    title,
-    apiEndpoint: '/stream-proxies',
-    noNodeSelection: true,
-    onOk: async (deleteDb, deleteEdge, nodeIds) => {
-      await executeDeleteWithProgress({
-        title: `批量删除四层代理: ${names.join('、')}`,
-        apiEndpoint: '/stream-proxies',
-        deleteDb,
-        deleteEdge,
-        nodeIds,
-        resourceKey: { field: 'proxy_ids', label: '四层代理', nameField: 'name', keys: selectedProxyIds.value },
-        refreshFn: loadProxies,
-        clearSelectedFn: () => {
-          clearSelection()
-          if (batchMode.value) toggleBatchMode()
-        },
-      })
-    },
-  })
+/** 集群 id → 显示名（批量删除节点清单标注归属集群） */
+function clusterNameById(id: number): string {
+  const c = clusters.value.find((x: any) => x.id === id)
+  return c ? c.display_name || c.name || `集群 ${id}` : `集群 ${id}`
 }
+
+/** 批量删除（统一入口 composable/useBatchDelete，AGENTS #88 ⑪） */
+const batchDelete = useBatchDelete<any>({
+  label: '四层代理',
+  endpoint: '/stream-proxies',
+  idField: 'proxy_ids',
+  nameField: 'name',
+  rows: () => selectedProxies.value,
+  ids: () => selectedProxyIds.value,
+  nameOf: (p: any) => p.name,
+  clusterIdOf: (p: any) => p.cluster_id,
+  clusterNameOf: clusterNameById,
+  refresh: loadProxies,
+  clearSelection: () => clearSelection(),
+  exitBatch: () => toggleBatchMode(),
+  subsetConsequence: '未选中的 {n} 个节点将保留该四层代理',
+})
 
 async function onPublishConfirm(nodeIds: number[]) {
   publishVisible.value = false
@@ -822,19 +817,6 @@ onUnmounted(() => {
   gap: 12px;
   margin-bottom: 20px;
   flex-wrap: nowrap;
-}
-.link-btn {
-  background: none;
-  border: none;
-  color: var(--accent);
-  font-size: 12px;
-  cursor: pointer;
-  padding: 4px 6px;
-  border-radius: 4px;
-  flex-shrink: 0;
-}
-.link-btn:hover {
-  background: oklch(56% 0.16 210 / 8%);
 }
 .loading-state {
   text-align: center;

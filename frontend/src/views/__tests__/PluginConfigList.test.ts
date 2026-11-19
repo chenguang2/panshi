@@ -145,7 +145,7 @@ describe('PluginConfigList.vue', () => {
     expectedGroups: ['线上', '预发'],
     groupParamAssert: 'defined',
     // M2：插件组主列表「全部」选项指明「集群分组」语义，与其他列表页不同
-    allLabel: '全部集群分组',
+    allLabel: '全部分组',
   })
 
   it('does not conditionally display count on group filter — always uses totalCount from server', async () => {
@@ -154,17 +154,17 @@ describe('PluginConfigList.vue', () => {
     await flushPromises()
     // Select a specific group
     const selects = wrapper.findAll('select')
-    const groupSelect = selects.find((s) => s.text().includes('全部集群分组'))
+    const groupSelect = selects.find((s) => s.text().includes('全部分组'))
     expect(groupSelect).toBeDefined()
     const selectEl = groupSelect!.element as HTMLSelectElement
     selectEl.value = '线上'
     selectEl.dispatchEvent(new Event('change'))
     await flushPromises()
-    // The count text should contain totalCount from server, not displayedConfigs.length
-    const countSpan = wrapper.findAll('span.text-sm.text-muted').find((s) => s.text().includes('共'))
-    expect(countSpan).toBeDefined()
-    // Should show server totalCount (99), not items.length (1)
-    expect(countSpan!.text()).toContain('99')
+    // AGENTS #86/#88：工具栏不再显示「共 N 个」——总数由状态 chips「全部 N」承担（服务端 totalCount）
+    expect(wrapper.findAll('span.text-sm.text-muted').some((x) => x.text().includes('共'))).toBe(false)
+    const allChip = wrapper.findAll('.chip-status').find((c) => c.text().includes('全部'))
+    expect(allChip).toBeDefined()
+    expect(allChip!.text()).toContain('99')
   })
 
   // ── 版本管理恢复出口条（4.x：canPublish → 既有发布链路） ──
@@ -177,8 +177,10 @@ describe('PluginConfigList.vue', () => {
   }
 
   async function openVersionModal(wrapper: any) {
+    // AGENTS #88：动作收进卡片 ⋯ 菜单 → 先点触发器再点「版本管理」条目
     const card = wrapper.findAll('.pc-card').find((c: any) => c.text().includes('rate-limit-config'))
-    const vmBtn = card.findAll('button').find((b: any) => b.text() === '版本管理')
+    await card.find('.op-btn').trigger('click')
+    const vmBtn = card.findAll('.mi').find((b: any) => b.text().includes('版本管理'))
     await vmBtn.trigger('click')
     await flushPromises()
     return wrapper.findComponent({ name: 'MockVersionManagementModal' })
@@ -224,5 +226,45 @@ describe('PluginConfigList.vue', () => {
     expect(listLoads).toBeGreaterThanOrEqual(2)
     expect(w.find('.mock-version-modal').exists()).toBe(true)
     w.unmount()
+  })
+})
+
+describe('PluginConfigList 批量管理（r20 新增）', () => {
+  async function mountBatchPage() {
+    const PluginConfigList = (await import('../PluginConfigList.vue')).default
+    const wrapper = mount(PluginConfigList, { global: { stubs } })
+    await flushPromises()
+    return wrapper
+  }
+
+  it('页头批量管理在「添加插件组」左侧；批量条只有「批量删除」', async () => {
+    const w = await mountBatchPage()
+    const btns = w.findAll('.page-header button')
+    const newIdx = btns.findIndex((b) => b.text().includes('添加插件组'))
+    const batchIdx = btns.findIndex((b) => b.text().includes('批量管理'))
+    expect(batchIdx).toBeGreaterThan(-1)
+    expect(batchIdx).toBeLessThan(newIdx)
+    await btns[batchIdx].trigger('click')
+    await w.vm.$nextTick()
+    expect(w.find('.pc-grid').classes()).toContain('batch')
+    const bar = w.find('.l5-batchbar')
+    expect(bar.exists()).toBe(true)
+    const labels = bar.findAll('button').map((b) => b.text())
+    expect(labels.some((l) => l.includes('批量删除'))).toBe(true)
+    expect(labels.some((l) => l.includes('批量发布'))).toBe(false)
+  })
+
+  it('勾选后计数更新、批量删除启用', async () => {
+    const w = await mountBatchPage()
+    await w
+      .findAll('.page-header button')
+      .find((b) => b.text().includes('批量管理'))!
+      .trigger('click')
+    await w.vm.$nextTick()
+    await w.findAll('.lp-check')[0].trigger('click')
+    await w.vm.$nextTick()
+    expect(w.find('.l5-batchbar').text()).toContain('已选 1 项')
+    const del = w.findAll('.l5-batchbar button').find((b) => b.text().includes('批量删除'))!
+    expect((del.element as HTMLButtonElement).disabled).toBe(false)
   })
 })

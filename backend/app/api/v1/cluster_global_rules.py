@@ -8,13 +8,13 @@ from sqlalchemy import select
 from app.core.database import get_db
 from app.models.cluster import GlobalRule, ConfigVersion, Node
 from app.models.user import User
-from app.schemas.cluster import (
+from app.schemas.cluster import (BatchDeleteGlobalRulesRequest,
     GlobalRuleCreate, GlobalRuleUpdate, GlobalRuleResponse,
     ConfigVersionListResponse,
     DeleteClusterRequest, PublishRequest,
 )
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
-from app.services import edge_sync
+from app.services import batch_delete, edge_sync
 from app.services import publish_preview
 from app.core.deps import require_permission
 
@@ -109,6 +109,29 @@ async def delete_global_rule(cluster_id: int, rule_id: int, body: DeleteClusterR
         results.extend(edge_results)
 
     return {"message": "全局规则已删除", "results": results}
+
+
+@router.delete("/{cluster_id}/global_rules")
+async def delete_global_rules_batch(
+    cluster_id: int,
+    body: BatchDeleteGlobalRulesRequest = Body(...),
+    db: AsyncSession = Depends(get_db),
+    request: Request = None,
+):
+    """批量删除全局规则（集群作用域）——委托 `services/batch_delete.py` 单一实现。"""
+    audit = getattr(request.state, "audit", None) if hasattr(request, "state") else None
+    if audit is not None:
+        ids = sorted(body.rule_ids)
+        audit.detail = f"批量删除全局规则: {ids} 共 {len(ids)} 条"
+    return await batch_delete.batch_delete(
+        "global_rule",
+        list(body.rule_ids),
+        db=db,
+        delete_db=body.delete_db,
+        delete_edge=body.delete_edge,
+        node_ids=body.node_ids,
+        cluster_id=cluster_id,
+    )
 
 
 @router.post("/{cluster_id}/global_rules/{rule_id}/publish")

@@ -27,6 +27,13 @@ vi.mock('@/composables/useClusterUtils', async (importOriginal) => {
 })
 
 const stubs = {
+  // AGENTS #88：工具条改接共享 TableToolbar —— 桩渲染 filters / mode-extra 槽
+  TableToolbar: {
+    template:
+      '<div class="l5-toolbar"><slot name="filters" /><slot name="extra" /><slot name="config" /><slot name="mode-extra" /><div class="seg" /></div>',
+    props: ['count', 'countUnit', 'showCount', 'refreshing', 'showMode', 'mode'],
+    emits: ['refresh', 'update:mode'],
+  },
   PageHeader: { template: '<div class="page-header"><slot name="actions" /></div>', props: ['title', 'description'] },
   StreamProxyFormWizard: {
     template: '<div class="mock-form-wizard" />',
@@ -142,13 +149,16 @@ describe('DnsUdpProxyList.vue', () => {
     expect(cards.length).toBe(2)
   })
 
-  it('displays DNS badge on cards', async () => {
+  it('卡片走设计解剖：卡头显示监听地址（.lp-hero），集群标签在 .lp-strip', async () => {
+    // AGENTS #88：DNS 页不再有「DNS」徽标（本页即 DNS），身份信息改由 hero 地址 + 集群标签承担
     const DnsUdpProxyList = (await import('../DnsUdpProxyList.vue')).default
     const wrapper = mount(DnsUdpProxyList, { global: { stubs } })
     await flushPromises()
     await wrapper.vm.$nextTick()
-    const dnsBadges = wrapper.findAll('.dns-badge')
-    expect(dnsBadges.length).toBe(2)
+    const cards = wrapper.findAll('.l5-panel')
+    expect(cards.length).toBe(2)
+    expect(cards[0].find('.lp-hero').text()).toMatch(/0\.0\.0\.0:\d+/)
+    expect(cards[0].find('.lp-cluster').exists()).toBe(true)
   })
 
   it('shows action buttons on cards: 查看, 编辑, 删除, 发布, 版本管理', async () => {
@@ -170,13 +180,14 @@ describe('DnsUdpProxyList.vue', () => {
     const wrapper = mount(DnsUdpProxyList, { global: { stubs } })
     await flushPromises()
     await wrapper.vm.$nextTick()
-    const firstCard = wrapper.findAll('.sp-card')[0]
+    const firstCard = wrapper.findAll('.l5-panel')[0]
+    // 设计卡体：首域名 + 「+N」+ 算法胶囊（TTL 不再单列，悬停 title 给全部域名）
     expect(firstCard.text()).toContain('example.com')
-    expect(firstCard.text()).toContain('test.local')
-    expect(firstCard.text()).toContain('TTL:')
+    expect(firstCard.find('.m-more').exists()).toBe(true)
+    expect(firstCard.find('.lp-algo').exists()).toBe(true)
   })
 
-  it('shows "无 DNS 配置" for proxy without dns_config hosts', async () => {
+  it('shows「未配置」for proxy without dns_config hosts', async () => {
     const DnsUdpProxyList = (await import('../DnsUdpProxyList.vue')).default
     const wrapper = mount(DnsUdpProxyList, { global: { stubs } })
     await flushPromises()
@@ -184,18 +195,16 @@ describe('DnsUdpProxyList.vue', () => {
     const cards = wrapper.findAll('.sp-card')
     expect(cards.length).toBe(2)
     const secondCard = cards[1]
-    expect(secondCard.text()).toContain('无 DNS 配置')
+    expect(secondCard.text()).toContain('未配置')
   })
 
-  it('shows protocol label on cards (TCP/UDP)', async () => {
+  it('卡体「上游」行以 chips 呈现（设计 .tg-chip；协议标签已按设计退场）', async () => {
     const DnsUdpProxyList = (await import('../DnsUdpProxyList.vue')).default
     const wrapper = mount(DnsUdpProxyList, { global: { stubs } })
     await flushPromises()
     await wrapper.vm.$nextTick()
-    const cards = wrapper.findAll('.sp-card')
-    expect(cards.length).toBe(2)
-    expect(cards[0].text()).toContain('TCP')
-    expect(cards[1].text()).toContain('UDP')
+    const cards = wrapper.findAll('.l5-panel')
+    expect(cards[0].findAll('.tg-chip').length).toBeGreaterThan(0)
   })
 
   it('count text shows total number of DNS proxies', async () => {
@@ -203,9 +212,11 @@ describe('DnsUdpProxyList.vue', () => {
     const wrapper = mount(DnsUdpProxyList, { global: { stubs } })
     await flushPromises()
     await wrapper.vm.$nextTick()
-    const countSpan = wrapper.findAll('span.text-sm.text-muted').find((s) => s.text().includes('共'))
-    expect(countSpan).toBeDefined()
-    expect(countSpan!.text()).toContain('2')
+    // AGENTS #86/#88：工具栏不再显示「共 N 个」——总数由状态 chips「全部 N」承担
+    expect(wrapper.findAll('span.text-sm.text-muted').some((x) => x.text().includes('共'))).toBe(false)
+    const allChip = wrapper.findAll('.chip-status').find((c) => c.text().includes('全部'))
+    expect(allChip).toBeDefined()
+    expect(allChip!.text()).toContain('2')
   })
 
   it('clicking create button toggles wizard visibility', async () => {
@@ -253,12 +264,14 @@ describe('DnsUdpProxyList.vue 批量管理', () => {
     const headerBtns = wrapper.findAll('.page-header button')
     const newBtnIdx = headerBtns.findIndex((b) => b.text().includes('新建 DNS 代理'))
     const batchBtnIdx = headerBtns.findIndex((b) => b.text().includes('批量管理'))
-    expect(batchBtnIdx).toBeGreaterThan(newBtnIdx)
+    // AGENTS #88 ⑦：批量管理在「新建」左侧（原断言为右侧，按设计反转）
+    expect(batchBtnIdx).toBeLessThan(newBtnIdx)
 
     await btn!.trigger('click')
     await wrapper.vm.$nextTick()
-    expect(wrapper.findAll('.sp-checkbox').length).toBe(2)
-    expect(wrapper.find('.sp-batch-bar').exists()).toBe(true)
+    // 勾选框恒在 DOM，批量态由网格 .batch 类显现（CSS）；批量条为随流 .l5-batchbar
+    expect(wrapper.find('.sp-grid').classes()).toContain('batch')
+    expect(wrapper.find('.l5-batchbar').exists()).toBe(true)
   })
 
   it('勾选卡片后计数更新、批量删除按钮启用', async () => {
@@ -272,11 +285,11 @@ describe('DnsUdpProxyList.vue 批量管理', () => {
       .find((b) => b.text().includes('批量管理'))!
       .trigger('click')
     await wrapper.vm.$nextTick()
-    await wrapper.findAll('.sp-checkbox')[0].trigger('click')
+    await wrapper.findAll('.lp-check')[0].trigger('click')
     await wrapper.vm.$nextTick()
 
     expect(wrapper.findAll('.sp-card.selected').length).toBe(1)
-    expect(wrapper.find('.sp-batch-bar').text()).toContain('1')
+    expect(wrapper.find('.l5-batchbar').text()).toContain('1')
     const delBtn = wrapper.findAll('button').find((b) => b.text().includes('批量删除'))
     expect(delBtn).toBeDefined()
     expect((delBtn!.element as HTMLButtonElement).disabled).toBe(false)
@@ -314,7 +327,7 @@ describe('DnsUdpProxyList.vue 批量管理', () => {
       .find((b) => b.text().includes('批量管理'))!
       .trigger('click')
     await wrapper.vm.$nextTick()
-    await wrapper.findAll('.sp-checkbox')[0].trigger('click')
+    await wrapper.findAll('.lp-check')[0].trigger('click')
     await wrapper.vm.$nextTick()
     expect(wrapper.findAll('.sp-card.selected').length).toBe(1)
 
@@ -323,7 +336,7 @@ describe('DnsUdpProxyList.vue 批量管理', () => {
       .find((b) => b.text().includes('退出批量管理'))!
       .trigger('click')
     await wrapper.vm.$nextTick()
-    expect(wrapper.findAll('.sp-checkbox').length).toBe(0)
+    expect(wrapper.find('.sp-grid').classes()).not.toContain('batch')
     expect(wrapper.findAll('.sp-card.selected').length).toBe(0)
   })
 })
@@ -447,7 +460,11 @@ describe('DnsUdpProxyList.vue · 版本弹窗发布出口接线', () => {
     const DnsUdpProxyList = (await import('../DnsUdpProxyList.vue')).default
     const wrapper = mount(DnsUdpProxyList, { global: { stubs: vmStubs } })
     await flushPromises()
-    const vmBtn = wrapper.findAll('button').find((b) => b.text().trim() === '版本管理')
+    // AGENTS #88：动作收进卡片 ⋯ 菜单 → 先点触发器再点「版本管理」条目
+    const menuBtn = wrapper.find('.op-btn')
+    expect(menuBtn.exists()).toBe(true)
+    await menuBtn.trigger('click')
+    const vmBtn = wrapper.findAll('.mi').find((b) => b.text().includes('版本管理'))
     expect(vmBtn).toBeTruthy()
     await vmBtn!.trigger('click')
     const vmm = wrapper.findComponent({ name: 'VersionManagementModal' })
@@ -567,7 +584,7 @@ describe('DnsUdpProxyList.vue 四态与分段控件', () => {
     await w.vm.$nextTick()
     expect(pendingTab.classes()).toContain('active')
     expect(pendingTab.attributes('aria-pressed')).toBe('true')
-    expect(w.findAll('.sp-card-name').map((n) => n.text())).toEqual(['a-pending'])
+    expect(w.findAll('.lp-name').map((n) => n.text())).toEqual(['a-pending'])
     // 未发布计数 0：.empty 且无 disabled
     const unpub = tabs.find((t) => t.text().includes('未发布'))!
     expect(unpub.classes()).toContain('empty')

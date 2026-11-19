@@ -5,10 +5,10 @@ from sqlalchemy import select, func
 
 from app.core.database import get_db
 from app.config import MAX_PAGE_SIZE
-from app.models.cluster import Cluster, PluginConfig
+from app.models.cluster import Cluster, PluginConfig, Route
 from app.models.user import User, UserCluster
-from app.schemas.cluster import PluginConfigResponse
-from app.services import edge_sync
+from app.schemas.cluster import BatchDeletePluginConfigsRequest, PluginConfigResponse
+from app.services import batch_delete, edge_sync, plugin_config_refs
 from app.core.deps import require_permission
 
 router = APIRouter(prefix="/plugin_configs", tags=["plugin_configs"])
@@ -76,6 +76,15 @@ async def list_all_plugin_configs(
     # 推导收敛在 edge_sync 共享单点，与集群子页端点同口径，禁止各自实现）
     pub_map = await edge_sync.load_publish_time_map(db, "plugin_config", [c.id for c in configs])
 
+    # 引用数（设计页「被 N 条路由引用」）：插件组是集群级资源，引用只可能来自同集群路由；
+    # 一次扫描本页涉及集群的全部路由后按 edge_uuid 计数（单一解析规则见 services/plugin_config_refs）。
+    ref_counts: dict[str, int] = {}
+    if cluster_ids:
+        r_result = await db.execute(
+            select(Route.cluster_id, Route.plugin_config_ids).where(Route.cluster_id.in_(cluster_ids))
+        )
+        ref_counts = plugin_config_refs.count_by_uuid(row[1] for row in r_result.all())
+
     items = []
     for c in configs:
         r = PluginConfigResponse.model_validate(c)
@@ -90,6 +99,29 @@ async def list_all_plugin_configs(
         item = r.model_dump()
         item["cluster_name"] = cluster_name_map.get(c.cluster_id, "")
         item["cluster_group_name"] = cluster_group_map.get(c.cluster_id, "")
+        # 引用数：被多少条同集群路由引用（0 = 未被引用，可安全删除）
+        item["reference_count"] = ref_counts.get(c.edge_uuid, 0)
         items.append(item)
 
     return {"total": total, "page": page, "page_size": page_size, "items": items}
+
+
+@router.delete("", response_model=dict)
+async def delete_plugin_configs_global(
+    body: BatchDeletePluginConfigsRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("plugin_groups")),
+):
+    """批量删除插件组（跨集群，全局视图）——契约统一入口（U2）。
+
+    PLG-07（被路由引用禁止删除）由 `services/batch_delete.py` 的 precheck 按条判定。
+    """
+    return await batch_delete.batch_delete(
+        "plugin_config",
+        list(body.plugin_config_ids),
+        db=db,
+        delete_db=body.delete_db,
+        delete_edge=body.delete_edge,
+        node_ids=body.node_ids,
+        user=current_user,
+    )

@@ -18,7 +18,7 @@ export interface GroupFilterSuiteOptions {
   listUrl?: string
   /** group_name 断言方式：'defined' = 每次调用都带该参数；'sentinel' = 首次调用传 '__all__' */
   groupParamAssert?: 'defined' | 'sentinel'
-  /** 分组下拉「全部」选项文案（缺省「全部分组」；插件组主列表为「全部集群分组」，plugin-group-ux-close-loop M2） */
+  /** 分组下拉「全部」选项文案（缺省「全部分组」；2026-11-19 起插件组也统一为「全部分组」） */
   allLabel?: string
 }
 

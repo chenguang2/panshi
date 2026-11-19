@@ -76,6 +76,7 @@
           <p>DoH 域名解析转发：在 HTTP 上承载 DNS 查询，按入口路径匹配</p>
         </div>
         <div class="page-header-actions">
+          <button class="btn btn-secondary" id="batchToggle" aria-pressed="false">批量管理</button>
           <button class="btn btn-primary"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>新建 DNS 代理路由</button>
         </div>
       </div>
@@ -119,7 +120,15 @@
           <span class="t-spacer"></span>
         </div>
 
-        <div class="card-grid">
+                <div class="l5-batchbar batchbar-dynamic" id="batchBar">
+          <span class="b-count">已选 0 项</span>
+          <span class="b-sep"></span>
+          <button class="btn btn-danger btn-sm need-sel"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg> 批量删除</button>
+          <span class="b-spacer"></span>
+          <button class="btn btn-ghost btn-sm" id="clearSel">清除选择</button>
+        </div>
+
+<div class="card-grid" id="grid">
           <div class="l5-band cluster-c1" data-fold="c1" role="button" tabindex="0" aria-expanded="true" aria-controls="band-c1">
             <button class="g-chev" data-band="c1" aria-expanded="true" title="收起本组" aria-label="折叠 / 展开本组"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button>
             <span class="b-name">生产集群</span>
@@ -129,7 +138,7 @@
           </div>
           <div class="band-cards" id="band-c1">
 <article class="l5-panel cluster-c1" data-group="c1">
-            
+            <span class="lp-check" aria-hidden="true"></span>
             <div class="lp-strip"><span class="lp-tag lp-cluster">生产集群</span><span class="st-algo">上游 · <b>10.0.0.53:53</b> <span class="c-dim">+1</span></span></div>
             <div class="lp-head">
               <div class="lp-title">
@@ -143,7 +152,7 @@
             </div>
             <div class="lp-body">
               <div class="lp-row"><span class="lp-k">域名</span><span class="lp-v split"><span class="tr mono" title="api.internal、www.internal、intranet.internal">api.internal<span class="m-more" title="另含 2 个域名">+2</span></span><span class="lp-algo">轮询</span></span></div>
-              <div class="lp-row group-only"><span class="lp-k">上游</span><div class="lp-chips"><span class="tg-chip">10.0.0.53:53</span><span class="tg-chip">10.0.0.54:53</span></div></div>
+              <div class="lp-row"><span class="lp-k">上游</span><div class="lp-chips"><span class="tg-chip">10.0.0.53:53</span><span class="tg-chip">10.0.0.54:53</span></div></div>
             </div>
             <div class="lp-foot">
               <button class="op-pub">发布</button>
@@ -160,7 +169,7 @@
             </div>
           </article>
 <article class="l5-panel cluster-c1" data-group="c1">
-            
+            <span class="lp-check" aria-hidden="true"></span>
             <div class="lp-strip"><span class="lp-tag lp-cluster">生产集群</span><span class="st-algo">上游 · <b>10.0.0.55:53</b></span></div>
             <div class="lp-head">
               <div class="lp-title">
@@ -174,7 +183,7 @@
             </div>
             <div class="lp-body">
               <div class="lp-row"><span class="lp-k">域名</span><span class="lp-v split"><span class="tr mono">ctr.internal</span><span class="lp-algo">轮询</span></span></div>
-              <div class="lp-row group-only"><span class="lp-k">上游</span><div class="lp-chips"><span class="tg-chip">10.0.0.55:53</span></div></div>
+              <div class="lp-row"><span class="lp-k">上游</span><div class="lp-chips"><span class="tg-chip">10.0.0.55:53</span></div></div>
             </div>
             <div class="lp-notice alert alert-error">
               <span class="n-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3.2 21.4 20H2.6L12 3.2z" fill="currentColor"/><path d="M12 9.4v4M12 16.6v.1" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></span>
@@ -196,7 +205,7 @@
             </div>
           </article>
 <article class="l5-panel cluster-c1" data-group="c1">
-            
+            <span class="lp-check" aria-hidden="true"></span>
             <div class="lp-strip"><span class="lp-tag lp-cluster">生产集群</span><span class="st-algo">上游 · <b title="该卡片未配置上游，见警示行">—</b></span></div>
             <div class="lp-head">
               <div class="lp-title">
@@ -256,7 +265,7 @@
             </div>
             <div class="lp-body">
               <div class="lp-row"><span class="lp-k">域名</span><span class="lp-v split"><span class="tr mono" title="corp.internal、vdn.internal">corp.internal<span class="m-more" title="另含 1 个域名">+1</span></span><span class="lp-algo">一致性哈希</span></span></div>
-              <div class="lp-row group-only"><span class="lp-k">上游</span><div class="lp-chips"><span class="tg-chip">10.0.1.53:53</span></div></div>
+              <div class="lp-row"><span class="lp-k">上游</span><div class="lp-chips"><span class="tg-chip">10.0.1.53:53</span></div></div>
             </div>
             <div class="lp-foot">
               <button class="op-pub">发布</button>
@@ -287,7 +296,7 @@
             </div>
             <div class="lp-body">
               <div class="lp-row"><span class="lp-k">域名</span><span class="lp-v split"><span class="tr mono" title="legacy.internal、old.internal">legacy.internal<span class="m-more" title="另含 1 个域名">+1</span></span><span class="lp-algo">最少连接</span></span></div>
-              <div class="lp-row group-only"><span class="lp-k">上游</span><div class="lp-chips"><span class="tg-chip">10.0.1.54:53</span></div></div>
+              <div class="lp-row"><span class="lp-k">上游</span><div class="lp-chips"><span class="tg-chip">10.0.1.54:53</span></div></div>
             </div>
             <div class="lp-foot">
               <button class="op-pub">发布</button>
@@ -327,7 +336,7 @@
             </div>
             <div class="lp-body">
               <div class="lp-row"><span class="lp-k">域名</span><span class="lp-v split" title="dev.internal"><span class="tr mono">dev.internal</span><span class="lp-algo">轮询</span><span class="field-warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>TTL 未配置</span></span></div>
-              <div class="lp-row group-only"><span class="lp-k">上游</span><div class="lp-chips"><span class="tg-chip">10.0.2.53:53</span></div></div>
+              <div class="lp-row"><span class="lp-k">上游</span><div class="lp-chips"><span class="tg-chip">10.0.2.53:53</span></div></div>
             </div>
             <div class="lp-foot">
               <button class="op-pub">发布</button>

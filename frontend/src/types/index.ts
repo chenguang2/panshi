@@ -210,7 +210,6 @@ export interface Plugin {
   schema: Record<string, any>
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 动态 JSON 结构（schema/config），成员访问按需
   metadata_schema?: Record<string, any>
-  enable_metadata?: boolean
 }
 
 export interface RoutePlugin {

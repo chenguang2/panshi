@@ -1,6 +1,8 @@
 """Tests: dns_upstream plugin definition is registered in BUILTIN_PLUGINS
 and accessible via the plugins API when whitelisted."""
 
+from pathlib import Path
+
 import pytest
 import yaml
 
@@ -16,13 +18,19 @@ class TestDnsUpstreamPluginDef:
         assert "dns_upstream" in names
 
     def test_plugin_structure(self):
-        """dns_upstream entry should have required fields."""
+        """dns_upstream entry should have required fields; 已退役写死开关不得回流定义。"""
         plugin = next(p for p in BUILTIN_PLUGINS if p["name"] == "dns_upstream")
         assert plugin["display_name"] == "DNS 上游解析"
         assert plugin["category"] == "process"
-        assert plugin["enable_metadata"] is False
         assert "disable" in plugin["schema"]
         assert "hosts" in plugin["schema"]
+        # plugin-metadata-plugins-config：写死开关全链路退役，定义不得再携带残留字段
+        assert "enable_metadata" not in plugin
+
+    def test_dns_upstream_not_in_default_metadata_list(self):
+        """dns_upstream 保持路由/DNS 解析插件定位，不在插件元数据可选清单（仓库默认）。"""
+        cfg = yaml.safe_load(Path("features.yaml").read_text(encoding="utf-8"))
+        assert "dns_upstream" not in cfg.get("plugin_metadata_plugins", [])
 
 
 class TestDnsUpstreamPluginAPI:

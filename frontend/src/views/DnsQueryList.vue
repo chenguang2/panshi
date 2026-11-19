@@ -5,98 +5,221 @@
       description="管理 DNS 代理路由（DoH 域名解析转发），基于 dns_upstream 插件实现"
     >
       <template #actions>
+        <!-- AGENTS #88 ⑦：批量管理（secondary）在「新建」（primary）左侧 -->
+        <button class="btn btn-secondary" :aria-pressed="batchMode" @click="toggleBatchMode">
+          {{ batchMode ? '退出批量管理' : '批量管理' }}
+        </button>
         <button class="btn btn-primary" @click="openCreateForm">+ 新建 DNS 代理路由</button>
       </template>
     </PageHeader>
 
-    <div class="dq-header-actions">
-      <SearchInput v-model="searchText" placeholder="搜索 DNS 代理路由名称..." @input="onSearch" />
-      <select v-model="groupFilter" class="form-input" style="width: 140px; flex-shrink: 0" @change="onGroupChange">
-        <option value="__all__">全部分组</option>
-        <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
-        <option value="__ung__">未分组</option>
-      </select>
-      <ClusterSelect
-        v-model="clusterFilter"
-        :clusters="filteredClusters"
-        allow-all
-        style="width: 160px; flex-shrink: 0"
-        @change="loadRoutes"
-      />
-      <span class="text-sm text-muted">共 {{ totalCount }} 条 DNS 代理路由</span>
-    </div>
-
-    <div v-if="loading" class="loading-state">加载中...</div>
-    <div v-else-if="routes.length === 0" class="dq-empty">
-      <div class="dq-empty-icon">&#9635;</div>
-      <div class="dq-empty-text">暂无 DNS 代理路由</div>
-      <button class="btn btn-primary" style="margin-top: 12px" @click="openCreateForm">+ 新建 DNS 代理路由</button>
-    </div>
-    <div v-else class="dq-grid card-grid">
-      <div v-for="r in sortedRoutes" :key="r.id" class="dq-card std-card" :style="getCardBorderStyle(r.cluster_group_name)">
-        <div class="dq-card-topbar" :style="getGroupColorStyle(r.cluster_group_name)">
-          <span class="dq-topbar-name">{{ r.name }}</span>
-          <span class="dns-badge">DNS</span>
-          <span v-if="r.cluster_group_name" class="group-badge">{{ r.cluster_group_name }}</span>
-        </div>
-        <div class="dq-card-header">
-          <div class="dq-card-info">
-            <div v-if="r.description" class="dq-card-desc">{{ r.description }}</div>
-          </div>
-          <div class="dq-card-meta">
-            <span v-if="r.current_version" class="badge badge-success"
-              ><span class="status-dot online"></span>已发布</span
-            >
-            <span v-else class="badge badge-neutral"><span class="status-dot"></span>未发布</span>
-            <div class="dq-version-text">
-              <template v-if="r.current_version"
-                ><PublishStatusTag :version="r.current_version" :published-at="r.published_at"
-              /></template>
-            </div>
-          </div>
-        </div>
-
-        <div class="dq-card-details">
-          <div class="dq-detail-row">
-            <span class="dq-detail-label">集群</span>
-            <span class="dq-detail-value">{{ r.cluster_name || '-' }}</span>
-          </div>
-          <div class="dq-detail-row">
-            <span class="dq-detail-label">URI</span>
-            <span class="dq-detail-value dq-uri" :title="'DoH 请求入口路径（DNS over HTTP 客户端访问的路径）'">{{
-              r.uri
-            }}</span>
-          </div>
-        </div>
-
-        <div class="dq-card-hosts" v-if="dnsHosts(r)">
-          <div class="dq-hosts-count">{{ dnsDomainCount(r) }} 个域名</div>
-          <div v-for="(host, domain) in dnsHosts(r)" :key="domain" class="dq-host-domain">
-            <div class="dq-host-domain-name">{{ domain }}</div>
-            <div class="dq-host-domain-lb">
-              <span class="dq-algo-tag">{{ dnsLbLabel(host.type) }}</span>
-              <span v-if="host.ttl_valid != null" class="dq-ttl-tag">TTL: {{ host.ttl_valid }}s</span>
-              <span v-if="host.checks" class="dq-check-tag">{{ dnsCheckLabel(host.checks.type) }}</span>
-            </div>
-            <div class="dq-host-nodes">
-              <span v-for="(cidrs, nodeIp) in host.nodes" :key="nodeIp" class="dq-node-tag">{{ nodeIp }}</span>
-            </div>
-          </div>
-        </div>
-        <div v-else class="dq-card-hosts dq-hosts-empty">
-          <span class="dq-no-hosts">无域名配置</span>
-        </div>
-
-        <div class="dq-card-actions">
-          <button class="btn btn-ghost btn-sm dq-action-btn" @click="viewRoute(r)">查看</button>
-          <button class="btn btn-ghost btn-sm dq-action-btn" @click="editRoute(r)">编辑</button>
-          <button class="btn btn-ghost btn-sm dq-action-btn" style="color: var(--danger)" @click="deleteRoute(r)">
-            删除
+    <!-- 工具条 + 状态行 + 批量条（AGENTS #87/#88：与列表页、其余卡片页同构）-->
+    <div class="l5-card sp-card-page">
+      <TableToolbar
+        v-model:mode="cardMode"
+        :count="totalCount"
+        count-unit="条 DNS 代理路由"
+        :show-count="false"
+        :refreshing="loading"
+        @refresh="refreshList"
+      >
+        <template #filters>
+          <SearchInput
+            v-model="searchText"
+            placeholder="搜索 DNS 代理路由名称..."
+            :width="150"
+            @input="onSearch"
+            @clear="loadRoutes"
+          />
+          <select v-model="groupFilter" class="l5-select" style="width: 104px" @change="onGroupChange">
+            <option value="__all__">全部分组</option>
+            <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
+            <option value="__ung__">未分组</option>
+          </select>
+          <ClusterSelect
+            v-model="clusterFilter"
+            :clusters="filteredClusters"
+            allow-all
+            style="width: 120px"
+            @change="loadRoutes"
+          />
+        </template>
+        <template #mode-extra>
+          <button
+            v-if="cardMode === 'group'"
+            type="button"
+            class="tool-btn fold-all-btn"
+            data-test="card-fold-all"
+            :title="pageHasFolded ? '展开全部集群组' : '收起全部集群组'"
+            @click="toggleFoldAll"
+          >
+            <StrokeIcon :name="pageHasFolded ? 'expandAll' : 'collapseAll'" :size="13" />
+            <span class="fold-all-label">{{ pageHasFolded ? '全部展开' : '全部收起' }}</span>
           </button>
-          <span style="flex: 1"></span>
-          <button class="btn btn-secondary btn-sm" @click="publishRouteAction(r)">发布</button>
-          <button class="btn btn-secondary btn-sm" @click="openVersionManagement(r)">版本管理</button>
+        </template>
+      </TableToolbar>
+
+      <div class="l5-chiprow" data-test="status-chip-row">
+        <span class="chiprow-label">状态</span>
+        <div class="f-chips status-chips" role="group" aria-label="按发布状态筛选">
+          <button
+            v-for="t in statusChips"
+            :key="t.key"
+            type="button"
+            class="f-chip chip-status"
+            :class="{ active: statusFilter === t.key, empty: t.count === 0 }"
+            :aria-pressed="statusFilter === t.key ? 'true' : 'false'"
+            @click="statusFilter = t.key"
+          >
+            {{ t.label }}<span class="f-count">{{ t.count }}</span>
+          </button>
         </div>
+        <span class="t-spacer"></span>
+      </div>
+
+      <!-- 批量条（AGENTS #88 ③）：状态行下、网格上、随流；只有「批量删除」 -->
+      <div v-if="batchMode" class="l5-batchbar batchbar-dynamic" :class="{ 'has-sel': selectedIds.length > 0 }">
+        <span class="b-count">已选 {{ selectedIds.length }} 项</span>
+        <span class="b-sep"></span>
+        <button class="btn btn-danger btn-sm need-sel" :disabled="selectedIds.length === 0" @click="batchDelete">
+          <StrokeIcon name="trash" :size="12" /> 批量删除
+        </button>
+        <span class="b-spacer"></span>
+        <button class="link-btn" @click="toggleSelectAllFiltered">
+          {{ allFilteredSelected ? '取消全选结果' : '全选当前筛选结果' }}
+        </button>
+        <button class="link-btn" @click="clearSelection">清除选择</button>
+      </div>
+
+      <div v-if="loading" class="loading-state">加载中...</div>
+      <div v-else-if="displayedRoutes.length === 0" class="dq-empty">
+        <template v-if="hasActiveFilters">
+          <div class="dq-empty-icon">◎</div>
+          <div class="dq-empty-text">无匹配结果</div>
+          <button class="btn btn-secondary" style="margin-top: 12px" @click="clearFilters">清空筛选</button>
+        </template>
+        <template v-else>
+          <div class="dq-empty-icon">&#9635;</div>
+          <div class="dq-empty-text">暂无 DNS 代理路由</div>
+          <button class="btn btn-primary" style="margin-top: 12px" @click="openCreateForm">+ 新建 DNS 代理路由</button>
+        </template>
+      </div>
+      <div
+        v-else
+        class="dq-grid card-grid l5-card sp-cards"
+        :class="[`mode-${cardMode}`, { 'batch-mode': batchMode, batch: batchMode }]"
+      >
+        <template v-for="g in renderGroups" :key="g.clusterId">
+          <ClusterBand
+            v-if="cardMode === 'group'"
+            :name="g.clusterName"
+            :group="g.groupName"
+            :count-label="countLabelOf(g.count)"
+            :secondary="secondaryOf(g.rows)"
+            :hue-class="g.hueClass"
+            :folded="isFolded(g.clusterId)"
+            :batch="batchMode"
+            :selected-count="selectedCountInGroup(g.rows)"
+            @toggle="toggleFold(g.clusterId)"
+            @toggle-select="toggleGroupSelect(g.rows)"
+          />
+          <div
+            v-for="r in g.rows"
+            :key="r.id"
+            class="dq-card std-card l5-panel"
+            :class="[
+              clusterHueClass(r.cluster_id),
+              {
+                selected: selectedIds.includes(r.id),
+                'is-selected': selectedIds.includes(r.id),
+                'is-folded': cardMode === 'group' && !groupVisible(g.clusterId),
+              },
+            ]"
+            @click="batchMode && toggleSelect(r.id)"
+          >
+            <span class="lp-check" aria-hidden="true"></span>
+            <div class="lp-strip">
+              <span class="lp-tag lp-cluster">{{ r.cluster_name || '-' }}</span>
+              <span v-if="r.cluster_group_name" class="lp-tag group lp-group">{{ r.cluster_group_name }}</span>
+              <span class="st-algo"
+                >上游 · <b>{{ upstreamGroups(r).length }}</b> 组</span
+              >
+            </div>
+            <div class="lp-head">
+              <div class="lp-title">
+                <span class="lp-hero sm">{{ r.uri }}</span>
+                <span class="lp-name" :title="r.name">{{ r.name }}</span>
+              </div>
+              <div class="lp-status status-cell-flex">
+                <PublishStatusTag
+                  :version="r.current_version"
+                  :published-at="r.published_at"
+                  :pending="r.pending_publish === true"
+                  :last-publish-status="r.last_publish_status"
+                />
+                <PublishDiffButton
+                  :pending="r.pending_publish === true"
+                  :last-publish-status="r.last_publish_status"
+                  @click.stop="openPublishPreview(r)"
+                />
+              </div>
+            </div>
+            <div class="lp-body">
+              <!-- 域名行：首域名 + `+N` + 算法胶囊（算法为分类值 → 胶囊） -->
+              <div class="lp-row">
+                <span class="lp-k">域名</span>
+                <span class="lp-v split">
+                  <span v-if="domains(r).length" class="tr mono" :title="domains(r).join('、')">
+                    {{ domains(r)[0]
+                    }}<span v-if="domains(r).length > 1" class="m-more">+{{ domains(r).length - 1 }}</span>
+                  </span>
+                  <span v-else class="lp-v dim">未配置</span>
+                  <span v-if="domains(r).length" class="lp-algo">{{ dnsLbLabel(firstHostType(r)) }}</span>
+                </span>
+              </div>
+              <!-- 上游行：AGENTS #87 ②（r19）——列表型关键信息两态都显示、完整呈现可折行 -->
+              <div class="lp-row">
+                <span class="lp-k">上游</span>
+                <div class="lp-chips">
+                  <span v-for="up in upstreamGroups(r)" :key="up" class="tg-chip">{{ up }}</span>
+                  <span v-if="!upstreamGroups(r).length" class="lp-v dim">未配置</span>
+                </div>
+                <span v-if="upstreamGroups(r).length" class="lp-cnt">{{ upstreamGroups(r).length }} 组</span>
+              </div>
+            </div>
+            <div class="lp-foot" @click.stop>
+              <button class="op-pub" @click="publishRouteAction(r)">发布</button>
+              <div class="menu-anchor">
+                <button
+                  type="button"
+                  class="op-btn"
+                  title="更多操作"
+                  aria-label="更多操作"
+                  @click.stop="toggleCardMenu(r.id, $event)"
+                >
+                  <StrokeIcon name="dots" :size="14" />
+                </button>
+                <div class="l5-menu" :class="{ open: openMenuId === r.id, 'flip-up': menuFlipUp }">
+                  <button class="mi" @click="menuView(r)">
+                    <span class="mi-main">查看</span>
+                  </button>
+                  <button class="mi" @click="menuEdit(r)">
+                    <span class="mi-main">编辑</span>
+                  </button>
+                  <button class="mi" @click="menuVersion(r)">
+                    <span class="mi-main">版本管理</span>
+                    <span class="mi-sub">历史版本查看与回滚</span>
+                  </button>
+                  <hr class="menu-sep" />
+                  <button class="mi danger" @click="menuDelete(r)">
+                    <span class="mi-main">删除</span>
+                    <span class="mi-sub">删平台配置，可同步删 Edge 路由（弹窗可选）</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
       </div>
     </div>
 
@@ -206,7 +329,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
 import ClusterSelect from '@/components/ClusterSelect.vue'
@@ -221,6 +344,15 @@ import { formatDate } from '@/utils/format'
 import { getGroupColorStyle, getCardBorderStyle } from '@/composables/useGroupColors'
 import PublishStatusTag from '@/components/PublishStatusTag.vue'
 import SearchInput from '@/components/SearchInput.vue'
+import TableToolbar from '@/components/TableToolbar.vue'
+import ClusterBand from '@/components/ClusterBand.vue'
+import StrokeIcon from '@/components/StrokeIcon.vue'
+import PublishDiffButton from '@/components/PublishDiffButton.vue'
+import { useCardClusterGrouping } from '@/composables/useCardClusterGrouping'
+import { useBatchDelete } from '@/composables/useBatchDelete'
+import { clusterHueClass } from '@/utils/clusterHue'
+import { getClusterNodes } from '@/api/clusters'
+import { PAGE_SIZE_DROPDOWN } from '@/constants'
 
 const route = useRoute()
 
@@ -293,6 +425,38 @@ function dnsHosts(r: any): Record<string, DnsHostEntry> | null {
   } catch {
     return null
   }
+}
+
+/** 卡片域名清单（首个 + `+N`） */
+function domains(r: any): string[] {
+  const hosts = dnsHosts(r)
+  return hosts ? Object.keys(hosts) : []
+}
+
+/** 首个域名的负载均衡算法（算法为分类值 → 胶囊） */
+function firstHostType(r: any): string | undefined {
+  const hosts = dnsHosts(r)
+  const first = hosts ? Object.values(hosts)[0] : undefined
+  return first?.type
+}
+
+/** 上游清单（所有域名的 dns_upstream 节点地址，去重保持顺序） */
+function upstreamGroups(r: any): string[] {
+  const hosts = dnsHosts(r)
+  if (!hosts) return []
+  const out: string[] = []
+  for (const entry of Object.values(hosts)) {
+    for (const addr of Object.keys(entry.nodes || {})) {
+      if (!out.includes(addr)) out.push(addr)
+    }
+  }
+  return out
+}
+
+/** 集群 id → 显示名（批量删除节点清单标注归属集群用） */
+function clusterNameById(id: number): string {
+  const c = clusters.value.find((x: any) => x.id === id)
+  return c ? c.display_name || c.name || `集群 ${id}` : `集群 ${id}`
 }
 
 // ── Data loading ──
@@ -455,6 +619,190 @@ async function deleteRoute(r: any) {
       })
     },
   })
+}
+
+// ── 发布状态 chips（带计数；本页全量拉取，前端聚合）──
+type StatusKey = 'all' | 'unpublished' | 'pending' | 'published'
+const statusFilter = ref<StatusKey>('all')
+
+function statusOf(r: any): Exclude<StatusKey, 'all'> {
+  if (r.pending_publish === true) return 'pending'
+  if (r.current_version) return 'published'
+  return 'unpublished'
+}
+
+const statusChips = computed(() => {
+  const c = { unpublished: 0, pending: 0, published: 0 }
+  routes.value.forEach((r: any) => c[statusOf(r)]++)
+  return [
+    { key: 'all' as StatusKey, label: '全部', count: totalCount.value },
+    { key: 'unpublished' as StatusKey, label: '未发布', count: c.unpublished },
+    { key: 'pending' as StatusKey, label: '待发布', count: c.pending },
+    { key: 'published' as StatusKey, label: '已发布', count: c.published },
+  ]
+})
+
+const displayedRoutes = computed(() =>
+  statusFilter.value === 'all'
+    ? sortedRoutes.value
+    : sortedRoutes.value.filter((r: any) => statusOf(r) === statusFilter.value),
+)
+
+const hasActiveFilters = computed(
+  () => searchText.value.trim() !== '' || clusterFilter.value !== '' || groupFilter.value !== '__all__',
+)
+
+function clearFilters(): void {
+  searchText.value = ''
+  clusterFilter.value = ''
+  groupFilter.value = '__all__'
+  loadRoutes()
+}
+
+async function refreshList(): Promise<void> {
+  await loadClusters()
+  await loadRoutes()
+}
+
+// ── 集群分组 / 平铺双视图（AGENTS #87/#88）──
+const {
+  mode: cardMode,
+  groups: cardGroups,
+  countLabel: countLabelOf,
+  secondaryOf,
+  isFolded,
+  toggleFold,
+  pageHasFolded,
+  toggleFoldAll,
+  groupVisible,
+} = useCardClusterGrouping<any>({
+  rows: () => displayedRoutes.value,
+  unit: '条 DNS 代理路由',
+  clusterIdOf: (r) => r.cluster_id,
+  clusterNameOf: (r) => r.cluster_name,
+  groupNameOf: (r) => r.cluster_group_name,
+  secondary: (rows) => {
+    const ups = new Set<string>()
+    rows.forEach((r) => upstreamGroups(r).forEach((u) => ups.add(u)))
+    return `上游 · ${ups.size} 组`
+  },
+})
+
+const renderGroups = computed(() =>
+  cardMode.value === 'group'
+    ? cardGroups.value
+    : [
+        {
+          clusterId: -1,
+          clusterName: '',
+          groupName: '',
+          hueClass: 'cluster-c1',
+          rows: displayedRoutes.value,
+          count: displayedRoutes.value.length,
+        },
+      ],
+)
+
+// ── 批量管理（只有「批量删除」）──
+const batchMode = ref(false)
+const selectedIds = ref<number[]>([])
+const selectedRoutes = computed(() => routes.value.filter((r: any) => selectedIds.value.includes(r.id)))
+const allFilteredSelected = computed(
+  () => displayedRoutes.value.length > 0 && displayedRoutes.value.every((r: any) => selectedIds.value.includes(r.id)),
+)
+
+function toggleBatchMode(): void {
+  batchMode.value = !batchMode.value
+  if (!batchMode.value) selectedIds.value = []
+}
+function toggleSelect(id: number): void {
+  selectedIds.value = selectedIds.value.includes(id)
+    ? selectedIds.value.filter((x) => x !== id)
+    : [...selectedIds.value, id]
+}
+function clearSelection(): void {
+  selectedIds.value = []
+}
+function toggleSelectAllFiltered(): void {
+  if (allFilteredSelected.value) {
+    const ids = new Set(displayedRoutes.value.map((r: any) => r.id))
+    selectedIds.value = selectedIds.value.filter((id) => !ids.has(id))
+  } else {
+    selectedIds.value = [...new Set([...selectedIds.value, ...displayedRoutes.value.map((r: any) => r.id)])]
+  }
+}
+function selectedCountInGroup(rows: any[]): number {
+  return rows.filter((r) => selectedIds.value.includes(r.id)).length
+}
+function toggleGroupSelect(rows: any[]): void {
+  const ids = rows.map((r) => r.id)
+  const allSelected = ids.every((id) => selectedIds.value.includes(id))
+  selectedIds.value = allSelected
+    ? selectedIds.value.filter((id) => !ids.includes(id))
+    : [...new Set([...selectedIds.value, ...ids])]
+}
+
+/** 批量删除（统一入口 composable/useBatchDelete，AGENTS #88 ⑪） */
+const batchDelete = useBatchDelete<any>({
+  label: 'DNS 代理路由',
+  endpoint: '/routes',
+  idField: 'route_ids',
+  nameField: 'route_name',
+  rows: () => selectedRoutes.value,
+  ids: () => selectedIds.value,
+  nameOf: (r: any) => r.name,
+  clusterIdOf: (r: any) => r.cluster_id,
+  clusterNameOf: clusterNameById,
+  refresh: loadRoutes,
+  clearSelection: () => clearSelection(),
+  exitBatch: () => toggleBatchMode(),
+  subsetConsequence: '未选中的 {n} 个节点将保留该 DNS 代理路由',
+})
+
+// ── ⋯ 菜单（同屏只开一个；空间不足向上翻转，AGENTS #88 ⑥）──
+const openMenuId = ref<number | null>(null)
+const menuFlipUp = ref(false)
+function toggleCardMenu(id: number, event?: MouseEvent): void {
+  if (openMenuId.value === id) {
+    openMenuId.value = null
+    return
+  }
+  openMenuId.value = id
+  const rect = (event?.currentTarget as HTMLElement | null)?.getBoundingClientRect()
+  menuFlipUp.value = rect ? rect.bottom + 200 > window.innerHeight : false
+}
+function closeCardMenu(): void {
+  openMenuId.value = null
+}
+function onDocClick(): void {
+  if (openMenuId.value !== null) openMenuId.value = null
+}
+onMounted(() => document.addEventListener('click', onDocClick))
+onUnmounted(() => document.removeEventListener('click', onDocClick))
+
+function menuView(r: any): void {
+  closeCardMenu()
+  viewRoute(r)
+}
+function menuEdit(r: any): void {
+  closeCardMenu()
+  editRoute(r)
+}
+function menuVersion(r: any): void {
+  closeCardMenu()
+  openVersionManagement(r)
+}
+function menuDelete(r: any): void {
+  closeCardMenu()
+  deleteRoute(r)
+}
+
+/** 发布差异预览（与 ⋯ 菜单并列的圆形按钮） */
+const previewVisible = ref(false)
+const previewRoute = ref<any | null>(null)
+function openPublishPreview(r: any): void {
+  previewRoute.value = r
+  previewVisible.value = true
 }
 
 // ── Lifecycle ──

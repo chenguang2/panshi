@@ -72,7 +72,7 @@
     <div class="content-area">
       <div class="page-header" style="margin-bottom:20px;">
         <div>
-          <h1>插件元数据<span class="ph-inline"><span class="ph-lite lite-accent"><b>3</b> 集群</span><span class="ph-lite lite-warn"><b>1</b> schema 缺失</span></span></h1>
+          <h1>插件元数据<span class="ph-inline"><span class="ph-lite lite-accent"><b>3</b> 集群</span><span class="ph-lite lite-accent"><b>4</b> 插件</span></span></h1>
           <p>插件元数据定义插件在单个集群内的默认参数，供该集群的插件组与路由引用</p>
         </div>
         <div class="page-header-actions">
@@ -105,8 +105,15 @@
             <option>预发集群</option>
             <option>开发集群</option>
           </select>
+          <select class="l5-select" style="width:104px">
+            <option>全部插件</option>
+            <option value="log_process">日志记录</option>
+            <option value="limit-count">请求数限流</option>
+            <option value="jwt-auth">JWT 鉴权</option>
+            <option value="data_center">数据中心</option>
+          </select>
           <span class="t-spacer"></span>
-          <button class="tool-btn" title="重新拉取列表"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 11-2.64-6.36"/><path d="M21 3v6h-6"/></svg>刷新</button><button class="tool-btn fold-all-btn" data-fold-all title="收起当页全部分组"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7 4 12 9 17 4"/><polyline points="7 20 12 15 17 20"/></svg>全部收起</button><div class="seg" id="modeSeg"><span class="seg-opt all active" data-mode="group">分组</span><span class="seg-opt all" data-mode="flat">平铺</span></div>
+          <button class="tool-btn" title="重新拉取列表"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 11-2.64-6.36"/><path d="M21 3v6h-6"/></svg>刷新</button><button class="tool-btn" data-config-toggle title="收起全部配置 JSON"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7 4 12 9 17 4"/><polyline points="7 20 12 15 17 20"/></svg><span class="fold-all-label">收起配置</span></button><button class="tool-btn fold-all-btn" data-fold-all title="收起当页全部分组"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7 4 12 9 17 4"/><polyline points="7 20 12 15 17 20"/></svg>全部收起</button><div class="seg" id="modeSeg"><span class="seg-opt all active" data-mode="group">分组</span><span class="seg-opt all" data-mode="flat">平铺</span></div>
         </div>
 
         <div class="l5-chiprow">
@@ -130,10 +137,10 @@
           </div>
           <div class="band-cards" id="band-c1">
 <article class="l5-panel cluster-c1" data-group="c1">
-            <div class="lp-strip"><span class="lp-tag lp-cluster">生产集群</span><span class="lp-tag group lp-group">生产环境</span><span class="st-algo">参数 · <b>6 项</b> <span class="badge badge-success">schema 完整</span></span></div>
+            <div class="lp-strip"><span class="lp-tag lp-cluster">生产集群</span><span class="lp-tag group lp-group">生产环境</span><span class="st-algo">参数 · <b>6 项</b></span></div>
             <div class="lp-head">
               <div class="lp-title">
-                <span class="lp-name mono" title="limit-count">limit-count</span>
+                <span class="lp-name">请求数限流</span><span class="lp-key" title="limit-count">limit-count</span>
                 
                 
               </div>
@@ -144,8 +151,11 @@
             </div>
             <div class="lp-body">
               <div class="lp-row"><span class="lp-k">显示名</span><span class="lp-v">限流</span></div>
-              <div class="lp-row group-only"><span class="lp-k">参数</span><span class="lp-v"><span class="c-mono">6 项</span> <span class="badge badge-success">schema 完整</span></span></div>
-              <div class="lp-row"><span class="lp-k">配置</span><span class="lp-v mono dim" title="count=100 · window=60s">count=100 · window=60s</span></div>
+              <div class="lp-row group-only"><span class="lp-k">参数</span><span class="lp-v"><span class="c-mono">6 项</span></span></div>
+              <div class="lp-row lpr-config"><span class="lp-k">配置</span><button type="button" class="lp-json-toggle" data-json-toggle aria-expanded="true"><span class="c-mono">N 项</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button></div>
+              <pre class="lp-json">{
+  "logs": "logs/process.log"
+}</pre>
             </div>
             <div class="lp-foot">
               <button class="op-pub">发布</button>
@@ -163,10 +173,10 @@
             </div>
           </article>
 <article class="l5-panel cluster-c1" data-group="c1">
-            <div class="lp-strip"><span class="lp-tag lp-cluster">生产集群</span><span class="lp-tag group lp-group">生产环境</span><span class="st-algo">参数 · <b>4 项</b> <span class="badge badge-success">schema 完整</span></span></div>
+            <div class="lp-strip"><span class="lp-tag lp-cluster">生产集群</span><span class="lp-tag group lp-group">生产环境</span><span class="st-algo">参数 · <b>4 项</b></span></div>
             <div class="lp-head">
               <div class="lp-title">
-                <span class="lp-name mono" title="cors">cors</span>
+                <span class="lp-name">cors</span><span class="lp-key" title="cors">cors</span>
                 
                 
               </div>
@@ -177,8 +187,11 @@
             </div>
             <div class="lp-body">
               <div class="lp-row"><span class="lp-k">显示名</span><span class="lp-v">跨域</span></div>
-              <div class="lp-row group-only"><span class="lp-k">参数</span><span class="lp-v"><span class="c-mono">4 项</span> <span class="badge badge-success">schema 完整</span></span></div>
-              <div class="lp-row"><span class="lp-k">配置</span><span class="lp-v mono dim" title="allow_origin=* · max_age=3600">allow_origin=* · max_age=3600</span></div>
+              <div class="lp-row group-only"><span class="lp-k">参数</span><span class="lp-v"><span class="c-mono">4 项</span></span></div>
+              <div class="lp-row lpr-config"><span class="lp-k">配置</span><button type="button" class="lp-json-toggle" data-json-toggle aria-expanded="true"><span class="c-mono">N 项</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button></div>
+              <pre class="lp-json">{
+  "logs": "logs/process.log"
+}</pre>
             </div>
             <div class="lp-foot">
               <button class="op-pub">发布</button>
@@ -205,10 +218,10 @@
           </div>
           <div class="band-cards" id="band-c2">
 <article class="l5-panel cluster-c2" data-group="c2">
-            <div class="lp-strip"><span class="lp-tag lp-cluster">预发集群</span><span class="lp-tag group lp-group">预发环境</span><span class="st-algo">参数 · <b>5 项</b> <span class="badge badge-warn">schema 缺失</span></span></div>
+            <div class="lp-strip"><span class="lp-tag lp-cluster">预发集群</span><span class="lp-tag group lp-group">预发环境</span><span class="st-algo">参数 · <b>5 项</b></span></div>
             <div class="lp-head">
               <div class="lp-title">
-                <span class="lp-name mono" title="jwt-auth">jwt-auth</span>
+                <span class="lp-name">JWT 鉴权</span><span class="lp-key" title="jwt-auth">jwt-auth</span>
                 
                 
               </div>
@@ -219,12 +232,7 @@
             </div>
             <div class="lp-body">
               <div class="lp-row"><span class="lp-k">显示名</span><span class="lp-v">JWT 鉴权</span></div>
-              <div class="lp-row group-only"><span class="lp-k">参数</span><span class="lp-v"><span class="c-mono">5 项</span> <span class="badge badge-warn">schema 缺失</span></span></div>
-            </div>
-            <div class="lp-notice alert alert-warning">
-              <span class="n-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
-              <span class="n-txt">无 schema，只能用 JSON 编辑</span>
-              <button class="n-act">打开编辑器</button>
+              <div class="lp-row group-only"><span class="lp-k">参数</span><span class="lp-v"><span class="c-mono">5 项</span></span></div>
             </div>
             <div class="lp-foot">
               <button class="op-pub">发布</button>
@@ -242,10 +250,10 @@
             </div>
           </article>
 <article class="l5-panel cluster-c2" data-group="c2">
-            <div class="lp-strip"><span class="lp-tag lp-cluster">预发集群</span><span class="lp-tag group lp-group">预发环境</span><span class="st-algo">参数 · <b>3 项</b> <span class="badge badge-success">schema 完整</span></span></div>
+            <div class="lp-strip"><span class="lp-tag lp-cluster">预发集群</span><span class="lp-tag group lp-group">预发环境</span><span class="st-algo">参数 · <b>3 项</b></span></div>
             <div class="lp-head">
               <div class="lp-title">
-                <span class="lp-name mono" title="proxy-cache">proxy-cache</span>
+                <span class="lp-name">proxy-cache</span><span class="lp-key" title="proxy-cache">proxy-cache</span>
                 
                 
               </div>
@@ -256,7 +264,7 @@
             </div>
             <div class="lp-body">
               <div class="lp-row"><span class="lp-k">显示名</span><span class="lp-v">边缘缓存</span></div>
-              <div class="lp-row group-only"><span class="lp-k">参数</span><span class="lp-v"><span class="c-mono">3 项</span> <span class="badge badge-success">schema 完整</span></span></div>
+              <div class="lp-row group-only"><span class="lp-k">参数</span><span class="lp-v"><span class="c-mono">3 项</span></span></div>
             </div>
             <div class="lp-notice alert alert-success">
               <span class="n-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="8 12.5 11 15.5 16 9"/></svg></span>
@@ -287,18 +295,21 @@
           </div>
           <div class="band-cards" id="band-c3">
 <article class="l5-panel cluster-c3" data-group="c3">
-            <div class="lp-strip"><span class="lp-tag lp-cluster">开发集群</span><span class="lp-tag group lp-group">开发环境</span><span class="st-algo">参数 · <b>2 项</b> <span class="badge badge-success">schema 完整</span></span></div>
+            <div class="lp-strip"><span class="lp-tag lp-cluster">开发集群</span><span class="lp-tag group lp-group">开发环境</span><span class="st-algo">参数 · <b>2 项</b></span></div>
             <div class="lp-head">
               <div class="lp-title">
-                <span class="lp-name mono" title="prometheus">prometheus</span>
+                <span class="lp-name">prometheus</span><span class="lp-key" title="prometheus">prometheus</span>
                 
               </div>
               <div class="lp-status"><span class="ps-tag ps-unpub">未发布</span></div>
             </div>
             <div class="lp-body">
               <div class="lp-row"><span class="lp-k">显示名</span><span class="lp-v">指标采集</span></div>
-              <div class="lp-row group-only"><span class="lp-k">参数</span><span class="lp-v"><span class="c-mono">2 项</span> <span class="badge badge-success">schema 完整</span></span></div>
-              <div class="lp-row"><span class="lp-k">配置</span><span class="lp-v mono dim" title="export_addr=0.0.0.0:9091">export_addr=0.0.0.0:9091</span></div>
+              <div class="lp-row group-only"><span class="lp-k">参数</span><span class="lp-v"><span class="c-mono">2 项</span></span></div>
+              <div class="lp-row lpr-config"><span class="lp-k">配置</span><button type="button" class="lp-json-toggle" data-json-toggle aria-expanded="true"><span class="c-mono">N 项</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button></div>
+              <pre class="lp-json">{
+  "logs": "logs/process.log"
+}</pre>
             </div>
             <div class="lp-foot">
               <button class="op-pub">发布</button>
@@ -319,7 +330,7 @@
             <div class="lp-strip"><span class="lp-tag lp-cluster">开发集群</span><span class="lp-tag group lp-group">开发环境</span><span class="st-algo">参数 · <b>0 项</b> <span class="field-warn">沿用默认</span></span></div>
             <div class="lp-head">
               <div class="lp-title">
-                <span class="lp-name mono" title="log-process">log-process</span>
+                <span class="lp-name">log-process</span><span class="lp-key" title="log-process">log-process</span>
                 
                 
               </div>
@@ -331,7 +342,10 @@
             <div class="lp-body">
               <div class="lp-row"><span class="lp-k">显示名</span><span class="lp-v">日志切割</span></div>
               <div class="lp-row group-only"><span class="lp-k">参数</span><span class="lp-v"><span class="field-warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>0 项 · 发布后沿用插件默认</span></span></div>
-              <div class="lp-row"><span class="lp-k">配置</span><span class="lp-v mono dim" title="空配置 {}">空配置 {}</span></div>
+              <div class="lp-row lpr-config"><span class="lp-k">配置</span><button type="button" class="lp-json-toggle" data-json-toggle aria-expanded="true"><span class="c-mono">N 项</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button></div>
+              <pre class="lp-json">{
+  "logs": "logs/process.log"
+}</pre>
             </div>
             <div class="lp-foot">
               <button class="op-pub">发布</button>
@@ -552,6 +566,50 @@
 
   document.querySelectorAll('a[href="#"]').forEach(function (a) { a.addEventListener('click', function (e) { e.preventDefault(); }); });
 })();
+</script>
+<script>
+  // 配置 JSON：默认全部展开（r27）；单卡触控切换 + 工具条全局开关
+  var configToggleAll = document.querySelector('[data-config-toggle]')
+  function syncConfigToggleAll() {
+    if (!configToggleAll) return
+    var pres = [].slice.call(document.querySelectorAll('.lp-json'))
+    var allOpen = pres.length > 0 && pres.every(function (p) { return !p.hidden })
+    configToggleAll.querySelector('.fold-all-label').textContent = allOpen ? '收起配置' : '展开配置'
+    configToggleAll.setAttribute('title', allOpen ? '收起全部配置 JSON' : '展开全部配置 JSON')
+  }
+  if (configToggleAll) {
+    configToggleAll.addEventListener('click', function () {
+      var pres = [].slice.call(document.querySelectorAll('.lp-json'))
+      var allOpen = pres.length > 0 && pres.every(function (p) { return !p.hidden })
+      pres.forEach(function (p) {
+        p.hidden = allOpen
+        var row = p.previousElementSibling
+        var btn = row && row.querySelector('.lp-json-toggle')
+        if (btn) {
+          btn.setAttribute('aria-expanded', allOpen ? 'false' : 'true')
+          var poly = btn.querySelector('svg polyline')
+          if (poly) poly.setAttribute('points', allOpen ? '6 9 12 15 18 9' : '6 15 12 9 18 15')
+        }
+      })
+      syncConfigToggleAll()
+    })
+  }
+  syncConfigToggleAll()
+
+  // 配置 JSON 折叠（方案 C）：点击 N 项触控切换对应 pre 的 hidden
+  document.querySelectorAll('.lp-json-toggle').forEach(function (btn) {
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation()
+      var row = btn.closest('.lp-row')
+      var pre = row && row.nextElementSibling
+      if (!pre || !pre.classList.contains('lp-json')) return
+      var open = pre.hidden
+      pre.hidden = !open
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false')
+      var poly = btn.querySelector('svg polyline')
+      if (poly) poly.setAttribute('points', open ? '6 15 12 9 18 15' : '6 9 12 15 18 9')
+    })
+  })
 </script>
 </body>
 </html>

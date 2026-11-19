@@ -9,12 +9,13 @@ from app.core.database import get_db
 from app.models.cluster import PluginConfig, ConfigVersion, Node, Route
 from app.models.user import User
 from app.schemas.cluster import (
+    BatchDeletePluginConfigsRequest,
     PluginConfigCreate, PluginConfigUpdate, PluginConfigResponse,
     ConfigVersionListResponse,
     DeleteClusterRequest, PublishRequest,
 )
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
-from app.services import edge_sync
+from app.services import batch_delete, edge_sync, plugin_config_refs
 from app.services import publish_preview
 from app.core.deps import require_permission
 
@@ -22,22 +23,12 @@ router = APIRouter(prefix="/clusters", tags=["clusters"], dependencies=[Depends(
 
 
 def _find_referencing_routes(routes: list[Route], edge_uuid: str) -> list[Route]:
-    """遍历路由，返回引用了该插件组 edge_uuid 的路由清单（PLG-07 判定单点）。
+    """返回引用了该插件组 edge_uuid 的路由清单（PLG-07 判定）。
 
-    比对键是 Route.plugin_config_ids（JSON TEXT，存插件组 edge_uuid 而非 id，
-    约定见 models/cluster.py）；畸形 JSON 按「不含引用」处理（与 cluster_backup
-    导入期的清理语义一致），不报错阻断。删除守卫与 GET .../references 端点
-    共用本判定，保证提示展示的引用清单与后端删除拦截永远同语义。
+    比对规则收敛在 `services/plugin_config_refs.py`（与全局列表端点的
+    `reference_count` 同语义），本函数只保留名字供既有调用点使用。
     """
-    referencing: list[Route] = []
-    for r in routes:
-        try:
-            refs = json.loads(r.plugin_config_ids) if r.plugin_config_ids else []
-        except (json.JSONDecodeError, TypeError):
-            refs = []
-        if isinstance(refs, list) and edge_uuid in refs:
-            referencing.append(r)
-    return referencing
+    return plugin_config_refs.find_referencing(routes, edge_uuid)
 
 
 @router.get("/{cluster_id}/plugin_configs", response_model=dict)
@@ -141,6 +132,29 @@ async def delete_plugin_config(cluster_id: int, config_id: int, body: DeleteClus
         results.extend(edge_results)
 
     return {"message": "插件组已删除", "results": results}
+
+
+@router.delete("/{cluster_id}/plugin_configs")
+async def delete_plugin_configs_batch(
+    cluster_id: int,
+    body: BatchDeletePluginConfigsRequest = Body(...),
+    db: AsyncSession = Depends(get_db),
+    request: Request = None,
+):
+    """批量删除插件组（集群作用域）——委托 `services/batch_delete.py` 单一实现。"""
+    audit = getattr(request.state, "audit", None) if hasattr(request, "state") else None
+    if audit is not None:
+        ids = sorted(body.plugin_config_ids)
+        audit.detail = f"批量删除插件组: {ids} 共 {len(ids)} 条"
+    return await batch_delete.batch_delete(
+        "plugin_config",
+        list(body.plugin_config_ids),
+        db=db,
+        delete_db=body.delete_db,
+        delete_edge=body.delete_edge,
+        node_ids=body.node_ids,
+        cluster_id=cluster_id,
+    )
 
 
 @router.get("/{cluster_id}/plugin_configs/{config_id}/references")

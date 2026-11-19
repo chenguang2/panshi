@@ -107,6 +107,16 @@ def get_global_rule_plugins() -> list[str]:
     return get_features().get("global_rule_plugins", [])
 
 
+def get_plugin_metadata_plugins() -> list[str]:
+    """Return the plugin-metadata plugin whitelist (empty list = no restriction).
+
+    专用清单（plugin-metadata-plugins-config）：约束插件元数据两添加入口的
+    可用插件选择，不承担 enabled_plugins 的部署级全平台启用语义。
+    空/未配置 = 不限制；写死字段 enable_metadata 已退役，本清单是唯一事实源。
+    """
+    return get_features().get("plugin_metadata_plugins", [])
+
+
 def get_concurrency(name: str, default: int) -> int:
     """Return a concurrency parameter value (default when not configured)."""
     return get_features().get("concurrency", {}).get(name, default)
@@ -191,6 +201,15 @@ def _validate(config: dict) -> None:
         config["global_rule_plugins"] = []
     elif not isinstance(global_rule_plugins, list):
         print("错误: features.yaml 中 'global_rule_plugins' 必须是列表", file=sys.stderr)
+        sys.exit(1)
+
+    # 顶层专用清单 key（plugin-metadata-plugins-config）：同 global_rule_plugins
+    # 形态校验；约束插件元数据两添加入口（旧写死字段 enable_metadata 已退役）。
+    plugin_metadata_plugins = config.get("plugin_metadata_plugins", [])
+    if plugin_metadata_plugins is None:
+        config["plugin_metadata_plugins"] = []
+    elif not isinstance(plugin_metadata_plugins, list):
+        print("错误: features.yaml 中 'plugin_metadata_plugins' 必须是列表", file=sys.stderr)
         sys.exit(1)
 
 

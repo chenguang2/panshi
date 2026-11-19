@@ -6,8 +6,8 @@ import json
 
 from app.core.database import get_db
 from app.models.cluster import PluginMetadata, ConfigVersion, Node
-from app.schemas.cluster import DeleteClusterRequest, PublishRequest
-from app.services import edge_sync
+from app.schemas.cluster import BatchDeletePluginMetadataRequest, DeleteClusterRequest, PublishRequest
+from app.services import batch_delete, edge_sync
 from app.services import publish_preview
 from app.services.edge_client import EdgeClient, EdgeConnectionError, EdgeAPIError
 
@@ -175,6 +175,29 @@ async def delete_plugin_metadata(cluster_id: int, plugin_name: str, body: Delete
 
 
 # ─── 发布 ────────────────────────────────────────────
+@router.delete("")
+async def delete_plugin_metadata_batch(
+    cluster_id: int,
+    body: BatchDeletePluginMetadataRequest = Body(...),
+    db: AsyncSession = Depends(get_db),
+    request: Request = None,
+):
+    """批量删除插件元数据（集群作用域）——委托 `services/batch_delete.py` 单一实现。"""
+    audit = getattr(request.state, "audit", None) if hasattr(request, "state") else None
+    if audit is not None:
+        ids = sorted(body.metadata_ids)
+        audit.detail = f"批量删除插件元数据: {ids} 共 {len(ids)} 条"
+    return await batch_delete.batch_delete(
+        "plugin_metadata",
+        list(body.metadata_ids),
+        db=db,
+        delete_db=body.delete_db,
+        delete_edge=body.delete_edge,
+        node_ids=body.node_ids,
+        cluster_id=cluster_id,
+    )
+
+
 @router.post("/{plugin_name}/publish")
 async def publish_plugin_metadata(
     cluster_id: int,

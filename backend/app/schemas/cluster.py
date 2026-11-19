@@ -246,6 +246,28 @@ class BatchDeleteRoutesRequest(DeleteClusterRequest):
     route_ids: List[int] = Field(...)
 
 
+class BatchDeletePluginMetadataRequest(DeleteClusterRequest):
+    """批量删除插件元数据请求：继承单删字段，额外指定 metadata_ids（行 id）。"""
+
+    metadata_ids: List[int] = Field(...)
+
+
+class BatchDeletePluginConfigsRequest(DeleteClusterRequest):
+    """批量删除插件组请求：继承单删字段，额外指定 plugin_config_ids。
+
+    与路由批量同构（空列表由端点显式返回 400）；被路由引用的插件组按条返回失败，
+    不阻断其余条（PLG-07 语义不变）。
+    """
+
+    plugin_config_ids: List[int] = Field(...)
+
+
+class BatchDeleteGlobalRulesRequest(DeleteClusterRequest):
+    """批量删除全局规则请求：继承单删字段，额外指定 rule_ids。"""
+
+    rule_ids: List[int] = Field(...)
+
+
 class BatchDeleteUpstreamsRequest(DeleteClusterRequest):
     """批量删除上游请求：继承单删字段，额外指定 upstream_ids。
 
