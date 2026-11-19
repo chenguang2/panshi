@@ -35,11 +35,11 @@
             style="width: 120px"
             @change="onClusterChange"
           />
-          <select v-model="protoFilter" class="l5-select" style="width: 104px" @change="loadProxies">
+          <select v-model="schemeFilter" class="l5-select" style="width: 104px" @change="loadProxies">
             <option value="">全部协议</option>
-            <option value="TCP">TCP</option>
-            <option value="UDP">UDP</option>
-            <option value="TLS">TLS</option>
+            <option value="tcp">TCP</option>
+            <option value="udp">UDP</option>
+            <option value="tls">TLS</option>
           </select>
         </template>
         <template #mode-extra>
@@ -344,6 +344,7 @@ const {
   searchText,
   clusterFilter,
   groupFilter,
+  schemeFilter,
   groupOptions,
   filteredClusters,
   displayedProxies,
@@ -405,8 +406,8 @@ const renderGroups = computed(() =>
       ],
 )
 
-/** 协议筛选（r15-8：设计页第 4 个下拉；现有 loadProxies 按 scheme 客户端过滤） */
-const protoFilter = ref('')
+// 协议筛选：状态由 useStreamProxyList 的 schemeFilter 持有（随请求下发 `scheme`，
+// 后端按 `StreamProxy.scheme` 过滤——曾被写成页面局部 ref 且从未参与过滤/请求，等于摆设）
 
 /** 工具条刷新（TableToolbar @refresh）：重取集群与列表 */
 async function refreshList(): Promise<void> {

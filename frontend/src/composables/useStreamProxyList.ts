@@ -16,6 +16,9 @@ export function useStreamProxyList(proxyType: Ref<'normal' | 'dns'>) {
   const searchText = ref('')
   const clusterFilter = ref<string | number>('')
   const groupFilter = ref('__all__')
+  /** 协议筛选（四层代理工具条「全部协议」；值 = tcp/udp/tls，空串 = 全部）。
+   *  真实协议字段是 `scheme`（模型列），不是 `protocol`——后者在本模型不存在。 */
+  const schemeFilter = ref<string>('')
 
   const pageTitle = computed(() => (proxyType.value === 'dns' ? 'DNS 代理' : '四层代理'))
   const pageDesc = computed(() =>
@@ -138,6 +141,7 @@ export function useStreamProxyList(proxyType: Ref<'normal' | 'dns'>) {
       }
       if (clusterFilter.value) params.cluster_id = clusterFilter.value
       if (searchText.value) params.search = searchText.value
+      if (schemeFilter.value) params.scheme = schemeFilter.value
       const res = await api.get('/stream-proxies', { params })
       proxies.value = res.data.items || []
       totalCount.value = res.data.total || 0
@@ -170,6 +174,7 @@ export function useStreamProxyList(proxyType: Ref<'normal' | 'dns'>) {
     searchText,
     clusterFilter,
     groupFilter,
+    schemeFilter,
     pageTitle,
     pageDesc,
     itemLabel,

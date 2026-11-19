@@ -390,3 +390,10 @@
 - [x] 35.3 `style.css` 单点新增 `.lp-key`；`theme.css` 同值同步（设计页与实现一致）
 - [x] 35.4 设计页 `plugin-metadata.html`：卡头改「中文名 + 标识」、下拉选项改中文（日志记录 / 请求数限流 / JWT 鉴权 / 数据中心）
 - [x] 35.5 用例：下拉断言改中文（`JWT 鉴权`）；实测（1600）：下拉 `日志记录 / 数据中心`、卡头 `日志记录 [log_process]`、`自定义预处理(旧版) [functions_pre]`
+
+## 36. bugfix：四层代理「全部协议」下拉是摆设（r30，2026-11-19 用户上报）
+
+- [x] 36.1 **根因**：`protoFilter` 只是页面局部 `ref`，模板绑定后**从未参与任何过滤或请求**——`loadProxies()` 不带它、`displayedProxies` 不筛它（原注释写「按 scheme 客户端过滤」，实际代码里没有这段）。且下拉值是 `TCP/UDP/TLS` 大写，而模型列 `scheme` 是小写 `tcp/udp/tls`，即便接上也会筛空
+- [x] 36.2 **修复**：状态上移到 `useStreamProxyList` 的 `schemeFilter`（值 = `tcp|udp|tls` 小写），随请求下发 `scheme`；后端 `GET /stream-proxies` 新增 `scheme` 查询参数（`pattern="^(tcp|udp|tls)$"`，非法值 422），按 `StreamProxy.scheme` 精确过滤。选服务端过滤而非客户端：本页 `page_size=CARD_GRID` 属抽样上限，客户端过滤在超量时静默漏数据（#85④）
+- [x] 36.3 用例：前端 2 例（选择后请求带 `scheme=udp`、清空不带；选项值 `['', 'tcp', 'udp', 'tls']`）；后端 2 例（三种 scheme 各自只返回本协议；非法值 422）
+- [x] 36.4 真机实测（1600）：全部 → 16 张（均为 TCP）；选 UDP → 0 张（本页 `proxy_type=normal` 的 16 条全是 TCP，UDP 属 DNS 代理页）；选回全部 → 16 张；chips 随筛选同步（`全部 16 / 未发布 7 / 待发布 2 / 已发布 7`）

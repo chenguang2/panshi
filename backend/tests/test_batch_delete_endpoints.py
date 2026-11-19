@@ -336,3 +336,28 @@ class TestPluginMetadataFilter:
         )
         assert res.json()["total"] == 1
         assert res.json()["items"][0]["cluster_id"] == cid2
+
+
+class TestStreamProxySchemeFilter:
+    """工具条「全部协议」下拉：`GET /stream-proxies?scheme=` 按 StreamProxy.scheme 精确筛选。"""
+
+    async def test_scheme_filter(self, async_authed_client):
+        client = async_authed_client
+        for name, scheme in (("sf-tcp", "tcp"), ("sf-udp", "udp"), ("sf-tls", "tls")):
+            r = await client.post(
+                "/api/v1/clusters/1/stream-proxies",
+                json={"name": name, "listen_port": 20000 + hash(name) % 1000, "scheme": scheme, "targets": []},
+            )
+            assert r.status_code in (200, 201), r.text
+
+        for scheme in ("tcp", "udp", "tls"):
+            res = await client.get(
+                "/api/v1/stream-proxies", params={"page_size": 100, "scheme": scheme, "search": "sf-"}
+            )
+            assert res.status_code == 200, res.text
+            items = res.json()["items"]
+            assert [i["scheme"] for i in items] == [scheme]
+
+    async def test_scheme_filter_rejects_unknown_value(self, async_authed_client):
+        res = await async_authed_client.get("/api/v1/stream-proxies", params={"scheme": "sctp"})
+        assert res.status_code == 422

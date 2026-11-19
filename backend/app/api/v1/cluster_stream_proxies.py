@@ -157,12 +157,15 @@ async def list_all_stream_proxies(
     search: Optional[str] = None,
     proxy_type: Optional[str] = Query(None, pattern="^(normal|dns)$"),
     cluster_id: Optional[int] = Query(None),
+    scheme: Optional[str] = Query(None, pattern="^(tcp|udp|tls)$", description="按协议筛选（工具条「全部协议」下拉）"),
 ):
     """List stream proxies across all clusters (global view)."""
     query = select(StreamProxy).order_by(StreamProxy.created_at.desc())
 
     if proxy_type:
         query = query.where(StreamProxy.proxy_type == proxy_type)
+    if scheme:
+        query = query.where(StreamProxy.scheme == scheme)
     if cluster_id is not None:
         query = query.where(StreamProxy.cluster_id == cluster_id)
 

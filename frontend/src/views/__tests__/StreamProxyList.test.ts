@@ -723,3 +723,34 @@ describe('StreamProxyList.vue 批 4 空态与权重', () => {
     expect(w.find('.tg-w').text()).toBe('100')
   })
 })
+
+describe('StreamProxyList 协议筛选（r30 bugfix：曾为摆设下拉）', () => {
+  it('「全部协议」下拉选择后请求带 scheme；清空后不带', async () => {
+    const { default: StreamProxyList } = await import('../StreamProxyList.vue')
+    const wrapper = mount(StreamProxyList, { global: { stubs } })
+    await flushPromises()
+
+    const protoSelect = wrapper.findAll('select').find((s) => s.findAll('option').some((o) => o.text() === '全部协议'))
+    expect(protoSelect, '应有「全部协议」下拉').toBeTruthy()
+
+    mockApiGet.mockClear()
+    await protoSelect!.setValue('udp')
+    await flushPromises()
+    const calls = mockApiGet.mock.calls.filter((c) => c[0] === '/stream-proxies')
+    expect(calls.length).toBeGreaterThan(0)
+    expect(calls[calls.length - 1][1].params.scheme).toBe('udp')
+
+    await protoSelect!.setValue('')
+    await flushPromises()
+    const calls2 = mockApiGet.mock.calls.filter((c) => c[0] === '/stream-proxies')
+    expect(calls2[calls2.length - 1][1].params.scheme).toBeUndefined()
+  })
+
+  it('选项值的协议小写（tcp/udp/tls），与模型 scheme 列一致', async () => {
+    const { default: StreamProxyList } = await import('../StreamProxyList.vue')
+    const wrapper = mount(StreamProxyList, { global: { stubs } })
+    await flushPromises()
+    const protoSelect = wrapper.findAll('select').find((s) => s.findAll('option').some((o) => o.text() === '全部协议'))!
+    expect(protoSelect.findAll('option').map((o) => o.attributes('value'))).toEqual(['', 'tcp', 'udp', 'tls'])
+  })
+})
