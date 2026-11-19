@@ -6,9 +6,9 @@ import { resolve } from 'node:path'
 // 统一管理 Tab 共四个入口，发布状态列必须经共享 PublishDiffButton 提供预览入口，
 // 禁止逐页内联复制按钮（同 ClusterSelect.consumers 守卫范式）。
 //
-// 列宽防裁切（发布状态列宽方案 A，2026-11-13 用户确认）：partial 态标签
-// 「⚠ v15 · 发布未完全生效」约 170px + ▾ 按钮 23px，定宽 140/160 会把按钮裁没；
-// 四入口统一 width: 200 + 状态单元格 status-cell-flex（nowrap 防标签与按钮分离）。
+// 列宽防裁切（发布状态列宽方案 A 2026-11-13；批 7 胶囊 2026-11-19 用户裁决 C）：
+// partial 态标签「⚠ v15 · 发布未完全生效」约 170px + gap 6 + 「差异」胶囊 ~42px，
+// 四入口统一 width: 220 + 状态单元格 status-cell-flex（nowrap 防标签与按钮分离）。
 
 const ROOT = resolve(__dirname, '../../..')
 
@@ -77,9 +77,9 @@ describe('PublishDiffButton consumers', () => {
     expect(src).toContain('resource-type="\'ssl\'"')
   })
 
-  it.each(WIDTH_FILES)('%s 发布状态列宽为 200（partial 态放得下按钮）', (rel) => {
+  it.each(WIDTH_FILES)('%s 发布状态列宽为 220（批 7「差异」胶囊：partial 态放得下标签+胶囊）', (rel) => {
     const block = columnBlock(read(rel))
-    expect(block).toContain('width: 200')
+    expect(block).toContain('width: 220')
     expect(block).not.toMatch(/width: 1[0-9]0/)
   })
 })

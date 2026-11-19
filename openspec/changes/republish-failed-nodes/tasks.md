@@ -49,3 +49,13 @@
 - [x] 6.8 全量回归 + `openspec validate --all` 收口
 
 > 批 5+6 落地记录（2026-11-19）：chips 四档全六页真机确认（四层 16=7+2+6+1，partial 从「已发布」拆出）；方案 B 后端——五列 + COLUMN_MIGRATIONS、publish_resource/rollback hasattr 单点写回/清除、_RUNTIME_STATE_KEYS 补 last_publish_status（修复既有导入泄漏）、五全局列表端点透出解析明细（PublishDetailField Annotated str→dict）；PG 冒烟 11 passed（#103）；前端三级回退（持久化 → 预览缓存 → 泛化）+ partialNoticeText 六页接线。真机：四层代理 9876 打开即见「1 个节点分发失败（192.168.0.15:16620 Edge API error 403…）」（该明细来自真实 partial 发布经新写回路径落库），无 console 错误。全量 3080 passed（SearchInput 1 例隔离复跑全绿，#58 波动）。
+
+## 7. 「查看差异」入口改文字胶囊（批 7，用户裁决 C，2026-11-19）
+
+- [x] 7.1 `PublishDiffButton`：下箭头圆钮 → 文字胶囊「差异」（高 20、padding 0 9、accent 描边淡底、11px/600）；title 统一「查看与 Edge 节点的差异」
+- [x] 7.2 列表行内列宽预算复测：RouteList 发布状态列 200→220、UpstreamList 184→220（partial 态标签 ~170 + gap 6 + 胶囊 ~42），minWidths.publish_status 同步 110→220
+- [x] 7.3 断言反转（#217）：PublishDiffButton 组件测试补「差异」文本断言；RouteList 列宽断言 200→220；mockupParity r7-③ 反转（禁 chevron SVG、断言胶囊形态）
+- [x] 7.4 设计侧同步：theme.css `.diff-btn` 改胶囊；13 份设计页按钮标记替换（svg→「差异」，title 统一）；AGENTS #84② 文字同步
+- [x] 7.5 真机复测 + 全量回归收口
+
+> 批 7 落地记录（2026-11-19）：胶囊 42×20、路由列表行内发布状态单元格零溢出（236/236）；统一管理 Tab 两 composable（useClusterUpstreams/useClusterRoutes）列宽同步 220（PublishDiffButton.consumers 守卫抓出的第三处 200 预算，#217 漏扫补齐）；theme.css + 13 份设计页按钮标记同步（27 处 svg→胶囊，title 统一）；AGENTS #84② 更新。全量 3079 passed（2 例 #58 波动隔离复跑绿）、vue-tsc -b 干净。

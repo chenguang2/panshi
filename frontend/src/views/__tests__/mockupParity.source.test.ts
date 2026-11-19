@@ -363,12 +363,15 @@ describe('mockup-parity r7（parity-audit-upstreams-r7：目标健康列 / 发�
       expect(block, `${cls} 不应再带 1px 边框`).not.toContain('border:')
     }
   })
-  it('r7-③ 差异预览按钮 = 设计 .diff-btn（20×20 圆形 + accent 30% 描边 + chevron SVG）', () => {
+  it('r7-③ 差异预览按钮 = 文字胶囊「差异」（批 7 用户裁决 C：下箭头曾被误读为收起）', () => {
     const s = readFileSync(resolve(process.cwd(), 'src/components/PublishDiffButton.vue'), 'utf-8')
-    expect(s).toContain('<polyline points="6 9 12 15 18 9" />')
-    expect(s).not.toContain('<span class="tri">▾</span>')
+    // 胶囊形态：文本「差异」+ 无箭头图形
+    expect(s).toContain('差异')
+    expect(s).not.toContain('<polyline points="6 9 12 15 18 9" />')
+    expect(s).not.toContain('<svg')
     const block = s.slice(s.indexOf('.diff-preview-btn {'))
-    expect(block).toContain('width: 20px')
+    expect(block).toContain('height: 20px')
+    expect(block).toContain('padding: 0 9px')
     expect(block).toContain('border-radius: 999px')
     expect(block).toContain('oklch(56% 0.16 210 / 30%)')
     expect(block).toContain('color: var(--accent)')

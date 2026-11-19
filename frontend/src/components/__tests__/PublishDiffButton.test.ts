@@ -8,6 +8,9 @@ describe('PublishDiffButton', () => {
     const btn = w.find('button.diff-preview-btn')
     expect(btn.exists()).toBe(true)
     expect(btn.attributes('title')).toBe('查看与 Edge 节点的差异')
+    // 批 7（用户裁决 C）：文字胶囊「差异」，非箭头图形
+    expect(btn.text()).toContain('差异')
+    expect(btn.find('svg').exists()).toBe(false)
     await btn.trigger('click')
     expect(w.emitted('click')).toHaveLength(1)
     w.unmount()

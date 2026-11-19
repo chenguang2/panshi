@@ -471,7 +471,8 @@ const columns: TableColumnsType = [
   { title: '负载均衡', key: 'load_balance', width: 120 },
   { title: '目标节点与健康', key: 'targets', width: 314 },
   { title: '协议', key: 'scheme', width: 90 },
-  { title: '发布状态', key: 'publish_status', width: 184 },
+  // 220（批 7 胶囊）：partial 态标签 ~170 + gap 6 + 「差异」胶囊 ~42
+  { title: '发布状态', key: 'publish_status', width: 220 },
   { title: '操作', key: 'actions', width: 150, fixed: 'right' },
 ]
 
@@ -508,14 +509,15 @@ const { widths: fittedColumnWidths, minTableWidth } = useFitColumnWidths({
   containerRef: cardRef,
   overrides: () => upstreamColumnWidths.value,
   flexKey: 'targets',
-  // 列内容下限（r7-B4）：目标列为弹性列不设下限；scroll.x 下限之和 = 572 → 窗口 ≥ ~960 零横向滚动
+  // 列内容下限（r7-B4；批 7 publish_status 110→220）：目标列为弹性列不设下限；
+  // scroll.x 下限之和 = 682 → 窗口 ≥ ~1070 零横向滚动
   minWidths: () => ({
     ...(viewMode.value === 'flat' ? { cluster: CLUSTER_COLUMN_MIN_WIDTH } : {}),
     index: 40,
     name: 120,
     load_balance: 80,
     scheme: 70,
-    publish_status: 110,
+    publish_status: 220,
     actions: 120,
   }),
 })

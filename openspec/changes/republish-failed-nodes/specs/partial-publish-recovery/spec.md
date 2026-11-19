@@ -2,6 +2,16 @@
 
 ## ADDED Requirements
 
+### Requirement: 差异入口按钮为可读文字胶囊
+
+发布差异预览入口按钮（待发布 / 部分失败态出现在发布状态旁）SHALL 呈现为文字胶囊「差异」（accent 描边淡底、高 20px），SHALL NOT 使用方向箭头图形（与「收起/展开」隐喻冲突致误解）。悬停提示 SHALL 为「查看与 Edge 节点的差异」。承载该按钮的表格「发布状态」列 SHALL 保证 partial 态（状态标签 + 胶囊）不被裁切。
+
+#### Scenario: 按钮形态可辨识
+
+- **WHEN** 某资源处于待发布或部分失败态
+- **THEN** 发布状态旁出现「差异」文字胶囊，悬停提示为「查看与 Edge 节点的差异」
+- **AND** 按钮图形 SHALL NOT 是箭头
+
 ### Requirement: 部分失败卡片的双动作提示条
 
 已发布且处于「部分失败」（`last_publish_status === 'partial'` 且非待发布）状态的资源卡片 SHALL 显示一条错误提示条（`.lp-notice`）与两个动作：「重发失败节点」（主动作）与「查看差异」（次动作）。

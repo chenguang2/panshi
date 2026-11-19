@@ -563,8 +563,8 @@ const columns: TableColumnsType = [
     key: 'publish_status',
     // 定宽收敛（用户反馈：auto 宽度挤压行内发布后的操作列）；已发布态的完整时间在 ps-date
     // 省略号截断，悬浮 title 已带全量时间（PublishStatusTag 内建）。
-    // 200（发布状态列宽方案 A）：partial 态标签 ~170px + ▾ 预览按钮 23px，160 曾裁掉按钮。
-    width: 200,
+    // 220（批 7 胶囊）：partial 态标签 ~170px + gap 6 + 「差异」胶囊 ~42px；日期超宽走省略+tooltip。
+    width: 220,
   },
   {
     title: '创建时间',
@@ -628,14 +628,15 @@ const { widths: fittedColumnWidths, minTableWidth } = useFitColumnWidths({
   containerRef: cardRef,
   overrides: () => routeColumnWidths.value,
   flexKey: 'uri',
-  // 列内容下限（r7-B4）：请求匹配（uri）为弹性列不设下限；scroll.x 下限之和 = 652 → 窗口 ≥ ~1040 零横向滚动
+  // 列内容下限（r7-B4；批 7 publish_status 110→220）：请求匹配（uri）为弹性列不设下限；
+  // scroll.x 下限之和 = 762 → 窗口 ≥ ~1150 零横向滚动
   minWidths: () => ({
     ...(viewMode.value === 'flat' ? { cluster: CLUSTER_COLUMN_MIN_WIDTH } : {}),
     index: 40,
     name: 110,
     upstream: 100,
     priority: 70,
-    publish_status: 110,
+    publish_status: 220,
     created_at: 90,
     actions: 100,
   }),

@@ -1,6 +1,7 @@
 # partial-publish-recovery 变更
 
 ## Decisions
+- **D13 · 「查看差异」入口改文字胶囊（批 7，用户裁决 C 2026-11-19）**：PublishDiffButton 的 20×20 下箭头圆钮与「收起」通用隐喻冲突，改为文字胶囊「差异」（高 20、accent 描边淡底）。占宽 23→~42px——列表行内（路由 200 / 上游 184 定宽）按 partial 态内容实需 218 放宽到 220，minWidths 同步；设计页 theme.css `.diff-btn` 与 13 份设计页标记同步（设计页是活基准，#82 推论）。标题统一「查看与 Edge 节点的差异」。
 
 - **D1 · 方案 A（用户裁决 2026-11-19）**：失败节点集合经发布差异预览接口取得，不新增后端持久化。方案 B（publish_resource 落 failed_nodes 明细，需各资源模型加列 + COLUMN_MIGRATIONS + PG 冒烟）被明确否决，除非未来要求「页面打开即显示失败节点」（打开即见才需要持久化，点按后才取用预览即可）。
 - **D2 · 失败集合语义**：预览响应中 `node_status ∈ {unreachable, missing, diff}`（含 `behind_nodes`）的节点集合 = 「上次发布未生效的节点」。依据：partial 发布后，失败节点仍是旧配置 → 与候选存在差异或整资源缺失；成功节点与候选一致 → `ok`。待发布（pending_publish）资源**不显示**该提示条（全节点本就落后，无「失败子集」语义）——与四张页现有条件 `last_publish_status === 'partial' && !pending_publish` 一致，保持不变。

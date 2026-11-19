@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-// 发布差异预览入口按钮（publish-diff-preview）：置于 PublishStatusTag 右侧的
-// 小三角按钮。显隐自判（待发布 / 发布未完全生效两态），不侵入共享状态组件本体
-// （PublishStatusTag 为 15+ 处消费的纯展示组件，#217）。
+// 发布差异预览入口按钮（publish-diff-preview；批 7 用户裁决 C）：置于 PublishStatusTag
+// 右侧的「差异」文字胶囊——下箭头圆钮曾被误读为「收起卡片」。显隐自判（待发布 /
+// 发布未完全生效两态），不侵入共享状态组件本体（PublishStatusTag 为 15+ 处消费的
+// 纯展示组件，#217）。
 const props = defineProps<{
   /** 后端 pending_publish 推导（true = 待发布） */
   pending?: boolean
@@ -24,44 +25,32 @@ const visible = computed(() => props.pending === true || props.lastPublishStatus
     title="查看与 Edge 节点的差异"
     @click.stop="$emit('click', $event)"
   >
-    <svg
-      width="11"
-      height="11"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="2"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      aria-hidden="true"
-    >
-      <polyline points="6 9 12 15 18 9" />
-    </svg>
+    差异
   </button>
 </template>
 
 <style scoped>
-/* mockup-parity-standard r7：对齐设计 .diff-btn —— 20×20 圆形、accent 淡底 + accent 30% 描边 +
-   11px chevron；间距由父容器 gap 6px 承担（不再自带 margin）。 */
+/* 批 7（用户裁决 C）：下箭头圆钮与「收起」隐喻冲突 → 文字胶囊「差异」。
+   高 20 不变、宽随文字（~42px）；accent 描边淡底与原圆钮同族。列表行内
+   发布状态列预算已同步放宽（RouteList/UpstreamList 220 + minWidths）。 */
 .diff-preview-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
   height: 20px;
-  padding: 0;
+  padding: 0 9px;
   border: 1px solid oklch(56% 0.16 210 / 30%);
   border-radius: 999px;
   background: var(--accent-bg, oklch(56% 0.16 210 / 10%));
   color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
   transition: all 0.12s;
 }
 .diff-preview-btn:hover {
   background: oklch(56% 0.16 210 / 20%);
-}
-.diff-preview-btn svg {
-  width: 11px;
-  height: 11px;
 }
 </style>
