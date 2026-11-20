@@ -219,6 +219,14 @@ body {
   }
 }
 
+/* 卡片页面板内网格内距（设计页 .l5-card .card-grid 基线：padding 16px，2026-11-20 补齐）：
+   仅作用于「面板直子代、且网格自身不带面板框」的形态（集群管理/CA 根证书/服务器证书）；
+   :not(.l5-card) 豁免 box-in-box 过渡页（插件开关/插件组/插件元数据/静态资源/四层/DNS-UDP/
+   DNS 查询/全局规则的网格自带 l5-card），待用户裁决拉平后解除豁免。 */
+.l5-card > .card-grid:not(.l5-card) {
+  padding: 16px;
+}
+
 .std-card {
   background: var(--surface);
   border: 1px solid var(--border);

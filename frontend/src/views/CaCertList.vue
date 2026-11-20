@@ -61,83 +61,87 @@
       </div>
     </details>
 
-    <TableToolbar
-      v-model:mode="cardMode"
-      :count="totalCount"
-      count-unit="个 CA 根证书"
-      :refreshing="loading"
-      @refresh="loadCerts"
-    >
-      <template #filters>
-        <SearchInput v-model="searchText" placeholder="搜索证书名称..." :width="150" @input="onSearch" />
-        <select
-          v-model="groupFilter"
-          :title="groupFilter.startsWith('__') ? '' : groupFilter"
-          class="l5-select"
-          style="width: 104px"
-          @change="onGroupChange"
-        >
-          <option value="__all__">全部分组</option>
-          <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
-          <option value="__ung__">未分组</option>
-        </select>
-        <ClusterSelect
-          v-model="clusterFilter"
-          :clusters="filteredClusters"
-          allow-all
-          style="width: 120px"
-          @change="loadCerts"
-        />
-      </template>
-      <template #mode-extra>
-        <button
-          v-if="cardMode === 'group'"
-          type="button"
-          class="tool-btn fold-all-btn"
-          data-test="card-fold-all"
-          :title="pageHasFolded ? '展开全部集群组' : '收起全部集群组'"
-          @click="toggleFoldAll"
-        >
-          <StrokeIcon :name="pageHasFolded ? 'expandAll' : 'collapseAll'" :size="13" />
-          <span class="fold-all-label">{{ pageHasFolded ? '全部展开' : '全部收起' }}</span>
-        </button>
-      </template>
-    </TableToolbar>
+    <!-- 卡片页面板（r15 与列表页同构；设计页 ca-certs.html）：工具条 / 状态行 / 网格
+         同处一个 .l5-card 面板——2026-11-20 修复「分组|平铺」工具条漂在面板外（用户实测）。 -->
+    <div class="l5-card ca-card-page">
+      <TableToolbar
+        v-model:mode="cardMode"
+        :count="totalCount"
+        count-unit="个 CA 根证书"
+        :refreshing="loading"
+        @refresh="loadCerts"
+      >
+        <template #filters>
+          <SearchInput v-model="searchText" placeholder="搜索证书名称..." :width="150" @input="onSearch" />
+          <select
+            v-model="groupFilter"
+            :title="groupFilter.startsWith('__') ? '' : groupFilter"
+            class="l5-select"
+            style="width: 104px"
+            @change="onGroupChange"
+          >
+            <option value="__all__">全部分组</option>
+            <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
+            <option value="__ung__">未分组</option>
+          </select>
+          <ClusterSelect
+            v-model="clusterFilter"
+            :clusters="filteredClusters"
+            allow-all
+            style="width: 120px"
+            @change="loadCerts"
+          />
+        </template>
+        <template #mode-extra>
+          <button
+            v-if="cardMode === 'group'"
+            type="button"
+            class="tool-btn fold-all-btn"
+            data-test="card-fold-all"
+            :title="pageHasFolded ? '展开全部集群组' : '收起全部集群组'"
+            @click="toggleFoldAll"
+          >
+            <StrokeIcon :name="pageHasFolded ? 'expandAll' : 'collapseAll'" :size="13" />
+            <span class="fold-all-label">{{ pageHasFolded ? '全部展开' : '全部收起' }}</span>
+          </button>
+        </template>
+      </TableToolbar>
 
-    <div v-if="loading" class="loading-state">加载中...</div>
-    <div v-else-if="hasActiveFilter && displayedCerts.length === 0" class="ssl-empty">
-      <div class="ssl-empty-icon">🔑</div>
-      <div class="ssl-empty-text">未找到匹配的证书</div>
-      <button class="btn btn-secondary" style="margin-top: 12px" @click="clearFilters">清除筛选</button>
-    </div>
-    <div v-else-if="certs.length === 0" class="ssl-empty">
-      <div class="ssl-empty-icon">🔑</div>
-      <div class="ssl-empty-text">暂无 CA 根证书</div>
-      <button class="btn btn-primary" style="margin-top: 12px" @click="openCaCreateDialog">创建 CA 根证书</button>
-    </div>
-    <div v-else class="ca-grid card-grid l5-card" :class="[`mode-${cardMode}`]">
-      <template v-for="g in renderGroups" :key="g.clusterId">
-        <ClusterBand
-          v-if="cardMode === 'group'"
-          :name="g.clusterName"
-          :group="g.groupName"
-          :count-label="countLabelOf(g.count)"
-          :secondary="secondaryOf(g.rows)"
-          :hue-class="g.hueClass"
-          :folded="isFolded(g.clusterId)"
-          @toggle="toggleFold(g.clusterId)"
-        />
-        <SslCertCard
-          v-for="cert in g.rows"
-          :key="cert.id"
-          :cert="cert"
-          variant="ca"
-          :class="{ 'is-folded': cardMode === 'group' && !groupVisible(g.clusterId) }"
-          @view="viewCert"
-          @download="downloadCa"
-          @delete="deleteCert"
-        />
-      </template>
+      <div v-if="loading" class="loading-state">加载中...</div>
+      <div v-else-if="hasActiveFilter && displayedCerts.length === 0" class="ssl-empty">
+        <div class="ssl-empty-icon">🔑</div>
+        <div class="ssl-empty-text">未找到匹配的证书</div>
+        <button class="btn btn-secondary" style="margin-top: 12px" @click="clearFilters">清除筛选</button>
+      </div>
+      <div v-else-if="certs.length === 0" class="ssl-empty">
+        <div class="ssl-empty-icon">🔑</div>
+        <div class="ssl-empty-text">暂无 CA 根证书</div>
+        <button class="btn btn-primary" style="margin-top: 12px" @click="openCaCreateDialog">创建 CA 根证书</button>
+      </div>
+      <div v-else class="ca-grid card-grid" :class="[`mode-${cardMode}`]">
+        <template v-for="g in renderGroups" :key="g.clusterId">
+          <ClusterBand
+            v-if="cardMode === 'group'"
+            :name="g.clusterName"
+            :group="g.groupName"
+            :count-label="countLabelOf(g.count)"
+            :secondary="secondaryOf(g.rows)"
+            :hue-class="g.hueClass"
+            :folded="isFolded(g.clusterId)"
+            @toggle="toggleFold(g.clusterId)"
+          />
+          <SslCertCard
+            v-for="cert in g.rows"
+            :key="cert.id"
+            :cert="cert"
+            variant="ca"
+            :class="{ 'is-folded': cardMode === 'group' && !groupVisible(g.clusterId) }"
+            @view="viewCert"
+            @download="downloadCa"
+            @delete="deleteCert"
+          />
+        </template>
+      </div>
     </div>
 
     <SslViewDrawer v-model:visible="viewDrawerVisible" :cert="viewingCert" :cluster-label="viewingClusterLabel" />
