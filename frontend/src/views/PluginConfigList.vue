@@ -115,7 +115,7 @@
         <template v-else>
           <div class="pc-empty-icon">▣</div>
           <div class="pc-empty-text">暂无插件组</div>
-          <button class="btn btn-primary pc-empty-action" @click="openCreateModal">+ 添加插件组</button>
+          <button class="btn btn-primary pc-empty-action" @click="openCreateModal">添加插件组</button>
         </template>
       </div>
       <div

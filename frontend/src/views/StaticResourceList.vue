@@ -101,7 +101,7 @@
       <div v-else-if="rowsFiltered.length === 0" class="sr-empty">
         <div class="sr-empty-icon">▣</div>
         <div class="sr-empty-text">暂无静态资源</div>
-        <button class="btn btn-primary" style="margin-top: 12px" @click="openAddModal">+ 添加静态资源</button>
+        <button class="btn btn-primary" style="margin-top: 12px" @click="openAddModal">添加静态资源</button>
       </div>
       <div
         v-else

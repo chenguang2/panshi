@@ -80,9 +80,11 @@ describe('M7 未分组术语统一', () => {
 })
 
 describe('M8 连接新建动词统一', () => {
-  it('数据库管理与 CK 配置统一「+ 新建连接」', () => {
-    expect(src('views', 'DatabaseManagement.vue')).toContain('+ 新建连接')
-    expect(src('views', 'ClickHouseConfig.vue')).toContain('+ 新建连接')
+  it('数据库管理与 CK 配置统一「新建连接」（加号由 StrokeIcon plus 承担，page-header-actions-standard）', () => {
+    for (const f of ['DatabaseManagement.vue', 'ClickHouseConfig.vue']) {
+      expect(src('views', f)).toMatch(/<StrokeIcon name="plus" :size="13" \/>\s*新建连接/)
+      expect(src('views', f)).not.toContain('+ 新建连接')
+    }
   })
 })
 

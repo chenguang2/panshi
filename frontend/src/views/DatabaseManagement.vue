@@ -5,7 +5,7 @@
       description="管理当前系统使用的数据库连接，支持 SQLite / PostgreSQL，提供连接测试、切换与单向快照迁移。"
     >
       <template #actions>
-        <button class="btn btn-primary" @click="openCreateModal">+ 新建连接</button>
+        <button class="btn btn-primary" @click="openCreateModal"><StrokeIcon name="plus" :size="13" /> 新建连接</button>
       </template>
     </PageHeader>
 
@@ -218,6 +218,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
+import StrokeIcon from '@/components/StrokeIcon.vue'
 import { useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'

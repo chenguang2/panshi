@@ -3,7 +3,9 @@
     <PageHeader title="节点任务" description="跨集群查看和管理节点运维任务（安装/升级/启动/停止等），支持取消与重试">
       <template #actions>
         <!-- 页头只保留唯一主 CTA；低频文件维护入口降级到筛选条行尾（D11） -->
-        <button class="btn btn-primary" data-test="create-task-entry" @click="openCreateModal">＋ 新建任务</button>
+        <button class="btn btn-primary" data-test="create-task-entry" @click="openCreateModal">
+          <StrokeIcon name="plus" :size="13" /> 新建任务
+        </button>
       </template>
     </PageHeader>
 
@@ -1019,6 +1021,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount, h, render } from 'vue'
+import StrokeIcon from '@/components/StrokeIcon.vue'
 import ClusterSelect from '@/components/ClusterSelect.vue'
 import { message } from 'ant-design-vue'
 import { useRoute, useRouter } from 'vue-router'

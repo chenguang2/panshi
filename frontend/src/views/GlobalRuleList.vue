@@ -121,7 +121,7 @@
         <template v-else>
           <div class="gr-empty-icon">▣</div>
           <div class="gr-empty-text">暂无全局规则</div>
-          <button class="btn btn-primary gr-empty-action" @click="openCreateModal">+ 添加全局规则</button>
+          <button class="btn btn-primary gr-empty-action" @click="openCreateModal">添加全局规则</button>
         </template>
       </div>
       <div

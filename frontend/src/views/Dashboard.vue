@@ -4,6 +4,7 @@
       <template #actions>
         <span v-if="lastUpdated" class="updated-at">更新于 {{ lastUpdated }}</span>
         <button class="btn btn-secondary refresh-btn" :disabled="loading" @click="refreshAll">
+          <StrokeIcon name="rotate" :size="13" />
           {{ loading ? '刷新中…' : '刷新' }}
         </button>
       </template>
@@ -189,6 +190,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import StrokeIcon from '@/components/StrokeIcon.vue'
 import { useRouter } from 'vue-router'
 import api from '@/api'
 import PageHeader from '@/components/PageHeader.vue'

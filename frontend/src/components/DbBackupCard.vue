@@ -100,7 +100,7 @@
               <span class="dbb-title-row-text">
                 备份位置<span class="section-count">{{ targets.length }}</span>
               </span>
-              <button class="btn btn-primary btn-sm" @click="openCreateTarget">＋ 新增位置</button>
+              <button class="btn btn-primary btn-sm" @click="openCreateTarget">新增位置</button>
             </div>
             <div class="dbb-zone-hint">每轮备份将同一备份包推送至所有启用位置；单个位置失败不影响其余位置</div>
             <div v-if="targets.length === 0" class="dbb-target-empty">

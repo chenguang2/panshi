@@ -22,9 +22,7 @@
                     <div class="plugin-card-name">{{ plugin.name }}</div>
                     <div class="plugin-card-desc">{{ plugin.description }}</div>
                   </div>
-                  <a-button size="small" type="primary" class="add-btn" @click.stop="addPlugin(plugin)"
-                    >+ 添加</a-button
-                  >
+                  <a-button size="small" type="primary" class="add-btn" @click.stop="addPlugin(plugin)">添加</a-button>
                 </div>
               </div>
             </div>

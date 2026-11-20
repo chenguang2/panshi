@@ -35,7 +35,8 @@
 ### D3 · 文案
 
 - 结构「动词 + 名词」，≤ 8 个汉字，首字母大写语义不强求（中文）。
-- **禁止 `+` / `＋` 前缀**——加号由 `plus` 图标承担（现状 `+ 添加节点`、`＋ 创建 CA 根证书` 全部去掉）。
+- **主操作按钮禁止 `+` / `＋` 前缀**——覆盖页头动作区、空态 CTA、页面级区块 CTA（如卡片内「新增位置」、集群 Tab「添加全局规则」）：页头加号由 `plus` 图标承担，空态/区块按钮则直接去掉加号。
+- **例外（保留 `+`）**：表单内逐行/逐项「添加」类按钮（`.btn-ghost`/`a-button type=link`，如「+ 添加一行」「+ 添加目标」「+ 添加到上游节点」）——它们表达的是「再追加一条」，与图标化主按钮不同类，且通常没有图标位置。
 - 不使用省略号、不使用「新建/添加」混用无意义交替（同一域内保持一致：集群域用「新建」，资源域沿用各自既有动词）。
 
 ### D4 · 图标
@@ -100,6 +101,15 @@
 - **E2 · CA 证书「查看安装指引」** → **删设计页按钮**。实现是页内 `<details>` 折叠面板（四段安装步骤齐全），功能未缺；页头按钮属旧形态。
 - **E3 · 服务器证书「添加已有证书」** → **删设计页按钮**。实现无此功能，经用户确认**不是需求**；页头只保留「生成证书」+ `plus` 图标。横幅里的「前往 CA 根证书下载 →」两版一致，不动。
 - 另：`static-resources.html` 与 `plugin-metadata.html` 的页头补「批量管理」（实现已有该按钮，设计页缺，属 D9 的回填方向）。
+
+### 第二批（2026-11-21，用户要求「并进同一个变更收掉」）
+
+范围 = 上批未覆盖的两类：
+
+1. **空态 / 页面级区块 CTA 的加号前缀**（本批已清）：`GlobalRuleList`（空态）、`StaticResourceList` / `DnsQueryList` / `PluginConfigList`（空态）、`clusters/ClusterStaticResources`、`clusters/ClusterGlobalRules`（Tab 区块）、`RelayGateways`（卡内新建 + 空态文案）、`ClickHouseConfig`（空态）、`DbBackupCard`（新增位置）、`PluginMetadata`（Tab 区块「添加」）。表单内逐行「添加」按钮保留 `+`（D3 例外）。
+2. **无设计页的系统页面页头**（本批补齐 D3/D4）：`DatabaseManagement`、`ClickHouseConfig`、`RelayGateways`、`UserList`、`NodeTaskCenter` 的主操作去前缀并加 `plus`；`Dashboard` 的「刷新」补 `rotate` 图标（对齐 `overview.html`）。这些页面没有 `proposal-c` 设计页，所以只做「符合规范」而不做设计页对照。
+
+同时把守卫扩到全站：`pageHeaderActions.source.test.ts` 现在扫描全部 `.vue`（含 `views/clusters/*` 与 `components/*`）——主操作按钮禁前缀；有 `#actions` 的页面校验「无 inline margin / 无内联 `<svg>` / primary ≤ 1」；设计稿覆盖的 14 页额外校验「primary 在最右」与「设计页按钮数一致」。
 
 ## Risks / Trade-offs
 

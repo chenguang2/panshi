@@ -6,7 +6,7 @@
     >
       <template #actions>
         <router-link v-if="canViewAudit" to="/audit-log" class="btn btn-secondary">操作日志</router-link>
-        <button class="btn btn-primary" @click="openCreateModal">+ 新建连接</button>
+        <button class="btn btn-primary" @click="openCreateModal"><StrokeIcon name="plus" :size="13" /> 新建连接</button>
       </template>
     </PageHeader>
 
@@ -123,7 +123,7 @@
           <template #emptyText>
             <div class="ck-empty">
               <p>暂无 ClickHouse 连接；未配置时指标页面按默认参数尝试连接（127.0.0.1）。</p>
-              <button class="btn btn-primary btn-sm" @click="openCreateModal">+ 新建连接</button>
+              <button class="btn btn-primary btn-sm" @click="openCreateModal">新建连接</button>
             </div>
           </template>
         </a-table>
@@ -248,6 +248,7 @@
 
 <script setup lang="ts">
 import { h, computed, onMounted, reactive, ref } from 'vue'
+import StrokeIcon from '@/components/StrokeIcon.vue'
 import { message } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { showOverlayModal } from '@/composables/useOverlayModal'

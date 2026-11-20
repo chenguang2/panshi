@@ -31,3 +31,12 @@
 - [x] 4.2 同文件第二段：设计页 HTML 与实现页头按钮数量一一对应 + 设计页无前缀（14 对）
 - [x] 4.3 `vue-tsc -b` 干净；全量 `vitest --maxWorkers=4` 两轮：首轮 3165 passed / 2 failed（`mockupParity` 两处旧文案断言已反转；`DbBackupRestoreWizard.ux` 单跑 21/21 绿），次轮 3166 passed / 1 failed（`RelayGateways` 单跑 63/63 绿）——均判定 #58 波动；`openspec validate --all` 223 passed / 0 failed
 - [x] 4.4 真机 1600 视口逐页 DOM 核对 12 页（`/tmp/opencode/parity-central/check-headers.mjs` 输出 + `hdr-*.png`）：按钮文案/主次/图标/inline margin 全部符合规范；`hdr-nodes.png` 目检通过
+
+## 5. 第二批（2026-11-21 追加：空态前缀 + 系统页页头 + 设计页正文链接）
+
+- [x] 5.1 空态 / 区块 CTA 去 `+`/`＋`：`GlobalRuleList`、`StaticResourceList`、`DnsQueryList`、`PluginConfigList`、`clusters/ClusterStaticResources`、`clusters/ClusterGlobalRules`、`RelayGateways`（卡内 + 空态文案）、`ClickHouseConfig`（空态）、`DbBackupCard`（新增位置）、`PluginMetadata`（Tab「添加」）
+- [x] 5.2 系统页页头按 D3/D4 收口：`DatabaseManagement`、`ClickHouseConfig`、`RelayGateways`、`UserList`、`NodeTaskCenter` 去前缀 + `plus`；`Dashboard`「刷新」补 `rotate`
+- [x] 5.3 表单内逐行「添加」保留 `+`（D3 例外）：`EdgeClient` 两处添加节点、`AnsibleInventory` 添加主机与既有 `StreamProxyFormWizard` / `DnsQueryFormModal` / `PluginEditorDrawer` 一致
+- [x] 5.4 设计页 `plugin-metadata.html`：删除正文 alert 内的「插件开关」链接（无对应实现，侧边栏已有该入口）
+- [x] 5.5 守卫扩全站：`pageHeaderActions.source.test.ts` 扫描全部 `.vue`（148 例）——主操作禁前缀 + 页头三条 + 设计页 14 对
+- [x] 5.6 断言反转：`uxReviewM`（改断言 StrokeIcon plus 形态且不含 `+ 新建连接`）、`ClickHouseConfig.test`（`新建连接`）、`GlobalRuleList.test` / `ClusterGlobalRules.test`（标题去加号）

@@ -326,7 +326,7 @@ describe('GlobalRuleList.vue', () => {
 
   // ── 7.6 空态两分支 ──
 
-  it('空态（无筛选）：「暂无全局规则」+「+ 添加全局规则」行动入口', async () => {
+  it('空态（无筛选）：「暂无全局规则」+「添加全局规则」行动入口', async () => {
     const w = await mountWithItems([])
     expect(w.find('.gr-empty').text()).toContain('暂无全局规则')
     const action = w.findAll('.gr-empty button').find((b: any) => b.text().includes('添加全局规则'))

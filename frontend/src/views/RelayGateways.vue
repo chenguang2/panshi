@@ -8,7 +8,7 @@
         <button class="btn btn-secondary" :disabled="checkingAll || streamBusy" @click="handleCheckAll($event)">
           {{ checkingAll ? '体检中…' : '全量体检' }}
         </button>
-        <button class="btn btn-primary" @click="openCreate()">+ 新建区域</button>
+        <button class="btn btn-primary" @click="openCreate()"><StrokeIcon name="plus" :size="13" /> 新建区域</button>
       </template>
     </PageHeader>
 
@@ -99,7 +99,7 @@
         <div class="card-header">
           <h3>区域列表</h3>
           <span class="spacer"></span>
-          <button class="btn btn-primary btn-sm" @click="openCreate()">+ 新建区域</button>
+          <button class="btn btn-primary btn-sm" @click="openCreate()">新建区域</button>
         </div>
         <div class="card-body table-body">
           <a-table
@@ -293,7 +293,7 @@
       </div>
       <!-- 新建区域虚线卡：拓扑底部新建入口（点击打开新建弹窗，两视图共用） -->
       <div class="create-card" @click="openCreate()">
-        <b>+ 新建区域</b>
+        <b>新建区域</b>
         <div class="steps">登记区域 → 登记两腿 → 初始化网关 → 集群挂接 → 下发配置（全程在本图完成，不进弹窗）</div>
       </div>
     </div>
@@ -712,6 +712,7 @@
 
 <script setup lang="ts">
 import { computed, h, nextTick, onMounted, onUnmounted, reactive, ref, type VNode } from 'vue'
+import StrokeIcon from '@/components/StrokeIcon.vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'

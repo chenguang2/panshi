@@ -142,7 +142,7 @@ describe('ClickHouseConfig.vue', () => {
     const empty = wrapper.find('.mock-empty')
     expect(empty.exists()).toBe(true)
     expect(empty.text()).toContain('暂无 ClickHouse 连接')
-    const cta = empty.findAll('button').find((b) => b.text().includes('+ 新建连接'))
+    const cta = empty.findAll('button').find((b) => b.text().includes('新建连接'))
     expect(cta).toBeTruthy()
   })
 

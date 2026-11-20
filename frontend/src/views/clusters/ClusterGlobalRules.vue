@@ -64,7 +64,7 @@
       <!-- 6.3 空态行动引导（集群子页无筛选器，仅「无数据」分支，清空筛选分支属主页面） -->
       <div v-if="!cluster.global_rules || cluster.global_rules.length === 0" class="empty-hint">
         <div class="empty-hint-text">暂无全局规则</div>
-        <a-button size="small" type="primary" @click="openCreateModal">+ 添加全局规则</a-button>
+        <a-button size="small" type="primary" @click="openCreateModal">添加全局规则</a-button>
       </div>
     </div>
 

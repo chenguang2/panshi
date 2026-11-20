@@ -109,7 +109,7 @@
         <template v-else>
           <div class="dq-empty-icon">&#9635;</div>
           <div class="dq-empty-text">暂无 DNS 代理路由</div>
-          <button class="btn btn-primary" style="margin-top: 12px" @click="openCreateForm">+ 新建 DNS 代理路由</button>
+          <button class="btn btn-primary" style="margin-top: 12px" @click="openCreateForm">新建 DNS 代理路由</button>
         </template>
       </div>
       <div

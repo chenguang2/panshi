@@ -1,7 +1,7 @@
 <template>
   <div class="tab-content">
     <div class="node-actions">
-      <button class="btn btn-primary" @click="showAddStaticResource(cluster)">+ 添加静态资源</button>
+      <button class="btn btn-primary" @click="showAddStaticResource(cluster)">添加静态资源</button>
     </div>
     <div v-if="loading" class="loading-state">加载中...</div>
     <div v-if="!loading" style="display: flex; flex-wrap: wrap; gap: 16px; padding: 16px 0">

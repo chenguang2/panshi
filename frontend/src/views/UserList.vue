@@ -12,7 +12,9 @@
   <div class="user-list">
     <PageHeader title="用户管理" description="管理系统用户、角色分配和资源权限">
       <template #actions>
-        <button v-if="isAdmin" class="btn btn-primary" @click="openAddModal">+ 新建用户</button>
+        <button v-if="isAdmin" class="btn btn-primary" @click="openAddModal">
+          <StrokeIcon name="plus" :size="13" /> 新建用户
+        </button>
       </template>
     </PageHeader>
 
@@ -252,7 +254,7 @@
                 <span v-if="!selectedClusterIds.length" class="text-muted text-sm" style="padding: 4px 0"
                   >暂未选择集群</span
                 >
-                <span class="select-clusters-btn" @click="openClusterPicker">+ 选择集群</span>
+                <span class="select-clusters-btn" @click="openClusterPicker">选择集群</span>
               </div>
             </div>
           </template>
@@ -350,6 +352,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
+import StrokeIcon from '@/components/StrokeIcon.vue'
 import { message } from 'ant-design-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
 import { paginationProps } from '@/composables/usePagination'

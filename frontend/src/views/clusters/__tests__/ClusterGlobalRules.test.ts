@@ -208,7 +208,7 @@ describe('ClusterGlobalRules.vue — 加载失败态与空态（6.2/6.3，A3 共
     expect(w.findAll('.plugin-config-card').length).toBe(FOUR_STATE_ITEMS.length)
   })
 
-  it('空态：「暂无全局规则」+「+ 添加全局规则」行动按钮（集群子页无清空筛选分支）', async () => {
+  it('空态：「暂无全局规则」+「添加全局规则」行动按钮（集群子页无清空筛选分支）', async () => {
     const w = await mountTab(reactive(makeCluster([])))
     expect(w.text()).toContain('暂无全局规则')
     expect(w.text()).not.toContain('清空筛选')
@@ -222,7 +222,7 @@ describe('ClusterGlobalRules.vue — 表单收敛到共享 PluginEntityFormModal
     vi.clearAllMocks()
   })
 
-  it('「+ 添加全局规则」打开共享表单：resourceType=global_rule、clusters=[当前集群]', async () => {
+  it('「添加全局规则」打开共享表单：resourceType=global_rule、clusters=[当前集群]', async () => {
     const cluster = reactive(makeCluster([]))
     const w = await mountTab(cluster)
 

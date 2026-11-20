@@ -1,19 +1,21 @@
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { resolve, join } from 'node:path'
 
 /**
- * 页头动作区守卫（openspec page-header-actions-standard，2026-11-21）
+ * 页头动作区 / 主操作按钮守卫（openspec page-header-actions-standard，2026-11-21）
  *
- * 规范约束（design.md D2–D9）：
- * ① 页头按钮文案禁止 `+` / `＋` 前缀（加号由 StrokeIcon 的 plus 承担）；
- * ② 每页页头至多一颗 `.btn-primary`，且是动作区最后一颗；
+ * 规范（design.md D2–D9）：
+ * ① 主操作（`.btn-primary` / `a-button type="primary"`，含页头与空态 CTA）文案禁 `+` / `＋` 前缀
+ *    —— 页头加号由 StrokeIcon 的 plus 承担；表单内逐行/逐项「添加」（ghost/link 按钮）不受此限；
+ * ② 页头动作区每页至多一颗 primary；设计稿覆盖的 14 页要求 primary 位于动作区末尾；
  * ③ 页头按钮禁止 inline margin（间距由容器提供）；
  * ④ 页头按钮图标必须来自 StrokeIcon，禁止内联 <svg>；
  * ⑤ 设计页 HTML 的页头按钮集必须与本页实现一一对应（数量一致，且设计页同样无前缀）。
  */
 
 const REPO = resolve(__dirname, '../../../..')
+const SRC = resolve(__dirname, '../..')
 const VIEWS = resolve(__dirname, '..')
 const DESIGN = resolve(REPO, 'docs/ui/Live-Artifact-5/proposal-c')
 
@@ -37,6 +39,21 @@ const PAGES: Array<[string, string]> = [
 
 function read(file: string): string {
   return readFileSync(file, 'utf8')
+}
+
+/** 递归收集 .vue 文件 */
+function walk(dir: string): string[] {
+  const out: string[] = []
+  for (const name of readdirSync(dir)) {
+    const full = join(dir, name)
+    if (statSync(full).isDirectory()) {
+      if (name === '__tests__') continue
+      out.push(...walk(full))
+    } else if (name.endsWith('.vue')) {
+      out.push(full)
+    }
+  }
+  return out
 }
 
 /** 取 Vue 模板里的 `#actions` 槽内容 */
@@ -71,10 +88,15 @@ function designActions(html: string): string {
   return ''
 }
 
-/** 抽取块内的按钮（原文 + 去标签后的文本） */
-function buttons(block: string): Array<{ raw: string; text: string }> {
-  const out: Array<{ raw: string; text: string }> = []
-  const re = /<button\b[\s\S]*?<\/button>/g
+interface Btn {
+  raw: string
+  text: string
+}
+
+/** 抽取块内的原生按钮与 a-button（保留原文与去标签后的文本） */
+function buttons(block: string): Btn[] {
+  const out: Btn[] = []
+  const re = /<(button|a-button)\b[\s\S]*?<\/\1>/g
   let m: RegExpExecArray | null
   while ((m = re.exec(block)) !== null) {
     const raw = m[0]
@@ -87,35 +109,57 @@ function buttons(block: string): Array<{ raw: string; text: string }> {
   return out
 }
 
+/** 主操作按钮：原生 .btn-primary（字面 class，动态 :class 不计）或 a-button type="primary" */
+function isPrimary(raw: string): boolean {
+  return /(?<!:)class="[^"]*\bbtn-primary\b/.test(raw) || /<a-button[^>]*\btype="primary"/.test(raw)
+}
+
+const VUE_FILES = walk(VIEWS)
+const HEADER_FILES = VUE_FILES.filter((f) => read(f).includes('<template #actions>'))
+
+describe('主操作按钮守卫 · 全站（含页头与空态 CTA）', () => {
+  for (const file of VUE_FILES) {
+    const rel = file.slice(SRC.length + 1)
+    it(`${rel}：primary 按钮文案不带 + / ＋ 前缀`, () => {
+      const bad = buttons(read(file)).filter(
+        (b) => isPrimary(b.raw) && (b.text.startsWith('+') || b.text.startsWith('＋')),
+      )
+      expect(
+        bad.map((b) => b.text),
+        '主操作按钮仍带加号前缀',
+      ).toEqual([])
+    })
+  }
+})
+
 describe('页头动作区守卫 · 实现侧', () => {
-  for (const [file] of PAGES) {
-    const source = read(resolve(VIEWS, file))
-    const act = implActions(source)
+  for (const file of HEADER_FILES) {
+    const rel = file.slice(SRC.length + 1)
+    const act = implActions(read(file))
     const btns = buttons(act)
 
-    it(`${file}：按钮文案不带 + / ＋ 前缀`, () => {
-      for (const b of btns) {
-        expect(b.text.startsWith('+') || b.text.startsWith('＋'), `「${b.text}」带加号前缀`).toBe(false)
-      }
-    })
-
-    it(`${file}：主操作唯一且在最右`, () => {
-      const primaries = btns.map((b, i) => ({ i, primary: /class="[^"]*\bbtn-primary\b/.test(b.raw) }))
-      const hits = primaries.filter((x) => x.primary)
-      expect(hits.length, '页头主操作超过 1 颗').toBeLessThanOrEqual(1)
-      if (hits.length === 1 && btns.length > 1) {
-        expect(hits[0].i, '主操作不是最后一颗').toBe(btns.length - 1)
-      }
-    })
-
-    it(`${file}：按钮不带 inline margin`, () => {
+    it(`${rel}：按钮不带 inline margin`, () => {
       for (const b of btns) {
         expect(/style="[^"]*margin-(left|right)/.test(b.raw), `「${b.text}」用了 inline margin`).toBe(false)
       }
     })
 
-    it(`${file}：图标来自 StrokeIcon（无内联 svg）`, () => {
+    it(`${rel}：图标来自 StrokeIcon（无内联 svg）`, () => {
       expect(act).not.toContain('<svg')
+    })
+
+    it(`${rel}：primary 至多一颗`, () => {
+      expect(btns.filter((b) => isPrimary(b.raw)).length).toBeLessThanOrEqual(1)
+    })
+  }
+})
+
+describe('页头动作区守卫 · 设计稿覆盖页（主操作在最右）', () => {
+  for (const [file] of PAGES) {
+    const btns = buttons(implActions(read(resolve(VIEWS, file))))
+    it(`${file}：主操作在最右`, () => {
+      const idx = btns.map((b, i) => ({ i, primary: isPrimary(b.raw) })).filter((x) => x.primary)
+      if (idx.length === 1 && btns.length > 1) expect(idx[0].i, '主操作不是最后一颗').toBe(btns.length - 1)
     })
   }
 })
