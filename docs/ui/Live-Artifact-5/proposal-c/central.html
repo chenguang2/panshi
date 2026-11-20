@@ -23,6 +23,9 @@
 .node-chip.off { color: var(--muted); opacity: .8; }
 .cl-reg-badge { border-color: oklch(56% 0.16 210 / 30%); background: var(--accent-bg); color: var(--accent); }
 .cl-direct-badge { color: var(--muted); }
+/* 卡头「最大化」chip（实现 .maximize-btn-sm 同形；parity 审计 r1 D-2 回填） */
+.maximize-btn-sm { display: inline-flex; align-items: center; gap: 2px; padding: 1px 6px; font-size: 11px; border-radius: 3px; color: var(--muted); cursor: pointer; transition: all .15s; flex-shrink: 0; white-space: nowrap; }
+.maximize-btn-sm:hover { background: oklch(56% 0.16 210 / 12%); color: var(--accent); }
 
 /* ── 最大化面板：名字行 + dtabs + 表体（实现侧 expanded-name-row / dtabs 同语义）── */
 .max-panel { position: relative; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-sm); overflow: hidden; margin-bottom: 24px; }
@@ -115,6 +118,7 @@
         <div class="l5-search"><input type="text" style="width:150px" placeholder="搜索集群名称或显示名..."><svg class="s-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>
         <select class="l5-select" style="width:104px"><option>全部分组</option><option>生产环境</option><option>预发环境</option><option>开发环境</option><option>未分组</option></select>
         <span class="t-spacer"></span>
+        <button class="tool-btn" data-refresh title="重新拉取列表"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>刷新</button>
         <button class="tool-btn fold-all-btn" data-fold-all title="收起当页全部分组"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7 4 12 9 17 4"/><polyline points="7 20 12 15 17 20"/></svg>全部收起</button>
         <div class="seg" id="modeSeg"><span class="seg-opt all active" data-mode="group">分组</span><span class="seg-opt" data-mode="flat">平铺</span></div>
       </div>
@@ -134,11 +138,11 @@
               <div class="lp-title">
                 <span class="lp-name" title="生产集群 A">生产集群 A</span>
                 <span class="lp-tag tech" title="集群标识（API 标识）">prod-a</span>
+                <span class="maximize-btn-sm" title="最大化"><svg width="12" height="12" viewBox="0 0 14 14" fill="none" aria-hidden="true"><rect x="1" y="1" width="12" height="12" rx="1.5" stroke="currentColor" stroke-width="1.4"/><line x1="4.5" y1="1.5" x2="4.5" y2="12.5" stroke="currentColor" stroke-width="1" opacity="0.3"/><line x1="9.5" y1="1.5" x2="9.5" y2="12.5" stroke="currentColor" stroke-width="1" opacity="0.3"/><line x1="1.5" y1="4.5" x2="12.5" y2="4.5" stroke="currentColor" stroke-width="1" opacity="0.3"/><line x1="1.5" y1="9.5" x2="12.5" y2="9.5" stroke="currentColor" stroke-width="1" opacity="0.3"/></svg>最大化</span>
               </div>
               <div class="lp-status">
                 <span class="ps-tag ps-pub">已启用</span>
                 <span class="ps-tag ps-pub" title="全部资源已发布">v3 · 已发布</span>
-                <span class="lp-tag cl-direct-badge" title="该集群未挂中继区域，直连访问 Edge">直连</span>
               </div>
             </div>
             <div class="lp-body">
@@ -179,6 +183,7 @@
               <div class="lp-title">
                 <span class="lp-name" title="支付集群">支付集群</span>
                 <span class="lp-tag tech" title="集群标识（API 标识）">pay-gw</span>
+                <span class="maximize-btn-sm" title="最大化"><svg width="12" height="12" viewBox="0 0 14 14" fill="none" aria-hidden="true"><rect x="1" y="1" width="12" height="12" rx="1.5" stroke="currentColor" stroke-width="1.4"/><line x1="4.5" y1="1.5" x2="4.5" y2="12.5" stroke="currentColor" stroke-width="1" opacity="0.3"/><line x1="9.5" y1="1.5" x2="9.5" y2="12.5" stroke="currentColor" stroke-width="1" opacity="0.3"/><line x1="1.5" y1="4.5" x2="12.5" y2="4.5" stroke="currentColor" stroke-width="1" opacity="0.3"/><line x1="1.5" y1="9.5" x2="12.5" y2="9.5" stroke="currentColor" stroke-width="1" opacity="0.3"/></svg>最大化</span>
               </div>
               <div class="lp-status">
                 <span class="ps-tag ps-pub">已启用</span>
@@ -252,7 +257,7 @@
       <div class="max-name-row">
         <span class="cname" id="maxCname">生产集群 A</span>
         <span class="chint" id="maxChint">prod-a</span>
-        <span class="lp-tag cl-direct-badge" id="maxBadge" title="该集群未挂中继区域，直连访问 Edge">直连</span>
+        <span class="lp-tag cl-reg-badge" id="maxBadge" style="display:none"></span>
         <span class="spacer"></span>
         <button class="btn btn-secondary">详情</button>
         <button class="btn btn-secondary">连接测试</button>
@@ -717,7 +722,11 @@ document.querySelectorAll('.mini-item').forEach((item) => {
     item.classList.add('active')
     document.getElementById('maxCname').textContent = item.dataset.cname
     document.getElementById('maxChint').textContent = item.dataset.chint
-    document.getElementById('maxBadge').textContent = item.dataset.badge
+    // 路径徽章：直连是缺省态不展示（cluster-ux-close-loop 3.4），仅中继集群显示徽章
+    const badge = document.getElementById('maxBadge')
+    const badgeLabel = item.dataset.badge
+    badge.style.display = badgeLabel && badgeLabel !== '直连' ? '' : 'none'
+    if (badgeLabel) badge.textContent = badgeLabel
     // 色相跟随：面板挂 cluster-cN（演示三集群 c1/c3/c5）
     const panel = document.getElementById('viewMax')
     panel.classList.remove('cluster-c1', 'cluster-c3', 'cluster-c5')

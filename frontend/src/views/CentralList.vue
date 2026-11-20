@@ -5,9 +5,18 @@
         <PageStatBadges :items="headerStatItems" />
       </template>
       <template #actions>
-        <button class="btn btn-secondary" @click="openBackupDownloadTopbar">备份下载</button>
-        <button class="btn btn-secondary" @click="openBackupImport">从备份导入</button>
-        <button class="btn btn-primary" @click="showAddModal">+ 新建集群</button>
+        <button class="btn btn-secondary" @click="openBackupDownloadTopbar">
+          <StrokeIcon name="download" :size="13" />
+          备份下载
+        </button>
+        <button class="btn btn-secondary" @click="openBackupImport">
+          <StrokeIcon name="upload" :size="13" />
+          从备份导入
+        </button>
+        <button class="btn btn-primary" @click="showAddModal">
+          <StrokeIcon name="plus" :size="13" />
+          新建集群
+        </button>
       </template>
     </PageHeader>
 
@@ -100,6 +109,7 @@
               :cluster="cluster"
               :route-badge="routeBadge(cluster)"
               :stat-click="(key: string) => openStatTab(cluster, key)"
+              @test="testCluster(cluster)"
             >
               <template #topbar-extra>
                 <div class="maximize-btn-sm" title="最大化" @click.stop="maximizeCluster(cluster)">
@@ -158,25 +168,21 @@
             <span v-if="c.display_name" class="mini-hint">{{ c.name }}</span>
           </div>
         </div>
-        <button class="restore-btn" @click="restoreMaximize">退出最大化</button>
+        <button class="restore-btn" @click="restoreMaximize">× 收起</button>
       </div>
       <div class="max-name-row">
         <span class="cname">{{ maximizedCluster.display_name || maximizedCluster.name }}</span>
-        <span v-if="maximizedCluster.display_name" class="chint">({{ maximizedCluster.name }})</span>
+        <span v-if="maximizedCluster.display_name" class="chint">{{ maximizedCluster.name }}</span>
         <span v-if="maximizedRouteBadge" class="lp-tag cl-route-badge" :class="maximizedRouteBadge.cls">{{
           maximizedRouteBadge.label
         }}</span>
         <div class="cl-card-actions">
-          <button class="btn btn-secondary btn-sm" @click.stop="viewClusterDetail(maximizedCluster)">详情</button>
-          <button class="btn btn-ghost btn-sm" @click.stop="testCluster(maximizedCluster)">连接测试</button>
-          <button class="btn btn-ghost btn-sm" @click.stop="editCluster(maximizedCluster)">编辑</button>
-          <button class="btn btn-ghost btn-sm" @click.stop="exportCluster(maximizedCluster)">导出 Excel</button>
-          <button class="btn btn-ghost btn-sm" @click.stop="openBackupDownload(maximizedCluster)">备份下载</button>
-          <button
-            class="btn btn-ghost btn-sm"
-            style="color: var(--danger)"
-            @click.stop="deleteCluster(maximizedCluster)"
-          >
+          <button class="btn btn-secondary" @click.stop="viewClusterDetail(maximizedCluster)">详情</button>
+          <button class="btn btn-ghost" @click.stop="testCluster(maximizedCluster)">连接测试</button>
+          <button class="btn btn-ghost" @click.stop="editCluster(maximizedCluster)">编辑</button>
+          <button class="btn btn-ghost" @click.stop="exportCluster(maximizedCluster)">导出 Excel</button>
+          <button class="btn btn-ghost" @click.stop="openBackupDownload(maximizedCluster)">备份下载</button>
+          <button class="btn btn-ghost" style="color: var(--danger)" @click.stop="deleteCluster(maximizedCluster)">
             删除
           </button>
         </div>
@@ -186,48 +192,153 @@
           class="dt"
           :class="{ active: maximizedCluster.activeTab === 'nodes' }"
           @click="switchTab(maximizedCluster, 'nodes')"
-          >集群节点
-          <span class="db">{{ maximizedCluster.healthy_node_count }}/{{ maximizedCluster.node_count }}</span></span
         >
+          <svg
+            class="dt-ico"
+            width="13"
+            height="13"
+            viewBox="0 0 18 18"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M2 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h5v5H3v-5zm7 0h5v5h-5v-5z" />
+          </svg>
+          集群节点 <span class="db">{{ maximizedCluster.healthy_node_count }}/{{ maximizedCluster.node_count }}</span>
+        </span>
         <span
           class="dt"
           :class="{ active: maximizedCluster.activeTab === 'upstreams' }"
           @click="switchTab(maximizedCluster, 'upstreams')"
-          >上游 <span class="db">{{ maximizedCluster.upstream_count }}</span></span
         >
+          <svg
+            class="dt-ico"
+            width="13"
+            height="13"
+            viewBox="0 0 18 18"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M9 2v10M5 8l4 4 4-4M2 16h14" />
+          </svg>
+          上游 <span class="db">{{ maximizedCluster.upstream_count }}</span>
+        </span>
         <span
           class="dt"
           :class="{ active: maximizedCluster.activeTab === 'routes' }"
           @click="switchTab(maximizedCluster, 'routes')"
-          >路由 <span class="db">{{ maximizedCluster.route_count }}</span></span
         >
+          <svg
+            class="dt-ico"
+            width="13"
+            height="13"
+            viewBox="0 0 18 18"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M2 9l5-7v5h9v4H7v5l-5-7z" />
+          </svg>
+          路由 <span class="db">{{ maximizedCluster.route_count }}</span>
+        </span>
         <span
           v-if="authStore.hasPermission('plugin_groups')"
           class="dt"
           :class="{ active: maximizedCluster.activeTab === 'pluginConfigs' }"
           @click="switchTab(maximizedCluster, 'pluginConfigs')"
-          >插件组 <span class="db">{{ maximizedCluster.plugin_config_count }}</span></span
         >
+          <svg
+            class="dt-ico"
+            width="13"
+            height="13"
+            viewBox="0 0 18 18"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h5v5H3v-5zm7 0h5v5h-5v-5z" />
+          </svg>
+          插件组 <span class="db">{{ maximizedCluster.plugin_config_count }}</span>
+        </span>
         <span
           v-if="authStore.hasPermission('plugin_metadata')"
           class="dt"
           :class="{ active: maximizedCluster.activeTab === 'globalPlugins' }"
           @click="switchTab(maximizedCluster, 'globalPlugins')"
-          >插件元数据 <span class="db">{{ maximizedCluster.plugin_metadata_count }}</span></span
         >
+          <svg
+            class="dt-ico"
+            width="13"
+            height="13"
+            viewBox="0 0 18 18"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M5 3h8l3 3v9a1 1 0 01-1 1H5a1 1 0 01-1-1V4a1 1 0 011-1z" />
+            <path d="M9 7v4M9 13v-1" />
+          </svg>
+          插件元数据 <span class="db">{{ maximizedCluster.plugin_metadata_count }}</span>
+        </span>
         <span
           v-if="authStore.hasPermission('global_rules')"
           class="dt"
           :class="{ active: maximizedCluster.activeTab === 'globalRules' }"
           @click="switchTab(maximizedCluster, 'globalRules')"
-          >全局规则 <span class="db">{{ maximizedCluster.global_rule_count }}</span></span
         >
+          <svg
+            class="dt-ico"
+            width="13"
+            height="13"
+            viewBox="0 0 18 18"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M9 2l6 3v4c0 3-2.5 5.5-6 7-3.5-1.5-6-4-6-7V5l6-3z" />
+          </svg>
+          全局规则 <span class="db">{{ maximizedCluster.global_rule_count }}</span>
+        </span>
         <span
           class="dt"
           :class="{ active: maximizedCluster.activeTab === 'staticResources' }"
           @click="switchTab(maximizedCluster, 'staticResources')"
-          >静态资源 <span class="db">{{ maximizedCluster.static_resource_count }}</span></span
         >
+          <svg
+            class="dt-ico"
+            width="13"
+            height="13"
+            viewBox="0 0 18 18"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M5 3a1 1 0 011-1h6l4 4v10a1 1 0 01-1 1H6a1 1 0 01-1-1V3zM11 2v4h4" />
+          </svg>
+          静态资源 <span class="db">{{ maximizedCluster.static_resource_count }}</span>
+        </span>
       </div>
       <div class="dbody">
         <ClusterUpstreams
@@ -1356,57 +1467,62 @@ onMounted(async () => {
   padding: 8px 16px 0;
   overflow-x: auto;
 }
+/* 页签 = central.html .dt：文件夹式连通（图标 + 文本 + 计数胶囊），active 2px accent 上边 */
 .dt {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   padding: 7px 14px;
   font-size: 13px;
+  font-weight: 500;
   color: var(--muted);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  background: var(--bg);
   cursor: pointer;
   white-space: nowrap;
   transition: all 0.2s;
   flex-shrink: 0;
-  border-radius: 8px 8px 0 0;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-bottom: none;
   position: relative;
   user-select: none;
 }
+.dt .dt-ico {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
 .dt:hover {
   color: var(--accent);
-  background: var(--accent-bg);
-  border-color: var(--accent);
+  background: oklch(56% 0.16 210 / 6%);
+  border-color: oklch(56% 0.16 210 / 40%);
 }
 .dt.active {
   color: var(--accent);
-  background: var(--bg);
-  border-color: var(--border);
-  border-bottom: 1px solid var(--bg);
+  background: var(--accent-bg);
+  border-color: var(--accent);
+  border-width: 2px 2px 0;
+  padding: 6px 13px 7px;
+  border-bottom: 1px solid var(--accent-bg);
   margin-bottom: -1px;
   font-weight: 500;
   box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.04);
   z-index: 1;
 }
-.dt.active::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 8px;
-  right: 8px;
-  height: 2px;
-  background: var(--accent);
-  border-radius: 0 0 2px 2px;
-}
-.db {
-  margin-left: 4px;
+.dt .db {
+  font-size: 11px;
+  font-family: var(--font-mono);
   padding: 1px 6px;
   border-radius: 8px;
-  font-size: 11px;
-  background: var(--bg);
+  background: var(--surface);
+  border: 1px solid var(--border);
   color: var(--muted);
 }
 .dt.active .db {
   background: var(--accent-bg);
   color: var(--accent);
+  border-color: oklch(56% 0.16 210 / 30%);
 }
 .dbody {
   padding: 16px;
@@ -1661,16 +1777,15 @@ onMounted(async () => {
   color: var(--muted) !important;
 }
 
-/* ── Maximized mode: mini-bar ── */
+/* ── Maximized mode: mini-bar（central.html .mini-bar：独立全局导航条，--bg 底 + 上下双线） ── */
 .cluster-mini-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-  padding: 6px 12px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  gap: 6px;
+  padding: 10px 16px;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
   position: relative;
   z-index: 1;
 }
@@ -1682,62 +1797,66 @@ onMounted(async () => {
   flex: 1;
   overflow-x: auto;
   scrollbar-width: thin;
-  padding: 2px 0;
 }
 
 .mini-item {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
-  border-radius: var(--radius-md);
+  padding: 5px 12px;
+  border-radius: 999px;
   font-size: 12px;
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
-  transition: all 0.15s;
-  border: 1px solid transparent;
-  background: var(--bg);
+  transition: all 0.12s;
+  border: 1px solid var(--border);
+  background: var(--surface);
   color: var(--muted);
   user-select: none;
 }
 .mini-item:hover {
-  border-color: var(--accent);
-  background: var(--accent-bg);
-  color: var(--accent);
+  color: var(--fg);
+  border-color: oklch(56% 0.16 210 / 40%);
 }
 .mini-item.active {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
-  font-weight: 500;
+  border-color: oklch(56% 0.16 210 / 30%);
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-weight: 600;
 }
 .mini-item .status-dot {
   width: 7px;
   height: 7px;
-}
-.mini-name {
-  font-weight: 500;
+  border-radius: 999px;
+  box-shadow: none;
 }
 .mini-hint {
-  font-size: 11px;
-  opacity: 0.6;
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+  opacity: 0.8;
 }
 
+/* 收起按钮（central.html .btn.btn-ghost「× 收起」：透明底 + 无边框，hover 淡 accent） */
 .restore-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   flex-shrink: 0;
-  padding: 4px 12px;
-  font-size: 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg);
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--font-body);
+  line-height: 1.4;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
   color: var(--muted);
   cursor: pointer;
   transition: all 0.15s;
   white-space: nowrap;
 }
 .restore-btn:hover {
-  border-color: var(--accent);
   color: var(--accent);
   background: var(--accent-bg);
 }

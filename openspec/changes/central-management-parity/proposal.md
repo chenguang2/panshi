@@ -30,7 +30,7 @@
 
 ## Impact
 
-- 前端：`views/CentralList.vue`（网格态模板与分组状态管理重写，脚本态/CRUD/发布编排保留）；`style.css`（如需 max-panel/max-name-row 解剖类，单点）；共享组件零改动（ClusterCard/ClusterBand/TableToolbar/ClusterFormModal 现契约）。
+- 前端：`views/CentralList.vue`（网格态模板与分组状态管理重写，脚本态/CRUD/发布编排保留）；`style.css`（max-panel/max-name-row 解剖类、发布状态胶囊与卡内提示条语义色单点）；共享组件改动收敛为三处（parity 审计 r1）：`ClusterCard.vue`（提示条移出 lp-body + `.n-act` + 满健康分级）、`PageHeader.vue`（`align-items:center`）、`StrokeIcon.vue`（新增 `download`/`plus` 供页头按钮）。
 - 测试：`CentralList.test.ts`、`CentralList.statTab.test.ts`、`mockupParity.source.test.ts` 新段；守卫回归 `ClusterEditRefresh.source.test.ts`、`CardPagePanelContainment.source.test.ts`（统一管理纳入包含断言——见 design D1）。
 - 后端：零改动（ph-lite 徽标数据复用 /clusters 列表聚合，无新端点）。
 - 设计页：`central.html` 为既有批准基线，无需修改。

@@ -23,7 +23,7 @@ defineProps<{
 <style scoped>
 .page-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
   /* 设计稿基准（proposal-c 九页统一 20px；mockup-parity-standard 用户裁决全站单点） */

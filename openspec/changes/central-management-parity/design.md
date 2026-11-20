@@ -57,3 +57,14 @@
 - 删除 `.cluster-name-item` 快捷小条移除一个现存交互入口（组头点击直达最大化）——用户可从统计格/卡头两处进入，信息无损；如用户验收时要求保留，可在 band 右缘以 chip 形式复活（本变更不做）。
 - 两态收口删除 `.expanded-area` 承载壳：`TransitionGroup` 进出场动画路径改变（maximized 直渲染），需真机确认进出无闪烁。
 - 与 dashboard-cluster-parity 同工作树叠改：其 tasks 已全勾、全量回归已过；本变更基线 = 其完成态，落地前该批先提交（避免两批未提交变更混叠回归归属）。
+
+### D6 · 设计页对照修复（parity 审计 r1，2026-11-21）
+
+用户验收提出「实现与设计页有差异」，按 #82 五步法（同视口 1600×1000 双侧同批元素 `getComputedStyle` + `getBoundingClientRect`，颜色经 canvas 归一）产出 18 项清单（`parity-audit-central-r1.md`，脚本 `/tmp/opencode/parity-central/`），用户批准**全部修复** + 提示条「连接测试」补进实现。
+
+- 根因两处属「样式根本未生效」：① `.ps-tag` 胶囊样式只在 `PublishStatusTag.vue` 的 scoped 样式里，`ClusterCard` 内联 `<span class="ps-tag">` 拿不到 → 胶囊基类下沉 `style.css` 单点（组件侧只留四态语义色）；② 提示条同时挂 `alert alert-warning`，`style.css` 中 `.alert` 后于 `.lp-notice` 且同权重 → 去掉 `alert` 类、新增 `.lp-notice.warn` 语义色，并把它移出 `.lp-body`（设计里它是卡片直系子节点，内嵌导致宽度少 28px）。
+- 面板解剖按设计页逐值对齐：mini-bar（--bg 底 + 上下双线 + 10/16）、mini-item（999 胶囊 / active 淡 accent + 600）、mini-hint（10.5 mono）、收起按钮（`.btn-ghost`「× 收起」）、页签（7 个 13px 图标 + 2px accent 上边 + accent 淡底 + mono 计数胶囊）、名称行动作回 `.btn`（13px/6·14，高 28 保留）、chint 去括号。
+- 卡片/页头细节：统计格满健康显绿（`statHealthCls.is-ok`）、启用胶囊对齐 `.ps-tag` 解剖、页头三按钮补图标（`StrokeIcon` 增 `download/plus`；集群管理页头同步补，同级页面一致）、`PageHeader` 改 `align-items:center`。
+- 设计页回填（#298）：补「刷新」与卡头「最大化」chip；按 3.4 删除「直连」徽章（直连是缺省态），最大化名称行徽章改为按 mini-item 数据动态显示（仅中继）。
+- 遗留（判定非缺陷，另议）：提示条高度差来自文案长度（实现带端口）；`.ph-lite` 字体族声明链（设计继承 display 族、实现在 h1 兄弟节点继承 body 族）与「其余页头无图标」属全站共享层，建议并入专项。
+

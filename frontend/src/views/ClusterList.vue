@@ -2,9 +2,18 @@
   <div class="cl-page">
     <PageHeader title="集群管理" description="管理所有的网关集群，查看集群资源和运行状态">
       <template #actions>
-        <button class="btn btn-secondary" @click="openBackupDownload">备份下载</button>
-        <button class="btn btn-secondary" @click="openBackupImport">从备份导入</button>
-        <button class="btn btn-primary" @click="showAddModal">+ 新建集群</button>
+        <button class="btn btn-secondary" @click="openBackupDownload">
+          <StrokeIcon name="download" :size="13" />
+          备份下载
+        </button>
+        <button class="btn btn-secondary" @click="openBackupImport">
+          <StrokeIcon name="upload" :size="13" />
+          从备份导入
+        </button>
+        <button class="btn btn-primary" @click="showAddModal">
+          <StrokeIcon name="plus" :size="13" />
+          新建集群
+        </button>
       </template>
     </PageHeader>
 
@@ -102,7 +111,7 @@
             @toggle="toggleFold(g.clusterId)"
           />
           <div v-for="c in g.rows" v-show="cardMode !== 'group' || groupVisible(g.clusterId)" :key="c.id">
-            <ClusterCard :cluster="c" :route-badge="routeBadge(c)">
+            <ClusterCard :cluster="c" :route-badge="routeBadge(c)" @test="testCluster(c)">
               <template #actions>
                 <button class="btn btn-secondary btn-sm cl-action-btn" @click="viewCluster(c)">详情</button>
                 <button class="btn btn-ghost btn-sm cl-action-btn" @click="testCluster(c)">连接测试</button>

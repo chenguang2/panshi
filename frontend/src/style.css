@@ -3224,6 +3224,40 @@ th.resizable {
   margin-left: auto;
   flex-shrink: 0;
 }
+/* 发布状态胶囊（central.html .ps-tag / .ps-pub / .ps-unpub）——ClusterCard 内联使用，
+   与 components/PublishStatusTag.vue 的胶囊同形（该组件样式是 scoped，够不到卡片内联节点，
+   故胶囊基类下沉到此单点；组件侧只保留四态语义色）。 */
+.ps-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  letter-spacing: normal;
+  white-space: nowrap;
+}
+.ps-pub {
+  color: var(--success);
+  background: oklch(55% 0.15 145 / 12%);
+}
+.ps-unpub {
+  color: var(--muted);
+  background: oklch(50% 0.018 240 / 8%);
+  font-family: var(--font-body);
+}
+/* 卡片启用态胶囊对齐设计 .ps-tag 解剖（mono 11/600、999 圆角、12% 淡底） */
+.cl-card .lp-status .badge {
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  gap: 0;
+}
 .lp-body {
   display: flex;
   flex-direction: column;
@@ -3330,6 +3364,13 @@ th.resizable {
   font-weight: 500;
   opacity: 0.75;
   margin-left: 10px;
+}
+/* 卡内警示条语义色（central.html .lp-notice.alert-warning）：与 .alert-warning 同色值，
+   但几何由 .lp-notice 自持，避免全局 .alert 的内距/圆角覆盖（parity 审计 r1 P0-2）。 */
+.lp-notice.warn {
+  background: oklch(65% 0.15 85 / 8%);
+  border: 1px solid oklch(65% 0.15 85 / 20%);
+  color: var(--warning);
 }
 .lp-foot {
   margin-top: auto;

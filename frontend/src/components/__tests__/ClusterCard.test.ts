@@ -201,7 +201,7 @@ describe('ClusterCard - 节点 chips（≤3 个）', () => {
 
   it('有离线节点 → 渲染 lp-notice 离线警示（首个 IP 具体化 + 多节点「等」）', () => {
     const w = mountCard(makeCluster())
-    const notice = w.find('.lp-notice.alert-warning')
+    const notice = w.find('.lp-notice.warn')
     expect(notice.exists()).toBe(true)
     expect(notice.text()).toContain('1 个节点离线（192.168.1.2:80）')
     const multi = mountCard(
@@ -209,7 +209,16 @@ describe('ClusterCard - 节点 chips（≤3 个）', () => {
         nodes: [makeNode(1, '10.0.0.1', 0), makeNode(2, '10.0.0.2', 0)],
       }),
     )
-    expect(multi.find('.lp-notice.alert-warning').text()).toContain('2 个节点离线（10.0.0.1:80 等）')
+    expect(multi.find('.lp-notice.warn').text()).toContain('2 个节点离线（10.0.0.1:80 等）')
+  })
+
+  it('提示条内联「连接测试」= .n-act，点击 emit test（central.html .lp-notice .n-act）', async () => {
+    const w = mountCard(makeCluster())
+    const act = w.find('.lp-notice .n-act')
+    expect(act.exists()).toBe(true)
+    expect(act.text()).toBe('连接测试')
+    await act.trigger('click')
+    expect(w.emitted('test')).toHaveLength(1)
   })
 })
 

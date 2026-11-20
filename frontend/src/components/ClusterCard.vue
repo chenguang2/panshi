@@ -41,16 +41,17 @@
         </template>
         <span v-else class="lp-v dim">未挂节点</span>
       </div>
-      <div v-if="offlineNotice" class="lp-notice alert alert-warning">
-        <span class="n-ico"><StrokeIcon name="warning" :size="13" /></span>
-        <span class="n-txt">{{ offlineNotice }}</span>
-      </div>
+    </div>
+    <div v-if="offlineNotice" class="lp-notice warn">
+      <span class="n-ico"><StrokeIcon name="warning" :size="13" /></span>
+      <span class="n-txt">{{ offlineNotice }}</span>
+      <button class="n-act" @click="emit('test')">连接测试</button>
     </div>
     <!-- 统计格：statClick 接管（统一管理直切 Tab）/ router-link 深链（集群管理跳资源页）双分支 -->
     <div v-if="statClick" class="stat-grid">
       <div
         class="stat-cell"
-        :class="healthCls"
+        :class="statHealthCls"
         title="健康节点 / 节点总数（点击进入统一管理 · 节点）"
         @click="onStatClick('nodes')"
       >
@@ -86,7 +87,7 @@
       <router-link
         :to="{ path: '/nodes', query: { cluster_id: cluster.id } }"
         class="stat-cell"
-        :class="healthCls"
+        :class="statHealthCls"
         title="健康节点 / 节点总数"
       >
         <div class="sv">{{ cluster.healthy_node_count }}/{{ cluster.node_count }}</div>
@@ -166,6 +167,11 @@ const props = defineProps<{
   statClick?: (key: string) => void
 }>()
 
+/** 卡内动作转发：离线提示条内联「连接测试」（central.html .n-act，页面接自家连接测试流程） */
+const emit = defineEmits<{
+  (e: 'test'): void
+}>()
+
 /** 统计格点击转发（约定 #25：模板 handler 提取为函数）；仅在 statClick 分支渲染 */
 function onStatClick(key: string) {
   props.statClick?.(key)
@@ -201,6 +207,14 @@ const healthCls = computed(() => {
   if (total > 0 && healthy === 0) return 'is-danger'
   if (healthy < total) return 'is-warning'
   return ''
+})
+
+/** 统计格节点格分级（central.html .stat-cell .sv.ok）：满健康显绿，其余沿用健康比分级 */
+const statHealthCls = computed(() => {
+  const total = props.cluster.node_count || 0
+  const healthy = props.cluster.healthy_node_count || 0
+  if (total > 0 && healthy === total) return 'is-ok'
+  return healthCls.value
 })
 
 /** 节点 tag 最多展示前 3 个 */
@@ -267,6 +281,9 @@ const offlineNotice = computed<string | null>(() => {
 .stat-cell.is-warning .sv {
   color: var(--warning);
 }
+.stat-cell.is-ok .sv {
+  color: var(--success);
+}
 .stat-cell.is-danger,
 .stat-cell.is-warning {
   cursor: pointer;
@@ -296,6 +313,7 @@ const offlineNotice = computed<string | null>(() => {
   background: var(--bg);
   text-decoration: none;
   color: inherit;
+  cursor: pointer;
   transition:
     border-color 0.12s,
     background 0.12s,

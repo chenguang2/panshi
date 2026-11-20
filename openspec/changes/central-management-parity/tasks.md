@@ -35,3 +35,17 @@
 - [x] 5.1 手册截图核对：`manual-screenshots.mjs` SHOTS 清单无统一管理（/central-management）条目——无既有截图需重拍（新增手册章节属范围外，未立项）
 - [ ] 5.2 `openspec validate --all` 0 error 收口（✅ 222 通过 0 失败，2026-11-20 实测）；等待用户验收后归档（sync specs + archive）
 
+## 6. 设计页差异修复（parity 审计 r1，2026-11-21）
+
+> 清单：`parity-audit-central-r1.md`（P0×2 / P1×8 / P2×4 / D×4）。批准前不动代码。
+
+- [x] 6.1 逐项批准 parity 审计 r1（用户裁决「全部修复」+ D-4 提示条内联「连接测试」补进实现；D-3「直连」徽章按 3.4 从设计页删除）
+- [x] 6.2 P0-1 发布状态胶囊：`.ps-tag/.ps-pub/.ps-unpub` 下沉 `style.css`（PublishStatusTag 与 ClusterCard 共用），卡片状态恢复胶囊（实测 11px/600 mono、20px、12% 淡底）
+- [x] 6.3 P0-2 离线提示条：去掉 `alert alert-warning`、移出 `.lp-body`（宽度回 385.3）、新增 `.lp-notice.warn` 语义色；内联「连接测试」`.n-act` + `emit('test')`，两页绑定 `testCluster`
+- [x] 6.4 P1 最大化面板外壳：mini-bar（--bg/双线/10·16）、mini-item（999 胶囊/active 淡 accent）、mini-hint（10.5 mono）、「× 收起」`.btn-ghost` 解剖
+- [x] 6.5 P1 页签条：7 页签补 13px 线性图标、active 2px accent 上边 + accent 淡底、`.db` 计数胶囊（mono + 1px 边）
+- [x] 6.6 P1 名称行：动作按钮去 `btn-sm`（13px/6·14，高 28 保留）、`chint` 去括号
+- [x] 6.7 P2：统计格满健康绿（`statHealthCls.is-ok`）、启用胶囊 `.badge` 对齐 `.ps-tag` 解剖、页头图标（`StrokeIcon` 增 `download/plus`，统一管理 + 集群管理两页）、`PageHeader` 居中
+- [x] 6.8 D 项：设计页 `central.html` 补「刷新」与「最大化」chip、删「直连」徽章（最大化徽章改按数据动态显示）
+- [x] 6.9 回归：`ClusterCard/CentralList/CentralList.statTab/CentralList.source/mockupParity` 159 例绿；全量 `vitest --maxWorkers=4` 3096 passed / 1 flake（NodeList 列拖拽，隔离复跑 72/72 绿，判定 #58 波动）；`vue-tsc -b` 干净；同一审计脚本复测，18 项全 ✓（剩余 7 项判定非缺陷，见审计文档「六、修复与复测」）
+
