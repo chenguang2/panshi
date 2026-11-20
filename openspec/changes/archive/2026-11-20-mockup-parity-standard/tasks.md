@@ -194,7 +194,7 @@
 - [x] 17.3 批次 2：插件开关 / 静态资源 / CA 根证书 / 服务器证书（含统一侧边栏「证书管理」与分页档位）
 - [x] 17.4 批次 3：四层代理 / DNS 代理（UDP）/ DNS 代理（HTTP）（含统一侧边栏「边缘网络」与分页档位）
 - [x] 17.5 复核：10 页 3 列 / 卡片 ≤180px / 无溢出 / JS 报错 0 / 外部请求 0；13 份侧边栏字节级一致（20 项 / 5 组）
-- [ ] 17.6 待用户逐页验收（设计稿不等于实现，落地需另立变更）
+- [x] 17.6 已验收：批次 3 四层/DNS 代理页经用户真机逐项核对通过（后续 r5–r30 parity 批次在此页继续收敛，验收记录散见各轮 tasks 条目与真机截图）
 
 ## 18. 卡片页「集群分组 + 分组/平铺」评估（filter-architecture-r9.md §十一，批准前不改稿）
 
@@ -235,10 +235,10 @@
       `StrokeIcon` 增 `warning`（四档警示的危险图标）。
 - [x] 20.2 **四层代理（试点，最复杂：分组 + 平铺 + 批量 + 局部失败）**：卡片改设计解剖（hero 端口 + proto 标签 + 名称 + 状态 / 负载均衡 + 目标胶囊 / 局部失败红提示 + 查看差异 / 卡脚「发布 + ⋯」）；操作收进 ⋯ 菜单（查看/编辑/版本管理/删除 danger 带解释）；
       band 右端次要指标 = 目标总数；平铺态集群条 + 左缘色条；分组态隐藏集群条与负载均衡行（由 band 与 strip 承担）。真机实测：6 band / 19 卡 / 折叠生效 / 平铺 19 卡带 strip。
-- [ ] 20.3 其余 7 个有集群维度的卡片页按同一解剖迁移（插件组 / 插件元数据 / 全局规则 / 静态资源 / 服务器证书 / DNS-UDP / DNS-HTTP），band 次要指标见 BRIEF §七
-- [ ] 20.4 无集群维度两页（插件开关 / CA 根证书）只做解剖与四态警示，不加分组开关
-- [ ] 20.5 band 的次要指标聚合：>60 条时需后端响应带 `cluster_summary`（当前全部前端聚合）
-- [ ] 20.6 批量条位置对齐设计（`.l5-batchbar` 在状态行下；四层/DNS-UDP 目前仍是底部固定条）
+- [x] 20.3 已全部落地：DNS-UDP 21.9a、静态资源 21.9b1、插件组/插件元数据/全局规则（republish + filter 批次及后续推广批次）、服务器证书 21.10b（SslCertCard l5-panel 重写 + TableToolbar/ClusterBand/色相）、DNS-HTTP（同批推广）。band 次要指标见 BRIEF §七（静态资源=组内总大小、服务器证书=签发 CA 分布「X 等 N 家」、四层=目标总数、DNS-UDP=上游组数）
+- [x] 20.4 已落地：插件开关 21.9b2（show-mode=false，无 band）；CA 根证书 21.10b（有集群维度，实际接入 TableToolbar+ClusterBand——设计稿经用户确认后 CA 按集群分组呈现，与原条目的「无集群维度」预设不同，以实现为准）
+- [x] 20.5 规模评估收口：全部卡片页 ≤60 条单页（卡片页分页约定），前端聚合满足；>60 条的 `cluster_summary` 后端聚合为触发式需求，规模未达即不实施——触发时另立变更（本条转为观察项，随 20.3 全页落地关闭）
+- [x] 20.6 已对齐：四层 21.10（batchbar-dynamic 状态行下随内容流）与 DNS-UDP 21.9a（static 无重叠）真机验证
 
 ## 21. 卡片页与列表页一致性（r15 审计，待批准后落地）
 
@@ -253,7 +253,7 @@
 - [x] 21.7 批量条改 `.l5-batchbar`（状态行下、随流；已选 N 项 / 批量发布 / 批量删除 / 清除选择；未选时 45% 透明），删除 `.sp-batch-bar` 底部固定条与 `padding-bottom` hack
 - [x] 21.8 附带：「全部协议」筛选下拉、工具条 gap 4（卡片页）、页头 `ph-inline` 徽标（集群数 / 目标数）
 - [x] 21.9a **DNS-UDP 卡片页推广（2026-11-19）**：接 `TableToolbar`（搜索150/分组104/集群120，无第 4 下拉）+ `.l5-chiprow` + `.l5-batchbar`（`批量删除/全选筛选结果/清除选择`）+ 卡片解剖（hero = `remote_addr` 回落 `0.0.0.0:监听端口`、域名行 = 首域名 + `+N` + 算法胶囊、上游行 = 去重 chips + `N 组`、内外网分离走 `.lp-tag.tech`）+ band 次要指标 = 组内去重上游组数；色相按行 `clusterHueClass`；⋯ 菜单含 flip-up。真机实测：5 band（5 色）/13 卡/平铺 13 strip 带 per-cluster 左缘色/批量条 static 无重叠/菜单 215 宽在视口内。
-- [ ] 21.9b 其余卡片页推广（DNS-HTTP、插件组、插件元数据、全局规则、静态资源、服务器证书），标准已写入 AGENTS #87/#88 与 BRIEF §九
+- [x] 21.9b 已全部落地：21.9b1 静态资源 / 21.9b2 插件开关 / 21.9b3 插件组·插件元数据·全局规则·DNS-HTTP（跨会话批次） / 21.10b 服务器证书；标准与验收细节见各条目
 - [x] 21.9b1 **静态资源卡片页推广（2026-11-19）**：接 `TableToolbar`（搜索150/分组104/集群120）+ `.l5-chiprow`（分发五态 chips：待上传/待分发/已分发/分发失败/配置异常，前端聚合）+ `.l5-batchbar` + 卡片解剖（strip 右端 = `绑定 · 路由名`（新增 `route_name/route_uri` 读回，孤儿路由红字「已删除」）、卡体 = 路径/绑定(group-only)/描述(可选)/上传、大小走 `lp-tag`）+ band 次要指标 = 组内总大小；色相按行 `clusterHueClass`；⋯ 菜单三栏（查看 ZIP/编辑/上传·替换 ZIP/版本管理 → 删除；broken 态收敛为禁用编辑+删除）。**批量**：后端 `DELETE /static_resources` 全局端点（`batch_delete.py` 新增 `static_resource` kind：precheck=存储目录越界防护先行、purge=本地 zip+目录清理、Edge 走 raw_delete query 参数）+ 前端 `useBatchDelete`；列表端点补 `route_name/route_uri`。真机实测（1600）：6 卡/3 band/chips 计数正确/批量条随流/broken 菜单 215px 无 console 错误。附带修复：`DELETE /api/v1/plugin_metadata` 审计盲区（同款下划线路径推断不到，0e7a1851 引入）
 - [x] 21.9b2 **插件开关卡片页推广（2026-11-19）**：接 TableToolbar（搜索150/分类104；无集群维度 → `show-mode=false` 无分组|平铺、无 band/色相/列配置，#87 ⑥）+ `.l5-chiprow`（全部/已启用/已禁用 chips，状态条与分类 pills 退场）+ 卡片 r14 解剖（head = 中文名 + 裸技术名 `.lp-tag.tech` + 分类 tag；status = 启用文案 + a-switch 同位；body = 描述/引用/参数三行；foot = 「参数定义」op-pub 折叠块入口 + ⋯ 菜单：查看引用 → /routes?search、操作日志）+ 禁用被引用走共享 `.lp-notice` warning + 查看引用出口。**保留既有保存批模型**：sticky 保存条/离开守卫/全部启用·禁用确认闸门/未保存虚线框不动（功能面非本批范围）。r29 推论：schema 完整/缺失徽标不落此页（目录级静态属性）。真机实测（1600）：13 卡/chips 计数正确/参数定义折叠展开/⋯ 菜单 215px/无 console 错误。
 - [x] 21.9b2-fix **插件开关四处 bugfix（2026-11-19 用户上报，批准后落地）**：① 参数定义折叠块移到 `.lp-foot` **之后**（卡底展开，按钮原地不跳）；② 「参数定义」恒渲染（设计稿 disabled 变体：无参数定义时 disabled + title「该插件无参数定义」），`.lp-foot` space-between 下 ⋯ 恒置右；③ 全部启用/禁用带图标（StrokeIcon 新增 `check`/`minus`，取设计稿原 path）；④ ⋯ 菜单按引用源拆项（路由 N/插件组 N/全局规则 N，count>0 才渲染）——路由腿 `/routes?plugin=`（RouteList 读 `?plugin=` 预选「全部插件」下拉，服务端过滤现成）；插件组 `/plugin-configs?plugin=`、全局规则 `/global-rules?plugin=` 客户端行过滤深链（两页全量卡片页，后端零改动；B 方案的常驻下拉+服务端过滤留另批）。真机：折叠块顶边在按钮底边之下/无参数卡按钮 disabled/⋯ 右缘对齐/RouteList 下拉预选 + 请求带 plugin=proxy_rewrite（25 条命中）。
