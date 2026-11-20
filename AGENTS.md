@@ -261,6 +261,8 @@ openspec/        # 变更工件；openspec/specs/ = main specs
 
 90. **页头动作区规范（page-header-actions-standard，2026-11-21）** — 页头 `#actions` 只放页面级动作（创建类 / 导入导出类 / 批量管理 / 页面级跳转）；行内动作、工具条动作（刷新/列配置/分组收起）、批量选中动作、破坏性动作一律不进。每页**至多一颗 `.btn-primary` 且恒为最右一颗**，其余 `.btn-secondary`；**主操作按钮文案禁 `+`/`＋` 前缀**（页头加号由 `<StrokeIcon name="plus" :size="13" />` 承担，图标左置、间距靠 `.btn { gap: 6px }`；空态 CTA 与页面级区块 CTA 直接去加号、不加图标），导入类用 `upload`、下载/导出用 `download`，**批量管理与跳转类不带图标**；表单内逐行「添加一行/一项/目标」的 ghost·link 按钮保留 `+`（例外，免征）；顺序 = 批量管理 → 导入导出 → 创建。按钮**禁 inline `margin-left/right`**（间距由 `.page-header-actions` 容器 gap 提供），无权限整颗不渲染（不 disabled）。**设计页与实现必须一一对应**（`proposal-c/*.html` 的 `.page-header-actions`：数量/顺序/主次/图标两侧同改；设计页有而实现已另置于正文/横幅的条目须裁决后同步删除或回填）。守卫 `frontend/src/views/__tests__/pageHeaderActions.source.test.ts`（全站 `.vue` 扫主操作前缀 + 页头内联边距/内联 svg/primary 唯一 + 设计稿覆盖 14 页的主操作最右与设计页数量一致），改页头按钮先跑它。规范正文与逐页裁决见 `openspec/changes/page-header-actions-standard/`。
 
+91. **设计页基线一页一份，过程稿用完即删（2026-11-21 收敛）** — `docs/ui/Live-Artifact-5/proposal-c/` 是设计与 parity 的唯一基线，**每页只有一份定稿**（16 张：概览/集群管理/统一管理/节点/上游/路由/四层/DNS×2/插件组/插件元数据/插件开关/全局规则/静态资源/CA/服务器证书），入口 `docs/ui/Live-Artifact-5/index.html`（目录页），清单与维护约定见同目录 `README.md`。**变体对比稿（`*-v2`/`*-demo`/`*-variants`）只用于单轮裁决，结论落地后删除**，不得留在基线目录；删前在 git 里留痕即可。新增页面复制同形态最接近的定稿起步，命名与资源同名，禁止从历史方案（proposal-a/b、已删过程稿）复制。设计页 ↔ 实现仍按 #90 一一对应。
+
 ## 新增功能步骤
 
 1. 在 `backend/app/schemas/` 定义 Pydantic 模型

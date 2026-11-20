@@ -3,125 +3,182 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Live-Artifact-5 · 列表页美化方案对比 — 磐石网关管理平台</title>
-<link rel="stylesheet" href="proposal-a/theme.css">
+<title>设计页目录 · 方案 C 定稿 — 磐石网关管理平台</title>
+<link rel="stylesheet" href="proposal-c/theme.css">
 <style>
-.idx-wrap { max-width: 1560px; margin: 0 auto; padding: 24px 24px 40px; }
-.idx-head { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
-.idx-logo { width: 42px; height: 42px; border-radius: var(--radius-md); background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 700; flex-shrink: 0; }
-.idx-head h1 { font-family: var(--font-display); font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
-.idx-head p { font-size: 12px; color: var(--muted); margin-top: 2px; }
-.idx-head .btn { margin-left: auto; }
-.idx-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
-.idx-controls .seg { height: 34px; }
-.idx-controls .seg-opt { padding: 0 14px; font-family: var(--font-body); font-size: 12.5px; }
-.idx-controls .seg-opt b { font-weight: 600; margin-right: 4px; }
-.idx-meta { font-size: 12.5px; color: var(--muted); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 9px 14px; margin-bottom: 14px; }
-.idx-meta b { color: var(--fg); }
-.idx-stage iframe, #singleWrap iframe { width: 100%; height: calc(100vh - 250px); min-height: 620px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg); display: block; }
-.idx-compare { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-.cmp-cap { display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 600; color: var(--fg); background: var(--surface); border: 1px solid var(--border); border-bottom: none; border-radius: var(--radius-md) var(--radius-md) 0 0; padding: 7px 12px; }
-.cmp-cap a { font-size: 11px; font-weight: 500; color: var(--accent); text-decoration: none; }
-.cmp-vp { height: 660px; overflow: hidden; border: 1px solid var(--border); border-radius: 0 0 var(--radius-md) var(--radius-md); background: var(--bg); }
-.cmp-vp iframe { width: 200%; height: 200%; border: none; transform: scale(0.5); transform-origin: 0 0; pointer-events: none; }
-.idx-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 16px; }
-.idx-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; }
-.idx-card h3 { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
-.idx-card h3 .pill { height: 18px; font-size: 10px; }
-.idx-card p { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.6; }
-.idx-card .idx-links { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
-.idx-card .idx-links a { font-size: 11px; color: var(--accent); text-decoration: none; border: 1px solid oklch(56% 0.16 210 / 30%); background: var(--accent-bg); padding: 3px 10px; border-radius: 999px; }
-.idx-card .idx-links a:hover { background: var(--accent); color: #fff; }
-@media (max-width: 1100px) { .idx-compare, .idx-cards { grid-template-columns: 1fr; } }
+  body { background: var(--bg); color: var(--fg); font-family: var(--font-body); margin: 0; }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 32px 28px 56px; }
+  .head { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 8px; }
+  .logo { width: 40px; height: 40px; border-radius: 10px; background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 19px; flex-shrink: 0; }
+  h1 { font-size: 21px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+  .sub { font-size: 13px; color: var(--muted); margin: 3px 0 0; }
+  .badges { display: flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
+  .ph-lite { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); font-size: 11.5px; font-weight: 600; letter-spacing: -0.42px; color: var(--muted); white-space: nowrap; }
+  .ph-lite b { font-family: var(--font-mono); color: var(--fg); }
+  .ph-lite.lite-accent { border-color: oklch(56% 0.16 210 / 30%); background: var(--accent-bg); color: var(--accent); }
+  .ph-lite.lite-accent b { color: var(--accent); }
+  .notice { display: flex; gap: 8px; align-items: flex-start; border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius-md); padding: 10px 14px; font-size: 12px; color: var(--muted); line-height: 1.6; margin: 18px 0 26px; }
+  .notice b { color: var(--fg); }
+  .notice code { font-family: var(--font-mono); font-size: 11px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; color: var(--fg); }
+  .group { margin-bottom: 26px; }
+  .group-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+  .group-head h2 { font-size: 13px; font-weight: 700; margin: 0; }
+  .group-head span { font-size: 11.5px; color: var(--muted); }
+  .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  @media (max-width: 1100px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+  .card { display: flex; flex-direction: column; gap: 8px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); padding: 14px 16px 12px; box-shadow: var(--shadow-sm); text-decoration: none; color: inherit; transition: all .15s; position: relative; }
+  .card::before { content: ''; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px; border-radius: 0 2px 2px 0; background: var(--cc, var(--accent)); }
+  .card:hover { border-color: oklch(56% 0.16 210 / 45%); transform: translateY(-1px); box-shadow: var(--shadow-md); }
+  .card .row1 { display: flex; align-items: center; gap: 8px; }
+  .card .name { font-size: 14px; font-weight: 600; }
+  .card .kind { height: 19px; padding: 0 7px; border-radius: 4px; background: var(--accent-bg); border: 1px solid oklch(56% 0.16 210 / 22%); color: var(--accent); font-family: var(--font-mono); font-size: 10.5px; display: inline-flex; align-items: center; flex-shrink: 0; }
+  .card .kind.neutral { background: var(--bg); border-color: var(--border); color: var(--muted); }
+  .card .desc { font-size: 12px; color: var(--muted); line-height: 1.55; min-height: 34px; }
+  .card .foot { display: flex; align-items: center; gap: 8px; margin-top: 2px; padding-top: 9px; border-top: 1px solid var(--border); }
+  .card .file { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+  .card .open { margin-left: auto; font-size: 12px; color: var(--accent); font-weight: 500; }
+  .card:hover .open { text-decoration: underline; }
+  .c1 { --cc: oklch(56% 0.16 210); } .c2 { --cc: oklch(55% 0.14 300); } .c3 { --cc: oklch(55% 0.15 145); }
+  .c4 { --cc: oklch(58% 0.16 28); } .c5 { --cc: oklch(55% 0.12 240); } .c6 { --cc: oklch(62% 0.13 95); }
+  .c7 { --cc: oklch(58% 0.16 330); } .c8 { --cc: oklch(58% 0.13 190); }
+  .footnote { margin-top: 30px; font-size: 11.5px; color: var(--muted); line-height: 1.7; border-top: 1px solid var(--border); padding-top: 14px; }
+  .footnote code { font-family: var(--font-mono); font-size: 11px; color: var(--fg); }
 </style>
 </head>
 <body>
+<div class="wrap">
 
-<div class="idx-wrap">
-  <header class="idx-head">
-    <div class="idx-logo">磐</div>
+  <div class="head">
+    <div class="logo">磐</div>
     <div>
-      <h1>节点 / 上游 / 路由 — 列表页美化方案对比</h1>
-      <p>三套方向 · 沿用现行主题 token（Live-Artifact-4 基调演进）· 产物目录 docs/ui/Live-Artifact-5</p>
+      <h1>设计页目录 · 方案 C（定稿）</h1>
+      <p class="sub">页面级设计稿唯一基线 · 每页一份，变体与旧方案已于 2026-11-21 收敛删除</p>
     </div>
-    <a class="btn btn-secondary" id="openCur" href="proposal-a/nodes.html" target="_blank">新窗口打开当前页</a>
-  </header>
-  <div class="idx-controls">
-    <div class="seg" id="segProp">
-      <span class="seg-opt all active" data-v="a"><b>方案 A</b> 秩序与密度</span>
-      <span class="seg-opt" data-v="b"><b>方案 B</b> 概览 + 列表</span>
-      <span class="seg-opt" data-v="c"><b>方案 C</b> 控制台感</span>
-    </div>
-    <div class="seg" id="segPage">
-      <span class="seg-opt all active" data-v="nodes">节点管理</span>
-      <span class="seg-opt" data-v="upstreams">上游管理</span>
-      <span class="seg-opt" data-v="routes">路由管理</span>
-    </div>
-    <label class="l5-check" style="margin-left:auto;"><input type="checkbox" id="cmpToggle">三方案并排对比</label>
-  </div>
-  <div class="idx-meta" id="metaLine"></div>
-  <div id="singleWrap"><iframe id="mainFrame" src="proposal-a/nodes.html" title="方案预览"></iframe></div>
-  <div id="cmpWrap" class="idx-compare" style="display:none;">
-    <div><div class="cmp-cap"><span>方案 A · 秩序与密度</span><a href="proposal-a/nodes.html" target="_blank" data-p="a">打开</a></div><div class="cmp-vp"><iframe data-p="a" title="方案 A"></iframe></div></div>
-    <div><div class="cmp-cap"><span>方案 B · 概览 + 列表</span><a href="proposal-b/nodes.html" target="_blank" data-p="b">打开</a></div><div class="cmp-vp"><iframe data-p="b" title="方案 B"></iframe></div></div>
-    <div><div class="cmp-cap"><span>方案 C · 网关控制台感</span><a href="proposal-c/nodes.html" target="_blank" data-p="c">打开</a></div><div class="cmp-vp"><iframe data-p="c" title="方案 C"></iframe></div></div>
-  </div>
-  <div class="idx-cards">
-    <div class="idx-card">
-      <h3>方案 A <span class="pill pill-run"><span class="dot"></span>保守 · 推荐</span></h3>
-      <p>布局骨架不变：页头一行（标题 + 统计徽标 + 主操作）、工具条收进表格卡单行整合、状态胶囊与行悬浮打磨、分页规范化。改动最小、落地最快。</p>
-      <div class="idx-links"><a href="proposal-a/nodes.html" target="_blank">节点</a><a href="proposal-a/upstreams.html" target="_blank">上游</a><a href="proposal-a/routes.html" target="_blank">路由</a></div>
-    </div>
-    <div class="idx-card">
-      <h3>方案 B <span class="pill pill-unknown"><span class="dot"></span>中度</span></h3>
-      <p>在 A 的表格基础上，页首增加一排轻量统计卡（节点在线率 / 上游发布覆盖 / 路由发布进度），列表区卡片化更强，页面更有「产品概览」气息。</p>
-      <div class="idx-links"><a href="proposal-b/nodes.html" target="_blank">节点</a><a href="proposal-b/upstreams.html" target="_blank">上游</a><a href="proposal-b/routes.html" target="_blank">路由</a></div>
-    </div>
-    <div class="idx-card">
-      <h3>方案 C <span class="pill pill-stop"><span class="dot"></span>较大改动</span></h3>
-      <p>强调网关领域结构：节点按集群分组（分组头可折叠）、上游目标芯片带权重占比条与健康点、路由呈现「优先级 → 上游 → 集群」转发链路管线。视觉最有特色。</p>
-      <div class="idx-links"><a href="proposal-c/nodes.html" target="_blank">节点</a><a href="proposal-c/upstreams.html" target="_blank">上游 · 分组</a><a href="proposal-c/routes.html" target="_blank">路由 · V2 分组</a><a href="proposal-c/routes-v1.html" target="_blank">路由 · V1 分组</a><a href="proposal-c/routes-v3.html" target="_blank">路由 · V3 分组</a><a href="proposal-c/routes-l2.html" target="_blank">路由 · 不分组对照</a><a href="proposal-c/routes-sort-demo.html" target="_blank">分组/平铺双模式演示</a></div>
+    <div class="badges">
+      <span class="ph-lite lite-accent"><b>16</b> 张页面设计稿</span>
+      <span class="ph-lite"><b>1</b> 套共享主题</span>
     </div>
   </div>
-</div>
-<script>
-(function(){
-  'use strict';
-  var DIR = { a: 'proposal-a/', b: 'proposal-b/', c: 'proposal-c/' };
-  var PAGE = { nodes: 'nodes.html', upstreams: 'upstreams.html', routes: 'routes.html' };
-  var META = {
-    a: '方案 A · <b>秩序与密度</b> — 布局骨架不变，页头一行式统计徽标 + 工具条收进表格卡 + 状态胶囊/行悬浮/分页打磨。推荐作为落地基线。',
-    b: '方案 B · <b>数据概览 + 列表</b> — 页首轻量统计卡（示意数据），列表区沿用 A 的表格语言，整体更有产品概览气息。信息密度略降。',
-    c: '方案 C · <b>网关控制台感</b> — 节点按集群分组（分组头可点击折叠）、上游权重占比条 + 健康点、路由「P 优先级 → 上游 → 集群」链路管线。改动最大，建议单页试点。'
-  };
-  var state = { p: 'a', pg: 'nodes' };
-  var mainFrame = document.getElementById('mainFrame');
-  var metaLine = document.getElementById('metaLine');
-  var openCur = document.getElementById('openCur');
-  var cmpToggle = document.getElementById('cmpToggle');
-  var cmpWrap = document.getElementById('cmpWrap');
-  var singleWrap = document.getElementById('singleWrap');
-  function apply() {
-    var src = DIR[state.p] + PAGE[state.pg];
-    mainFrame.src = src;
-    openCur.href = src;
-    metaLine.innerHTML = META[state.p];
-    document.querySelectorAll('#segProp .seg-opt').forEach(function (o) { o.classList.toggle('active', o.dataset.v === state.p); });
-    document.querySelectorAll('#segPage .seg-opt').forEach(function (o) { o.classList.toggle('active', o.dataset.v === state.pg); });
-    document.querySelectorAll('#cmpWrap iframe').forEach(function (f) { f.src = DIR[f.dataset.p] + PAGE[state.pg]; });
-    document.querySelectorAll('#cmpWrap .cmp-cap a').forEach(function (a) { a.href = DIR[a.dataset.p] + PAGE[state.pg]; });
-  }
-  document.querySelectorAll('#segProp .seg-opt').forEach(function (o) { o.addEventListener('click', function () { state.p = o.dataset.v; apply(); }); });
-  document.querySelectorAll('#segPage .seg-opt').forEach(function (o) { o.addEventListener('click', function () { state.pg = o.dataset.v; apply(); }); });
-  cmpToggle.addEventListener('change', function () {
-    var on = cmpToggle.checked;
-    cmpWrap.style.display = on ? 'grid' : 'none';
-    singleWrap.style.display = on ? 'none' : 'block';
-    if (on) apply();
-  });
-  apply();
-})();
-</script>
 
+  <div class="notice">
+    <div>
+      <b>使用约定</b>：本目录就是 parity 的唯一基线——设计页与实现必须一一对应，实现新增元素要回填设计页，设计页有而实现已另置的条目须裁决后同步删除（AGENTS #90 / #298）。<br>
+      维护入口：共享主题 <code>proposal-c/theme.css</code>；卡片页解剖说明 <code>proposal-c/CARD-PAGES-DESIGN-BRIEF.md</code>；设计页改动后跑 <code>frontend/src/views/__tests__/pageHeaderActions.source.test.ts</code> 与 mockup parity 用例。
+    </div>
+  </div>
+
+  <div class="group">
+    <div class="group-head"><h2>核心与集群域</h2><span>概览 / 集群管理 / 统一管理（两态）</span></div>
+    <div class="grid">
+      <a class="card c1" href="proposal-c/overview.html">
+        <div class="row1"><span class="name">概览</span><span class="kind neutral">信息页</span></div>
+        <div class="desc">大数统计 + 三列状态卡 + 快捷入口；对应 <code>Dashboard.vue</code></div>
+        <div class="foot"><span class="file">overview.html</span><span class="open">打开 →</span></div>
+      </a>
+      <a class="card c2" href="proposal-c/clusters.html">
+        <div class="row1"><span class="name">集群管理</span><span class="kind">卡片页</span></div>
+        <div class="desc">分组 / 平铺两态 + 集群卡片解剖；对应 <code>ClusterList.vue</code></div>
+        <div class="foot"><span class="file">clusters.html</span><span class="open">打开 →</span></div>
+      </a>
+      <a class="card c3" href="proposal-c/central.html">
+        <div class="row1"><span class="name">统一管理</span><span class="kind">两态</span></div>
+        <div class="desc">卡片网格 ⇄ 单集群最大化面板（七 Tab）；对应 <code>CentralList.vue</code></div>
+        <div class="foot"><span class="file">central.html</span><span class="open">打开 →</span></div>
+      </a>
+    </div>
+  </div>
+
+  <div class="group">
+    <div class="group-head"><h2>资源管理 · 列表页</h2><span>表格解剖 + 工具条 + 状态 chips + 外置分页条</span></div>
+    <div class="grid">
+      <a class="card c4" href="proposal-c/nodes.html">
+        <div class="row1"><span class="name">节点管理</span><span class="kind">列表页</span></div>
+        <div class="desc">集群分组、列配置、批量条；对应 <code>NodeList.vue</code></div>
+        <div class="foot"><span class="file">nodes.html</span><span class="open">打开 →</span></div>
+      </a>
+      <a class="card c5" href="proposal-c/upstreams.html">
+        <div class="row1"><span class="name">上游管理</span><span class="kind">列表页</span></div>
+        <div class="desc">目标芯片 + 权重占比 + 发布态；对应 <code>UpstreamList.vue</code></div>
+        <div class="foot"><span class="file">upstreams.html</span><span class="open">打开 →</span></div>
+      </a>
+      <a class="card c6" href="proposal-c/routes.html">
+        <div class="row1"><span class="name">路由管理</span><span class="kind">列表页</span></div>
+        <div class="desc">请求匹配链路 + 分组/平铺双模式；对应 <code>RouteList.vue</code></div>
+        <div class="foot"><span class="file">routes.html</span><span class="open">打开 →</span></div>
+      </a>
+    </div>
+  </div>
+
+  <div class="group">
+    <div class="group-head"><h2>资源管理 · 卡片页</h2><span>集群带 + 卡片解剖 + 批量管理 + 插件组织</span></div>
+    <div class="grid">
+      <a class="card c7" href="proposal-c/stream-proxies.html">
+        <div class="row1"><span class="name">四层代理</span><span class="kind">卡片页</span></div>
+        <div class="desc">TCP/UDP/TLS 转发规则卡；对应 <code>StreamProxyList.vue</code></div>
+        <div class="foot"><span class="file">stream-proxies.html</span><span class="open">打开 →</span></div>
+      </a>
+      <a class="card c8" href="proposal-c/dns-udp-proxies.html">
+        <div class="row1"><span class="name">DNS 代理（UDP）</span><span class="kind">卡片页</span></div>
+        <div class="desc">UDP DNS 转发规则卡；对应 <code>DnsUdpProxyList.vue</code></div>
+        <div class="foot"><span class="file">dns-udp-proxies.html</span><span class="open">打开 →</span></div>
+      </a>
+      <a class="card c1" href="proposal-c/dns-http-proxies.html">
+        <div class="row1"><span class="name">DNS 代理（HTTP）</span><span class="kind">卡片页</span></div>
+        <div class="desc">HTTP DNS 代理规则卡；对应 <code>DnsQueryList.vue</code></div>
+        <div class="foot"><span class="file">dns-http-proxies.html</span><span class="open">打开 →</span></div>
+      </a>
+      <a class="card c2" href="proposal-c/plugin-groups.html">
+        <div class="row1"><span class="name">插件组</span><span class="kind">卡片页</span></div>
+        <div class="desc">插件配置聚合 + 引用数；对应 <code>PluginConfigList.vue</code></div>
+        <div class="foot"><span class="file">plugin-groups.html</span><span class="open">打开 →</span></div>
+      </a>
+      <a class="card c3" href="proposal-c/plugin-metadata.html">
+        <div class="row1"><span class="name">插件元数据</span><span class="kind">卡片页</span></div>
+        <div class="desc">集群级插件默认参数；对应 <code>PluginMetadataList.vue</code></div>
+        <div class="foot"><span class="file">plugin-metadata.html</span><span class="open">打开 →</span></div>
+      </a>
+      <a class="card c4" href="proposal-c/plugin-switches.html">
+        <div class="row1"><span class="name">插件开关</span><span class="kind">卡片页</span></div>
+        <div class="desc">插件启用状态管理；对应 <code>PluginSwitches.vue</code></div>
+        <div class="foot"><span class="file">plugin-switches.html</span><span class="open">打开 →</span></div>
+      </a>
+      <a class="card c5" href="proposal-c/global-rules.html">
+        <div class="row1"><span class="name">全局规则</span><span class="kind">卡片页</span></div>
+        <div class="desc">集群级全局插件规则；对应 <code>GlobalRuleList.vue</code></div>
+        <div class="foot"><span class="file">global-rules.html</span><span class="open">打开 →</span></div>
+      </a>
+      <a class="card c6" href="proposal-c/static-resources.html">
+        <div class="row1"><span class="name">静态资源</span><span class="kind">卡片页</span></div>
+        <div class="desc">ZIP 静态包 + 绑定路由；对应 <code>StaticResourceList.vue</code></div>
+        <div class="foot"><span class="file">static-resources.html</span><span class="open">打开 →</span></div>
+      </a>
+    </div>
+  </div>
+
+  <div class="group">
+    <div class="group-head"><h2>证书管理</h2><span>CA 信任锚 + 服务器证书</span></div>
+    <div class="grid">
+      <a class="card c7" href="proposal-c/ca-certs.html">
+        <div class="row1"><span class="name">CA 根证书</span><span class="kind">卡片页</span></div>
+        <div class="desc">平台自建 CA + 安装指引；对应 <code>CaCertList.vue</code></div>
+        <div class="foot"><span class="file">ca-certs.html</span><span class="open">打开 →</span></div>
+      </a>
+      <a class="card c8" href="proposal-c/server-certs.html">
+        <div class="row1"><span class="name">服务器证书</span><span class="kind">卡片页</span></div>
+        <div class="desc">网关 TLS 证书 + 分发警示；对应 <code>ServerCertList.vue</code></div>
+        <div class="foot"><span class="file">server-certs.html</span><span class="open">打开 →</span></div>
+      </a>
+    </div>
+  </div>
+
+  <div class="footnote">
+    2026-11-21 收敛：删除旧方案 <code>proposal-a/</code>、<code>proposal-b/</code> 与工具条变体页 <code>routes-toolbar-variants.html</code>，
+    以及 proposal-c 内 10 份过程稿（routes-v1 / routes-v3 / routes-l2 / routes-sort-demo / routes-method-chips-demo /
+    nodes-group-toggle-demo / filter-architecture-demo / list-flat-cluster-demo / publish-diff-button-demo / republish-failed-nodes-demo）。
+    历史版本仍可在 git 历史中检索；后续如确需方案对比，请新建独立演示页并在结论落地后删除，不留在基线目录。
+  </div>
+
+</div>
 </body>
 </html>
