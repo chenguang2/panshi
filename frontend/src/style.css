@@ -2562,8 +2562,10 @@ th.sorted-desc .sort-ind::after {
   border: 1px solid var(--border);
   background: var(--surface);
   font-size: 11.5px;
-  /* 设计稿 .ph-inline 嵌在 <h1> 内、继承标题的 600 与 -0.42px；组件化后 PageHeader 把 #stats
-     渲染为 h1 兄弟节点，继承链断裂 → 此处显式声明（r4-①，用户实测「标签字没加粗」） */
+  /* 设计稿 .ph-inline 嵌在 <h1> 内、继承标题的字族/600/-0.42px；组件化后 PageHeader 把 #stats
+     渲染为 h1 兄弟节点，继承链断裂 → 此处显式声明（r4-① 字重用户实测；parity r1 补字族：
+     设计胶囊走 --font-display，实现曾落到 --font-body） */
+  font-family: var(--font-display);
   font-weight: 600;
   letter-spacing: -0.42px;
   color: var(--muted);
