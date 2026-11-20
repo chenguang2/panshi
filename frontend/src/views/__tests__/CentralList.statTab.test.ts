@@ -97,7 +97,7 @@ describe('统一管理 · 统计格点击 → 本页集群详情 Tab（方案 A�
   it('默认（未点击）：不出现展开视图', async () => {
     const wrapper = await mountPage()
     expect(statCells(wrapper).length).toBe(7)
-    expect(wrapper.find('.card-expanded').exists()).toBe(false)
+    expect(wrapper.find('.max-panel').exists()).toBe(false)
     wrapper.unmount()
   })
 
@@ -105,8 +105,8 @@ describe('统一管理 · 统计格点击 → 本页集群详情 Tab（方案 A�
     const wrapper = await mountPage()
     await statCells(wrapper)[1].trigger('click')
     await flushPromises()
-    expect(wrapper.find('.card-expanded[data-cluster-id="1"]').exists()).toBe(true)
-    expect(wrapper.find('.card-expanded .dt.active').text()).toContain('上游')
+    expect(wrapper.find('.max-panel[data-cluster-id="1"]').exists()).toBe(true)
+    expect(wrapper.find('.max-panel .dt.active').text()).toContain('上游')
     wrapper.unmount()
   })
 
@@ -114,8 +114,8 @@ describe('统一管理 · 统计格点击 → 本页集群详情 Tab（方案 A�
     const wrapper = await mountPage()
     await statCells(wrapper)[2].trigger('click')
     await flushPromises()
-    expect(wrapper.find('.card-expanded[data-cluster-id="1"]').exists()).toBe(true)
-    expect(wrapper.find('.card-expanded .dt.active').text()).toContain('路由')
+    expect(wrapper.find('.max-panel[data-cluster-id="1"]').exists()).toBe(true)
+    expect(wrapper.find('.max-panel .dt.active').text()).toContain('路由')
     wrapper.unmount()
   })
 
@@ -123,7 +123,7 @@ describe('统一管理 · 统计格点击 → 本页集群详情 Tab（方案 A�
     const wrapper = await mountPage()
     await statCells(wrapper)[5].trigger('click')
     await flushPromises()
-    const active = wrapper.find('.card-expanded .dt.active')
+    const active = wrapper.find('.max-panel .dt.active')
     expect(active.text()).toContain('插件元数据')
     wrapper.unmount()
   })

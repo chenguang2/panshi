@@ -19,16 +19,16 @@ describe('统一管理·节点表单状态控件', () => {
   })
 })
 
-describe('统一管理·卡片动作双分支一致（central-management-ux-review-fixes）', () => {
-  it('两个分组渲染分支（命名组/未分组）的卡片动作都带「更多 ▾」收纳菜单', () => {
+describe('统一管理·卡片动作单循环一致（central-management-parity 断言反转）', () => {
+  it('唯一的卡片动作插槽（renderGroups 单循环）带完整动作集：更多 ▾ 收纳菜单', () => {
     const s = src()
-    // 历史坑：卡片模板在两个 v-for 分支各有一份，只改一处会让部分分组的卡片缺动作。
-    // 卡片动作插槽的识别特征 = 含 viewClusterDetail（排除 PageHeader 的 #actions）。
+    // 断言反转（#217）：分组/未分组双分支模板已收敛为 renderGroups 单循环（旧「两份拷贝只改
+    // 一处」的坑被结构性消除——动作插槽全页唯一）；历史双分支守卫随模板退场。
     const cardActionBlocks = s
       .split('<template #actions>')
       .slice(1)
       .filter((b) => b.includes('viewClusterDetail'))
-    expect(cardActionBlocks.length).toBe(2)
+    expect(cardActionBlocks.length).toBe(1)
     for (const block of cardActionBlocks) {
       expect(block).toContain('更多 ▾')
       expect(block).toContain('onCardMenuClick($event, cluster)')

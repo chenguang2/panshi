@@ -1005,3 +1005,53 @@ describe('mockup-parity · 概览与集群管理落地（dashboard-cluster-parit
     expect(s).not.toContain("from '@/components/TableCard.vue'")
   })
 })
+
+// ── 统一管理页同构红线（central-management-parity，2026-11-20）：网格态 = 卡片页标准外壳，
+//    两态模型（网格 ⇄ 最大化面板）；旧壳与不可达中间态死代码不回潮。 ──
+describe('mockup-parity：统一管理卡片页同构（central-management-parity）', () => {
+  it('网格态：单面板 + 工具条 + 状态 chips + 分组带 + 平铺段', () => {
+    const s = page('CentralList.vue')
+    expect(s, '缺单面板').toContain('class="l5-card cm-card-page"')
+    expect(s, '缺 TableToolbar').toContain('<TableToolbar')
+    expect(s, '缺状态 chips 行').toContain('data-test="status-chip-row"')
+    expect(s, '缺分组组合式').toContain('useCardClusterGrouping')
+    expect(s, '缺分组带').toContain('<ClusterBand')
+    expect(s, '缺页头徽标').toContain('<PageStatBadges')
+    // 工具条无总数计数（#86③：总数归 chips）
+    expect(s, 'show-count 应为 false').toContain(':show-count="false"')
+    // 旧状态下拉退场（#85①：状态筛选 = chips 单一形态）
+    expect(s, '状态筛选旧下拉回潮').not.toMatch(/<select[^>]*v-model="statusFilter/)
+  })
+
+  it('旧壳与死代码不残留', () => {
+    const s = page('CentralList.vue')
+    expect(s, '旧工具条壳').not.toContain('cl-header-actions')
+    expect(s, '旧分组头').not.toContain('group-head')
+    expect(s, '集群名快捷小条').not.toContain('cluster-name-item')
+    expect(s, '多展开中间态壳').not.toContain('expanded-area')
+    expect(s, '旧展开卡壳').not.toContain('card-expanded')
+    expect(s, '死代码 toggleExpand').not.toContain('function toggleExpand')
+    expect(s, '共 N 个集群计数回潮').not.toContain('共 {{')
+  })
+
+  it('最大化面板：两态直渲染 + 色相 + 名称行 + 稳定锚点', () => {
+    const s = page('CentralList.vue')
+    expect(s, '缺两态直渲染').toContain('v-else-if="maximizedCluster"')
+    expect(s, '缺面板容器').toContain('class="max-panel"')
+    expect(s, '缺集群色相').toContain('clusterHueClass(maximizedCluster.id)')
+    expect(s, '缺稳定锚点').toContain(':data-cluster-id="maximizedCluster.id"')
+    expect(s, '缺名称行').toContain('class="max-name-row"')
+    expect(s, '缺中继徽章镜像').toContain('maximizedRouteBadge')
+    // mini-bar 原地切换保留当前 Tab（行为契约，central.html 状态二）
+    expect(s, '缺紧凑切换条').toContain('switchMaximizedCluster')
+    expect(s, '缺收起入口').toContain('restoreMaximize')
+  })
+
+  it('功能面保持：保存刷新链路 + 局部刷新运行态键 + 统计格直达 Tab', () => {
+    const s = page('CentralList.vue')
+    expect(s, '保存刷新链路').toContain('@saved="onClusterSaved"')
+    expect(s, '局部刷新运行态键（#203）').toContain('CLUSTER_RUNTIME_KEYS')
+    expect(s, '统计格直达 Tab').toContain('STAT_TAB_KEYS')
+    expect(s, '节点全量拉取（#216）').toContain('fetchAllClusterNodes')
+  })
+})

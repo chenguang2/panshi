@@ -76,8 +76,9 @@ describe('集群卡片 · 统计格点击接管（方案 A）', () => {
     expect(s).toContain('@click="onStatClick(')
   })
 
-  it('统一管理两处卡片（分组 + 未分组）均传入 :stat-click', () => {
-    expect((src('views', 'CentralList.vue').match(/:stat-click="/g) || []).length).toBe(2)
+  it('统一管理卡片（renderGroups 单循环）传入 :stat-click', () => {
+    // 断言反转（central-management-parity）：分组/未分组双分支已收敛为单循环，全页唯一一处
+    expect((src('views', 'CentralList.vue').match(/:stat-click="/g) || []).length).toBe(1)
   })
 
   it('集群管理未传 stat-click —— 统计格保持跳全局列表的默认 router-link 行为', () => {

@@ -4,6 +4,7 @@
 // （设计页基线：面板唯一，grid 自身无框、经 .l5-card > .card-grid 内距 16px 取呼吸感）。
 // 同类缺陷三页同修（用户约定：确认一处缺陷须同轮修正全部受影响同级页）：
 //   ClusterList（集群管理，用户报告）/ CaCertList（CA 根证书）/ ServerCertList（服务器证书）。
+//   2026-11-20 追加：CentralList（统一管理，central-management-parity 网格态换壳）。
 // 其余八个卡片页（插件开关/插件组/插件元数据/静态资源/四层/DNS-UDP/DNS 查询/全局规则）
 // 工具条已在面板内、仅网格自带内框（box-in-box），是否拉平为独立决策项，勿在此并入。
 import { describe, it, expect } from 'vitest'
@@ -17,14 +18,15 @@ const CASES = [
   { f: 'ClusterList.vue', gridHook: 'cl-grid-wrap card-grid', hasChips: true },
   { f: 'CaCertList.vue', gridHook: 'ca-grid card-grid', hasChips: false },
   { f: 'ServerCertList.vue', gridHook: 'sc-grid card-grid', hasChips: true },
+  { f: 'CentralList.vue', gridHook: 'cluster-grid card-grid', hasChips: true },
 ] as const
 
 describe('卡片页工具条面板包含（r15 与列表页同构）', () => {
   it.each(CASES)('$f：工具条/状态行/网格同处一个 .l5-card 面板', ({ f, gridHook, hasChips }) => {
     const s = page(f)
 
-    // 1) 面板开标签先于工具条（工具条在面板内，不再漂浮在面板外）
-    const panelAt = s.indexOf('<div class="l5-card')
+    // 1) 面板开标签先于工具条（工具条在面板内，不再漂浮在面板外；容忍 v-if 等前置属性的多行/单行写法）
+    const panelAt = s.search(/<div\s[^>]*class="l5-card/)
     const toolbarAt = s.indexOf('<TableToolbar')
     expect(panelAt, `${f} 缺 .l5-card 面板包裹工具条`).toBeGreaterThan(-1)
     expect(toolbarAt, `${f} 缺 TableToolbar`).toBeGreaterThan(-1)

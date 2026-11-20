@@ -707,45 +707,67 @@ describe('CentralList.vue 分组筛选（批7：与集群管理对齐）', () =>
   }
 
   function groupNames(wrapper: ReturnType<typeof mount>['wrapper']) {
-    return wrapper.findAll('.group-name').map((g) => g.text().trim())
+    return wrapper.findAll('.l5-band .b-name').map((g) => g.text().trim())
   }
 
-  /** 工具栏下拉（排除常驻 DOM 的备份弹窗内下拉）：[0]=分组 [1]=状态 */
-  function toolbarSelects(wrapper: ReturnType<typeof mount>['wrapper']) {
-    return wrapper.find('.cl-header-actions').findAll('select')
+  /** 状态 chips 计数（替代旧「共 N 个集群」文本；#86③ 总数只由 chips 承担） */
+  function chipCounts(wrapper: ReturnType<typeof mount>['wrapper']) {
+    return wrapper.findAll('[data-test="status-chip-row"] .f-count').map((c) => c.text())
+  }
+
+  /** 工具栏分组下拉（新壳 .l5-toolbar select.l5-select；断言反转自旧 .cl-header-actions） */
+  function groupSelect(wrapper: ReturnType<typeof mount>['wrapper']) {
+    return wrapper.find('.l5-toolbar select.l5-select')
   }
 
   it('工具栏提供分组筛选（全部分组/未分组/各组），选组后仅显示该组', async () => {
     const wrapper = await mountPage()
-    const groupSelect = toolbarSelects(wrapper)[0]
-    const options = groupSelect.findAll('option').map((o) => o.text())
+    const select = groupSelect(wrapper)
+    const options = select.findAll('option').map((o) => o.text())
     expect(options).toEqual(['全部分组', '未分组', 'dns'])
-    // 选 dns → 只剩 dns 组（未分组组头消失），计数同步
-    await groupSelect.setValue('dns')
+    // 选 dns → 只剩 dns 组（未分组 band 消失），chips 计数同步（#85①：全部/已启用/已禁用）
+    await select.setValue('dns')
     expect(groupNames(wrapper)).toEqual(['dns'])
-    expect(wrapper.text()).toContain('共 2 个集群')
+    expect(chipCounts(wrapper)).toEqual(['2', '2', '0'])
     wrapper.unmount()
   })
 
   it('未分组选项仅显示未分组集群；重选全部分组恢复（清除筛选仅空态出现，与集群管理同款）', async () => {
     const wrapper = await mountPage()
-    const groupSelect = toolbarSelects(wrapper)[0]
-    await groupSelect.setValue('__ung__')
+    const select = groupSelect(wrapper)
+    await select.setValue('__ung__')
     expect(groupNames(wrapper)).toEqual(['未分组'])
-    expect(wrapper.text()).toContain('共 1 个集群')
+    expect(chipCounts(wrapper)[0]).toBe('1')
     // 与集群管理同款：清除筛选按钮仅在「筛选结果为空」时出现
-    await groupSelect.setValue('dns')
-    const searchInput = wrapper.find('.cl-header-actions input')
+    await select.setValue('dns')
+    const searchInput = wrapper.find('.l5-toolbar .search-input-wrap input')
     await searchInput.setValue('不存在的集群zzz')
     await flushPromises()
     // 空态判定（a-empty 描述文案在 jsdom 不入文本树，用计数与清除按钮断言）
-    expect(wrapper.text()).toContain('共 0 个集群')
+    expect(chipCounts(wrapper)[0]).toBe('0')
     const clearBtn = wrapper.findAll('button').find((b) => b.text() === '清除筛选')
     expect(clearBtn, '空态应出现「清除筛选」').toBeTruthy()
     await clearBtn!.trigger('click')
     await flushPromises()
     expect(groupNames(wrapper)).toEqual(['未分组', 'dns'])
-    expect(wrapper.text()).toContain('共 3 个集群')
+    expect(chipCounts(wrapper)[0]).toBe('3')
+    wrapper.unmount()
+  })
+
+  it('网格态外壳同构（central-management-parity）：单面板包含工具条/状态行/网格，旧壳不残留', async () => {
+    const wrapper = await mountPage()
+    const panel = wrapper.find('.l5-card.cm-card-page')
+    expect(panel.exists()).toBe(true)
+    expect(panel.find('.l5-toolbar').exists()).toBe(true)
+    expect(panel.find('[data-test="status-chip-row"]').exists()).toBe(true)
+    expect(panel.find('.card-grid').exists()).toBe(true)
+    // 工具条无总数计数（#86③：总数归 chips）；最大化面板初态不存在（两态模型）
+    expect(wrapper.find('[data-test="toolbar-count"]').exists()).toBe(false)
+    expect(wrapper.find('.max-panel').exists()).toBe(false)
+    // 旧壳断言反转：工具条旧壳 / 旧分组头 / 集群名快捷小条不再渲染
+    expect(wrapper.find('.cl-header-actions').exists()).toBe(false)
+    expect(wrapper.find('.group-head').exists()).toBe(false)
+    expect(wrapper.find('.cluster-name-item').exists()).toBe(false)
     wrapper.unmount()
   })
 })

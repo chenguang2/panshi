@@ -1,6 +1,9 @@
 <template>
   <div class="cl-page">
     <PageHeader title="统一管理" description="以集群为单位，统一管理该集群下的资源，实现统一监控与运维">
+      <template #stats>
+        <PageStatBadges :items="headerStatItems" />
+      </template>
       <template #actions>
         <button class="btn btn-secondary" @click="openBackupDownloadTopbar">备份下载</button>
         <button class="btn btn-secondary" @click="openBackupImport">从备份导入</button>
@@ -17,432 +20,266 @@
       @close="onBackupDialogClose"
     />
 
-    <div class="cl-header-actions">
-      <SearchInput v-model="filterText" placeholder="搜索集群名称或显示名..." />
-      <select
-        v-model="groupFilter"
-        :title="groupFilter.startsWith('__') ? '' : groupFilter"
-        class="form-input"
-        style="width: 140px; flex-shrink: 0"
+    <!-- 卡片页面板（central-management-parity，设计页 central.html 状态一）：工具条 / 状态行 / 网格同框 -->
+    <div v-if="!maximizedCluster" class="l5-card cm-card-page">
+      <TableToolbar
+        v-model:mode="cardMode"
+        :count="filteredClusters.length"
+        count-unit="个集群"
+        :show-count="false"
+        :refreshing="loading"
+        @refresh="loadClusters"
       >
-        <option value="__all__">全部分组</option>
-        <option value="__ung__">未分组</option>
-        <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
-      </select>
-      <select v-model="statusFilter" class="form-input" style="width: 110px; flex-shrink: 0">
-        <option value="all">全部状态</option>
-        <option value="enabled">已启用</option>
-        <option value="disabled">已禁用</option>
-      </select>
-      <span class="text-sm text-muted">共 {{ filteredClusters.length }} 个集群</span>
-      <button
-        v-if="groupedClusters.some((g) => expandedGroups[g.name || '__ungrouped__'] === false)"
-        class="btn btn-secondary btn-sm"
-        @click="expandAll"
-      >
-        全部展开
-      </button>
-      <button
-        v-if="groupedClusters.some((g) => expandedGroups[g.name || '__ungrouped__'] !== false)"
-        class="btn btn-secondary btn-sm"
-        @click="collapseAll"
-      >
-        全部收起
-      </button>
-    </div>
-
-    <!-- Mini-bar: compact cluster bar when in maximized mode -->
-    <div v-if="maximizedClusterId" class="cluster-mini-bar">
-      <div class="mini-scroll">
-        <div
-          v-for="c in filteredClusters"
-          :key="c.id"
-          class="mini-item"
-          :class="{ active: maximizedClusterId === c.id }"
-          @click="switchMaximizedCluster(c.id)"
-        >
-          <span class="status-dot" :class="c.status === 1 ? 'green' : 'red'"></span>
-          <span class="mini-name">{{ c.display_name || c.name }}</span>
-          <span v-if="c.display_name" class="mini-hint">{{ c.name }}</span>
-        </div>
-      </div>
-      <button class="restore-btn" @click="restoreMaximize">退出最大化</button>
-    </div>
-
-    <!-- 分组集群列表 + 展开区 -->
-    <!-- 最大化时隐藏分组列表（v-if 提升到 template 上，避免 v-for 同元素优先级歧义） -->
-    <template v-if="!maximizedClusterId">
-      <div v-for="group in groupedClusters" :key="group.name || '__ungrouped'" class="cluster-group">
-        <div class="group-inner">
-          <div v-if="group.name" class="group-head">
-            <div class="group-header" @click="toggleGroup(group.name)">
-              <CaretDownOutlined v-if="expandedGroups[group.name] !== false" class="group-toggle" />
-              <CaretRightOutlined v-else class="group-toggle" />
-              <span class="group-name">{{ group.name }}</span>
-              <span class="group-count">(共{{ group.clusters.length }}个)</span>
-              <div class="cluster-names">
-                <span
-                  v-for="c in group.clusters"
-                  :key="c.id"
-                  class="cluster-name-item"
-                  :title="
-                    (c.status === 1 ? '已启用' : '已禁用') + ' · ' + (c.display_name || c.name) + '（点击最大化）'
-                  "
-                  @click.stop="maximizeCluster(c)"
-                >
-                  <span class="status-dot-sm" :class="c.status === 1 ? 'green' : 'red'"></span>
-                  {{ c.display_name || c.name }}
-                </span>
-              </div>
-              <a-button size="small" class="expand-group-btn" @click.stop="toggleGroup(group.name)">
-                {{ expandedGroups[group.name] !== false ? '收起' : '展开' }}
-              </a-button>
-            </div>
-            <div v-if="expandedGroups[group.name] !== false" class="group-body">
-              <TransitionGroup name="grid" tag="div" class="cluster-grid card-grid">
-                <ClusterCard
-                  v-for="cluster in group.clusters"
-                  :key="cluster.id"
-                  :cluster="cluster"
-                  :route-badge="routeBadge(cluster)"
-                  :stat-click="(key: string) => openStatTab(cluster, key)"
-                >
-                  <template #topbar-extra>
-                    <div class="maximize-btn-sm" title="最大化" @click.stop="maximizeCluster(cluster)">
-                      <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
-                        <rect x="1" y="1" width="12" height="12" rx="1.5" stroke="currentColor" stroke-width="1.4" />
-                        <line
-                          x1="4.5"
-                          y1="1.5"
-                          x2="4.5"
-                          y2="12.5"
-                          stroke="currentColor"
-                          stroke-width="1"
-                          opacity="0.3"
-                        />
-                        <line
-                          x1="9.5"
-                          y1="1.5"
-                          x2="9.5"
-                          y2="12.5"
-                          stroke="currentColor"
-                          stroke-width="1"
-                          opacity="0.3"
-                        />
-                        <line
-                          x1="1.5"
-                          y1="4.5"
-                          x2="12.5"
-                          y2="4.5"
-                          stroke="currentColor"
-                          stroke-width="1"
-                          opacity="0.3"
-                        />
-                        <line
-                          x1="1.5"
-                          y1="9.5"
-                          x2="12.5"
-                          y2="9.5"
-                          stroke="currentColor"
-                          stroke-width="1"
-                          opacity="0.3"
-                        />
-                      </svg>
-                      <span>最大化</span>
-                    </div>
-                  </template>
-                  <template #actions>
-                    <button class="btn btn-secondary btn-sm" @click.stop="viewClusterDetail(cluster)">详情</button>
-                    <button class="btn btn-ghost btn-sm" @click.stop="testCluster(cluster)">连接测试</button>
-                    <button class="btn btn-ghost btn-sm" @click.stop="openDrift(cluster)">漂移检测</button>
-                    <button class="btn btn-ghost btn-sm" @click.stop="editCluster(cluster)">编辑</button>
-                    <a-dropdown :trigger="['click']">
-                      <button class="btn btn-ghost btn-sm" @click.stop>更多 ▾</button>
-                      <template #overlay>
-                        <a-menu @click="onCardMenuClick($event, cluster)">
-                          <a-menu-item key="backup">备份下载</a-menu-item>
-                          <a-menu-item key="export">导出 Excel</a-menu-item>
-                        </a-menu>
-                      </template>
-                    </a-dropdown>
-                    <button
-                      class="btn btn-ghost btn-sm"
-                      style="color: var(--danger)"
-                      @click.stop="deleteCluster(cluster)"
-                    >
-                      删除
-                    </button>
-                  </template>
-                </ClusterCard>
-              </TransitionGroup>
-            </div>
-          </div>
-          <div v-else class="group-head">
-            <div class="group-header" @click="toggleGroup('__ungrouped__')">
-              <CaretDownOutlined v-if="expandedGroups['__ungrouped__'] !== false" class="group-toggle" />
-              <CaretRightOutlined v-else class="group-toggle" />
-              <span class="group-name ungrouped-label">未分组</span>
-              <span class="group-count">(共{{ group.clusters.length }}个)</span>
-              <div class="cluster-names">
-                <span
-                  v-for="c in group.clusters"
-                  :key="c.id"
-                  class="cluster-name-item"
-                  :title="
-                    (c.status === 1 ? '已启用' : '已禁用') + ' · ' + (c.display_name || c.name) + '（点击最大化）'
-                  "
-                  @click.stop="maximizeCluster(c)"
-                >
-                  <span class="status-dot-sm" :class="c.status === 1 ? 'green' : 'red'"></span>
-                  {{ c.display_name || c.name }}
-                </span>
-              </div>
-              <a-button size="small" class="expand-group-btn" @click.stop="toggleGroup('__ungrouped__')">
-                {{ expandedGroups['__ungrouped__'] !== false ? '收起' : '展开' }}
-              </a-button>
-            </div>
-            <div v-if="expandedGroups['__ungrouped__'] !== false" class="group-body">
-              <TransitionGroup name="grid" tag="div" class="cluster-grid card-grid">
-                <ClusterCard
-                  v-for="cluster in group.clusters"
-                  :key="cluster.id"
-                  :cluster="cluster"
-                  :route-badge="routeBadge(cluster)"
-                  :stat-click="(key: string) => openStatTab(cluster, key)"
-                >
-                  <template #topbar-extra>
-                    <div class="maximize-btn-sm" title="最大化" @click.stop="maximizeCluster(cluster)">
-                      <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
-                        <rect x="1" y="1" width="12" height="12" rx="1.5" stroke="currentColor" stroke-width="1.4" />
-                        <line
-                          x1="4.5"
-                          y1="1.5"
-                          x2="4.5"
-                          y2="12.5"
-                          stroke="currentColor"
-                          stroke-width="1"
-                          opacity="0.3"
-                        />
-                        <line
-                          x1="9.5"
-                          y1="1.5"
-                          x2="9.5"
-                          y2="12.5"
-                          stroke="currentColor"
-                          stroke-width="1"
-                          opacity="0.3"
-                        />
-                        <line
-                          x1="1.5"
-                          y1="4.5"
-                          x2="12.5"
-                          y2="4.5"
-                          stroke="currentColor"
-                          stroke-width="1"
-                          opacity="0.3"
-                        />
-                        <line
-                          x1="1.5"
-                          y1="9.5"
-                          x2="12.5"
-                          y2="9.5"
-                          stroke="currentColor"
-                          stroke-width="1"
-                          opacity="0.3"
-                        />
-                      </svg>
-                      <span>最大化</span>
-                    </div>
-                  </template>
-                  <template #actions>
-                    <button class="btn btn-secondary btn-sm" @click.stop="viewClusterDetail(cluster)">详情</button>
-                    <button class="btn btn-ghost btn-sm" @click.stop="testCluster(cluster)">连接测试</button>
-                    <button class="btn btn-ghost btn-sm" @click.stop="openDrift(cluster)">漂移检测</button>
-                    <button class="btn btn-ghost btn-sm" @click.stop="editCluster(cluster)">编辑</button>
-                    <a-dropdown :trigger="['click']">
-                      <button class="btn btn-ghost btn-sm" @click.stop>更多 ▾</button>
-                      <template #overlay>
-                        <a-menu @click="onCardMenuClick($event, cluster)">
-                          <a-menu-item key="backup">备份下载</a-menu-item>
-                          <a-menu-item key="export">导出 Excel</a-menu-item>
-                        </a-menu>
-                      </template>
-                    </a-dropdown>
-                    <button
-                      class="btn btn-ghost btn-sm"
-                      style="color: var(--danger)"
-                      @click.stop="deleteCluster(cluster)"
-                    >
-                      删除
-                    </button>
-                  </template>
-                </ClusterCard>
-              </TransitionGroup>
-            </div>
-          </div>
-        </div>
-      </div>
-    </template>
-
-    <!-- EXPANDED AREA: clusters removed from grid -->
-    <TransitionGroup v-if="expandedClusters.length > 0" name="expand" tag="div" class="expanded-area">
-      <div
-        v-for="cluster in expandedClusters"
-        :key="cluster.id"
-        class="card-expanded"
-        :class="{ 'card-maximized': maximizedClusterId === cluster.id }"
-        :data-cluster-id="cluster.id"
-      >
-        <!-- Header: status + group-chip + restore -->
-        <div class="expanded-mini-row">
-          <span class="status-dot" :class="cluster.status === 1 ? 'green' : 'red'"></span>
-          <span v-if="cluster.group_name" class="group-chip">{{ cluster.group_name }}</span>
-          <span class="flex-spacer"></span>
-          <div
-            v-if="maximizedClusterId !== cluster.id"
-            class="maximize-btn"
-            title="最大化"
-            @click.stop="maximizeCluster(cluster)"
+        <template #filters>
+          <SearchInput v-model="filterText" placeholder="搜索集群名称或显示名..." :width="150" />
+          <select
+            v-model="groupFilter"
+            :title="groupFilter.startsWith('__') ? '' : groupFilter"
+            class="l5-select"
+            style="width: 104px"
           >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <rect x="1" y="1" width="12" height="12" rx="1.5" stroke="currentColor" stroke-width="1.4" />
-              <line x1="4.5" y1="1.5" x2="4.5" y2="12.5" stroke="currentColor" stroke-width="1" opacity="0.3" />
-              <line x1="9.5" y1="1.5" x2="9.5" y2="12.5" stroke="currentColor" stroke-width="1" opacity="0.3" />
-              <line x1="1.5" y1="4.5" x2="12.5" y2="4.5" stroke="currentColor" stroke-width="1" opacity="0.3" />
-              <line x1="1.5" y1="9.5" x2="12.5" y2="9.5" stroke="currentColor" stroke-width="1" opacity="0.3" />
-            </svg>
-            <span>最大化</span>
+            <option value="__all__">全部分组</option>
+            <option value="__ung__">未分组</option>
+            <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
+          </select>
+        </template>
+        <template #mode-extra>
+          <button
+            v-if="cardMode === 'group'"
+            type="button"
+            class="tool-btn fold-all-btn"
+            data-test="card-fold-all"
+            :title="pageHasFolded ? '展开全部分组' : '收起全部分组'"
+            @click="toggleFoldAll"
+          >
+            <StrokeIcon :name="pageHasFolded ? 'expandAll' : 'collapseAll'" :size="13" />
+            <span class="fold-all-label">{{ pageHasFolded ? '全部展开' : '全部收起' }}</span>
+          </button>
+        </template>
+      </TableToolbar>
+
+      <!-- 状态 chips（#85①）：启用状态 = 带计数 chips 单一形态，替代旧状态下拉 -->
+      <div class="l5-chiprow" data-test="status-chip-row">
+        <span class="chiprow-label">状态</span>
+        <div class="f-chips status-chips" role="group" aria-label="按启用状态筛选">
+          <button
+            v-for="t in statusTabs"
+            :key="t.key"
+            type="button"
+            class="f-chip chip-status"
+            :class="{ active: statusFilter === t.key }"
+            :aria-pressed="statusFilter === t.key ? 'true' : 'false'"
+            @click="statusFilter = t.key"
+          >
+            {{ t.label }}<span class="f-count">{{ t.count }}</span>
+          </button>
+        </div>
+        <span class="t-spacer"></span>
+      </div>
+
+      <div v-if="filteredClusters.length === 0 && !loading" class="empty-state">
+        <!-- 空状态两分支（cluster-ux-close-loop B6.4）：从未创建 vs 筛选无结果 -->
+        <a-empty :description="hasActiveFilters ? '没有符合筛选条件的集群' : '还没有集群'" />
+        <button v-if="hasActiveFilters" class="btn btn-secondary" @click="clearFilters">清除筛选</button>
+        <button v-else class="btn btn-primary" @click="showAddModal">新建集群</button>
+      </div>
+      <div v-else class="cluster-grid card-grid" :class="[`mode-${cardMode}`]">
+        <template v-for="g in renderGroups" :key="g.clusterId">
+          <ClusterBand
+            v-if="cardMode === 'group'"
+            :name="g.clusterName || '未分组'"
+            :group="g.groupName"
+            :count-label="countLabelOf(g.count)"
+            :secondary="secondaryOf(g.rows)"
+            :hue-class="g.hueClass"
+            :folded="isFolded(g.clusterId)"
+            @toggle="toggleFold(g.clusterId)"
+          />
+          <div v-for="cluster in g.rows" v-show="cardMode !== 'group' || groupVisible(g.clusterId)" :key="cluster.id">
+            <ClusterCard
+              :cluster="cluster"
+              :route-badge="routeBadge(cluster)"
+              :stat-click="(key: string) => openStatTab(cluster, key)"
+            >
+              <template #topbar-extra>
+                <div class="maximize-btn-sm" title="最大化" @click.stop="maximizeCluster(cluster)">
+                  <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+                    <rect x="1" y="1" width="12" height="12" rx="1.5" stroke="currentColor" stroke-width="1.4" />
+                    <line x1="4.5" y1="1.5" x2="4.5" y2="12.5" stroke="currentColor" stroke-width="1" opacity="0.3" />
+                    <line x1="9.5" y1="1.5" x2="9.5" y2="12.5" stroke="currentColor" stroke-width="1" opacity="0.3" />
+                    <line x1="1.5" y1="4.5" x2="12.5" y2="4.5" stroke="currentColor" stroke-width="1" opacity="0.3" />
+                    <line x1="1.5" y1="9.5" x2="12.5" y2="9.5" stroke="currentColor" stroke-width="1" opacity="0.3" />
+                  </svg>
+                  <span>最大化</span>
+                </div>
+              </template>
+              <template #actions>
+                <button class="btn btn-secondary btn-sm" @click.stop="viewClusterDetail(cluster)">详情</button>
+                <button class="btn btn-ghost btn-sm" @click.stop="testCluster(cluster)">连接测试</button>
+                <button class="btn btn-ghost btn-sm" @click.stop="openDrift(cluster)">漂移检测</button>
+                <button class="btn btn-ghost btn-sm" @click.stop="editCluster(cluster)">编辑</button>
+                <a-dropdown :trigger="['click']">
+                  <button class="btn btn-ghost btn-sm" @click.stop>更多 ▾</button>
+                  <template #overlay>
+                    <a-menu @click="onCardMenuClick($event, cluster)">
+                      <a-menu-item key="backup">备份下载</a-menu-item>
+                      <a-menu-item key="export">导出 Excel</a-menu-item>
+                    </a-menu>
+                  </template>
+                </a-dropdown>
+                <button class="btn btn-ghost btn-sm" style="color: var(--danger)" @click.stop="deleteCluster(cluster)">
+                  删除
+                </button>
+              </template>
+            </ClusterCard>
           </div>
-          <div v-else class="maximize-btn restore" title="退出最大化" @click.stop="restoreMaximize">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <rect x="1.5" y="1.5" width="11" height="11" rx="1.5" stroke="currentColor" stroke-width="1.3" />
-              <line x1="3" y="1.5" x2="3" y2="12.5" stroke="currentColor" stroke-width="1.2" />
-              <line x1="7" y="1.5" x2="7" y2="12.5" stroke="currentColor" stroke-width="1.2" />
-              <line x1="11" y="1.5" x2="11" y2="12.5" stroke="currentColor" stroke-width="1.2" />
-              <line x1="1.5" y="3" x2="12.5" y2="3" stroke="currentColor" stroke-width="1.2" />
-              <line x1="1.5" y="7" x2="12.5" y2="7" stroke="currentColor" stroke-width="1.2" />
-              <line x1="1.5" y="11" x2="12.5" y2="11" stroke="currentColor" stroke-width="1.2" />
-            </svg>
-            <span>还原</span>
+        </template>
+      </div>
+    </div>
+
+    <!-- 最大化面板（central.html 状态二）：同屏单集群；mini-bar 原地切换保留当前 Tab；✕ 收起返回网格 -->
+    <div
+      v-else-if="maximizedCluster"
+      class="max-panel"
+      :class="clusterHueClass(maximizedCluster.id)"
+      :data-cluster-id="maximizedCluster.id"
+    >
+      <div class="cluster-mini-bar">
+        <div class="mini-scroll">
+          <div
+            v-for="c in filteredClusters"
+            :key="c.id"
+            class="mini-item"
+            :class="{ active: maximizedClusterId === c.id }"
+            @click="switchMaximizedCluster(c.id)"
+          >
+            <span class="status-dot" :class="c.status === 1 ? 'green' : 'red'"></span>
+            <span class="mini-name">{{ c.display_name || c.name }}</span>
+            <span v-if="c.display_name" class="mini-hint">{{ c.name }}</span>
           </div>
         </div>
-        <!-- Name + actions row -->
-        <div class="expanded-name-row">
-          <span class="cname">{{ cluster.display_name || cluster.name }}</span>
-          <span v-if="cluster.display_name" class="chint">({{ cluster.name }})</span>
-          <div class="cl-card-actions">
-            <button class="btn btn-secondary btn-sm" @click.stop="viewClusterDetail(cluster)">详情</button>
-            <button class="btn btn-ghost btn-sm" @click.stop="testCluster(cluster)">连接测试</button>
-            <button class="btn btn-ghost btn-sm" @click.stop="editCluster(cluster)">编辑</button>
-            <button class="btn btn-ghost btn-sm" @click.stop="exportCluster(cluster)">导出 Excel</button>
-            <button class="btn btn-ghost btn-sm" @click.stop="openBackupDownload(cluster)">备份下载</button>
-            <button class="btn btn-ghost btn-sm" style="color: var(--danger)" @click.stop="deleteCluster(cluster)">
-              删除
-            </button>
-          </div>
-        </div>
-        <div class="card-detail">
-          <div class="dtabs">
-            <span class="dt" :class="{ active: cluster.activeTab === 'nodes' }" @click="switchTab(cluster, 'nodes')"
-              >集群节点 <span class="db">{{ cluster.healthy_node_count }}/{{ cluster.node_count }}</span></span
-            >
-            <span
-              class="dt"
-              :class="{ active: cluster.activeTab === 'upstreams' }"
-              @click="switchTab(cluster, 'upstreams')"
-              >上游 <span class="db">{{ cluster.upstream_count }}</span></span
-            >
-            <span class="dt" :class="{ active: cluster.activeTab === 'routes' }" @click="switchTab(cluster, 'routes')"
-              >路由 <span class="db">{{ cluster.route_count }}</span></span
-            >
-            <span
-              v-if="authStore.hasPermission('plugin_groups')"
-              class="dt"
-              :class="{ active: cluster.activeTab === 'pluginConfigs' }"
-              @click="switchTab(cluster, 'pluginConfigs')"
-              >插件组 <span class="db">{{ cluster.plugin_config_count }}</span></span
-            >
-            <span
-              v-if="authStore.hasPermission('plugin_metadata')"
-              class="dt"
-              :class="{ active: cluster.activeTab === 'globalPlugins' }"
-              @click="switchTab(cluster, 'globalPlugins')"
-              >插件元数据 <span class="db">{{ cluster.plugin_metadata_count }}</span></span
-            >
-            <span
-              v-if="authStore.hasPermission('global_rules')"
-              class="dt"
-              :class="{ active: cluster.activeTab === 'globalRules' }"
-              @click="switchTab(cluster, 'globalRules')"
-              >全局规则 <span class="db">{{ cluster.global_rule_count }}</span></span
-            >
-            <span
-              class="dt"
-              :class="{ active: cluster.activeTab === 'staticResources' }"
-              @click="switchTab(cluster, 'staticResources')"
-              >静态资源 <span class="db">{{ cluster.static_resource_count }}</span></span
-            >
-          </div>
-          <div class="dbody">
-            <ClusterUpstreams
-              v-if="cluster.activeTab === 'upstreams'"
-              :cluster="cluster"
-              :clusters="clusters"
-              :open-publish-modal="openPublishModal"
-              @refresh="loadClusters"
-            />
-            <ClusterRoutes
-              v-else-if="cluster.activeTab === 'routes'"
-              :cluster="cluster"
-              :clusters="clusters"
-              :open-publish-modal="openPublishModal"
-              :show-delete-confirm="showDeleteConfirm"
-              :load-plugin-configs="loadPluginConfigs"
-              @refresh="loadClusters"
-            />
-            <ClusterPluginConfigs
-              v-else-if="cluster.activeTab === 'pluginConfigs'"
-              :cluster="cluster"
-              :clusters="clusters"
-              :open-publish-modal="openPublishModal"
-              :available-plugins="availablePlugins"
-              :load-available-plugins="loadAvailablePlugins"
-              :loading="loading"
-              @refresh="loadClusters"
-            />
-            <ClusterGlobalRules
-              v-else-if="cluster.activeTab === 'globalRules'"
-              :cluster="cluster"
-              :clusters="clusters"
-              :open-publish-modal="openPublishModal"
-              :available-plugins="availablePlugins"
-              :load-available-plugins="loadAvailablePlugins"
-              :loading="loading"
-              @refresh="loadClusters"
-            />
-            <ClusterStaticResources
-              v-else-if="cluster.activeTab === 'staticResources'"
-              :cluster="cluster"
-              :clusters="clusters"
-              :open-publish-modal="openPublishModal"
-              :load-routes="loadRoutes"
-              :loading="loading"
-              @refresh="loadClusters"
-            />
-            <div v-else-if="cluster.activeTab === 'globalPlugins'" class="tab-content">
-              <PluginMetadata :cluster-id="cluster.id" :nodes="cluster.nodes" />
-            </div>
-            <ClusterNodes v-else :cluster="cluster" @refresh="loadClusters" />
-          </div>
+        <button class="restore-btn" @click="restoreMaximize">退出最大化</button>
+      </div>
+      <div class="max-name-row">
+        <span class="cname">{{ maximizedCluster.display_name || maximizedCluster.name }}</span>
+        <span v-if="maximizedCluster.display_name" class="chint">({{ maximizedCluster.name }})</span>
+        <span v-if="maximizedRouteBadge" class="lp-tag cl-route-badge" :class="maximizedRouteBadge.cls">{{
+          maximizedRouteBadge.label
+        }}</span>
+        <div class="cl-card-actions">
+          <button class="btn btn-secondary btn-sm" @click.stop="viewClusterDetail(maximizedCluster)">详情</button>
+          <button class="btn btn-ghost btn-sm" @click.stop="testCluster(maximizedCluster)">连接测试</button>
+          <button class="btn btn-ghost btn-sm" @click.stop="editCluster(maximizedCluster)">编辑</button>
+          <button class="btn btn-ghost btn-sm" @click.stop="exportCluster(maximizedCluster)">导出 Excel</button>
+          <button class="btn btn-ghost btn-sm" @click.stop="openBackupDownload(maximizedCluster)">备份下载</button>
+          <button
+            class="btn btn-ghost btn-sm"
+            style="color: var(--danger)"
+            @click.stop="deleteCluster(maximizedCluster)"
+          >
+            删除
+          </button>
         </div>
       </div>
-    </TransitionGroup>
-
-    <div v-if="filteredClusters.length === 0 && !loading" class="empty-state">
-      <!-- 空状态两分支（cluster-ux-close-loop B6.4）：从未创建 vs 筛选无结果 -->
-      <a-empty :description="hasActiveFilters ? '没有符合筛选条件的集群' : '还没有集群'" />
-      <button v-if="hasActiveFilters" class="btn btn-secondary" @click="clearFilters">清除筛选</button>
-      <button v-else class="btn btn-primary" @click="showAddModal">新建集群</button>
+      <div class="dtabs">
+        <span
+          class="dt"
+          :class="{ active: maximizedCluster.activeTab === 'nodes' }"
+          @click="switchTab(maximizedCluster, 'nodes')"
+          >集群节点
+          <span class="db">{{ maximizedCluster.healthy_node_count }}/{{ maximizedCluster.node_count }}</span></span
+        >
+        <span
+          class="dt"
+          :class="{ active: maximizedCluster.activeTab === 'upstreams' }"
+          @click="switchTab(maximizedCluster, 'upstreams')"
+          >上游 <span class="db">{{ maximizedCluster.upstream_count }}</span></span
+        >
+        <span
+          class="dt"
+          :class="{ active: maximizedCluster.activeTab === 'routes' }"
+          @click="switchTab(maximizedCluster, 'routes')"
+          >路由 <span class="db">{{ maximizedCluster.route_count }}</span></span
+        >
+        <span
+          v-if="authStore.hasPermission('plugin_groups')"
+          class="dt"
+          :class="{ active: maximizedCluster.activeTab === 'pluginConfigs' }"
+          @click="switchTab(maximizedCluster, 'pluginConfigs')"
+          >插件组 <span class="db">{{ maximizedCluster.plugin_config_count }}</span></span
+        >
+        <span
+          v-if="authStore.hasPermission('plugin_metadata')"
+          class="dt"
+          :class="{ active: maximizedCluster.activeTab === 'globalPlugins' }"
+          @click="switchTab(maximizedCluster, 'globalPlugins')"
+          >插件元数据 <span class="db">{{ maximizedCluster.plugin_metadata_count }}</span></span
+        >
+        <span
+          v-if="authStore.hasPermission('global_rules')"
+          class="dt"
+          :class="{ active: maximizedCluster.activeTab === 'globalRules' }"
+          @click="switchTab(maximizedCluster, 'globalRules')"
+          >全局规则 <span class="db">{{ maximizedCluster.global_rule_count }}</span></span
+        >
+        <span
+          class="dt"
+          :class="{ active: maximizedCluster.activeTab === 'staticResources' }"
+          @click="switchTab(maximizedCluster, 'staticResources')"
+          >静态资源 <span class="db">{{ maximizedCluster.static_resource_count }}</span></span
+        >
+      </div>
+      <div class="dbody">
+        <ClusterUpstreams
+          v-if="maximizedCluster.activeTab === 'upstreams'"
+          :cluster="maximizedCluster"
+          :clusters="clusters"
+          :open-publish-modal="openPublishModal"
+          @refresh="loadClusters"
+        />
+        <ClusterRoutes
+          v-else-if="maximizedCluster.activeTab === 'routes'"
+          :cluster="maximizedCluster"
+          :clusters="clusters"
+          :open-publish-modal="openPublishModal"
+          :show-delete-confirm="showDeleteConfirm"
+          :load-plugin-configs="loadPluginConfigs"
+          @refresh="loadClusters"
+        />
+        <ClusterPluginConfigs
+          v-else-if="maximizedCluster.activeTab === 'pluginConfigs'"
+          :cluster="maximizedCluster"
+          :clusters="clusters"
+          :open-publish-modal="openPublishModal"
+          :available-plugins="availablePlugins"
+          :load-available-plugins="loadAvailablePlugins"
+          :loading="loading"
+          @refresh="loadClusters"
+        />
+        <ClusterGlobalRules
+          v-else-if="maximizedCluster.activeTab === 'globalRules'"
+          :cluster="maximizedCluster"
+          :clusters="clusters"
+          :open-publish-modal="openPublishModal"
+          :available-plugins="availablePlugins"
+          :load-available-plugins="loadAvailablePlugins"
+          :loading="loading"
+          @refresh="loadClusters"
+        />
+        <ClusterStaticResources
+          v-else-if="maximizedCluster.activeTab === 'staticResources'"
+          :cluster="maximizedCluster"
+          :clusters="clusters"
+          :open-publish-modal="openPublishModal"
+          :load-routes="loadRoutes"
+          :loading="loading"
+          @refresh="loadClusters"
+        />
+        <div v-else-if="maximizedCluster.activeTab === 'globalPlugins'" class="tab-content">
+          <PluginMetadata :cluster-id="maximizedCluster.id" :nodes="maximizedCluster.nodes" />
+        </div>
+        <ClusterNodes v-else :cluster="maximizedCluster" @refresh="loadClusters" />
+      </div>
     </div>
 
     <ClusterFormModal
@@ -604,7 +441,6 @@
 import { ref, reactive, computed, watch, watchEffect, onMounted, h, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
-import { CaretDownOutlined, CaretRightOutlined } from '@ant-design/icons-vue'
 import {
   showDeleteConfirm,
   executeDeleteWithProgress,
@@ -643,6 +479,12 @@ import ClusterPluginConfigs from '@/views/clusters/ClusterPluginConfigs.vue'
 import ClusterGlobalRules from '@/views/clusters/ClusterGlobalRules.vue'
 import ClusterStaticResources from '@/views/clusters/ClusterStaticResources.vue'
 import SearchInput from '@/components/SearchInput.vue'
+import TableToolbar from '@/components/TableToolbar.vue'
+import ClusterBand from '@/components/ClusterBand.vue'
+import StrokeIcon from '@/components/StrokeIcon.vue'
+import PageStatBadges from '@/components/PageStatBadges.vue'
+import { useCardClusterGrouping } from '@/composables/useCardClusterGrouping'
+import { clusterHueClass } from '@/utils/clusterHue'
 
 const authStore = useAuthStore()
 const clusters = ref<Cluster[]>([])
@@ -705,61 +547,34 @@ function handlePublishCancel() {
   publishModalResolve = null
 }
 
-const expandedIds = ref<Set<number>>(new Set())
-const expandedOrder = ref<number[]>([])
 const maximizedClusterId = ref<number | null>(null)
 
+/** 当前最大化集群（两态模型：网格 ⇄ 最大化；从全量列表解析——筛选变化不使面板悬空） */
+const maximizedCluster = computed(() => clusters.value.find((c) => c.id === maximizedClusterId.value) ?? null)
+
+/** 最大化面板中继徽章（页面 routeBadge 单点的只读镜像） */
+const maximizedRouteBadge = computed(() => (maximizedCluster.value ? routeBadge(maximizedCluster.value) : null))
+
 function maximizeCluster(cluster: Cluster) {
-  // Collapse all groups to save space
-  for (const g of groupedClusters.value) {
-    expandedGroups[g.name || '__ungrouped__'] = false
-  }
-  // Collapse all other expanded clusters
-  const s = new Set<number>()
-  s.add(cluster.id)
-  expandedIds.value = s
-  expandedOrder.value = [cluster.id]
+  // 保留旧行为：最大化即折叠全部分组（收起返回网格时紧凑）
+  collapseAllGroups()
   cluster.activeTab = cluster.activeTab || 'nodes'
   maximizedClusterId.value = cluster.id
 }
 
 function restoreMaximize() {
-  const clusterId = maximizedClusterId.value
-  if (clusterId) {
-    const s = new Set(expandedIds.value)
-    s.delete(clusterId)
-    expandedIds.value = s
-    expandedOrder.value = expandedOrder.value.filter((id) => id !== clusterId)
-  }
   maximizedClusterId.value = null
 }
 
 function switchMaximizedCluster(clusterId: number) {
   const cluster = clusters.value.find((c) => c.id === clusterId)
   if (!cluster) return
+  // 设计基线（central.html 状态二）：点其他集群 = 原地切换、保留当前 Tab——
+  // 把当前活动 Tab 带到目标集群并触发按需加载（旧实现切新集群会回落节点 Tab）
+  const curTab = maximizedCluster.value?.activeTab
+  if (curTab) cluster.activeTab = curTab
   maximizeCluster(cluster)
-}
-
-function toggleExpand(clusterId: number) {
-  const s = new Set(expandedIds.value)
-  const order = [...expandedOrder.value]
-  if (s.has(clusterId)) {
-    s.delete(clusterId)
-    const idx = order.indexOf(clusterId)
-    if (idx > -1) order.splice(idx, 1)
-    if (maximizedClusterId.value === clusterId) {
-      maximizedClusterId.value = null
-    }
-  } else {
-    s.add(clusterId)
-    order.push(clusterId)
-    setTimeout(() => {
-      const el = document.querySelector(`.card-expanded[data-cluster-id="${clusterId}"]`)
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }, 100)
-  }
-  expandedIds.value = s
-  expandedOrder.value = order
+  if (curTab) handleTabClick(cluster, curTab)
 }
 
 const closeEditModal = () => {
@@ -813,26 +628,6 @@ const handleTabClick = async (cluster: Cluster, key: string) => {
   }
 }
 
-function expandAndSwitchTab(cluster: Cluster, tab: string) {
-  cluster.activeTab = tab
-  const s = new Set(expandedIds.value)
-  const order = [...expandedOrder.value]
-  const isNew = !s.has(cluster.id)
-  if (isNew) {
-    s.add(cluster.id)
-    order.push(cluster.id)
-  }
-  expandedIds.value = s
-  expandedOrder.value = order
-  handleTabClick(cluster, tab)
-  if (isNew) {
-    setTimeout(() => {
-      const el = document.querySelector(`.card-expanded[data-cluster-id="${cluster.id}"]`)
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }, 100)
-  }
-}
-
 const filteredClusters = computed(() => {
   return clusters.value.filter((c: Cluster) => {
     const text = filterText.value.trim().toLowerCase()
@@ -853,104 +648,75 @@ const filteredClusters = computed(() => {
   })
 })
 
-const gridClusters = computed(() => {
-  return filteredClusters.value.filter((c: Cluster) => !expandedIds.value.has(c.id))
-})
+// ── 网格态分组 / 平铺（useCardClusterGrouping 共享组合式，#87/#88；旧自有分组态已退场）──
+// 状态 chips（#85①）：启用位筛选单形；计数前端聚合（全量 ≤PAGE_SIZE_CARD_GRID）
+const statusTabs = computed(() => [
+  { key: 'all', label: '全部', count: filteredClusters.value.length },
+  { key: 'enabled', label: '已启用', count: filteredClusters.value.filter((c) => c.status === 1).length },
+  { key: 'disabled', label: '已禁用', count: filteredClusters.value.filter((c) => c.status !== 1).length },
+])
 
-const expandedClusters = computed(() => {
-  const byId: Record<number, Cluster> = {}
-  for (const c of filteredClusters.value) {
-    if (expandedIds.value.has(c.id)) byId[c.id] = c
-  }
-  return expandedOrder.value.map((id) => byId[id]).filter(Boolean)
-})
-
-// ── Group collapse state ──
-const expandedGroups = reactive<Record<string, boolean>>({})
-
-function toggleGroup(name: string) {
-  expandedGroups[name] = expandedGroups[name] === false ? true : false
-}
-
-function expandAll() {
-  for (const g of groupedClusters.value) {
-    expandedGroups[g.name || '__ungrouped__'] = true
-  }
-}
-
-function collapseAll() {
-  for (const g of groupedClusters.value) {
-    expandedGroups[g.name || '__ungrouped__'] = false
-  }
-}
-
-const groupedClusters = computed(() => {
-  const groups: { name: string; clusters: Cluster[] }[] = []
-  const map = new Map<string, Cluster[]>()
-  for (const c of filteredClusters.value) {
-    if (expandedIds.value.has(c.id)) continue // 展开的单独显示
-    const key = c.group_name || ''
-    if (!map.has(key)) map.set(key, [])
-    map.get(key)!.push(c)
-  }
-  // 未分组在前，有分组名在后（默认色在上，彩色在下）
-  if (map.has('')) groups.push({ name: '', clusters: map.get('')! })
-  const named = Array.from(map.entries())
-    .filter(([k]) => k)
-    .sort(([a], [b]) => a.localeCompare(b))
-  for (const [name, cls] of named) groups.push({ name, clusters: cls })
-  return groups
-})
-
-let draggedClusterId: number | null = null
-
-function onDragStart(event: DragEvent, clusterId: number) {
-  draggedClusterId = clusterId
-  if (event.dataTransfer) {
-    event.dataTransfer.effectAllowed = 'move'
-    event.dataTransfer.setData('text/plain', String(clusterId))
-  }
-  const el = (event.target as HTMLElement).closest('.card-expanded') as HTMLElement
-  if (el) setTimeout(() => el.classList.add('dragging'), 0)
-}
-
-function onDragOver(event: DragEvent) {
-  event.preventDefault()
-  if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
-  const target = (event.target as HTMLElement).closest('.card-expanded') as HTMLElement
-  if (!target || !draggedClusterId) return
-  const targetId = Number(target.dataset.clusterId)
-  if (targetId === draggedClusterId) return
-  document.querySelectorAll('.card-expanded.drag-over').forEach((el) => el.classList.remove('drag-over'))
-  target.classList.add('drag-over')
-}
-
-function onDrop(event: DragEvent) {
-  event.preventDefault()
-  document.querySelectorAll('.card-expanded.drag-over, .card-expanded.dragging').forEach((el) => {
-    el.classList.remove('drag-over', 'dragging')
+/** 组名稳定序（未分组置顶 + 字母序）：供分堆伪 id 与 band 色相 */
+const groupOrderNames = computed(() => {
+  const names = new Set(filteredClusters.value.map((c) => c.group_name || ''))
+  return Array.from(names).sort((a, b) => {
+    if (!a) return -1
+    if (!b) return 1
+    return a.localeCompare(b, 'zh')
   })
-  if (!draggedClusterId) return
-  const target = (event.target as HTMLElement).closest('.card-expanded') as HTMLElement
-  if (!target) return
-  const targetId = Number(target.dataset.clusterId)
-  if (targetId === draggedClusterId) return
+})
 
-  const order = [...expandedOrder.value]
-  const fromIdx = order.indexOf(draggedClusterId)
-  const toIdx = order.indexOf(targetId)
-  if (fromIdx === -1 || toIdx === -1) return
-  order.splice(fromIdx, 1)
-  order.splice(toIdx, 0, draggedClusterId)
-  expandedOrder.value = order
+const groupIdOf = (name: string): number => {
+  const idx = groupOrderNames.value.indexOf(name)
+  return idx >= 0 ? idx + 1 : 999
 }
 
-function onDragEnd(_event: DragEvent) {
-  document.querySelectorAll('.card-expanded.drag-over, .card-expanded.dragging').forEach((el) => {
-    el.classList.remove('drag-over', 'dragging')
-  })
-  draggedClusterId = null
-}
+const {
+  mode: cardMode,
+  groups: cardGroups,
+  countLabel: countLabelOf,
+  secondaryOf,
+  isFolded,
+  toggleFold,
+  pageHasFolded,
+  toggleFoldAll,
+  groupVisible,
+  collapseAll: collapseAllGroups,
+} = useCardClusterGrouping<Cluster>({
+  rows: () => filteredClusters.value,
+  unit: '个集群',
+  // 分堆键 = 组伪 id（未分组置顶 + 字母序，band 色相随之；同集群管理 D2 口径）
+  clusterIdOf: (c) => groupIdOf(c.group_name || ''),
+  clusterNameOf: (c) => c.group_name || '未分组',
+  groupNameOf: () => '',
+  secondary: (rows) => {
+    const nodes = rows.reduce((acc, c) => acc + (c.node_count || 0), 0)
+    const routes = rows.reduce((acc, c) => acc + (c.route_count || 0), 0)
+    return `节点 ${nodes} · 路由 ${routes}`
+  },
+})
+
+/** 平铺 = 全量收进单伪组（band 不渲染，卡片本体即集群身份） */
+const renderGroups = computed(() =>
+  cardMode.value === 'group'
+    ? cardGroups.value
+    : [
+        {
+          clusterId: -1,
+          clusterName: '',
+          groupName: '',
+          hueClass: 'cluster-c1',
+          rows: filteredClusters.value,
+          count: filteredClusters.value.length,
+        },
+      ],
+)
+
+// ── 页头补充维度徽标（#86②：总数归 chips「全部 N」，页头只放补充维度）──
+const headerStatItems = computed(() => [
+  { value: clusters.value.length, label: '集群' },
+  { value: clusters.value.reduce((acc, c) => acc + (c.node_count || 0), 0), label: '节点' },
+])
 
 const modalVisible = ref(false)
 const editingCluster = ref<Cluster | null>(null)
@@ -1446,21 +1212,6 @@ onMounted(async () => {
   min-height: calc(100vh - 56px - 40px);
 }
 
-.cl-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 20px;
-  flex-wrap: nowrap;
-}
-.cl-header-actions .search-input-wrap {
-  width: 200px;
-  flex-shrink: 0;
-}
-.cl-header-actions :deep(.form-input) {
-  width: 100%;
-}
-
 .status-dot {
   width: 10px;
   height: 10px;
@@ -1476,96 +1227,6 @@ onMounted(async () => {
   box-shadow: 0 0 6px color-mix(in srgb, var(--danger) 50%, transparent);
 }
 
-.cluster-group {
-  margin-bottom: 16px;
-}
-
-.group-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  margin-bottom: 8px;
-  cursor: pointer;
-  border-radius: 6px;
-  background: oklch(94.5% 0.008 240);
-  transition: background 0.15s;
-  user-select: none;
-}
-.group-header:hover {
-  background: var(--accent-bg);
-}
-.group-toggle {
-  font-size: 11px;
-  color: var(--accent);
-  opacity: 0.6;
-  flex-shrink: 0;
-}
-.group-name {
-  font-weight: 600;
-  font-size: 14px;
-  color: var(--fg);
-  flex-shrink: 0;
-}
-.group-count {
-  font-size: 12px;
-  color: var(--muted);
-  margin-right: 8px;
-  flex-shrink: 0;
-}
-.ungrouped-label {
-  opacity: 0.7;
-  font-weight: 500;
-}
-.cluster-names {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-  flex: 1;
-  min-width: 0;
-  padding: 0 4px;
-}
-.cluster-name-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  color: var(--muted);
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.15s;
-}
-.cluster-name-item:hover {
-  background: var(--accent-bg);
-  color: var(--accent);
-}
-.status-dot-sm {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.status-dot-sm.green {
-  background: var(--success);
-}
-.status-dot-sm.red {
-  background: var(--danger);
-}
-.expand-group-btn {
-  flex-shrink: 0;
-}
-.group-chip {
-  font-size: 11px;
-  padding: 1px 8px;
-  border-radius: 8px;
-  background: var(--accent-bg);
-  color: var(--accent);
-  margin-right: 4px;
-  flex-shrink: 0;
-}
 .maximize-btn-sm {
   display: inline-flex;
   align-items: center;
@@ -1594,10 +1255,6 @@ onMounted(async () => {
 }
 .scell:hover .snum {
   color: var(--accent);
-}
-
-.group-body {
-  position: relative;
 }
 
 .cluster-grid {
@@ -1641,70 +1298,56 @@ onMounted(async () => {
   flex-shrink: 0;
 }
 
-.expanded-area {
-  margin-top: 20px;
+/* 最大化面板名称行（central.html 状态二基线）：3px 集群色相竖条贴名左，cname 16/700、chint mono */
+/* 最大化面板容器（central.html .max-panel）：集群色相经 cluster-cN 的 --cc 注入 */
+.max-panel {
   position: relative;
-  z-index: 1;
-  border-top: 2px solid color-mix(in srgb, var(--accent) 40%, transparent);
-  padding-top: 16px;
-}
-
-.card-expanded {
-  background: var(--surface);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
-  border-top: 3px solid var(--accent);
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  margin-bottom: 12px;
+  background: var(--surface);
   box-shadow: var(--shadow-sm);
-}
-.card-expanded.dragging {
-  opacity: 0.35;
-}
-.card-expanded.drag-over {
-  border-color: var(--warning) !important;
-  box-shadow: 0 4px 24px color-mix(in srgb, var(--warning) 25%, transparent) !important;
+  overflow: hidden;
+  margin-bottom: 24px;
 }
 
-.flex-spacer {
-  flex: 1;
-}
-.expanded-mini-row {
+.max-name-row {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 16px;
-  background: var(--accent-bg);
+  gap: 10px;
+  padding: 14px 16px 12px 19px;
   border-bottom: 1px solid var(--border);
 }
-.expanded-name-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  border-bottom: 1px solid var(--border);
+.max-name-row::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--cc, var(--accent));
 }
-.expanded-name-row .cname {
-  font-size: 14px;
-  font-weight: 600;
+.max-name-row .cname {
+  font-size: 16px;
+  font-weight: 700;
   color: var(--fg);
 }
-.expanded-name-row .chint {
-  font-size: 12px;
+.max-name-row .chint {
+  font-size: 11.5px;
+  font-family: var(--font-mono);
   color: var(--muted);
 }
-.expanded-name-row .cl-card-actions {
+.max-name-row .cl-card-actions {
   margin-left: auto;
   margin-top: 0;
   padding: 0;
   border-top: none;
 }
-
-.card-detail {
-  border-top: 1px solid var(--border);
-  position: relative;
+.max-name-row .btn {
+  height: 28px;
 }
+
 .dtabs {
   display: flex;
   gap: 4px;
@@ -1831,77 +1474,6 @@ onMounted(async () => {
   margin: 0;
 }
 
-/* transitions */
-.grid-leave-active {
-  position: absolute !important;
-  opacity: 0;
-  transform: translateY(10px);
-  transition: all 0.2s ease-in;
-  width: calc(100% / 3 - 8px);
-  z-index: 1;
-}
-.grid-move {
-  transition: all 0.3s ease;
-}
-.grid-enter-active {
-  transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
-}
-.grid-enter-from {
-  opacity: 0;
-  transform: translateY(10px) scale(0.95);
-}
-.expand-enter-active {
-  animation: expandWaterfall 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-}
-@keyframes expandWaterfall {
-  0% {
-    opacity: 0;
-    max-height: 0;
-    margin-bottom: 0;
-    overflow: hidden;
-    transform: translateY(-250px);
-  }
-  25% {
-    opacity: 1;
-  }
-  85% {
-    max-height: 500px;
-    transform: translateY(8px);
-  }
-  100% {
-    opacity: 1;
-    max-height: 500px;
-    margin-bottom: 12px;
-    transform: translateY(0);
-  }
-}
-.expand-leave-active {
-  animation: expandFlyUp 0.3s ease-in forwards;
-  overflow: hidden;
-}
-@keyframes expandFlyUp {
-  0% {
-    opacity: 1;
-    max-height: 500px;
-    margin-bottom: 12px;
-    transform: translateY(0);
-  }
-  40% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-    max-height: 0;
-    margin-bottom: 0;
-    padding-top: 0;
-    padding-bottom: 0;
-    transform: translateY(-120px);
-  }
-}
-
-:deep(.node-table) .ant-table {
-  background: transparent !important;
-}
 /* 表头：保留品牌色底 + 主色下框（页面标识，沿用 --p-* 令牌），其余机械属性对齐列表页契约 */
 :deep(.node-table) .ant-table-thead > tr > th {
   background: var(--accent-bg) !important;
@@ -2171,27 +1743,6 @@ onMounted(async () => {
 }
 
 /* ── Maximize / Restore button ── */
-.maximize-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 10px 3px 6px;
-  border-radius: var(--radius-sm);
-  color: var(--muted);
-  font-size: 11px;
-  cursor: pointer;
-  flex-shrink: 0;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  transition: all 0.2s;
-  user-select: none;
-  margin-left: 4px;
-}
-.maximize-btn:hover {
-  background: var(--bg);
-  border-color: var(--accent);
-  color: var(--accent);
-}
 .maximize-btn.restore {
   background: var(--accent-bg);
   border-color: var(--accent);
@@ -2199,27 +1750,6 @@ onMounted(async () => {
 }
 
 /* ── Card maximized ── */
-.card-maximized {
-  border-color: var(--accent) !important;
-  box-shadow: 0 4px 24px color-mix(in srgb, var(--accent) 20%, transparent) !important;
-}
-.card-maximized .dbody {
-  min-height: 300px;
-}
-.card-maximized .dtabs {
-  overflow-x: visible;
-}
-.card-maximized .expanded-mini-row {
-  cursor: default;
-}
-
-/* ── Expanded area in maximized mode ── */
-.cluster-list:has(.cluster-mini-bar) .expanded-area {
-  margin-top: 0;
-  border-top: none;
-  padding-top: 0;
-}
-
 /* ── Test connection ── */
 .test-nodes-list {
   max-height: 320px;
@@ -2289,13 +1819,6 @@ onMounted(async () => {
 @media (max-width: 768px) {
   .cluster-grid {
     grid-template-columns: 1fr;
-  }
-  .cl-header-actions {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .cl-header-actions .search-input-wrap {
-    width: 100%;
   }
 }
 </style>
