@@ -879,7 +879,8 @@ function menuDelete(r: any): void {
 
 onMounted(async () => {
   const clusterId = route.query.cluster_id as string | undefined
-  if (clusterId) clusterFilter.value = clusterId
+  const numeric = Number(clusterId)
+  if (Number.isFinite(numeric)) clusterFilter.value = numeric
   await loadClusters()
   loadRoutes()
 })

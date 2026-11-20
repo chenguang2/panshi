@@ -1026,7 +1026,14 @@ function resolveDeepLinkClusterId(): number | null {
 
 onMounted(() => {
   const clusterId = route.query.cluster_id as string | undefined
-  if (clusterId) clusterFilter.value = clusterId
+  if (clusterId) {
+    const numeric = Number(clusterId)
+    if (Number.isFinite(numeric)) {
+      clusterFilter.value = numeric
+      // 深链进入：上游下拉选项随深链集群加载（正常路径由 onClusterChange 触发）
+      loadUpstreams(numeric)
+    }
+  }
   // plugin-switches-ux-review-fixes 批 2：「查看引用」深链——/routes?search=<plugin_name>
   // 预填搜索框，随首屏请求过滤（useDebouncedSearch 初始值随 loadRoutes 带 search 参数）
   const searchQuery = route.query.search as string | undefined

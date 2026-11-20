@@ -1124,7 +1124,7 @@ describe('RouteList.vue 深链 cluster_id：过滤 + 新建预选（batch1 7.6 �
     expect(vm.formModalVisible).toBe(false)
     // 既有行为保持：列表请求仍按深链集群过滤
     const calls = mockApiGet.mock.calls.filter((c: unknown[]) => c[0] === '/routes')
-    expect((calls[calls.length - 1][1] as { params: { cluster_id?: unknown } }).params.cluster_id).toBe('5')
+    expect((calls[calls.length - 1][1] as { params: { cluster_id?: unknown } }).params.cluster_id).toBe(5)
 
     // 规格场景：深链进入后手动点「新建路由」→ 预选该集群
     const createBtn = wrapper.findAll('button').find((b) => b.text().includes('新建路由'))
@@ -1147,7 +1147,7 @@ describe('RouteList.vue 深链 cluster_id：过滤 + 新建预选（batch1 7.6 �
     const vm = wrapper.vm as { formModalVisible: boolean }
     expect(vm.formModalVisible).toBe(false)
     const calls = mockApiGet.mock.calls.filter((c: unknown[]) => c[0] === '/routes')
-    expect((calls[calls.length - 1][1] as { params: { cluster_id?: unknown } }).params.cluster_id).toBe('999')
+    expect((calls[calls.length - 1][1] as { params: { cluster_id?: unknown } }).params.cluster_id).toBe(999)
     // 未授权集群不进预选：手动新建时不带 defaultClusterId
     const createBtn = wrapper.findAll('button').find((b) => b.text().includes('新建路由'))
     await createBtn!.trigger('click')

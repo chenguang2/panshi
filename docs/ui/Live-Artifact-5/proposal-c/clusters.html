@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>集群管理 · 方案 C（卡片型） — 磐石网关管理平台</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+/* 该页独有：集群统计格（7 格迷你统计，实现侧 cl-stat 同语义）与节点行内 chips；
+   卡片解剖一律走 theme.css 共享类 */
+.stat-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; margin: 0 14px 4px; }
+.stat-cell { text-align: center; padding: 7px 2px 6px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg); cursor: pointer; transition: all .12s; }
+.stat-cell:hover { border-color: oklch(56% 0.16 210 / 45%); background: var(--accent-bg); transform: translateY(-1px); }
+.stat-cell .sv { font-size: 15px; font-weight: 700; font-family: var(--font-mono); color: var(--fg); line-height: 1.1; }
+.stat-cell .sv.dim { color: var(--muted); }
+.stat-cell .sv.ok { color: var(--success); }
+.stat-cell .sv.warn { color: var(--warning); }
+.stat-cell .sl { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+.node-row { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; padding: 0 14px; margin-bottom: 4px; }
+.node-chip { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg); font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+.node-chip .dot { width: 6px; height: 6px; border-radius: 999px; background: var(--success); }
+.node-chip.off .dot { background: var(--muted); }
+.node-chip.off { color: var(--muted); opacity: .8; }
+.node-more { font-size: 10.5px; color: var(--muted); }
+.cl-reg-badge { border-color: oklch(56% 0.16 210 / 30%); background: var(--accent-bg); color: var(--accent); }
+.cl-direct-badge { color: var(--muted); }
+.page-header h1 { font-size: 21px; }
+</style>
+</head>
+<body>
+<div class="app-layout">
+  <aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="sidebar-logo-icon">磐</div>
+    <span class="sidebar-logo-text">磐石</span>
+    <span class="sidebar-logo-version">v1.0</span>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">核心功能</div>
+      <a class="nav-item active" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h5v5H3v-5zm7 0h5v5h-5v-5z"/></svg><span>概览</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="14" height="5" rx="1"/><rect x="2" y="10" width="14" height="5" rx="1"/></svg><span>统一管理</span></a>
+      <a class="nav-item active" href="clusters.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="3"/><circle cx="3.5" cy="4" r="1.6"/><circle cx="14.5" cy="4" r="1.6"/><circle cx="3.5" cy="14" r="1.6"/><circle cx="14.5" cy="14" r="1.6"/><path d="M4.8 5.1 6.6 7m6.6-1.9-1.8 1.9M4.8 12.9 6.6 11m6.6 1.9-1.8-1.9"/></svg><span>集群管理</span></a>
+      <a class="nav-item" href="nodes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="3"/><circle cx="3.5" cy="4" r="1.6"/><circle cx="14.5" cy="4" r="1.6"/><circle cx="3.5" cy="14" r="1.6"/><circle cx="14.5" cy="14" r="1.6"/><path d="M4.8 5.1 6.6 7m6.6-1.9-1.8 1.9M4.8 12.9 6.6 11m6.6 1.9-1.8-1.9"/></svg><span>节点管理</span></a>
+      <a class="nav-item" href="upstreams.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>上游管理</span></a>
+      <a class="nav-item" href="routes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l5-7v5h9v4H7v5l-5-7z"/></svg><span>路由管理</span></a>
+      <a class="nav-item" href="plugin-groups.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h5v5H3v-5zm7 0h5v5h-5v-5z"/></svg><span>插件组</span></a>
+      <a class="nav-item" href="plugin-metadata.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h8l3 3v9a1 1 0 01-1 1H5a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M9 7v4M9 13v-1"/></svg><span>插件元数据</span></a>
+      <a class="nav-item" href="global-rules.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l6 3v4c0 3-2.5 5.5-6 7-3.5-1.5-6-4-6-7V5l6-3z"/></svg><span>全局规则</span></a>
+      <a class="nav-item" href="static-resources.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3a1 1 0 011-1h6l4 4v10a1 1 0 01-1 1H6a1 1 0 01-1-1V3zM11 2v4h4"/></svg><span>静态资源</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">证书管理</div>
+      <a class="nav-item" href="ca-certs.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="12.5" r="2.5"/><path d="M8 12.5h7M13 12.5v2.5M15 12.5v2.5"/></svg><span>CA 根证书</span></a>
+      <a class="nav-item" href="server-certs.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="10" height="8" rx="1"/><path d="M6.5 8V6a2.5 2.5 0 015 0v2"/></svg><span>服务器证书</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">边缘网络</div>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="14" height="10" rx="1"/><path d="M6 8h6M9 8v4"/></svg><span>edge.env 配置</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9h4l2-4 3 8 2-4h3"/></svg><span>流量监控</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">运维管理</div>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="6"/><path d="M9 5v4l3 2"/></svg><span>任务中心</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="12" height="12" rx="1"/><path d="M3 8h12M8 8v7"/></svg><span>系统管理</span></a>
+    </div>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="sidebar-user"><div class="sidebar-user-avatar">a</div><div><div class="sidebar-user-name">admin</div><div class="sidebar-user-role">超级管理员</div></div></div>
+  </div>
+  </aside>
+
+  <div class="main-area">
+    <header class="top-header">
+      <div class="top-header-breadcrumb"><a href="#">首页</a><span>/</span><span>集群管理</span></div>
+      <div class="top-header-actions">
+        <div class="h-search">
+          <input type="text" placeholder="搜索功能或页面...">
+          <svg class="s-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        </div>
+        <div class="header-user"><div class="header-avatar">管</div><span>管理员</span></div>
+      </div>
+    </header>
+
+    <div class="content-area">
+    <header class="page-header" style="margin-bottom:20px;"><div><h1>集群管理<span class="ph-inline"><span class="ph-lite lite-accent"><b>4</b> 分组</span><span class="ph-lite"><b>31</b> 节点</span></span></h1><p>管理 Edge 网关集群：节点健康、资源分布与配置发布状态</p></div><div class="page-header-actions"><button class="btn btn-secondary"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></svg>备份下载</button><button class="btn btn-secondary"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 9l5-5 5 5M12 3v10"/></svg>从备份导入</button><button class="btn btn-primary"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>新建集群</button></div></header>
+    <div class="l5-card">
+      <!-- 工具条（#85⑤ 契约）：搜索150 → 分组104 → spacer → 全部收起 → 分组|平铺；计数归 chips -->
+      <div class="l5-toolbar" style="gap:6px;">
+        <div class="l5-search"><input type="text" style="width:150px" placeholder="搜索集群名称或显示名..."><svg class="s-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>
+        <select class="l5-select" style="width:104px"><option>全部分组</option><option>生产环境</option><option>预发环境</option><option>开发环境</option><option>未分组</option></select>
+        <span class="t-spacer"></span>
+        <button class="tool-btn fold-all-btn" data-fold-all title="收起当页全部分组"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7 4 12 9 17 4"/><polyline points="7 20 12 15 17 20"/></svg>全部收起</button>
+        <div class="seg" id="modeSeg"><span class="seg-opt all active" data-mode="group">分组</span><span class="seg-opt" data-mode="flat">平铺</span></div>
+      </div>
+
+      <!-- 状态行（#85①）：启用状态 = 带计数 chips -->
+      <div class="l5-chiprow"><span class="chiprow-label">状态</span><div class="f-chips"><span class="f-chip chip-status active">全部<span class="f-count">8</span></span><span class="f-chip chip-status">已启用<span class="f-count">7</span></span><span class="f-chip chip-status">已禁用<span class="f-count">1</span></span></div><span class="t-spacer"></span></div>
+
+      <div class="card-grid">
+        <!-- ═══ 分组一：生产环境 ═══ -->
+        <div class="l5-band cluster-c1" data-fold="g1" role="button" tabindex="0" aria-expanded="true" aria-controls="band-g1">
+          <button class="g-chev" data-band="g1" aria-expanded="true" title="收起本组" aria-label="折叠 / 展开本组"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button>
+          <span class="b-name">生产环境</span>
+          <span class="b-count">3 个集群</span>
+          <span class="b-spacer"></span>
+          <span class="b-hint">节点 <b>12</b> · 路由 <b>27</b></span>
+        </div>
+        <div class="band-cards" id="band-g1">
+          <!-- 集群卡 ①：全量健康 + 已发布 + 直连 -->
+          <article class="l5-panel cluster-c1">
+            <div class="lp-head">
+              <div class="lp-title">
+                <span class="lp-name" title="生产集群 A">生产集群 A</span>
+                <span class="lp-tag tech" title="集群标识（API 标识）">prod-a</span>
+              </div>
+              <div class="lp-status">
+                <span class="ps-tag ps-pub">已启用</span>
+                <span class="ps-tag ps-pub" title="全部资源已发布">v3 · 已发布</span>
+                <span class="lp-tag cl-direct-badge" title="该集群未挂中继区域，直连访问 Edge">直连</span>
+              </div>
+            </div>
+            <div class="lp-body">
+              <div class="lp-row"><span class="lp-k">描述</span><span class="lp-v dim" title="门户与订单主集群">门户与订单主集群</span></div>
+              <div class="lp-row"><span class="lp-k">节点</span><div class="lp-chips">
+                <span class="node-chip"><span class="dot"></span>192.168.1.11:8080</span>
+                <span class="node-chip"><span class="dot"></span>192.168.1.12:8080</span>
+                <span class="node-chip"><span class="dot"></span>192.168.1.13:8080</span>
+              </div><span class="lp-cnt">3/3 健康</span></div>
+            </div>
+            <div class="stat-grid">
+              <a class="stat-cell" href="http://localhost:12345/nodes?cluster_id=1" title="查看该集群的节点列表（健康节点 / 节点总数）" style="text-decoration:none;color:inherit"><div class="sv ok">3/3</div><div class="sl">节点</div></a>
+              <a class="stat-cell" href="http://localhost:12345/upstreams?cluster_id=1" title="查看该集群的上游列表" style="text-decoration:none;color:inherit"><div class="sv">2</div><div class="sl">上游</div></a>
+              <a class="stat-cell" href="http://localhost:12345/routes?cluster_id=1" title="查看该集群的路由列表" style="text-decoration:none;color:inherit"><div class="sv">12</div><div class="sl">路由</div></a>
+              <a class="stat-cell" href="http://localhost:12345/plugin-configs?cluster_id=1" title="查看该集群的插件组" style="text-decoration:none;color:inherit"><div class="sv">3</div><div class="sl">插件组</div></a>
+              <a class="stat-cell" href="http://localhost:12345/global-rules?cluster_id=1" title="查看该集群的全局规则" style="text-decoration:none;color:inherit"><div class="sv">1</div><div class="sl">全局规则</div></a>
+              <a class="stat-cell" href="http://localhost:12345/plugin-metadata?cluster_id=1" title="查看该集群的插件元数据" style="text-decoration:none;color:inherit"><div class="sv">2</div><div class="sl">插件元数据</div></a>
+              <a class="stat-cell" href="http://localhost:12345/static-resources?cluster_id=1" title="查看该集群的静态资源" style="text-decoration:none;color:inherit"><div class="sv">1</div><div class="sl">静态资源</div></a>
+            </div>
+            <div class="lp-foot">
+              <button class="btn btn-secondary btn-sm">详情</button>
+              <button class="btn btn-secondary btn-sm">连接测试</button>
+              <button class="btn btn-secondary btn-sm">漂移检测</button>
+              <button class="btn btn-secondary btn-sm">编辑</button>
+              <div class="menu-anchor">
+                <button class="btn btn-secondary btn-sm" data-menu-toggle="cl-0">更多 ▾</button>
+                <div class="l5-menu" id="cl-0">
+                  <button class="mi"><span class="mi-main">备份下载</span><span class="mi-sub">导出集群配置 JSON</span></button>
+                  <button class="mi"><span class="mi-main">导出 Excel</span><span class="mi-sub">资源清单导出</span></button>
+                </div>
+              </div>
+              <button class="btn btn-secondary btn-sm" style="color: var(--danger)">删除</button>
+            </div>
+          </article>
+
+          <!-- 集群卡 ②：1 节点离线（warning）+ 待发布 + 经中继 -->
+          <article class="l5-panel cluster-c3">
+            <div class="lp-head">
+              <div class="lp-title">
+                <span class="lp-name" title="支付集群">支付集群</span>
+                <span class="lp-tag tech" title="集群标识（API 标识）">pay-gw</span>
+              </div>
+              <div class="lp-status">
+                <span class="ps-tag ps-pub">已启用</span>
+                <span class="ps-tag ps-pending" title="存在待发布变更">v4 · 待发布</span>
+                <span class="lp-tag cl-reg-badge" title="该集群挂接中继区域 aoh：发布/访问经区域网关转发">经中继 · aoh</span>
+              </div>
+            </div>
+            <div class="lp-body">
+              <div class="lp-row"><span class="lp-k">描述</span><span class="lp-v dim" title="支付渠道网关集群">支付渠道网关集群</span></div>
+              <div class="lp-row"><span class="lp-k">节点</span><div class="lp-chips">
+                <span class="node-chip"><span class="dot"></span>192.168.1.14:8080</span>
+                <span class="node-chip"><span class="dot"></span>192.168.1.15:8080</span>
+                <span class="node-chip off"><span class="dot"></span>192.168.1.16:8080</span>
+              </div><span class="lp-cnt warn">2/3 健康</span></div>
+            </div>
+            <div class="lp-notice alert alert-warning">
+              <span class="n-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+              <span class="n-txt">1 个节点离线（192.168.1.16），发布将跳过该节点</span>
+              <button class="n-act">连接测试</button>
+            </div>
+            <div class="stat-grid">
+              <a class="stat-cell" href="http://localhost:12345/nodes?cluster_id=2" title="查看该集群的节点列表（健康节点 / 节点总数）" style="text-decoration:none;color:inherit"><div class="sv warn">2/3</div><div class="sl">节点</div></a>
+              <a class="stat-cell" href="http://localhost:12345/upstreams?cluster_id=2" title="查看该集群的上游列表" style="text-decoration:none;color:inherit"><div class="sv">1</div><div class="sl">上游</div></a>
+              <a class="stat-cell" href="http://localhost:12345/routes?cluster_id=2" title="查看该集群的路由列表" style="text-decoration:none;color:inherit"><div class="sv">6</div><div class="sl">路由</div></a>
+              <a class="stat-cell" href="http://localhost:12345/plugin-configs?cluster_id=2" title="查看该集群的插件组" style="text-decoration:none;color:inherit"><div class="sv">2</div><div class="sl">插件组</div></a>
+              <a class="stat-cell" href="http://localhost:12345/global-rules?cluster_id=2" title="查看该集群的全局规则" style="text-decoration:none;color:inherit"><div class="sv">1</div><div class="sl">全局规则</div></a>
+              <a class="stat-cell" href="http://localhost:12345/plugin-metadata?cluster_id=2" title="查看该集群的插件元数据" style="text-decoration:none;color:inherit"><div class="sv dim">0</div><div class="sl">插件元数据</div></a>
+              <a class="stat-cell" href="http://localhost:12345/static-resources?cluster_id=2" title="查看该集群的静态资源" style="text-decoration:none;color:inherit"><div class="sv dim">0</div><div class="sl">静态资源</div></a>
+            </div>
+            <div class="lp-foot">
+              <button class="btn btn-secondary btn-sm">详情</button>
+              <button class="btn btn-secondary btn-sm">连接测试</button>
+              <button class="btn btn-secondary btn-sm">漂移检测</button>
+              <button class="btn btn-secondary btn-sm">编辑</button>
+              <div class="menu-anchor">
+                <button class="btn btn-secondary btn-sm" data-menu-toggle="cl-1">更多 ▾</button>
+                <div class="l5-menu" id="cl-1">
+                  <button class="mi"><span class="mi-main">备份下载</span><span class="mi-sub">导出集群配置 JSON</span></button>
+                  <button class="mi"><span class="mi-main">导出 Excel</span><span class="mi-sub">资源清单导出</span></button>
+                </div>
+              </div>
+              <button class="btn btn-secondary btn-sm" style="color: var(--danger)">删除</button>
+            </div>
+          </article>
+
+          <!-- 集群卡 ③：已发布 -->
+          <article class="l5-panel cluster-c5">
+            <div class="lp-head">
+              <div class="lp-title">
+                <span class="lp-name" title="内容分发集群">内容分发集群</span>
+                <span class="lp-tag tech" title="集群标识（API 标识）">cdn-edge</span>
+              </div>
+              <div class="lp-status">
+                <span class="ps-tag ps-pub">已启用</span>
+                <span class="ps-tag ps-pub">v2 · 已发布</span>
+                <span class="lp-tag cl-direct-badge" title="该集群未挂中继区域，直连访问 Edge">直连</span>
+              </div>
+            </div>
+            <div class="lp-body">
+              <div class="lp-row"><span class="lp-k">描述</span><span class="lp-v dim" title="静态内容与下载边缘节点">静态内容与下载边缘节点</span></div>
+              <div class="lp-row"><span class="lp-k">节点</span><div class="lp-chips">
+                <span class="node-chip"><span class="dot"></span>192.168.1.17:8080</span>
+                <span class="node-chip"><span class="dot"></span>192.168.1.18:8080</span>
+              </div><span class="lp-cnt">2/2 健康</span></div>
+            </div>
+            <div class="stat-grid">
+              <a class="stat-cell" href="http://localhost:12345/nodes?cluster_id=3" title="查看该集群的节点列表（健康节点 / 节点总数）" style="text-decoration:none;color:inherit"><div class="sv ok">2/2</div><div class="sl">节点</div></a>
+              <a class="stat-cell" href="http://localhost:12345/upstreams?cluster_id=3" title="查看该集群的上游列表" style="text-decoration:none;color:inherit"><div class="sv">1</div><div class="sl">上游</div></a>
+              <a class="stat-cell" href="http://localhost:12345/routes?cluster_id=3" title="查看该集群的路由列表" style="text-decoration:none;color:inherit"><div class="sv">4</div><div class="sl">路由</div></a>
+              <a class="stat-cell" href="http://localhost:12345/plugin-configs?cluster_id=3" title="查看该集群的插件组" style="text-decoration:none;color:inherit"><div class="sv">1</div><div class="sl">插件组</div></a>
+              <a class="stat-cell" href="http://localhost:12345/global-rules?cluster_id=3" title="查看该集群的全局规则" style="text-decoration:none;color:inherit"><div class="sv dim">0</div><div class="sl">全局规则</div></a>
+              <a class="stat-cell" href="http://localhost:12345/plugin-metadata?cluster_id=3" title="查看该集群的插件元数据" style="text-decoration:none;color:inherit"><div class="sv dim">0</div><div class="sl">插件元数据</div></a>
+              <a class="stat-cell" href="http://localhost:12345/static-resources?cluster_id=3" title="查看该集群的静态资源" style="text-decoration:none;color:inherit"><div class="sv">3</div><div class="sl">静态资源</div></a>
+            </div>
+            <div class="lp-foot">
+              <button class="btn btn-secondary btn-sm">详情</button>
+              <button class="btn btn-secondary btn-sm">连接测试</button>
+              <button class="btn btn-secondary btn-sm">漂移检测</button>
+              <button class="btn btn-secondary btn-sm">编辑</button>
+              <div class="menu-anchor">
+                <button class="btn btn-secondary btn-sm" data-menu-toggle="cl-2">更多 ▾</button>
+                <div class="l5-menu" id="cl-2">
+                  <button class="mi"><span class="mi-main">备份下载</span><span class="mi-sub">导出集群配置 JSON</span></button>
+                  <button class="mi"><span class="mi-main">导出 Excel</span><span class="mi-sub">资源清单导出</span></button>
+                </div>
+              </div>
+              <button class="btn btn-secondary btn-sm" style="color: var(--danger)">删除</button>
+            </div>
+          </article>
+        </div>
+
+        <!-- ═══ 分组二：预发环境 ═══ -->
+        <div class="l5-band cluster-c2" data-fold="g2" role="button" tabindex="0" aria-expanded="true" aria-controls="band-g2">
+          <button class="g-chev" data-band="g2" aria-expanded="true" title="收起本组" aria-label="折叠 / 展开本组"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button>
+          <span class="b-name">预发环境</span>
+          <span class="b-count">2 个集群</span>
+          <span class="b-spacer"></span>
+          <span class="b-hint">节点 <b>5</b> · 路由 <b>9</b></span>
+        </div>
+        <div class="band-cards" id="band-g2">
+          <!-- 集群卡 ④：部分失败（error 提示）+ 经中继 + 白名单未下发警示 -->
+          <article class="l5-panel cluster-c2">
+            <div class="lp-head">
+              <div class="lp-title">
+                <span class="lp-name" title="预发主集群">预发主集群</span>
+                <span class="lp-tag tech" title="集群标识（API 标识）">staging</span>
+              </div>
+              <div class="lp-status">
+                <span class="ps-tag ps-pub">已启用</span>
+                <span class="ps-tag ps-partial" title="上次发布存在未生效节点">v5 · 部分失败</span>
+                <span class="lp-tag cl-reg-badge" title="该集群挂接中继区域 aoh：发布/访问经区域网关转发">经中继 · aoh</span>
+              </div>
+            </div>
+            <div class="lp-body">
+              <div class="lp-row"><span class="lp-k">描述</span><span class="lp-v dim" title="预发回归验证集群">预发回归验证集群</span></div>
+              <div class="lp-row"><span class="lp-k">节点</span><div class="lp-chips">
+                <span class="node-chip"><span class="dot"></span>192.168.2.11:8080</span>
+                <span class="node-chip"><span class="dot"></span>192.168.2.12:8080</span>
+                <span class="node-chip off"><span class="dot"></span>192.168.2.13:8080</span>
+              </div><span class="lp-cnt warn">2/3 健康</span></div>
+            </div>
+            <div class="lp-notice alert alert-error">
+              <span class="n-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3.2 21.4 20H2.6L12 3.2z" fill="currentColor"/><path d="M12 9.4v4M12 16.6v.1" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></span>
+              <span class="n-txt">上次发布 1 个节点失败（192.168.2.13 连接超时）</span>
+              <button class="n-act">查看差异</button>
+            </div>
+            <div class="stat-grid">
+              <a class="stat-cell" href="http://localhost:12345/nodes?cluster_id=4" title="查看该集群的节点列表（健康节点 / 节点总数）" style="text-decoration:none;color:inherit"><div class="sv warn">2/3</div><div class="sl">节点</div></a>
+              <a class="stat-cell" href="http://localhost:12345/upstreams?cluster_id=4" title="查看该集群的上游列表" style="text-decoration:none;color:inherit"><div class="sv">3</div><div class="sl">上游</div></a>
+              <a class="stat-cell" href="http://localhost:12345/routes?cluster_id=4" title="查看该集群的路由列表" style="text-decoration:none;color:inherit"><div class="sv">7</div><div class="sl">路由</div></a>
+              <a class="stat-cell" href="http://localhost:12345/plugin-configs?cluster_id=4" title="查看该集群的插件组" style="text-decoration:none;color:inherit"><div class="sv">2</div><div class="sl">插件组</div></a>
+              <a class="stat-cell" href="http://localhost:12345/global-rules?cluster_id=4" title="查看该集群的全局规则" style="text-decoration:none;color:inherit"><div class="sv">1</div><div class="sl">全局规则</div></a>
+              <a class="stat-cell" href="http://localhost:12345/plugin-metadata?cluster_id=4" title="查看该集群的插件元数据" style="text-decoration:none;color:inherit"><div class="sv">1</div><div class="sl">插件元数据</div></a>
+              <a class="stat-cell" href="http://localhost:12345/static-resources?cluster_id=4" title="查看该集群的静态资源" style="text-decoration:none;color:inherit"><div class="sv dim">0</div><div class="sl">静态资源</div></a>
+            </div>
+            <div class="lp-foot">
+              <button class="btn btn-secondary btn-sm">详情</button>
+              <button class="btn btn-secondary btn-sm">连接测试</button>
+              <button class="btn btn-secondary btn-sm">漂移检测</button>
+              <button class="btn btn-secondary btn-sm">编辑</button>
+              <div class="menu-anchor">
+                <button class="btn btn-secondary btn-sm" data-menu-toggle="cl-3">更多 ▾</button>
+                <div class="l5-menu" id="cl-3">
+                  <button class="mi"><span class="mi-main">备份下载</span><span class="mi-sub">导出集群配置 JSON</span></button>
+                  <button class="mi"><span class="mi-main">导出 Excel</span><span class="mi-sub">资源清单导出</span></button>
+                </div>
+              </div>
+              <button class="btn btn-secondary btn-sm" style="color: var(--danger)">删除</button>
+            </div>
+          </article>
+
+          <!-- 集群卡 ⑤：已禁用 -->
+          <article class="l5-panel cluster-c6 is-off">
+            <div class="lp-head">
+              <div class="lp-title">
+                <span class="lp-name" title="压测集群">压测集群</span>
+                <span class="lp-tag tech" title="集群标识（API 标识）">bench</span>
+              </div>
+              <div class="lp-status">
+                <span class="ps-tag ps-unpub">已禁用</span>
+                <span class="ps-tag ps-unpub" title="从未发布或已全部回滚">未发布</span>
+                <span class="lp-tag cl-direct-badge" title="该集群未挂中继区域，直连访问 Edge">直连</span>
+              </div>
+            </div>
+            <div class="lp-body">
+              <div class="lp-row"><span class="lp-k">描述</span><span class="lp-v dim" title="性能压测专用（停用中）">性能压测专用（停用中）</span></div>
+              <div class="lp-row"><span class="lp-k">节点</span><div class="lp-chips">
+                <span class="node-chip off"><span class="dot"></span>192.168.2.14:8080</span>
+              </div><span class="lp-cnt">0/1 健康</span></div>
+            </div>
+            <div class="stat-grid">
+              <a class="stat-cell" href="http://localhost:12345/nodes?cluster_id=5" title="查看该集群的节点列表（健康节点 / 节点总数）" style="text-decoration:none;color:inherit"><div class="sv dim">0/1</div><div class="sl">节点</div></a>
+              <a class="stat-cell" href="http://localhost:12345/upstreams?cluster_id=5" title="查看该集群的上游列表" style="text-decoration:none;color:inherit"><div class="sv">1</div><div class="sl">上游</div></a>
+              <a class="stat-cell" href="http://localhost:12345/routes?cluster_id=5" title="查看该集群的路由列表" style="text-decoration:none;color:inherit"><div class="sv">2</div><div class="sl">路由</div></a>
+              <a class="stat-cell" href="http://localhost:12345/plugin-configs?cluster_id=5" title="查看该集群的插件组" style="text-decoration:none;color:inherit"><div class="sv dim">0</div><div class="sl">插件组</div></a>
+              <a class="stat-cell" href="http://localhost:12345/global-rules?cluster_id=5" title="查看该集群的全局规则" style="text-decoration:none;color:inherit"><div class="sv dim">0</div><div class="sl">全局规则</div></a>
+              <a class="stat-cell" href="http://localhost:12345/plugin-metadata?cluster_id=5" title="查看该集群的插件元数据" style="text-decoration:none;color:inherit"><div class="sv dim">0</div><div class="sl">插件元数据</div></a>
+              <a class="stat-cell" href="http://localhost:12345/static-resources?cluster_id=5" title="查看该集群的静态资源" style="text-decoration:none;color:inherit"><div class="sv dim">0</div><div class="sl">静态资源</div></a>
+            </div>
+            <div class="lp-foot">
+              <button class="btn btn-secondary btn-sm">详情</button>
+              <button class="btn btn-secondary btn-sm">连接测试</button>
+              <button class="btn btn-secondary btn-sm">漂移检测</button>
+              <button class="btn btn-secondary btn-sm">编辑</button>
+              <div class="menu-anchor">
+                <button class="btn btn-secondary btn-sm" data-menu-toggle="cl-4">更多 ▾</button>
+                <div class="l5-menu" id="cl-4">
+                  <button class="mi"><span class="mi-main">备份下载</span><span class="mi-sub">导出集群配置 JSON</span></button>
+                  <button class="mi"><span class="mi-main">导出 Excel</span><span class="mi-sub">资源清单导出</span></button>
+                </div>
+              </div>
+              <button class="btn btn-secondary btn-sm" style="color: var(--danger)">删除</button>
+            </div>
+          </article>
+        </div>
+
+        <!-- ═══ 分组三：未分组 ═══ -->
+        <div class="l5-band" data-fold="g3" role="button" tabindex="0" aria-expanded="true" aria-controls="band-g3">
+          <button class="g-chev" data-band="g3" aria-expanded="true" title="收起本组" aria-label="折叠 / 展开本组"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button>
+          <span class="b-name">未分组</span>
+          <span class="b-count">3 个集群</span>
+          <span class="b-spacer"></span>
+          <span class="b-hint">节点 <b>7</b> · 路由 <b>11</b></span>
+        </div>
+        <div class="band-cards" id="band-g3">
+          <!-- 集群卡 ⑥：从未发布（未发布）+ 新建 -->
+          <article class="l5-panel cluster-c4">
+            <div class="lp-head">
+              <div class="lp-title">
+                <span class="lp-name" title="日志集群">日志集群</span>
+                <span class="lp-tag tech" title="集群标识（API 标识）">log-c</span>
+              </div>
+              <div class="lp-status">
+                <span class="ps-tag ps-pub">已启用</span>
+                <span class="ps-tag ps-unpub" title="从未发布或已全部回滚">未发布</span>
+                <span class="lp-tag cl-direct-badge" title="该集群未挂中继区域，直连访问 Edge">直连</span>
+              </div>
+            </div>
+            <div class="lp-body">
+              <div class="lp-row"><span class="lp-k">描述</span><span class="lp-v dim" title="日志采集与转发（尚未发布）">日志采集与转发（尚未发布）</span></div>
+              <div class="lp-row"><span class="lp-k">节点</span><div class="lp-chips">
+                <span class="node-chip"><span class="dot"></span>192.168.3.11:8080</span>
+                <span class="node-chip"><span class="dot"></span>192.168.3.12:8080</span>
+              </div><span class="lp-cnt">2/2 健康</span></div>
+            </div>
+            <div class="stat-grid">
+              <a class="stat-cell" href="http://localhost:12345/nodes?cluster_id=6" title="查看该集群的节点列表（健康节点 / 节点总数）" style="text-decoration:none;color:inherit"><div class="sv ok">2/2</div><div class="sl">节点</div></a>
+              <a class="stat-cell" href="http://localhost:12345/upstreams?cluster_id=6" title="查看该集群的上游列表" style="text-decoration:none;color:inherit"><div class="sv">1</div><div class="sl">上游</div></a>
+              <a class="stat-cell" href="http://localhost:12345/routes?cluster_id=6" title="查看该集群的路由列表" style="text-decoration:none;color:inherit"><div class="sv">3</div><div class="sl">路由</div></a>
+              <a class="stat-cell" href="http://localhost:12345/plugin-configs?cluster_id=6" title="查看该集群的插件组" style="text-decoration:none;color:inherit"><div class="sv dim">0</div><div class="sl">插件组</div></a>
+              <a class="stat-cell" href="http://localhost:12345/global-rules?cluster_id=6" title="查看该集群的全局规则" style="text-decoration:none;color:inherit"><div class="sv dim">0</div><div class="sl">全局规则</div></a>
+              <a class="stat-cell" href="http://localhost:12345/plugin-metadata?cluster_id=6" title="查看该集群的插件元数据" style="text-decoration:none;color:inherit"><div class="sv dim">0</div><div class="sl">插件元数据</div></a>
+              <a class="stat-cell" href="http://localhost:12345/static-resources?cluster_id=6" title="查看该集群的静态资源" style="text-decoration:none;color:inherit"><div class="sv dim">0</div><div class="sl">静态资源</div></a>
+            </div>
+            <div class="lp-foot">
+              <button class="btn btn-secondary btn-sm">详情</button>
+              <button class="btn btn-secondary btn-sm">连接测试</button>
+              <button class="btn btn-secondary btn-sm">漂移检测</button>
+              <button class="btn btn-secondary btn-sm">编辑</button>
+              <div class="menu-anchor">
+                <button class="btn btn-secondary btn-sm" data-menu-toggle="cl-5">更多 ▾</button>
+                <div class="l5-menu" id="cl-5">
+                  <button class="mi"><span class="mi-main">备份下载</span><span class="mi-sub">导出集群配置 JSON</span></button>
+                  <button class="mi"><span class="mi-main">导出 Excel</span><span class="mi-sub">资源清单导出</span></button>
+                </div>
+              </div>
+              <button class="btn btn-secondary btn-sm" style="color: var(--danger)">删除</button>
+            </div>
+          </article>
+
+          <!-- 集群卡 ⑦：连接测试失败（error）+ 离线 -->
+          <article class="l5-panel cluster-c7">
+            <div class="lp-head">
+              <div class="lp-title">
+                <span class="lp-name" title="边陲集群">边陲集群</span>
+                <span class="lp-tag tech" title="集群标识（API 标识）">remote-x</span>
+              </div>
+              <div class="lp-status">
+                <span class="ps-tag ps-pub">已启用</span>
+                <span class="ps-tag ps-pub" title="全部资源已发布">v1 · 已发布</span>
+                <span class="lp-tag cl-reg-badge" title="该集群挂接中继区域 luju：发布/访问经区域网关转发">经中继 · luju</span>
+              </div>
+            </div>
+            <div class="lp-body">
+              <div class="lp-row"><span class="lp-k">描述</span><span class="lp-v dim" title="远端机房接入集群">远端机房接入集群</span></div>
+              <div class="lp-row"><span class="lp-k">节点</span><div class="lp-chips">
+                <span class="node-chip off"><span class="dot"></span>192.168.9.11:8080</span>
+              </div><span class="lp-cnt">0/1 健康</span></div>
+            </div>
+            <div class="lp-notice alert alert-error">
+              <span class="n-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3.2 21.4 20H2.6L12 3.2z" fill="currentColor"/><path d="M12 9.4v4M12 16.6v.1" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></span>
+              <span class="n-txt">连接测试失败：Failed to connect to 192.168.9.11:9180（timed out）</span>
+              <button class="n-act">重试</button>
+            </div>
+            <div class="stat-grid">
+              <a class="stat-cell" href="http://localhost:12345/nodes?cluster_id=7" title="查看该集群的节点列表（健康节点 / 节点总数）" style="text-decoration:none;color:inherit"><div class="sv dim">0/1</div><div class="sl">节点</div></a>
+              <a class="stat-cell" href="http://localhost:12345/upstreams?cluster_id=7" title="查看该集群的上游列表" style="text-decoration:none;color:inherit"><div class="sv">2</div><div class="sl">上游</div></a>
+              <a class="stat-cell" href="http://localhost:12345/routes?cluster_id=7" title="查看该集群的路由列表" style="text-decoration:none;color:inherit"><div class="sv">5</div><div class="sl">路由</div></a>
+              <a class="stat-cell" href="http://localhost:12345/plugin-configs?cluster_id=7" title="查看该集群的插件组" style="text-decoration:none;color:inherit"><div class="sv">1</div><div class="sl">插件组</div></a>
+              <a class="stat-cell" href="http://localhost:12345/global-rules?cluster_id=7" title="查看该集群的全局规则" style="text-decoration:none;color:inherit"><div class="sv dim">0</div><div class="sl">全局规则</div></a>
+              <a class="stat-cell" href="http://localhost:12345/plugin-metadata?cluster_id=7" title="查看该集群的插件元数据" style="text-decoration:none;color:inherit"><div class="sv dim">0</div><div class="sl">插件元数据</div></a>
+              <a class="stat-cell" href="http://localhost:12345/static-resources?cluster_id=7" title="查看该集群的静态资源" style="text-decoration:none;color:inherit"><div class="sv">1</div><div class="sl">静态资源</div></a>
+            </div>
+            <div class="lp-foot">
+              <button class="btn btn-secondary btn-sm">详情</button>
+              <button class="btn btn-secondary btn-sm">连接测试</button>
+              <button class="btn btn-secondary btn-sm">漂移检测</button>
+              <button class="btn btn-secondary btn-sm">编辑</button>
+              <div class="menu-anchor">
+                <button class="btn btn-secondary btn-sm" data-menu-toggle="cl-6">更多 ▾</button>
+                <div class="l5-menu" id="cl-6">
+                  <button class="mi"><span class="mi-main">备份下载</span><span class="mi-sub">导出集群配置 JSON</span></button>
+                  <button class="mi"><span class="mi-main">导出 Excel</span><span class="mi-sub">资源清单导出</span></button>
+                </div>
+              </div>
+              <button class="btn btn-secondary btn-sm" style="color: var(--danger)">删除</button>
+            </div>
+          </article>
+
+          <!-- 集群卡 ⑧：新建向导占位（未挂节点） -->
+          <article class="l5-panel cluster-c8">
+            <div class="lp-head">
+              <div class="lp-title">
+                <span class="lp-name" title="灰度集群">灰度集群</span>
+                <span class="lp-tag tech" title="集群标识（API 标识）">canary</span>
+              </div>
+              <div class="lp-status">
+                <span class="ps-tag ps-pub">已启用</span>
+                <span class="ps-tag ps-unpub" title="从未发布或已全部回滚">未发布</span>
+                <span class="lp-tag cl-direct-badge" title="该集群未挂中继区域，直连访问 Edge">直连</span>
+              </div>
+            </div>
+            <div class="lp-body">
+              <div class="lp-row"><span class="lp-k">描述</span><span class="lp-v dim" title="灰度发布验证（节点安装中）">灰度发布验证（节点安装中）</span></div>
+              <div class="lp-row"><span class="lp-k">节点</span><span class="lp-v dim">未挂节点</span></div>
+            </div>
+            <div class="stat-grid">
+              <a class="stat-cell" href="http://localhost:12345/nodes?cluster_id=8" title="查看该集群的节点列表（健康节点 / 节点总数）" style="text-decoration:none;color:inherit"><div class="sv dim">—</div><div class="sl">节点</div></a>
+              <a class="stat-cell" href="http://localhost:12345/upstreams?cluster_id=8" title="查看该集群的上游列表" style="text-decoration:none;color:inherit"><div class="sv dim">0</div><div class="sl">上游</div></a>
+              <a class="stat-cell" href="http://localhost:12345/routes?cluster_id=8" title="查看该集群的路由列表" style="text-decoration:none;color:inherit"><div class="sv dim">0</div><div class="sl">路由</div></a>
+              <a class="stat-cell" href="http://localhost:12345/plugin-configs?cluster_id=8" title="查看该集群的插件组" style="text-decoration:none;color:inherit"><div class="sv dim">0</div><div class="sl">插件组</div></a>
+              <a class="stat-cell" href="http://localhost:12345/global-rules?cluster_id=8" title="查看该集群的全局规则" style="text-decoration:none;color:inherit"><div class="sv dim">0</div><div class="sl">全局规则</div></a>
+              <a class="stat-cell" href="http://localhost:12345/plugin-metadata?cluster_id=8" title="查看该集群的插件元数据" style="text-decoration:none;color:inherit"><div class="sv dim">0</div><div class="sl">插件元数据</div></a>
+              <a class="stat-cell" href="http://localhost:12345/static-resources?cluster_id=8" title="查看该集群的静态资源" style="text-decoration:none;color:inherit"><div class="sv dim">0</div><div class="sl">静态资源</div></a>
+            </div>
+            <div class="lp-foot">
+              <button class="btn btn-secondary btn-sm">详情</button>
+              <button class="btn btn-secondary btn-sm">连接测试</button>
+              <button class="btn btn-secondary btn-sm">漂移检测</button>
+              <button class="btn btn-secondary btn-sm">编辑</button>
+              <div class="menu-anchor">
+                <button class="btn btn-secondary btn-sm" data-menu-toggle="cl-7">更多 ▾</button>
+                <div class="l5-menu" id="cl-7">
+                  <button class="mi"><span class="mi-main">备份下载</span><span class="mi-sub">导出集群配置 JSON</span></button>
+                  <button class="mi"><span class="mi-main">导出 Excel</span><span class="mi-sub">资源清单导出</span></button>
+                </div>
+              </div>
+              <button class="btn btn-secondary btn-sm" style="color: var(--danger)">删除</button>
+            </div>
+          </article>
+        </div>
+      </div>
+    </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// 设计页交互示意：band 折叠 / 分组|平铺切换（与其它设计页同款最小脚本）
+document.querySelectorAll('.l5-band').forEach((band) => {
+  band.addEventListener('click', (e) => {
+    if (e.target.closest('.g-chev') || e.target.closest('button') && !e.target.closest('.g-chev')) {
+      if (!e.target.closest('.g-chev')) return
+    }
+    const cards = document.getElementById(band.getAttribute('aria-controls'))
+    const open = band.getAttribute('aria-expanded') === 'true'
+    band.setAttribute('aria-expanded', String(!open))
+    if (cards) cards.style.display = open ? 'none' : ''
+    const chev = band.querySelector('.g-chev')
+    if (chev) chev.setAttribute('aria-expanded', String(!open))
+  })
+})
+document.querySelectorAll('.seg .seg-opt').forEach((opt) => {
+  opt.addEventListener('click', () => {
+    document.querySelectorAll('.seg .seg-opt').forEach((o) => o.classList.remove('active'))
+    opt.classList.add('active')
+    const grid = document.querySelector('.card-grid')
+    const flat = opt.dataset.mode === 'flat'
+    const card = document.querySelector('.l5-card')
+    card.classList.toggle('mode-flat', flat)
+    card.classList.toggle('mode-group', !flat)
+    grid.classList.toggle('mode-flat', flat)
+    grid.classList.toggle('mode-group', !flat)
+    // 平铺：隐藏 band 行（卡片保留集群色条与 strip 身份）
+    document.querySelectorAll('.l5-band').forEach((b) => (b.style.display = flat ? 'none' : ''))
+    document.querySelectorAll('.band-cards').forEach((c) => (c.style.display = ''))
+  })
+})
+// ⋯ 菜单开合（卡脚「更多 ▾」）
+document.querySelectorAll('[data-menu-toggle]').forEach((btn) => {
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation()
+    const menu = btn.parentElement.querySelector('.l5-menu')
+    document.querySelectorAll('.l5-menu.open').forEach((m) => m !== menu && m.classList.remove('open'))
+    menu.classList.toggle('open')
+  })
+})
+document.addEventListener('click', () => document.querySelectorAll('.l5-menu.open').forEach((m) => m.classList.remove('open')))
+</script>
+</body>
+</html>

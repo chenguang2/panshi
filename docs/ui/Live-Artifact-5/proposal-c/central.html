@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>统一管理 · 方案 C（卡片 + 最大化面板） — 磐石网关管理平台</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+/* 该页独有：集群统计格（与 clusters.html 同款）与节点行内 chips、最大化面板 Tab 条；
+   卡片与表格解剖一律走 theme.css 共享类 */
+.stat-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; margin: 0 14px 4px; }
+.stat-cell { cursor: pointer; text-align: center; padding: 7px 2px 6px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg); transition: all .12s; }
+.stat-cell:hover { border-color: oklch(56% 0.16 210 / 45%); background: var(--accent-bg); transform: translateY(-1px); }
+.stat-cell .sv { font-size: 15px; font-weight: 700; font-family: var(--font-mono); color: var(--fg); line-height: 1.1; }
+.stat-cell .sv.dim { color: var(--muted); }
+.stat-cell .sv.ok { color: var(--success); }
+.stat-cell .sv.warn { color: var(--warning); }
+.stat-cell .sl { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+.node-row { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; padding: 0 14px; margin-bottom: 4px; }
+.node-chip { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg); font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+.node-chip .dot { width: 6px; height: 6px; border-radius: 999px; background: var(--success); }
+.node-chip.off .dot { background: var(--muted); }
+.node-chip.off { color: var(--muted); opacity: .8; }
+.cl-reg-badge { border-color: oklch(56% 0.16 210 / 30%); background: var(--accent-bg); color: var(--accent); }
+.cl-direct-badge { color: var(--muted); }
+
+/* ── 最大化面板：名字行 + dtabs + 表体（实现侧 expanded-name-row / dtabs 同语义）── */
+.max-panel { position: relative; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-sm); overflow: hidden; margin-bottom: 24px; }
+/* 集群色相锚（方案 A）：3px 竖条贴在名字行集群名左侧，跟随集群色相（切集群随之变化） */
+.max-name-row { position: relative; }
+.max-name-row::before { content: ''; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 2px 2px 0; background: var(--cc, var(--accent)); }
+.max-name-row { display: flex; align-items: center; gap: 10px; padding: 14px 16px 12px 19px; border-bottom: 1px solid var(--border); }
+.max-name-row .cname { font-size: 16px; font-weight: 700; color: var(--fg); }
+.max-name-row .chint { font-size: 11.5px; color: var(--muted); font-family: var(--font-mono); }
+.max-name-row .spacer { flex: 1; }
+.max-name-row .btn { height: 28px; }
+.dtabs { display: flex; gap: 4px; padding: 8px 16px 0; border-bottom: 1px solid var(--border); overflow-x: auto; }
+/* 页签 = 现实现 dtabs 同款（文件夹式连通）：bg 底、hover accent 淡底、active 顶部 2px accent 指示条 */
+.dt { display: inline-flex; align-items: center; gap: 7px; padding: 7px 14px; font-size: 13px; color: var(--muted); border: 1px solid var(--border); border-bottom: none; border-radius: 8px 8px 0 0; background: var(--bg); cursor: pointer; white-space: nowrap; flex-shrink: 0; position: relative; transition: all 0.2s; }
+.dt svg { width: 13px; height: 13px; flex-shrink: 0; opacity: 0.85; }
+.dt:hover { color: var(--accent); background: oklch(56% 0.16 210 / 6%); border-color: oklch(56% 0.16 210 / 40%); }
+.dt.active { color: var(--accent); background: var(--accent-bg); border-color: var(--accent); border-width: 2px 2px 0; padding: 6px 13px 7px; border-bottom: 1px solid var(--accent-bg); margin-bottom: -1px; font-weight: 500; box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.04); z-index: 1; }
+.dt .db { font-size: 11px; font-family: var(--font-mono); padding: 1px 6px; border-radius: 8px; background: var(--surface); border: 1px solid var(--border); color: var(--muted); }
+.dt.active .db { background: var(--accent-bg); color: var(--accent); border-color: oklch(56% 0.16 210 / 30%); }
+.dbody { padding: 14px 16px 16px; }
+.tab-toolbar { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
+.tab-toolbar .divider { width: 1px; height: 20px; background: var(--border); margin: 0 6px; }
+.tab-toolbar .spacer { flex: 1; }
+.table-note { font-size: 11.5px; color: var(--muted); margin-top: 10px; }
+.table-note b { color: var(--fg); }
+.page-header h1 { font-size: 21px; }
+</style>
+</head>
+<body>
+<div class="app-layout">
+  <aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="sidebar-logo-icon">磐</div>
+    <span class="sidebar-logo-text">磐石</span>
+    <span class="sidebar-logo-version">v1.0</span>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">核心功能</div>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h5v5H3v-5zm7 0h5v5h-5v-5z"/></svg><span>概览</span></a>
+      <a class="nav-item active" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="14" height="5" rx="1"/><rect x="2" y="10" width="14" height="5" rx="1"/></svg><span>统一管理</span></a>
+      <a class="nav-item" href="clusters.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="3"/><circle cx="3.5" cy="4" r="1.6"/><circle cx="14.5" cy="4" r="1.6"/><circle cx="3.5" cy="14" r="1.6"/><circle cx="14.5" cy="14" r="1.6"/><path d="M4.8 5.1 6.6 7m6.6-1.9-1.8 1.9M4.8 12.9 6.6 11m6.6 1.9-1.8-1.9"/></svg><span>集群管理</span></a>
+      <a class="nav-item" href="nodes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="3"/><circle cx="3.5" cy="4" r="1.6"/><circle cx="14.5" cy="4" r="1.6"/><circle cx="3.5" cy="14" r="1.6"/><circle cx="14.5" cy="14" r="1.6"/><path d="M4.8 5.1 6.6 7m6.6-1.9-1.8 1.9M4.8 12.9 6.6 11m6.6 1.9-1.8-1.9"/></svg><span>节点管理</span></a>
+      <a class="nav-item" href="upstreams.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>上游管理</span></a>
+      <a class="nav-item" href="routes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l5-7v5h9v4H7v5l-5-7z"/></svg><span>路由管理</span></a>
+      <a class="nav-item" href="plugin-groups.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h5v5H3v-5zm7 0h5v5h-5v-5z"/></svg><span>插件组</span></a>
+      <a class="nav-item" href="plugin-metadata.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h8l3 3v9a1 1 0 01-1 1H5a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M9 7v4M9 13v-1"/></svg><span>插件元数据</span></a>
+      <a class="nav-item" href="global-rules.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l6 3v4c0 3-2.5 5.5-6 7-3.5-1.5-6-4-6-7V5l6-3z"/></svg><span>全局规则</span></a>
+      <a class="nav-item" href="static-resources.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3a1 1 0 011-1h6l4 4v10a1 1 0 01-1 1H6a1 1 0 01-1-1V3zM11 2v4h4"/></svg><span>静态资源</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">证书管理</div>
+      <a class="nav-item" href="ca-certs.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="12.5" r="2.5"/><path d="M8 12.5h7M13 12.5v2.5M15 12.5v2.5"/></svg><span>CA 根证书</span></a>
+      <a class="nav-item" href="server-certs.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="10" height="8" rx="1"/><path d="M6.5 8V6a2.5 2.5 0 015 0v2"/></svg><span>服务器证书</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">边缘网络</div>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="14" height="10" rx="1"/><path d="M6 8h6M9 8v4"/></svg><span>edge.env 配置</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9h4l2-4 3 8 2-4h3"/></svg><span>流量监控</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">运维管理</div>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="6"/><path d="M9 5v4l3 2"/></svg><span>任务中心</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="12" height="12" rx="1"/><path d="M3 8h12M8 8v7"/></svg><span>系统管理</span></a>
+    </div>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="sidebar-user"><div class="sidebar-user-avatar">a</div><div><div class="sidebar-user-name">admin</div><div class="sidebar-user-role">超级管理员</div></div></div>
+  </div>
+  </aside>
+
+  <div class="main-area">
+    <header class="top-header">
+      <div class="top-header-breadcrumb"><a href="#">首页</a><span>/</span><span>统一管理</span></div>
+      <div class="top-header-actions">
+        <div class="h-search">
+          <input type="text" placeholder="搜索功能或页面...">
+          <svg class="s-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        </div>
+        <div class="header-user"><div class="header-avatar">管</div><span>管理员</span></div>
+      </div>
+    </header>
+
+    <div class="content-area">
+    <header class="page-header" style="margin-bottom:20px;"><div><h1>统一管理<span class="ph-inline"><span class="ph-lite lite-accent"><b>8</b> 集群</span><span class="ph-lite"><b>31</b> 节点</span></span></h1><p>以集群为单位，统一管理该集群下的资源，实现统一监控与运维</p></div><div class="page-header-actions"><button class="btn btn-secondary"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></svg>备份下载</button><button class="btn btn-secondary"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 9l5-5 5 5M12 3v10"/></svg>从备份导入</button><button class="btn btn-primary"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>新建集群</button></div></header>
+
+    <!-- ═══ 状态一：卡片网格（未最大化）。点统计格/「统一管理」= 该集群最大化（网格收起、全屏接管） ═══ -->
+    <div class="l5-card" id="viewGrid">
+      <div class="l5-toolbar" style="gap:6px;">
+        <div class="l5-search"><input type="text" style="width:150px" placeholder="搜索集群名称或显示名..."><svg class="s-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>
+        <select class="l5-select" style="width:104px"><option>全部分组</option><option>生产环境</option><option>预发环境</option><option>开发环境</option><option>未分组</option></select>
+        <span class="t-spacer"></span>
+        <button class="tool-btn fold-all-btn" data-fold-all title="收起当页全部分组"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7 4 12 9 17 4"/><polyline points="7 20 12 15 17 20"/></svg>全部收起</button>
+        <div class="seg" id="modeSeg"><span class="seg-opt all active" data-mode="group">分组</span><span class="seg-opt" data-mode="flat">平铺</span></div>
+      </div>
+      <div class="l5-chiprow"><span class="chiprow-label">状态</span><div class="f-chips"><span class="f-chip chip-status active">全部<span class="f-count">8</span></span><span class="f-chip chip-status">已启用<span class="f-count">7</span></span><span class="f-chip chip-status">已禁用<span class="f-count">1</span></span></div><span class="t-spacer"></span></div>
+
+      <div class="card-grid">
+        <div class="l5-band cluster-c1" data-fold="g1" role="button" tabindex="0" aria-expanded="true" aria-controls="band-g1">
+          <button class="g-chev" data-band="g1" aria-expanded="true" title="收起本组" aria-label="折叠 / 展开本组"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button>
+          <span class="b-name">生产环境</span>
+          <span class="b-count">2 个集群</span>
+          <span class="b-spacer"></span>
+          <span class="b-hint">节点 <b>5</b> · 路由 <b>18</b></span>
+        </div>
+        <div class="band-cards" id="band-g1">
+          <article class="l5-panel cluster-c1">
+            <div class="lp-head">
+              <div class="lp-title">
+                <span class="lp-name" title="生产集群 A">生产集群 A</span>
+                <span class="lp-tag tech" title="集群标识（API 标识）">prod-a</span>
+              </div>
+              <div class="lp-status">
+                <span class="ps-tag ps-pub">已启用</span>
+                <span class="ps-tag ps-pub" title="全部资源已发布">v3 · 已发布</span>
+                <span class="lp-tag cl-direct-badge" title="该集群未挂中继区域，直连访问 Edge">直连</span>
+              </div>
+            </div>
+            <div class="lp-body">
+              <div class="lp-row"><span class="lp-k">描述</span><span class="lp-v dim" title="门户与订单主集群">门户与订单主集群</span></div>
+              <div class="lp-row"><span class="lp-k">节点</span><div class="lp-chips">
+                <span class="node-chip"><span class="dot"></span>192.168.1.11:8080</span>
+                <span class="node-chip"><span class="dot"></span>192.168.1.12:8080</span>
+                <span class="node-chip"><span class="dot"></span>192.168.1.13:8080</span>
+              </div><span class="lp-cnt">3/3 健康</span></div>
+            </div>
+            <div class="stat-grid">
+              <div class="stat-cell" data-tab="nodes" title="进入统一管理 · 节点"><div class="sv ok">3/3</div><div class="sl">节点</div></div>
+              <div class="stat-cell" data-tab="upstreams" title="进入统一管理 · 上游"><div class="sv">2</div><div class="sl">上游</div></div>
+              <div class="stat-cell" data-tab="routes" title="进入统一管理 · 路由"><div class="sv">12</div><div class="sl">路由</div></div>
+              <div class="stat-cell" data-tab="pluginConfigs" title="进入统一管理 · 插件组"><div class="sv">3</div><div class="sl">插件组</div></div>
+              <div class="stat-cell" data-tab="globalRules" title="进入统一管理 · 全局规则"><div class="sv">1</div><div class="sl">全局规则</div></div>
+              <div class="stat-cell" data-tab="pluginMetadata" title="进入统一管理 · 插件元数据"><div class="sv">2</div><div class="sl">插件元数据</div></div>
+              <div class="stat-cell" data-tab="staticResources" title="进入统一管理 · 静态资源"><div class="sv">1</div><div class="sl">静态资源</div></div>
+            </div>
+            <div class="lp-foot">
+              <button class="btn btn-secondary btn-sm">详情</button>
+              <button class="btn btn-secondary btn-sm">连接测试</button>
+              <button class="btn btn-secondary btn-sm">漂移检测</button>
+              <button class="btn btn-secondary btn-sm">编辑</button>
+              <div class="menu-anchor">
+                <button class="btn btn-secondary btn-sm" data-menu-toggle="cm-0">更多 ▾</button>
+                <div class="l5-menu" id="cm-0">
+                  <button class="mi"><span class="mi-main">备份下载</span><span class="mi-sub">导出集群配置 JSON</span></button>
+                  <button class="mi"><span class="mi-main">导出 Excel</span><span class="mi-sub">资源清单导出</span></button>
+                </div>
+              </div>
+              <button class="btn btn-secondary btn-sm" style="color: var(--danger)">删除</button>
+            </div>
+          </article>
+
+          <article class="l5-panel cluster-c3">
+            <div class="lp-head">
+              <div class="lp-title">
+                <span class="lp-name" title="支付集群">支付集群</span>
+                <span class="lp-tag tech" title="集群标识（API 标识）">pay-gw</span>
+              </div>
+              <div class="lp-status">
+                <span class="ps-tag ps-pub">已启用</span>
+                <span class="ps-tag ps-pending" title="存在待发布变更">v4 · 待发布</span>
+                <span class="lp-tag cl-reg-badge" title="该集群挂接中继区域 aoh：发布/访问经区域网关转发">经中继 · aoh</span>
+              </div>
+            </div>
+            <div class="lp-body">
+              <div class="lp-row"><span class="lp-k">描述</span><span class="lp-v dim" title="支付渠道网关集群">支付渠道网关集群</span></div>
+              <div class="lp-row"><span class="lp-k">节点</span><div class="lp-chips">
+                <span class="node-chip"><span class="dot"></span>192.168.1.14:8080</span>
+                <span class="node-chip off"><span class="dot"></span>192.168.1.16:8080</span>
+              </div><span class="lp-cnt warn" title="健康节点 / 节点总数">1/2 健康</span></div>
+            </div>
+            <div class="lp-notice alert alert-warning">
+              <span class="n-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+              <span class="n-txt">1 个节点离线（192.168.1.16），发布将跳过该节点</span>
+              <button class="n-act">连接测试</button>
+            </div>
+            <div class="stat-grid">
+              <div class="stat-cell" data-tab="nodes" title="进入统一管理 · 节点"><div class="sv warn">1/2</div><div class="sl">节点</div></div>
+              <div class="stat-cell" data-tab="upstreams" title="进入统一管理 · 上游"><div class="sv">1</div><div class="sl">上游</div></div>
+              <div class="stat-cell" data-tab="routes" title="进入统一管理 · 路由"><div class="sv">6</div><div class="sl">路由</div></div>
+              <div class="stat-cell" data-tab="pluginConfigs" title="进入统一管理 · 插件组"><div class="sv">2</div><div class="sl">插件组</div></div>
+              <div class="stat-cell" data-tab="globalRules" title="进入统一管理 · 全局规则"><div class="sv">1</div><div class="sl">全局规则</div></div>
+              <div class="stat-cell" data-tab="pluginMetadata" title="进入统一管理 · 插件元数据"><div class="sv dim">0</div><div class="sl">插件元数据</div></div>
+              <div class="stat-cell" data-tab="staticResources" title="进入统一管理 · 静态资源"><div class="sv dim">0</div><div class="sl">静态资源</div></div>
+            </div>
+            <div class="lp-foot">
+              <button class="btn btn-secondary btn-sm">详情</button>
+              <button class="btn btn-secondary btn-sm">连接测试</button>
+              <button class="btn btn-secondary btn-sm">漂移检测</button>
+              <button class="btn btn-secondary btn-sm">编辑</button>
+              <div class="menu-anchor">
+                <button class="btn btn-secondary btn-sm" data-menu-toggle="cm-1">更多 ▾</button>
+                <div class="l5-menu" id="cm-1">
+                  <button class="mi"><span class="mi-main">备份下载</span><span class="mi-sub">导出集群配置 JSON</span></button>
+                  <button class="mi"><span class="mi-main">导出 Excel</span><span class="mi-sub">资源清单导出</span></button>
+                </div>
+              </div>
+              <button class="btn btn-secondary btn-sm" style="color: var(--danger)">删除</button>
+            </div>
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 状态二：最大化面板（点「统一管理」进入；同屏只展示一个集群；七个 Tab 可切换） ═══ -->
+    <div class="max-panel cluster-c1" id="viewMax" style="display:none">
+      <!-- 集群切换条（mini-bar）：点其他集群 = 原地切换、保留当前 Tab；✕ 收起返回网格 -->
+      <div class="mini-bar">
+        <div class="mini-item active" data-cname="生产集群 A" data-chint="prod-a" data-badge="直连" data-hue="cluster-c1">
+          <span class="dot" style="background: var(--success)"></span>
+          <span class="m-name">生产集群 A</span>
+          <span class="m-hint">prod-a</span>
+        </div>
+        <div class="mini-item" data-cname="支付集群" data-chint="pay-gw" data-badge="经中继 · aoh" data-hue="cluster-c3">
+          <span class="dot" style="background: var(--warning)"></span>
+          <span class="m-name">支付集群</span>
+          <span class="m-hint">pay-gw</span>
+        </div>
+        <div class="mini-item" data-cname="内容分发集群" data-chint="cdn-edge" data-badge="直连" data-hue="cluster-c5">
+          <span class="dot" style="background: var(--success)"></span>
+          <span class="m-name">内容分发集群</span>
+          <span class="m-hint">cdn-edge</span>
+        </div>
+        <span class="mini-scroll-hint" title="集群多时横向滚动">…</span>
+        <span class="mini-spacer"></span>
+        <button class="btn btn-ghost" id="maxCollapse" title="返回集群列表">✕ 收起</button>
+      </div>
+      <div class="max-name-row">
+        <span class="cname" id="maxCname">生产集群 A</span>
+        <span class="chint" id="maxChint">prod-a</span>
+        <span class="lp-tag cl-direct-badge" id="maxBadge" title="该集群未挂中继区域，直连访问 Edge">直连</span>
+        <span class="spacer"></span>
+        <button class="btn btn-secondary">详情</button>
+        <button class="btn btn-secondary">连接测试</button>
+        <button class="btn btn-secondary">编辑</button>
+        <button class="btn btn-secondary">导出 Excel</button>
+        <button class="btn btn-secondary">备份下载</button>
+        <button class="btn btn-secondary" style="color: var(--danger)">删除</button>
+      </div>
+      <div class="dtabs">
+        <span class="dt active" data-tab="nodes"><svg width="13" height="13" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h5v5H3v-5zm7 0h5v5h-5v-5z"/></svg>集群节点 <span class="db">3/3</span></span>
+        <span class="dt" data-tab="upstreams"><svg width="13" height="13" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg>上游 <span class="db">2</span></span>
+        <span class="dt" data-tab="routes"><svg width="13" height="13" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9l5-7v5h9v4H7v5l-5-7z"/></svg>路由 <span class="db">12</span></span>
+        <span class="dt" data-tab="pluginConfigs"><svg width="13" height="13" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h5v5H3v-5zm7 0h5v5h-5v-5z"/></svg>插件组 <span class="db">3</span></span>
+        <span class="dt" data-tab="pluginMetadata"><svg width="13" height="13" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h8l3 3v9a1 1 0 01-1 1H5a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M9 7v4M9 13v-1"/></svg>插件元数据 <span class="db">2</span></span>
+        <span class="dt" data-tab="globalRules"><svg width="13" height="13" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2l6 3v4c0 3-2.5 5.5-6 7-3.5-1.5-6-4-6-7V5l6-3z"/></svg>全局规则 <span class="db">1</span></span>
+        <span class="dt" data-tab="staticResources"><svg width="13" height="13" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3a1 1 0 011-1h6l4 4v10a1 1 0 01-1 1H6a1 1 0 01-1-1V3zM11 2v4h4"/></svg>静态资源 <span class="db">1</span></span>
+      </div>
+
+      <!-- ── Tab 1 · 集群节点 ── -->
+      <div class="dbody tab-body" data-body="nodes">
+        <div class="tab-toolbar">
+          <button class="tool-btn">＋ 添加节点</button>
+          <button class="tool-btn">编辑节点</button>
+          <button class="tool-btn" style="color: var(--danger)">删除节点 (1)</button>
+          <span class="divider"></span>
+          <button class="tool-btn">▶ 启动</button>
+          <button class="tool-btn">⏹ 停止</button>
+          <button class="tool-btn">⟳ 重载</button>
+          <button class="tool-btn">状态查询</button>
+          <span class="divider"></span>
+          <button class="tool-btn">安装 ▾</button>
+          <span class="spacer"></span>
+          <div class="pop-anchor">
+            <button class="tool-btn" data-pop="popColN"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>列配置</button>
+            <div class="l5-popover" id="popColN">
+              <div class="pop-title">选择显示列 <span class="pop-note">序号列恒展示，不参与勾选</span></div>
+              <div class="l5-pop-label">显示字段</div>
+              <div class="l5-checks">
+                <label class="l5-check"><input type="checkbox" checked>IP</label>
+                <label class="l5-check"><input type="checkbox" checked>Edge版本</label>
+                <label class="l5-check"><input type="checkbox" checked>服务端口</label>
+                <label class="l5-check"><input type="checkbox" checked>管理端口</label>
+                <label class="l5-check"><input type="checkbox" checked>Edge安装路径</label>
+                <label class="l5-check"><input type="checkbox" checked>状态</label>
+                <label class="l5-check"><input type="checkbox" checked>操作</label>
+              </div>
+              <div class="pop-hint">拖动表头右缘可调整列宽，拖动表头整格可调整列序</div>
+              <div class="pop-foot"><button class="btn btn-primary btn-sm">重置列宽</button></div>
+            </div>
+          </div>
+        </div>
+        <table class="l5-table" style="min-width:1076px">
+          <colgroup><col style="width:40px"><col style="width:140px"><col style="width:110px"><col style="width:100px"><col style="width:100px"><col style="width:220px"><col style="width:160px"><col style="width:280px"></colgroup>
+          <thead><tr><th class="c-c">#</th><th class="resizable sortable">IP</th><th class="resizable">Edge版本</th><th class="resizable sortable">服务端口</th><th class="resizable sortable">管理端口</th><th class="resizable sortable">Edge安装路径</th><th class="resizable sortable">状态</th><th class="resizable">操作</th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="c-c"><span class="c-idx">1</span></td>
+              <td><span class="c-strong">192.168.1.11</span></td>
+              <td><span class="ps-date">v1.2.0</span></td>
+              <td class="nw"><span class="c-mono">8080</span></td>
+              <td class="nw"><span class="c-mono">9180</span></td>
+              <td class="nw"><span class="c-mono c-dim" title="/opt/edge">/opt/edge</span></td>
+              <td class="nw"><span class="pub-cell"><span class="ps-tag ps-pub" title="管理开关：已启用">已启用</span><span class="ps-tag ps-pub" title="运行态：在线">在线</span></span></td>
+              <td><div class="ops"><button class="op-pub">重载</button><button class="op-pub" style="background:transparent;border-color:transparent;color:var(--muted)">状态</button><div class="menu-anchor"><button class="op-btn" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">编辑</span></button><button class="mi"><span class="mi-main">复制</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删节点记录，不触达 Edge 运行时</span></button><hr class="menu-sep"><button class="mi"><span class="mi-main">启动</span></button><button class="mi"><span class="mi-main">停止</span></button><button class="mi"><span class="mi-main">重载</span></button><button class="mi"><span class="mi-main">状态查询</span></button><button class="mi"><span class="mi-main">安装 OpenResty</span><span class="mi-sub">选择安装包在节点上安装 OpenResty</span></button><button class="mi"><span class="mi-main">安装 Edge</span><span class="mi-sub">下发 Edge 网关程序</span></button></div></div></div></td>
+            </tr>
+            <tr>
+              <td class="c-c"><span class="c-idx">2</span></td>
+              <td><span class="c-strong">192.168.1.12</span></td>
+              <td><span class="ps-date">v1.2.0</span></td>
+              <td class="nw"><span class="c-mono">8080</span></td>
+              <td class="nw"><span class="c-mono">9180</span></td>
+              <td class="nw"><span class="c-mono c-dim" title="/opt/edge">/opt/edge</span></td>
+              <td class="nw"><span class="pub-cell"><span class="ps-tag ps-pub" title="管理开关：已启用">已启用</span><span class="ps-tag ps-pub" title="运行态：在线">在线</span></span></td>
+              <td><div class="ops"><button class="op-pub">重载</button><button class="op-pub" style="background:transparent;border-color:transparent;color:var(--muted)">状态</button><div class="menu-anchor"><button class="op-btn" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">编辑</span></button><button class="mi"><span class="mi-main">复制</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删节点记录，不触达 Edge 运行时</span></button><hr class="menu-sep"><button class="mi"><span class="mi-main">启动</span></button><button class="mi"><span class="mi-main">停止</span></button><button class="mi"><span class="mi-main">重载</span></button><button class="mi"><span class="mi-main">状态查询</span></button></div></div></div></td>
+            </tr>
+            <tr>
+              <td class="c-c"><span class="c-idx">3</span></td>
+              <td><span class="c-strong">192.168.1.13</span></td>
+              <td><span class="ps-date">v1.1.0</span></td>
+              <td class="nw"><span class="c-mono">8080</span></td>
+              <td class="nw"><span class="c-mono">9180</span></td>
+              <td class="nw"><span class="c-mono c-dim" title="/opt/edge">/opt/edge</span></td>
+              <td class="nw"><span class="pub-cell"><span class="ps-tag ps-pub" title="管理开关：已启用">已启用</span><span class="ps-tag ps-partial" title="运行态：离线">离线</span></span></td>
+              <td><div class="ops"><button class="op-pub">重载</button><button class="op-pub" style="background:transparent;border-color:transparent;color:var(--muted)">状态</button><div class="menu-anchor"><button class="op-btn" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">编辑</span></button><button class="mi"><span class="mi-main">复制</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删节点记录，不触达 Edge 运行时</span></button><hr class="menu-sep"><button class="mi"><span class="mi-main">启动</span></button><button class="mi"><span class="mi-main">停止</span></button><button class="mi"><span class="mi-main">重载</span></button><button class="mi"><span class="mi-main">状态查询</span></button></div></div></div></td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="l5-pager" style="border:none;padding:12px 0 0;">
+          <span class="p-info">共 <b>3</b> 个节点 · 每页 <select class="pager-select"><option>20 条</option><option selected>50 条</option></select></span>
+          <span class="p-nav"><button class="p-btn" disabled><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 6 9 12 15 18"/></svg></button><button class="p-btn active">1</button><span class="p-jump">跳至 <input value="1"> 页</span></span>
+        </div>
+      </div>
+
+      <!-- ── Tab 2 · 上游 ── -->
+      <div class="dbody tab-body" data-body="upstreams">
+        <div class="tab-toolbar">
+          <button class="tool-btn">＋ 添加上游</button>
+          <span class="spacer"></span>
+          <div class="pop-anchor">
+            <button class="tool-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>列配置</button>
+          </div>
+        </div>
+        <table class="l5-table" style="min-width:1090px">
+          <colgroup><col style="width:40px"><col style="width:180px"><col style="width:110px"><col style="width:220px"><col style="width:200px"><col style="width:220px"><col style="width:120px"></colgroup>
+          <thead><tr><th class="c-c">#</th><th class="resizable sortable">名称</th><th class="resizable sortable">负载均衡</th><th class="resizable">目标节点</th><th class="resizable sortable">描述</th><th class="resizable">发布状态</th><th class="resizable">操作</th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="c-c"><span class="c-idx">1</span></td>
+              <td><span class="c-strong" title="订单服务">订单服务</span></td>
+              <td class="nw"><span class="lb-chip">加权轮询</span></td>
+              <td><div class="tg-list"><span class="tg-chip"><span class="dot d-ok"></span>192.168.1.11:8100<span class="tg-w">100</span></span><span class="tg-sum"><b>1</b> 目标 · <b>全部健康</b></span></div></td>
+              <td><span class="c-dim">订单后端</span></td>
+              <td class="nw"><span class="pub-cell"><span class="ps-tag ps-pub">v2 · 11-14 20:05</span><button class="diff-btn" title="查看与 Edge 节点的差异" aria-label="查看与 Edge 节点的差异">差异</button></span></td>
+              <td><div class="ops"><button class="op-pub">发布</button><div class="menu-anchor"><button class="op-btn" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">编辑</span></button><button class="mi"><span class="mi-main">版本管理</span><span class="mi-sub">历史版本查看与回滚</span></button><button class="mi"><span class="mi-main">复制</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 已发布配置（弹窗可选）</span></button></div></div></div></td>
+            </tr>
+            <tr>
+              <td class="c-c"><span class="c-idx">2</span></td>
+              <td><span class="c-strong" title="用户服务">用户服务</span></td>
+              <td class="nw"><span class="lb-chip">最少连接</span></td>
+              <td><div class="tg-list"><span class="tg-chip"><span class="dot d-ok"></span>192.168.1.12:8200<span class="tg-w">60</span></span><span class="tg-chip"><span class="dot d-warn"></span>192.168.1.13:8200<span class="tg-w">40</span></span><span class="tg-sum"><b>2</b> 目标 · <span style="color:var(--warning);font-weight:600;">1 项待验证</span></span></div></td>
+              <td><span class="c-dim">用户中心</span></td>
+              <td class="nw"><span class="pub-cell"><span class="ps-tag ps-pending" title="配置已修改，发布后生效">待发布</span><button class="diff-btn" title="查看与 Edge 节点的差异" aria-label="查看与 Edge 节点的差异">差异</button></span></td>
+              <td><div class="ops"><button class="op-pub">发布</button><div class="menu-anchor"><button class="op-btn" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">编辑</span></button><button class="mi"><span class="mi-main">版本管理</span><span class="mi-sub">历史版本查看与回滚</span></button><button class="mi"><span class="mi-main">复制</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 已发布配置（弹窗可选）</span></button></div></div></div></td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="l5-pager" style="border:none;padding:12px 0 0;">
+          <span class="p-info">共 <b>2</b> 个上游 · 每页 <select class="pager-select"><option selected>20 条</option></select></span>
+          <span class="p-nav"><button class="p-btn" disabled><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 6 9 12 15 18"/></svg></button><button class="p-btn active">1</button></span>
+        </div>
+      </div>
+
+      <!-- ── Tab 3 · 路由 ── -->
+      <div class="dbody tab-body" data-body="routes">
+        <div class="tab-toolbar">
+          <button class="tool-btn">＋ 添加路由</button>
+          <span class="spacer"></span>
+          <div class="pop-anchor">
+            <button class="tool-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>列配置</button>
+          </div>
+        </div>
+        <table class="l5-table" style="min-width:1150px">
+          <colgroup><col style="width:40px"><col style="width:160px"><col style="width:230px"><col style="width:130px"><col style="width:90px"><col style="width:220px"><col style="width:200px"><col style="width:110px"></colgroup>
+          <thead><tr><th class="c-c">#</th><th class="resizable sortable">名称</th><th class="resizable sortable">URI</th><th class="resizable">方法</th><th class="resizable sortable">优先级</th><th class="resizable">发布状态</th><th class="resizable sortable">描述</th><th class="resizable">操作</th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="c-c"><span class="c-idx">1</span></td>
+              <td><span class="c-strong" title="订单创建">订单创建</span></td>
+              <td><span class="pipe-uri">/api/orders</span></td>
+              <td><span class="m-tag POST">POST</span></td>
+              <td class="nw c-c"><span class="prio" title="优先级 0：按数值顺序依次尝试匹配">P0</span></td>
+              <td class="nw"><span class="pub-cell"><span class="ps-tag ps-pub">v3 · 11-14 20:05</span><button class="diff-btn" title="查看与 Edge 节点的差异" aria-label="查看与 Edge 节点的差异">差异</button></span></td>
+              <td><span class="c-dim">下单入口（幂等校验）</span></td>
+              <td><div class="ops"><button class="op-pub">发布</button><div class="menu-anchor"><button class="op-btn" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">编辑</span></button><button class="mi"><span class="mi-main">版本管理</span><span class="mi-sub">历史版本查看与回滚</span></button><button class="mi"><span class="mi-main">复制路由</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 已发布配置（弹窗可选）</span></button></div></div></div></td>
+            </tr>
+            <tr>
+              <td class="c-c"><span class="c-idx">2</span></td>
+              <td><span class="c-strong" title="用户查询接口">用户查询接口</span></td>
+              <td><span class="pipe-uri">/api/users/*</span></td>
+              <td><span class="m-tag GET">GET</span></td>
+              <td class="nw c-c"><span class="prio">P10</span></td>
+              <td class="nw"><span class="pub-cell"><span class="ps-tag ps-pending" title="配置已修改，发布后生效">待发布</span><button class="diff-btn" title="查看与 Edge 节点的差异" aria-label="查看与 Edge 节点的差异">差异</button></span></td>
+              <td><span class="c-dim">用户列表与详情查询</span></td>
+              <td><div class="ops"><button class="op-pub">发布</button><div class="menu-anchor"><button class="op-btn" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">编辑</span></button><button class="mi"><span class="mi-main">版本管理</span><span class="mi-sub">历史版本查看与回滚</span></button><button class="mi"><span class="mi-main">复制路由</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 已发布配置（弹窗可选）</span></button></div></div></div></td>
+            </tr>
+            <tr>
+              <td class="c-c"><span class="c-idx">3</span></td>
+              <td><span class="c-strong" title="健康探测">健康探测</span></td>
+              <td><span class="pipe-uri">/healthz</span></td>
+              <td><span class="m-tag GET">GET</span></td>
+              <td class="nw c-c"><span class="prio">P200</span></td>
+              <td class="nw"><span class="pub-cell"><span class="ps-tag ps-pub">v1 · 11-02 09:12</span></span></td>
+              <td><span class="c-dim">负载均衡健康检查</span></td>
+              <td><div class="ops"><button class="op-pub">发布</button><div class="menu-anchor"><button class="op-btn" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">编辑</span></button><button class="mi"><span class="mi-main">版本管理</span><span class="mi-sub">历史版本查看与回滚</span></button><button class="mi"><span class="mi-main">复制路由</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 已发布配置（弹窗可选）</span></button></div></div></div></td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="l5-pager" style="border:none;padding:12px 0 0;">
+          <span class="p-info">共 <b>12</b> 条路由 · 每页 <select class="pager-select"><option selected>20 条</option></select></span>
+          <span class="p-nav"><button class="p-btn" disabled><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 6 9 12 15 18"/></svg></button><button class="p-btn active">1</button><button class="p-btn">2</button><span class="p-jump">跳至 <input value="1"> 页</span></span>
+        </div>
+      </div>
+
+      <!-- ── Tab 4 · 插件组 ── -->
+      <div class="dbody tab-body" data-body="pluginConfigs">
+        <div class="tab-toolbar">
+          <button class="tool-btn">＋ 添加插件组</button>
+          <span class="spacer"></span>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:14px;">
+          <div class="pcc-card">
+            <div class="pcc-head">
+              <strong class="pcc-title">限流跨域组</strong>
+              <span class="pub-cell"><span class="ps-tag ps-pub">v2 · 11-14 20:05</span><button class="diff-btn" title="查看与 Edge 节点的差异" aria-label="查看与 Edge 节点的差异">差异</button></span>
+            </div>
+            <div class="pcc-desc">限流 + 跨域组合</div>
+            <div class="pcc-tags"><span class="lp-tag tech">limit-count</span><span class="lp-tag tech">cors</span></div>
+            <div class="pcc-actions">
+              <button class="tool-btn">查看</button>
+              <button class="tool-btn">编辑</button>
+              <button class="tool-btn" style="color: var(--danger)">删除</button>
+              <span style="flex:1"></span>
+              <button class="op-pub">发布</button>
+              <button class="tool-btn">版本管理</button>
+            </div>
+          </div>
+          <div class="pcc-card">
+            <div class="pcc-head">
+              <strong class="pcc-title">鉴权组</strong>
+              <span class="pub-cell"><span class="ps-tag ps-pending" title="配置已修改，发布后生效">待发布</span><button class="diff-btn" title="查看与 Edge 节点的差异" aria-label="查看与 Edge 节点的差异">差异</button></span>
+            </div>
+            <div class="pcc-desc">JWT 鉴权 + IP 白名单</div>
+            <div class="pcc-tags"><span class="lp-tag tech">jwt-auth</span><span class="lp-tag tech">ip-restriction</span></div>
+            <div class="pcc-actions">
+              <button class="tool-btn">查看</button>
+              <button class="tool-btn">编辑</button>
+              <button class="tool-btn" style="color: var(--danger)">删除</button>
+              <span style="flex:1"></span>
+              <button class="op-pub">发布</button>
+              <button class="tool-btn">版本管理</button>
+            </div>
+          </div>
+          <div class="pcc-card">
+            <div class="pcc-head">
+              <strong class="pcc-title">监控组</strong>
+              <span class="pub-cell"><span class="ps-tag ps-unpub" title="从未发布或已全部回滚">未发布</span></span>
+            </div>
+            <div class="pcc-desc">Prometheus 指标暴露</div>
+            <div class="pcc-tags"><span class="lp-tag tech">prometheus</span></div>
+            <div class="pcc-actions">
+              <button class="tool-btn">查看</button>
+              <button class="tool-btn">编辑</button>
+              <button class="tool-btn" style="color: var(--danger)">删除</button>
+              <span style="flex:1"></span>
+              <button class="op-pub">发布</button>
+              <button class="tool-btn">版本管理</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Tab 5 · 插件元数据 ── -->
+      <div class="dbody tab-body" data-body="pluginMetadata">
+        <div class="tab-toolbar">
+          <button class="tool-btn">＋ 添加插件</button>
+          <span class="spacer"></span>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:14px;">
+          <div class="pcc-card">
+            <div class="pcc-head">
+              <strong class="pcc-title">JWT 鉴权</strong>
+              <span class="lp-tag tech">jwt-auth</span>
+              <span class="pub-cell"><span class="ps-tag ps-pub">v1 · 11-10 09:15</span><button class="diff-btn" title="查看与 Edge 节点的差异" aria-label="查看与 Edge 节点的差异">差异</button></span>
+            </div>
+            <div class="pcc-tags"><span class="lp-key">jwt-auth</span><span class="lp-tag">元数据</span></div>
+            <div class="lp-json-toggle">2 项 ⌄</div>
+            <pre class="lp-json">{ "issuer": "https://auth.example.com",
+  "audience": "panshi-gw" }</pre>
+            <div class="pcc-actions">
+              <button class="tool-btn">查看</button>
+              <button class="tool-btn">编辑</button>
+              <button class="tool-btn" style="color: var(--danger)">删除</button>
+              <span style="flex:1"></span>
+              <button class="op-pub">发布</button>
+              <button class="tool-btn">版本管理</button>
+            </div>
+          </div>
+          <div class="pcc-card">
+            <div class="pcc-head">
+              <strong class="pcc-title">CORS 跨域</strong>
+              <span class="lp-tag tech">cors</span>
+              <span class="pub-cell"><span class="ps-tag ps-pub">v1 · 11-10 09:15</span></span>
+            </div>
+            <div class="pcc-tags"><span class="lp-key">cors</span><span class="lp-tag">元数据</span></div>
+            <div class="lp-json-toggle">1 项 ⌄</div>
+            <pre class="lp-json">{ "allow_origins": "*" }</pre>
+            <div class="pcc-actions">
+              <button class="tool-btn">查看</button>
+              <button class="tool-btn">编辑</button>
+              <button class="tool-btn" style="color: var(--danger)">删除</button>
+              <span style="flex:1"></span>
+              <button class="op-pub">发布</button>
+              <button class="tool-btn">版本管理</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Tab 6 · 全局规则 ── -->
+      <div class="dbody tab-body" data-body="globalRules">
+        <div class="tab-toolbar">
+          <button class="tool-btn">＋ 添加全局规则</button>
+          <span class="spacer"></span>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:14px;">
+          <div class="pcc-card">
+            <div class="pcc-head">
+              <strong class="pcc-title">全局 CORS</strong>
+              <span class="pub-cell"><span class="ps-tag ps-pub">v1 · 11-12 14:32</span><button class="diff-btn" title="查看与 Edge 节点的差异" aria-label="查看与 Edge 节点的差异">差异</button></span>
+            </div>
+            <div class="pcc-desc">对全部路由生效</div>
+            <div class="pcc-tags"><span class="lp-tag tech">cors</span></div>
+            <div class="pcc-actions">
+              <button class="tool-btn">查看</button>
+              <button class="tool-btn">编辑</button>
+              <button class="tool-btn" style="color: var(--danger)">删除</button>
+              <span style="flex:1"></span>
+              <button class="op-pub">发布</button>
+              <button class="tool-btn">版本管理</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Tab 7 · 静态资源 ── -->
+      <div class="dbody tab-body" data-body="staticResources">
+        <div class="tab-toolbar">
+          <button class="tool-btn">＋ 添加静态资源</button>
+          <span class="spacer"></span>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:14px;">
+          <div class="pcc-card">
+            <div class="pcc-head">
+              <strong class="pcc-title">门户静态包</strong>
+              <span class="lp-tag cl-direct-badge" title="分发路径">/static/portal/</span>
+              <span class="pub-cell"><span class="ps-tag ps-pub" title="已分发 3/3 节点">已分发 3/3</span></span>
+            </div>
+            <div class="pcc-desc">门户与下载边缘静态内容</div>
+            <div class="pcc-tags"><span class="lp-tag">2.4 MB</span><span class="lp-tag">上传 11-14 09:20</span><span class="lp-tag tech">v3</span></div>
+            <div class="pcc-actions">
+              <button class="tool-btn">查看 ZIP</button>
+              <button class="tool-btn">编辑</button>
+              <button class="tool-btn">上传 ZIP</button>
+              <button class="tool-btn" style="color: var(--danger)">删除</button>
+              <span style="flex:1"></span>
+              <button class="op-pub">发布</button>
+              <button class="tool-btn">版本管理</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="padding: 0 16px 14px;">
+        <div class="table-note">
+          <b>交互模型</b>：点击卡片上的任意<b>统计格</b>（如「上游 12」）或卡脚「统一管理」= 该集群<b>立即最大化</b>（集群网格收起、面板全屏接管空间），且<b>直达统计格对应的 Tab</b>（openStatTab 语义）；✕ 收起返回网格。同屏只展示一个集群；七个 Tab 均为该集群作用域的资源列表，可对全部资源做增删改与发布——
+          <b>节点/上游/路由 = 表格</b>（列宽/列序个性化 +「选择显示列」弹窗 + 外置分页条），<b>插件组/插件元数据/全局规则/静态资源 = 迷你卡片</b>（与集群管理 Tab 同款形态）；
+          行内/卡内 = 发布（op-pub）+ 状态四态 + 「差异」胶囊（批 7）+ ⋯ 菜单（r5 三栏）；统计格点击直达对应 Tab（openStatTab 语义）。
+        </div>
+      </div>
+    </div>
+    </div>
+  </div>
+</div>
+
+<style>
+/* Tab 4–7 迷你卡片（实现侧 plugin-config-card 同语义，走 theme token） */
+.pcc-card { width: 320px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); padding: 12px 14px; }
+.pcc-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.pcc-title { font-size: 13.5px; font-weight: 700; color: var(--fg); }
+.pcc-desc { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+.pcc-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
+.pcc-actions { display: flex; gap: 6px; align-items: center; border-top: 1px solid var(--border); padding-top: 10px; }
+.lp-json-toggle { font-size: 11px; color: var(--accent); cursor: pointer; margin-bottom: 6px; }
+.tab-body { display: none; }
+.tab-body.active { display: block; }
+/* 集群切换专用动画（Tab 切换不套用）：强 accent 底闪现 + 内描边辉光 + 位移，650ms */
+.tab-body.switch-flash { animation: clusterIn 0.65s ease; }
+@keyframes clusterIn {
+  0% { opacity: 0.1; transform: translateY(12px); background: oklch(56% 0.16 210 / 30%); box-shadow: inset 0 0 0 2px oklch(56% 0.16 210 / 45%); }
+  45% { opacity: 1; transform: none; background: oklch(56% 0.16 210 / 22%); box-shadow: inset 0 0 0 2px oklch(56% 0.16 210 / 28%); }
+  100% { opacity: 1; transform: none; background: transparent; box-shadow: inset 0 0 0 2px transparent; }
+}
+/* 集群切换条（mini-bar） */
+.mini-bar { display: flex; align-items: center; gap: 6px; padding: 10px 16px 10px; background: var(--bg); border-bottom: 1px solid var(--border); overflow-x: auto; }
+/* 方案 A：mini-bar = 独立全局导航条——上缘 1px + 下缘 1px 对称双线，与集群内容区两侧分界 */
+.max-panel .mini-bar { border-top: 1px solid var(--border); }
+.mini-item { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); font-size: 12px; color: var(--muted); cursor: pointer; white-space: nowrap; flex-shrink: 0; transition: all .12s; }
+.mini-item .dot { width: 7px; height: 7px; border-radius: 999px; flex-shrink: 0; }
+.mini-item .m-hint { font-size: 10.5px; font-family: var(--font-mono); opacity: .8; }
+.mini-item:hover { color: var(--fg); border-color: oklch(56% 0.16 210 / 40%); }
+.mini-item.active { border-color: oklch(56% 0.16 210 / 30%); background: var(--accent-bg); color: var(--accent); font-weight: 600; }
+.mini-scroll-hint { color: var(--muted); font-size: 12px; flex-shrink: 0; }
+.mini-spacer { flex: 1; }
+</style>
+
+<script>
+document.querySelectorAll('.op-btn').forEach((btn) => {
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation()
+    const menu = btn.parentElement.querySelector('.l5-menu')
+    document.querySelectorAll('.l5-menu.open').forEach((m) => m !== menu && m.classList.remove('open'))
+    menu.classList.toggle('open')
+  })
+})
+document.addEventListener('click', () => document.querySelectorAll('.l5-menu.open').forEach((m) => m.classList.remove('open')))
+document.querySelectorAll('.pop-anchor .tool-btn').forEach((btn) => {
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation()
+    const pop = btn.parentElement.querySelector('.l5-popover')
+    if (pop) pop.style.display = pop.style.display === 'block' ? 'none' : 'block'
+  })
+})
+document.querySelectorAll('.seg .seg-opt').forEach((opt) => {
+  opt.addEventListener('click', () => {
+    document.querySelectorAll('.seg .seg-opt').forEach((o) => o.classList.remove('active'))
+    opt.classList.add('active')
+    const card = document.querySelector('.l5-card')
+    const grid = document.querySelector('.card-grid')
+    const flat = opt.dataset.mode === 'flat'
+    card.classList.toggle('mode-flat', flat)
+    card.classList.toggle('mode-group', !flat)
+    grid.classList.toggle('mode-flat', flat)
+    grid.classList.toggle('mode-group', !flat)
+    document.querySelectorAll('.l5-band').forEach((b) => (b.style.display = flat ? 'none' : ''))
+  })
+})
+document.querySelectorAll('.l5-band').forEach((band) => {
+  band.addEventListener('click', (e) => {
+    if (!e.target.closest('.g-chev')) return
+    const cards = document.getElementById(band.getAttribute('aria-controls'))
+    const open = band.getAttribute('aria-expanded') === 'true'
+    band.setAttribute('aria-expanded', String(!open))
+    if (cards) cards.style.display = open ? 'none' : ''
+  })
+})
+// 视图切换：卡片网格 ⇄ 最大化面板（点统计格/主操作 = 立即最大化并直达对应 Tab）
+function activateTab(key) {
+  document.querySelectorAll('.dt').forEach((t) => t.classList.toggle('active', t.dataset.tab === key))
+  document.querySelectorAll('.tab-body').forEach((b) => b.classList.toggle('active', b.dataset.body === key))
+}
+/** 集群切换动画（仅换集群时）：重触发 switch-flash */
+function flashBody() {
+  const cur = document.querySelector('.tab-body.active')
+  if (!cur) return
+  cur.classList.remove('switch-flash')
+  void cur.offsetWidth
+  cur.classList.add('switch-flash')
+}
+function showMax(key) {
+  document.getElementById('viewGrid').style.display = 'none'
+  document.getElementById('viewMax').style.display = ''
+  if (key) activateTab(key)
+  document.getElementById('viewMax').scrollIntoView()
+}
+function showGrid() {
+  document.getElementById('viewMax').style.display = 'none'
+  document.getElementById('viewGrid').style.display = ''
+}
+document.addEventListener('click', (e) => {
+  const cell = e.target.closest('.stat-cell[data-tab]')
+  if (cell) { showMax(cell.dataset.tab); return }
+  const pub = e.target.closest('[data-max]')
+  if (pub) { showMax(pub.dataset.max); return }
+  if (e.target.closest('#maxCollapse')) showGrid()
+})
+
+// mini-bar 集群切换：原地换名字行 + 保留当前 Tab + 内容区 fade 动画（切换提示）
+document.querySelectorAll('.mini-item').forEach((item) => {
+  item.addEventListener('click', () => {
+    if (item.classList.contains('active')) return
+    document.querySelectorAll('.mini-item').forEach((i) => i.classList.remove('active'))
+    item.classList.add('active')
+    document.getElementById('maxCname').textContent = item.dataset.cname
+    document.getElementById('maxChint').textContent = item.dataset.chint
+    document.getElementById('maxBadge').textContent = item.dataset.badge
+    // 色相跟随：面板挂 cluster-cN（演示三集群 c1/c3/c5）
+    const panel = document.getElementById('viewMax')
+    panel.classList.remove('cluster-c1', 'cluster-c3', 'cluster-c5')
+    panel.classList.add(item.dataset.hue || 'cluster-c1')
+    flashBody()
+  })
+})
+
+// Tab 切换（最大化面板内七 Tab）
+document.querySelectorAll('.dt').forEach((tab) => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.dt').forEach((t) => t.classList.remove('active'))
+    tab.classList.add('active')
+    const key = tab.dataset.tab
+    document.querySelectorAll('.tab-body').forEach((b) => b.classList.toggle('active', b.dataset.body === key))
+  })
+})
+document.querySelectorAll('.lp-json-toggle').forEach((t) => {
+  t.addEventListener('click', () => {
+    const pre = t.nextElementSibling
+    pre.style.display = pre.style.display === 'none' ? 'block' : 'none'
+  })
+})
+document.querySelectorAll('.lp-json').forEach((pre) => (pre.style.display = 'none'))
+</script>
+</body>
+</html>

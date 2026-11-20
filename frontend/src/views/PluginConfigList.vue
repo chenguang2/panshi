@@ -607,7 +607,8 @@ onMounted(() => {
   const pluginQuery = route.query.plugin as string | undefined
   if (pluginQuery) pluginFilter.value = pluginQuery
   const clusterId = route.query.cluster_id as string | undefined
-  if (clusterId) clusterFilter.value = clusterId
+  const numeric = Number(clusterId)
+  if (Number.isFinite(numeric)) clusterFilter.value = numeric
   loadClusters()
   loadPluginOptions()
   loadConfigs()

@@ -89,6 +89,7 @@ describe('RouteList.vue - cluster_id from query', () => {
     const calls = mockApiGet.mock.calls.filter((c: any[]) => c[0] === '/routes')
     expect(calls.length).toBeGreaterThanOrEqual(1)
     const params = calls[0][1]?.params || {}
-    expect(params.cluster_id).toBe('5')
+    // 数字化（深链集群名显示修复）：请求参数为 number
+    expect(params.cluster_id).toBe(5)
   })
 })

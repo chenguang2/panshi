@@ -1024,7 +1024,8 @@ function openVersionManagement(sr: any) {
 
 onMounted(() => {
   const clusterId = route.query.cluster_id as string | undefined
-  if (clusterId) clusterFilter.value = clusterId
+  const numeric = Number(clusterId)
+  if (Number.isFinite(numeric)) clusterFilter.value = numeric
   loadClusters()
   loadResources()
 })
