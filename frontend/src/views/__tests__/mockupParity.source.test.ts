@@ -962,3 +962,46 @@ describe('mockup-parity · CA 根证书/服务器证书卡片页推广（2026-11
     expect(s).toContain('<PublishDiffButton')
   })
 })
+
+describe('mockup-parity · 概览与集群管理落地（dashboard-cluster-parity）', () => {
+  it('ClusterCard 解剖单点：l5-panel + 色相 + stat-grid 双分支 + 页面 slot 动作区', () => {
+    const s = readFileSync(resolve(process.cwd(), 'src/components/ClusterCard.vue'), 'utf-8')
+    expect(s).toContain('l5-panel')
+    expect(s).toContain('clusterHueClass')
+    expect(s).toContain('stat-grid')
+    expect(s).toContain('statClick')
+    expect(s).toContain('lp-tag tech')
+    // 旧解剖退场（两页内联守卫仍由 ClusterCard.source.test.ts 承担）
+    expect(s).not.toContain('cl-card-topbar')
+    // 离线警示（设计稿 lp-notice）
+    expect(s).toContain('个节点离线')
+  })
+
+  it('集群管理页：TableToolbar + 状态 chips + ClusterBand（#85①/#87 同构）', () => {
+    const s = page('ClusterList.vue')
+    expect(s, '缺 TableToolbar').toContain('<TableToolbar')
+    expect(s, '缺状态 chips 行').toContain('l5-chiprow')
+    expect(s, '缺 ClusterBand').toContain('<ClusterBand')
+    expect(s, '缺分组组合式').toContain('useCardClusterGrouping')
+    expect(s, '缺平铺 class').toContain('`mode-${cardMode}`')
+    // 旧外壳退场
+    expect(s, 'cl-header-actions 回潮').not.toContain('cl-header-actions')
+    expect(s, '旧状态下拉回潮').not.toContain('全部状态')
+    // 顶部备份双入口 + 新建集群保留（功能面不动）
+    expect(s).toContain('备份下载')
+    expect(s).toContain('新建集群')
+  })
+
+  it('概览页：四段信息架构 + 更新于/刷新（无新建集群）', () => {
+    const s = page('Dashboard.vue')
+    expect(s, '缺大数统计').toContain('dash-stats')
+    expect(s, '缺三列状态卡').toContain('dash-cards')
+    expect(s, '缺快捷入口单卡').toContain('quick-card')
+    expect(s, '缺更新于时间戳').toContain('updated-at')
+    // 页头动作只有刷新（用户裁决）
+    expect(s, '新建集群回潮').not.toContain('新建集群')
+    // StatCard/TableCard 旧组件退场（单点组件不再被概览引用）
+    expect(s).not.toContain("from '@/components/StatCard.vue'")
+    expect(s).not.toContain("from '@/components/TableCard.vue'")
+  })
+})

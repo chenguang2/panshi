@@ -515,23 +515,22 @@ describe('ClusterList.vue - 状态筛选器（B4）', () => {
     return wrapper
   }
 
-  it('提供 全部状态/已启用/已禁用 三项', async () => {
+  it('状态筛选 = chips 三档（#85①：状态下拉退场），无健康/离线档', async () => {
     const wrapper = await mountPage()
-    const opts = wrapper.findAll('select').flatMap((s) => s.findAll('option'))
-    const texts = opts.map((o) => o.text())
-    expect(texts).toContain('全部状态')
-    expect(texts).toContain('已启用')
-    expect(texts).toContain('已禁用')
-    expect(texts).not.toContain('健康')
-    expect(texts).not.toContain('离线')
+    const chips = wrapper.findAll('.f-chip.chip-status').map((c) => c.text())
+    expect(chips.some((t) => t.startsWith('全部'))).toBe(true)
+    expect(chips.some((t) => t.startsWith('已启用'))).toBe(true)
+    expect(chips.some((t) => t.startsWith('已禁用'))).toBe(true)
+    expect(chips.some((t) => t.includes('健康') || t.includes('离线'))).toBe(false)
   })
 
   it('选择「已禁用」仅显示 status=0 集群', async () => {
     const wrapper = await mountPage()
-    const statusSelect = wrapper.findAll('select').find((s) => s.findAll('option').some((o) => o.text() === '已禁用'))
-    await statusSelect!.setValue('disabled')
+    // 21.11：状态 = chips 点击筛选（b 板块）；卡片名 = lp-name
+    const disabledChip = wrapper.findAll('.f-chip.chip-status').find((c) => c.text().startsWith('已禁用'))
+    await disabledChip!.trigger('click')
     await flushPromises()
-    const names = wrapper.findAll('.cl-card-name').map((n) => n.text())
+    const names = wrapper.findAll('.lp-name').map((n) => n.text())
     expect(names).toContain('集群2')
     expect(names).not.toContain('集群1')
   })
@@ -553,6 +552,7 @@ describe('ClusterList.vue - 空状态与入口（B6）', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockLocalStorage()
+    setActivePinia(createPinia())
     localStorage.setItem('user', JSON.stringify({ id: 1, username: 'admin', role: 'admin' }))
     localStorage.setItem('token', 'mock-token')
     mockApiGet.mockImplementation((url: string) => {
@@ -607,7 +607,7 @@ describe('ClusterList.vue - 空状态与入口（B6）', () => {
     await clearBtn.trigger('click')
     await flushPromises()
     expect(wrapper.text()).not.toContain('没有符合筛选条件的集群')
-    expect(wrapper.findAll('.cl-card-name').map((n) => n.text())).toContain('甲')
+    expect(wrapper.findAll('.lp-name').map((n) => n.text())).toContain('甲')
   })
 
   it('卡片 actions 统一顺序「详情 / 连接测试 / 漂移检测 / 编辑 / 删除」，删除为危险色最右', async () => {
@@ -639,7 +639,8 @@ describe('ClusterList.vue - 空状态与入口（B6）', () => {
     })
     const wrapper = await mountPage()
     await flushPromises()
-    const actionsRow = wrapper.find('.cl-card-actions')
+    // 21.11：actions slot 落 .lp-foot
+    const actionsRow = wrapper.find('.lp-foot')
     expect(actionsRow.exists()).toBe(true)
     const labels = actionsRow.findAll('button').map((b) => b.text())
     expect(labels).toEqual(['详情', '连接测试', '漂移检测', '编辑', '更多 ▾', '删除'])
@@ -666,7 +667,8 @@ describe('ClusterList.vue - 空状态与入口（B6）', () => {
     })
     const wrapper = await mountPage()
     await flushPromises()
-    const names = wrapper.findAll('.cl-group-name').map((g) => g.text().trim())
+    // 21.11：分组头 = ClusterBand（b-name）
+    const names = wrapper.findAll('.l5-band .b-name').map((g) => g.text().trim())
     expect(names).toEqual(['未分组', 'a组', 'b组'])
     wrapper.unmount()
   })

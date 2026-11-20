@@ -14,9 +14,10 @@ function src(...parts: string): string {
 
 describe('集群卡片统计条（ux-review H1/H4）', () => {
   it('H1: 统计条容器允许换行，不再截断末项（守卫对象已迁移至 ClusterCard）', () => {
-    const m = src('components', 'ClusterCard.vue').match(/\.cl-card-stats\s*\{[^}]*\}/)
-    expect(m, 'ClusterCard.vue 需定义 .cl-card-stats').toBeTruthy()
-    expect(m![0], '统计条容器需支持窄屏换行（auto-fit 网格或 flex-wrap）').toMatch(/auto-fit|flex-wrap/)
+    // 21.11：统计区解剖化（stat-grid 固定 7 列网格，grid 天然换行容器——卡片网格断点由外层 card-grid 承担）
+    const m = src('components', 'ClusterCard.vue').match(/\.stat-grid\s*\{[^}]*\}/)
+    expect(m, 'ClusterCard.vue 需定义 .stat-grid').toBeTruthy()
+    expect(m![0], '统计区容器需为网格布局（grid）').toMatch(/grid/)
   })
 
   it('H4: 节点统计带健康/总数图例提示（ClusterCard 为两页唯一渲染点）', () => {

@@ -6,7 +6,6 @@ import { createPinia, setActivePinia } from 'pinia'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { useFeaturesStore } from '@/stores/features'
-import { aTableStub } from '@/components/__tests__/helpers/aTableStub'
 import { formatMonthDayTime } from '@/utils/format'
 
 const mockApiGet = vi.fn()
@@ -24,34 +23,8 @@ vi.mock('@/api/nodes', () => ({
   listNodes: (...args: any[]) => mockListNodes(...args),
 }))
 
-// ── a-table 桩：复用仓库共享 aTableStub（真实 Table 在 jsdom 缺 matchMedia 会连挂），
-//    追加 loading / customRow 语义切片（TableCard :loading 透传与最近路由行点击断言需要）
-const dashboardTableStub = {
-  ...aTableStub,
-  props: {
-    ...aTableStub.props,
-    pagination: { type: [Object, Boolean], default: null },
-    loading: { type: Boolean, default: false },
-    customRow: { type: Function, default: null },
-  },
-  methods: {
-    ...aTableStub.methods,
-    rowAttrs(this: any, r: Record<string, unknown>): Record<string, unknown> {
-      return this.customRow ? this.customRow(r) : {}
-    },
-  },
-  template: aTableStub.template
-    .replace(
-      '<div class="ant-table-wrapper">',
-      '<div class="ant-table-wrapper"><div v-if="loading" class="stub-table-loading">table-loading</div>',
-    )
-    .replace('<tr v-else class="ant-table-row">', '<tr v-else class="ant-table-row" v-bind="rowAttrs(r)">'),
-}
-
-// ── mock 形状依据（约定 #43，2026-10-10 curl 实测开发后端）：
-//    GET /dashboard/stats → 平铺 9 计数；GET /dashboard/recent-routes → {items:[{id,name,uri,status,cluster_name}]}
-//    GET /clusters → {items:[cluster]}；listNodes → {total,page,page_size,items:[node]}，
-//    node 含 status_detail（对象或 null）/cluster_name/ip/service_port
+// ── mock 形状依据（约定 #43，curl 实测开发后端）：
+//    GET /dashboard/stats → 平铺计数；GET /dashboard/recent-routes → items（current_version 已透出）
 const STATS = {
   clusters: 2,
   nodes: 4,
@@ -66,20 +39,21 @@ const STATS = {
   plugin_metadata: 9,
 }
 
-function routeItem(id: number, name: string) {
+function routeItem(id: number, name: string, current_version: number | null = 1) {
   return {
     id,
     name,
     uri: `/r${id}/*`,
     status: 1,
     cluster_name: '演示集群',
-    // naive UTC isoformat（2026-10-10 curl 实测：2026-08-20T09:27:33.706804）
+    // naive UTC isoformat（2026-10-10 curl 实测）
     created_at: '2026-10-10T06:30:00',
+    current_version,
   }
 }
 
 function clusterItem(id: number, status: number, display_name: string | null = `集群${id}`) {
-  return { id, name: `c${id}`, display_name, status }
+  return { id, name: `c${id}`, display_name, status, node_count: 1, healthy_node_count: status === 1 ? 1 : 0 }
 }
 
 function nodeItem(id: number, status: number, status_detail: Record<string, unknown> | null) {
@@ -166,9 +140,7 @@ async function mountDashboard(opts: MountOpts = {}) {
 
   const Dashboard = (await import('@/views/Dashboard.vue')).default
   const router = makeRouter()
-  const wrapper = mount(Dashboard, {
-    global: { plugins: [router], stubs: { 'a-table': dashboardTableStub } },
-  })
+  const wrapper = mount(Dashboard, { global: { plugins: [router] } })
   await flushPromises()
   await flushPromises()
   return { wrapper, router }
@@ -176,14 +148,19 @@ async function mountDashboard(opts: MountOpts = {}) {
 
 const apiCalls = (url: string) => mockApiGet.mock.calls.filter((c) => c[0] === url).length
 
-// ── 批次 2：三态与错误处理 ────────────────────────────────────────────────
-describe('Dashboard - 三态与错误处理（批次 2）', () => {
+/** 按 dc-title 找状态卡 */
+function cardByTitle(wrapper: ReturnType<typeof mount>['wrapper'], title: string) {
+  return wrapper.findAll('.dash-card').find((c) => c.find('.dc-title').text() === title)!
+}
+
+// ── 三态与错误处理（意图沿用旧契约，选择器随 21.10 解剖反转） ────────────────
+describe('Dashboard - 三态与错误处理', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
   })
 
-  it('2.1 全部已发起请求失败 → danger 横幅 + 重试，统计卡/表格无 0 值空表完成态假象', async () => {
+  it('全部失败 → danger 横幅 + 重试；大数卡不渲染、数据区为错误条（无完成态假象）', async () => {
     mockApiGet.mockRejectedValue(new Error('boom'))
     mockListNodes.mockRejectedValue(new Error('boom'))
     const { wrapper } = await mountDashboard()
@@ -192,13 +169,12 @@ describe('Dashboard - 三态与错误处理（批次 2）', () => {
     expect(banner.exists()).toBe(true)
     expect(banner.text()).toContain('数据加载失败，请检查后端服务是否可用')
     expect(banner.findAll('button').some((b) => b.text() === '重试')).toBe(true)
-    // 无完成态假象：统计卡不渲染、各数据区为错误条而非空表
-    expect(wrapper.findAll('.stat-card')).toHaveLength(0)
+    expect(wrapper.findAll('.dstat')).toHaveLength(0)
     expect(wrapper.findAll('.area-error').length).toBeGreaterThanOrEqual(1)
-    expect(wrapper.findAll('.ant-table-row')).toHaveLength(0)
+    expect(wrapper.findAll('.dash-card tbody tr')).toHaveLength(0)
   })
 
-  it('2.2 部分接口失败 → 横幅列失败资源名 + 失败区「加载失败 [重试]」，成功区照常渲染', async () => {
+  it('部分失败 → 横幅列失败资源名 + 失败区错误条，成功区照常渲染', async () => {
     mockApiGet.mockImplementation((url: string) => {
       if (url === '/clusters') return Promise.reject(new Error('boom'))
       if (url === '/dashboard/stats') return Promise.resolve({ data: { ...STATS } })
@@ -213,20 +189,16 @@ describe('Dashboard - 三态与错误处理（批次 2）', () => {
     const banner = wrapper.find('.load-banner-partial')
     expect(banner.exists()).toBe(true)
     expect(banner.text()).toContain('部分数据加载失败：集群，以下内容可能不完整')
-    expect(banner.findAll('button').some((b) => b.text() === '重试')).toBe(true)
-    // 失败区轻量错误条
     const areaErrors = wrapper.findAll('.area-error')
     expect(areaErrors.length).toBe(1)
     expect(areaErrors[0].text()).toContain('加载失败')
-    expect(areaErrors[0].findAll('button').some((b) => b.text() === '重试')).toBe(true)
-    // 成功区照常渲染（最近路由 1 行 + 节点失败明细 1 行；stub 不做默认单元格渲染，
-    // 行内文本断言只覆盖 bodyCell 分支内容）
-    expect(wrapper.findAll('.ant-table-row').length).toBe(2)
-    expect(wrapper.text()).toContain('共 1 条')
+    // 成功区照常渲染（最近路由 1 行 + 节点失败明细 1 行）
+    expect(wrapper.findAll('.dash-card tbody tr').length).toBe(2)
+    expect(wrapper.text()).toContain('1 条')
     expect(wrapper.text()).toContain(String(STATS.clusters))
   })
 
-  it('2.3 「重试」只重发失败的请求', async () => {
+  it('「重试」只重发失败的请求', async () => {
     let clustersCalls = 0
     mockApiGet.mockImplementation((url: string) => {
       if (url === '/clusters') {
@@ -256,13 +228,12 @@ describe('Dashboard - 三态与错误处理（批次 2）', () => {
     expect(apiCalls('/dashboard/stats')).toBe(1)
     expect(apiCalls('/dashboard/recent-routes')).toBe(1)
     expect(mockListNodes).toHaveBeenCalledTimes(1)
-    // 恢复后横幅消失，失败区被集群表替代（集群 1 行 + 最近路由 1 行）
+    // 恢复后横幅消失、错误条清零
     expect(wrapper.find('.load-banner').exists()).toBe(false)
     expect(wrapper.findAll('.area-error')).toHaveLength(0)
-    expect(wrapper.findAll('.ant-table-row').length).toBe(2)
   })
 
-  it('2.4a 首次加载：TableCard 显示 loading、统计卡降交互样式，完成后消失', async () => {
+  it('首次加载：大数卡降交互样式 + 数据卡不闪空态 CTA，完成后消失', async () => {
     let resolveStats!: (v: unknown) => void
     mockApiGet.mockImplementation((url: string) => {
       if (url === '/dashboard/stats') return new Promise((res) => (resolveStats = res))
@@ -273,24 +244,21 @@ describe('Dashboard - 三态与错误处理（批次 2）', () => {
     mockListNodes.mockResolvedValue({ data: { total: 0, page: 1, page_size: 500, items: [] } })
 
     const Dashboard = (await import('@/views/Dashboard.vue')).default
-    const wrapper = mount(Dashboard, {
-      global: { plugins: [makeRouter()], stubs: { 'a-table': dashboardTableStub } },
-    })
+    const wrapper = mount(Dashboard, { global: { plugins: [makeRouter()] } })
     await wrapper.vm.$nextTick()
 
-    expect(wrapper.find('.stats-grid-loading').exists()).toBe(true)
-    expect(wrapper.findAll('.stub-table-loading').length).toBeGreaterThanOrEqual(1)
+    expect(wrapper.find('.dash-stats-loading').exists()).toBe(true)
+    // 加载中不出现空态 CTA（避免「去创建」闪烁）
+    expect(wrapper.findAll('.empty-cta')).toHaveLength(0)
 
     resolveStats({ data: { ...STATS } })
     await flushPromises()
     await flushPromises()
 
-    expect(wrapper.find('.stats-grid-loading').exists()).toBe(false)
-    expect(wrapper.findAll('.stub-table-loading')).toHaveLength(0)
+    expect(wrapper.find('.dash-stats-loading').exists()).toBe(false)
   })
 
-  it('2.5 空态显示引导 CTA（集群/节点/路由），不出现默认「暂无数据」', async () => {
-    okApiMock()
+  it('空态显示引导 CTA（集群/节点/路由），不出现默认「暂无数据」', async () => {
     mockApiGet.mockImplementation((url: string) => {
       if (url === '/dashboard/stats') return Promise.resolve({ data: { ...STATS } })
       if (url === '/dashboard/recent-routes') return Promise.resolve({ data: { items: [] } })
@@ -312,7 +280,7 @@ describe('Dashboard - 三态与错误处理（批次 2）', () => {
     expect(wrapper.text()).not.toContain('暂无数据')
   })
 
-  it('2.6 某区 403 → 该区静默隐藏，不计入 loadErrors、不出现错误横幅', async () => {
+  it('某区 403 → 该区静默隐藏，不计入 loadErrors、不出现错误横幅', async () => {
     mockApiGet.mockImplementation((url: string) => {
       if (url === '/clusters') {
         return Promise.reject(Object.assign(new Error('forbidden'), { response: { status: 403 } }))
@@ -324,23 +292,21 @@ describe('Dashboard - 三态与错误处理（批次 2）', () => {
     const { wrapper } = await mountDashboard()
 
     expect(wrapper.find('.load-banner').exists()).toBe(false)
-    expect(wrapper.find('.load-banner-danger').exists()).toBe(false)
-    expect(wrapper.find('.load-banner-partial').exists()).toBe(false)
     expect(wrapper.findAll('.area-error')).toHaveLength(0)
-    // 集群区整体隐藏（含「查看全部集群」脚链），对照组：其他区照常
+    // 集群区整体隐藏（含「查看全部集群」头链），对照组：其他区照常
     expect(wrapper.text()).not.toContain('查看全部集群')
-    expect(wrapper.findAll('.ant-table-row').length).toBe(1)
+    expect(wrapper.findAll('.dash-card tbody tr').length).toBe(1)
   })
 })
 
-// ── 批次 4：刷新与时间锚点（先挂到此处随批次 2 回归，RED 属预期） ─────────
-describe('Dashboard - 刷新与时间锚点（批次 4）', () => {
+// ── 刷新与时间锚点 ────────────────────────────────────────────────────────
+describe('Dashboard - 刷新与时间锚点', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
   })
 
-  it('4.x 刷新期间旧数据保留（不清空、不回全 0）', async () => {
+  it('刷新期间旧数据保留（不清空、不回全 0）', async () => {
     okApiMock()
     const { wrapper } = await mountDashboard()
     expect(wrapper.text()).toContain(String(STATS.clusters))
@@ -362,17 +328,17 @@ describe('Dashboard - 刷新与时间锚点（批次 4）', () => {
     await refreshBtn!.trigger('click')
     await flushPromises()
 
-    // 刷新在途：旧数据仍在
-    expect(wrapper.text()).toContain(String(STATS.clusters))
-    expect(wrapper.findAll('.ant-table-row')).toHaveLength(2)
+    // 刷新在途：旧数据仍在（集群表 2 行）
+    const clusterCard = cardByTitle(wrapper, '集群')
+    expect(clusterCard.findAll('tbody tr').length).toBe(2)
 
     resolveClusters({ data: { items: [clusterItem(1, 1), clusterItem(2, 1), clusterItem(3, 1)] } })
     await flushPromises()
     await flushPromises()
-    expect(wrapper.findAll('.ant-table-row')).toHaveLength(3)
+    expect(clusterCard.findAll('tbody tr').length).toBe(3)
   })
 
-  it('4.1a 首次成功加载前「更新于」不渲染；成功后显示「更新于 HH:mm」', async () => {
+  it('首次成功加载前「更新于」不渲染；成功后显示「更新于 MM/DD HH:mm」', async () => {
     const resolvers: Array<(v: unknown) => void> = []
     mockApiGet.mockImplementation((url: string) => {
       if (url === '/dashboard/stats' || url === '/dashboard/recent-routes' || url === '/clusters') {
@@ -387,9 +353,7 @@ describe('Dashboard - 刷新与时间锚点（批次 4）', () => {
     )
 
     const Dashboard = (await import('@/views/Dashboard.vue')).default
-    const wrapper = mount(Dashboard, {
-      global: { plugins: [makeRouter()], stubs: { 'a-table': dashboardTableStub } },
-    })
+    const wrapper = mount(Dashboard, { global: { plugins: [makeRouter()] } })
     await wrapper.vm.$nextTick()
     expect(wrapper.find('.updated-at').exists()).toBe(false)
 
@@ -402,7 +366,7 @@ describe('Dashboard - 刷新与时间锚点（批次 4）', () => {
     expect(updated.text()).toMatch(/^更新于 \d{2}\/\d{2} \d{2}:\d{2}$/)
   })
 
-  it('4.1b 刷新期间按钮禁用显示「刷新中…」，完成后恢复并更新时间戳', async () => {
+  it('刷新期间按钮禁用显示「刷新中…」，完成后恢复并更新时间戳', async () => {
     okApiMock()
     const { wrapper } = await mountDashboard()
     expect(wrapper.find('.updated-at').exists()).toBe(true)
@@ -435,7 +399,7 @@ describe('Dashboard - 刷新与时间锚点（批次 4）', () => {
     expect(wrapper.find('.updated-at').exists()).toBe(true)
   })
 
-  it('4.2 加载进行中：重复点「刷新」不产生并发重复请求（in-flight 守卫统一覆盖）', async () => {
+  it('加载进行中：重复点「刷新」不产生并发重复请求（in-flight 守卫）', async () => {
     okApiMock()
     const { wrapper } = await mountDashboard()
     const statsBefore = apiCalls('/dashboard/stats')
@@ -456,7 +420,6 @@ describe('Dashboard - 刷新与时间锚点（批次 4）', () => {
     await refreshBtn.trigger('click')
     await flushPromises()
 
-    // 在途期间重复点击 → 守卫拦截，不新增请求
     await refreshBtn.trigger('click')
     await flushPromises()
     expect(apiCalls('/dashboard/stats')).toBe(statsBefore + 1)
@@ -467,7 +430,7 @@ describe('Dashboard - 刷新与时间锚点（批次 4）', () => {
     expect(apiCalls('/dashboard/stats')).toBe(statsBefore + 1)
   })
 
-  it('4.2b 在途期间分区「重试」与横幅「重试」禁用，不产生并发重复请求', async () => {
+  it('在途期间分区「重试」与横幅「重试」禁用，不产生并发重复请求', async () => {
     let clustersCalls = 0
     let resolveRetry!: (v: unknown) => void
     mockApiGet.mockImplementation((url: string) => {
@@ -485,13 +448,11 @@ describe('Dashboard - 刷新与时间锚点（批次 4）', () => {
     mockListNodes.mockResolvedValue({ data: { total: 0, page: 1, page_size: 500, items: [] } })
     const { wrapper } = await mountDashboard()
 
-    // 仅 clusters 失败 → 局部横幅 + 分区错误条；点击分区「重试」进入在途（延迟 resolve）
     const areaRetry = wrapper.find('.area-error').findAll('button')[0]
     await areaRetry.trigger('click')
     await flushPromises()
     expect(apiCalls('/clusters')).toBe(2)
 
-    // 在途期间所有入口禁用
     const bannerRetry = wrapper.find('.load-banner-partial').findAll('button')[0]
     const areaRetryNow = wrapper.find('.area-error').findAll('button')[0]
     const refreshingBtn = wrapper.findAll('button').find((b) => b.text() === '刷新中…')!
@@ -499,7 +460,6 @@ describe('Dashboard - 刷新与时间锚点（批次 4）', () => {
     expect(areaRetryNow.attributes('disabled')).toBeDefined()
     expect(refreshingBtn.attributes('disabled')).toBeDefined()
 
-    // 在途期间重复触发不产生并发请求
     await bannerRetry.trigger('click')
     await areaRetryNow.trigger('click')
     await refreshingBtn.trigger('click')
@@ -507,7 +467,6 @@ describe('Dashboard - 刷新与时间锚点（批次 4）', () => {
     expect(apiCalls('/clusters')).toBe(2)
     expect(apiCalls('/dashboard/stats')).toBe(1)
 
-    // 完成后恢复
     resolveRetry({ data: { items: [clusterItem(1, 1)] } })
     await flushPromises()
     await flushPromises()
@@ -516,21 +475,20 @@ describe('Dashboard - 刷新与时间锚点（批次 4）', () => {
   })
 })
 
-// ── 批次 5：权限过滤（与 AppSidebar 同源三元模型） ───────────────────────
-describe('Dashboard - 权限过滤（批次 5）', () => {
+// ── 权限过滤（与 AppSidebar 同源三元模型） ───────────────────────────────
+describe('Dashboard - 权限过滤', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
   })
 
-  it('5.1a 非管理员无权限：chip/统计卡/数据卡不渲染，过滤后为空的分组整卡隐藏', async () => {
+  it('非管理员无权限：chip/大数卡/数据卡不渲染', async () => {
     okApiMock()
     const { wrapper } = await mountDashboard({
       role: 'user',
       permissions: ['clusters', 'nodes', 'routes', 'upstreams'],
     })
     const text = wrapper.text()
-    // 无权限 chip 不渲染（快捷入口全部需要对应权限或 adminOnly）
     expect(text).not.toContain('用户管理')
     expect(text).not.toContain('数据库管理')
     expect(text).not.toContain('审计日志')
@@ -538,20 +496,18 @@ describe('Dashboard - 权限过滤（批次 5）', () => {
     expect(text).not.toContain('Ansible 主机清单')
     expect(text).not.toContain('自启动管理')
     expect(text).not.toContain('Edge 直连')
-    // 更多资源组全部无权限 → 整卡隐藏
     expect(text).not.toContain('插件组')
     expect(text).not.toContain('插件元数据')
     expect(text).not.toContain('全局规则')
     expect(text).not.toContain('静态资源')
     expect(text).not.toContain('指标总览')
-    expect(text).not.toContain('更多资源')
-    // 有权限数据卡照常渲染（nodes 空列表 → 节点卡为空态分支，标题可见即可）
+    // 有权限数据卡照常渲染
     expect(text).toContain('查看全部集群')
     expect(text).toContain('节点连通状态')
     expect(text).toContain('查看全部路由')
   })
 
-  it('5.1b 管理员全部入口可见', async () => {
+  it('管理员全部入口可见', async () => {
     okApiMock()
     const { wrapper } = await mountDashboard({ role: 'admin' })
     const text = wrapper.text()
@@ -573,7 +529,7 @@ describe('Dashboard - 权限过滤（批次 5）', () => {
     }
   })
 
-  it('5.1c 数据库管理双门控：持 permission 但 feature 关闭 → 不渲染', async () => {
+  it('数据库管理双门控：持 permission 但 feature 关闭 → 不渲染', async () => {
     okApiMock()
     const { wrapper } = await mountDashboard({
       role: 'user',
@@ -583,10 +539,9 @@ describe('Dashboard - 权限过滤（批次 5）', () => {
     expect(wrapper.text()).not.toContain('数据库管理')
   })
 
-  it('5.2a fetch-visible-only：无权限数据区不渲染且不发起请求', async () => {
+  it('fetch-visible-only：无权限数据区不渲染且不发起请求', async () => {
     okApiMock()
     const { wrapper } = await mountDashboard({ role: 'user', permissions: [] })
-    // stats 仅需登录，照常请求
     expect(apiCalls('/dashboard/stats')).toBe(1)
     expect(apiCalls('/clusters')).toBe(0)
     expect(apiCalls('/dashboard/recent-routes')).toBe(0)
@@ -597,7 +552,7 @@ describe('Dashboard - 权限过滤（批次 5）', () => {
     expect(text).not.toContain('查看全部路由')
   })
 
-  it('5.2b 仅持 clusters：只请求集群区，节点/路由区不请求不渲染', async () => {
+  it('仅持 clusters：只请求集群区，节点/路由区不请求不渲染', async () => {
     okApiMock()
     const { wrapper } = await mountDashboard({ role: 'user', permissions: ['clusters'] })
     expect(apiCalls('/clusters')).toBe(1)
@@ -609,13 +564,11 @@ describe('Dashboard - 权限过滤（批次 5）', () => {
   })
 })
 
-// ── 批次 5.3：权限键映射防漂移（源码级钉住，与 AppSidebar 逐项对照） ──────
-// vitest(jsdom) 下 import.meta.url 为 http 协议，文件定位用 process.cwd()（ClusterCard.source.test.ts 同款）
-describe('Dashboard - 权限键映射与 AppSidebar 同源（批次 5.3）', () => {
+// ── 权限键映射与 AppSidebar 同源（源码级钉住） ──────────────────────────
+describe('Dashboard - 权限键映射与 AppSidebar 同源', () => {
   const dashSrc = readFileSync(resolve(process.cwd(), 'src/views/Dashboard.vue'), 'utf-8')
   const sidebarSrc = readFileSync(resolve(process.cwd(), 'src/components/AppSidebar.vue'), 'utf-8')
 
-  // D4 映射表（2026-10-10 从 AppSidebar 逐项核实）：概览入口 → 三元门控
   const OVERVIEW_ENTRIES = [
     { path: '/node-tasks', permission: 'task_center', feature: 'task_center', adminOnly: false },
     { path: '/audit-log', permission: 'audit_logs', feature: 'audit_log', adminOnly: false },
@@ -664,12 +617,11 @@ describe('Dashboard - 权限键映射与 AppSidebar 同源（批次 5.3）', () 
       const sidebar = gatesOf(sidebarSrc, `route: '${e.path}'`, /label:\s*'|route:\s*'/)
       expect(sidebar.permission, `侧边栏 ${e.path} permission 漂移`).toBe(e.permission)
       expect(sidebar.adminOnly, `侧边栏 ${e.path} adminOnly 漂移`).toBe(e.adminOnly)
-      // 批 9 后 metrics 菜单项与全站同构（feature 字段门控，不再走条件展开特例）
       expect(sidebar.feature, `侧边栏 ${e.path} feature 漂移`).toBe(e.feature)
     }
   })
 
-  it('统计卡与三张数据卡键值符合 D4 映射', () => {
+  it('大数统计卡键值符合门控映射', () => {
     for (const [path, perm] of [
       ['/clusters', 'clusters'],
       ['/nodes', 'nodes'],
@@ -677,250 +629,159 @@ describe('Dashboard - 权限键映射与 AppSidebar 同源（批次 5.3）', () 
       ['/routes', 'routes'],
     ] as const) {
       const g = gatesOf(dashSrc, `to: '${path}'`, /path:\s*'|to:\s*'/)
-      expect(g.permission, `统计卡 ${path} permission 漂移`).toBe(perm)
+      expect(g.permission, `大数卡 ${path} permission 漂移`).toBe(perm)
     }
-    // 数据卡 fetch-visible-only 门控键
     expect(dashSrc).toContain("canEnter({ permission: 'clusters' })")
     expect(dashSrc).toContain("canEnter({ permission: 'nodes' })")
     expect(dashSrc).toContain("canEnter({ permission: 'routes' })")
   })
 })
 
-// ── 批次 8：打磨（node-card 收敛 TableCard / 分组语义 / 计数徽章 / 类型化） ──
-describe('Dashboard - 打磨（批次 8）', () => {
+// ── 新解剖细节（设计稿语言；旧 TableCard/StatCard 契约随解剖反转） ────────
+describe('Dashboard - 卡片解剖细节（dashboard-cluster-parity）', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
   })
 
-  it('8.1a 节点失败明细收敛 TableCard：表格行含 节点地址(mono)/所属集群/检测结果', async () => {
-    okApiMock([nodeItem(3, 0, { last_status: 'failed' })])
-    const { wrapper } = await mountDashboard()
-
-    const rows = wrapper.findAll('.node-detail-card .ant-table-row')
-    expect(rows.length).toBe(1)
-    const row = rows[0]
-    expect(row.find('.node-addr').text()).toBe('10.0.0.3:16610')
-    expect(row.text()).toContain('演示集群')
-    expect(row.text()).toContain('检测失败')
-    // 手写 node-row 结构已被表格行替代
-    expect(wrapper.findAll('.node-row')).toHaveLength(0)
-  })
-
-  it('8.1b 源码守卫：无手写 card-footer 拷贝，明细区 max-height 滚动', () => {
-    const src = readFileSync(resolve(process.cwd(), 'src/views/Dashboard.vue'), 'utf-8')
-    expect(src).not.toMatch(/\.card-footer/)
-    expect(src).toMatch(/node-detail.*max-height|max-height[\s\S]{0,80}overflow-y/s)
-  })
-
-  it('8.2 源码守卫：recentRoutes/clusterStatus 类型化，无 ref<any[]>', () => {
-    const src = readFileSync(resolve(process.cwd(), 'src/views/Dashboard.vue'), 'utf-8')
-    expect(src).toContain('ref<RecentRouteRow[]>')
-    expect(src).toContain('ref<ClusterRow[]>')
-    expect(src).not.toMatch(/ref<any\[\]>/)
-  })
-
-  it('8.3 分组重排：用户管理在快捷入口，两组标题为「快捷入口（运维操作）/更多资源（配置与查询）」', async () => {
-    okApiMock()
-    const { wrapper } = await mountDashboard({ role: 'admin' })
-    const cards = wrapper.findAll('.quick-columns .card')
-    expect(cards.length).toBe(2)
-    expect(cards[0].find('.table-card-title').text()).toBe('快捷入口（运维操作）')
-    expect(cards[0].text()).toContain('用户管理')
-    expect(cards[1].find('.table-card-title').text()).toBe('更多资源（配置与查询）')
-  })
-
-  it('8.4a 「更多资源」chip 尾部 mono 计数徽章（消费 stats 闲置计数）', async () => {
-    okApiMock()
-    const { wrapper } = await mountDashboard({ role: 'admin' })
-    const chipOf = (title: string) => wrapper.findAll('.quick-chip').find((c) => c.text().includes(title))!
-    expect(chipOf('插件组').find('.chip-count').text()).toBe(String(STATS.plugin_configs))
-    expect(chipOf('插件元数据').find('.chip-count').text()).toBe(String(STATS.plugin_metadata))
-    expect(chipOf('全局规则').find('.chip-count').text()).toBe(String(STATS.global_rules))
-    expect(chipOf('静态资源').find('.chip-count').text()).toBe(String(STATS.static_resources))
-    // 用户管理（快捷入口组）同理消费 users 计数
-    expect(chipOf('用户管理').find('.chip-count').text()).toBe(String(STATS.users))
-  })
-
-  it('8.4b 「数据库管理」chip 不带副标注（风险提示归目标页，入口按钮只做跳转）', async () => {
-    okApiMock()
-    const { wrapper } = await mountDashboard({ role: 'admin' })
-    const chip = wrapper.findAll('.quick-chip').find((c) => c.text().includes('数据库管理'))!
-    expect(chip.find('.chip-note').exists()).toBe(false)
-  })
-})
-
-// ── 批次 6：节点摘要数据源统一（消费批次 1 的 nodes_online/nodes_untested） ──
-describe('Dashboard - 节点摘要数据源统一（批次 6）', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    localStorage.clear()
-  })
-
-  it('6.1 摘要三态由 stats 派生（X=online−untested, Z=untested, Y=nodes−online），统计卡副标题与节点卡徽章一致，且与 listNodes 明细解耦', async () => {
-    // stats: nodes=5 online=3 untested=1 → 通过 2 · 未检测 1 · 失败 2；
-    // listNodes 明细只回 2 条失败节点（降级为明细源，不影响摘要计数）
+  it('大数统计 4 卡：色相左条类 + label 右上 + mono 大数；节点卡副文案 = 健康 N · 离线 M', async () => {
     okApiMock([nodeItem(8, 0, { last_status: 'failed' }), nodeItem(9, 0, { last_status: 'failed' })], {
       nodes: 5,
       nodes_online: 3,
       nodes_untested: 1,
     })
     const { wrapper } = await mountDashboard()
-
-    const nodeStatCard = wrapper.findAll('.stat-card').find((c) => c.text().includes('节点'))!
-    expect(nodeStatCard.text()).toContain('通过 2 · 未检测 1 · 失败 2')
-
-    const summary = wrapper.find('.node-summary')
-    expect(summary.exists()).toBe(true)
-    expect(summary.text()).toContain('检测通过 2')
-    expect(summary.text()).toContain('未检测 1')
-    expect(summary.text()).toContain('检测失败 2')
+    const dstats = wrapper.findAll('.dstat')
+    expect(dstats.length).toBe(4)
+    expect(dstats[0].classes()).toContain('cluster-c1')
+    expect(dstats[1].classes()).toContain('cluster-c3')
+    expect(dstats[3].classes()).toContain('cluster-c7')
+    expect(dstats[0].find('.d-num').text()).toBe('2')
+    expect(dstats[0].find('.d-label').text()).toBe('集群')
+    expect(dstats[1].find('.d-sub').text()).toBe('健康 3 · 离线 2')
+    // 大数卡深链
+    const hrefs = dstats.map((d) => d.attributes('href'))
+    expect(hrefs).toEqual(['/clusters', '/nodes', '/upstreams', '/routes'])
   })
 
-  it('6.2 节点明细达分页上限（500）→ 截断提示「节点数超过明细上限，失败清单可能不完整」', async () => {
+  it('集群卡行：中文名 + 标识 mono + 启用徽标 + 健康比（不足着警示色）', async () => {
+    okApiMock()
+    const { wrapper } = await mountDashboard()
+    const card = cardByTitle(wrapper, '集群')
+    const rows = card.findAll('tbody tr')
+    expect(rows.length).toBe(2)
+    expect(rows[0].text()).toContain('集群1')
+    expect(rows[0].text()).toContain('c1')
+    expect(rows[0].text()).toContain('已启用')
+    expect(rows[1].text()).toContain('已禁用')
+    // clusterItem(2) healthy 0/1 → 着警示
+    expect(rows[1].find('.c-warn').exists()).toBe(true)
+  })
+
+  it('节点卡：失败行在前 + 通过行补齐（上限 8 行）+ 检测通过/失败徽章', async () => {
+    okApiMock([
+      nodeItem(3, 0, { last_status: 'failed' }),
+      nodeItem(1, 1, { last_status: 'passed' }),
+      nodeItem(2, 1, null),
+    ])
+    const { wrapper } = await mountDashboard()
+    const card = cardByTitle(wrapper, '节点连通状态')
+    const rows = card.findAll('tbody tr')
+    expect(rows.length).toBe(3)
+    // 失败行在前
+    expect(rows[0].text()).toContain('10.0.0.3')
+    expect(rows[0].text()).toContain('检测失败')
+    expect(rows[1].text()).toContain('检测通过')
+  })
+
+  it('节点明细上限 8 行：失败优先保留（500 全失败 → 仅前 8 行 + 截断提示）', async () => {
     okApiMock(
       Array.from({ length: 500 }, (_, i) => nodeItem(i + 1, 0, { last_status: 'failed' })),
       { nodes: 600, nodes_online: 500, nodes_untested: 0 },
     )
     const { wrapper } = await mountDashboard()
+    const card = cardByTitle(wrapper, '节点连通状态')
+    expect(card.findAll('tbody tr').length).toBe(8)
     const notice = wrapper.find('.truncate-notice')
     expect(notice.exists()).toBe(true)
     expect(notice.text()).toBe('节点数超过明细上限，失败清单可能不完整')
-    // 归属节点明细区：紧邻其后的是节点连通状态卡（而非最近路由区）
-    const siblings = Array.from(wrapper.find('.dashboard-columns').element.children)
-    const idx = siblings.findIndex((el) => el.classList.contains('truncate-notice'))
-    expect(idx).toBeGreaterThanOrEqual(0)
-    expect(siblings[idx + 1]?.textContent).toContain('节点连通状态')
   })
 
-  it('6.2b 未达上限 → 不显示截断提示', async () => {
-    okApiMock([nodeItem(3, 0, { last_status: 'failed' })])
-    const { wrapper } = await mountDashboard()
-    expect(wrapper.text()).not.toContain('节点数超过明细上限')
-  })
-})
-
-// ── 批次 7：最近创建的路由时间列与行定位（消费批次 1 的 created_at） ──────
-describe('Dashboard - 最近创建的路由时间列与行定位（批次 7）', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    localStorage.clear()
-  })
-
-  it('7.1 「创建时间」列以 formatMonthDayTime(record.created_at) 渲染（naive UTC → Asia/Shanghai 短格式）', async () => {
+  it('最近路由卡：名称 + URI mono 胶囊 + 发布徽标（vN / 未发布）', async () => {
     okApiMock()
     const { wrapper } = await mountDashboard()
-    const expected = formatMonthDayTime('2026-10-10T06:30:00')
-    const routeTable = wrapper.findAll('.table-card').find((t) => t.text().includes('最近创建的路由'))!
-    // 共享 aTableStub 无 thead 渲染，列头定义走源码断言；单元格值走行为断言
-    const src = readFileSync(resolve(process.cwd(), 'src/views/Dashboard.vue'), 'utf-8')
-    expect(src).toContain("{ title: '创建时间', key: 'created_at' }")
-    expect(routeTable.findAll('.ant-table-row')[0].text()).toContain(expected)
-    // 约定 #26：禁止视图内 toLocaleString 直读后端时间
-    expect(src).not.toMatch(/toLocaleString/)
-  })
-
-  it('7.2 具备 routes 权限的用户点击路由行 → 跳转 /routes', async () => {
-    okApiMock()
-    const { wrapper, router } = await mountDashboard({ role: 'admin' })
-    const routeTable = wrapper.findAll('.table-card').find((t) => t.text().includes('最近创建的路由'))!
-    const row = routeTable.findAll('.ant-table-row')[0]
-    expect(row.classes()).toContain('clickable-row')
-    await row.trigger('click')
-    await flushPromises()
-    expect(router.currentRoute.value.path).toBe('/routes')
-  })
-})
-
-// ── 批次 3：文案语义修正 ─────────────────────────────────────────────────
-describe('Dashboard - 文案语义修正（批次 3）', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    localStorage.clear()
-  })
-
-  it('3.1 集群徽章：status===1 →「已启用」、否则「已禁用」，不出现「正常运行/离线」', async () => {
-    okApiMock()
-    const { wrapper } = await mountDashboard()
-    expect(wrapper.text()).toContain('已启用')
-    expect(wrapper.text()).toContain('已禁用')
-    expect(wrapper.text()).not.toContain('正常运行')
-    expect(wrapper.text()).not.toContain('离线')
-  })
-
-  it('3.2a 节点卡：标题「节点连通状态」，摘要三段 检测通过/未检测/检测失败（未检测中性灰），明细行徽章「检测失败」', async () => {
-    // stats 与明细一致：nodes=3 online=2 untested=1 → X=1 Z=1 Y=1
-    okApiMock(
-      [nodeItem(1, 1, { last_status: 'passed' }), nodeItem(2, 1, null), nodeItem(3, 0, { last_status: 'failed' })],
-      { nodes: 3, nodes_online: 2, nodes_untested: 1 },
-    )
-    const { wrapper } = await mountDashboard()
-
-    expect(wrapper.text()).toContain('节点连通状态')
-    const summary = wrapper.find('.node-summary')
-    expect(summary.exists()).toBe(true)
-    expect(summary.text()).toContain('检测通过 1')
-    expect(summary.text()).toContain('未检测 1')
-    expect(summary.text()).toContain('检测失败 1')
-    // 未检测用中性灰徽章（BadgeStatus 增量扩展 neutral）
-    expect(summary.findAll('.badge-neutral').length).toBe(1)
-    // 明细仅列检测失败节点，行徽章「检测失败」（批次 8 起明细为 TableCard 表格行）
-    expect(wrapper.text()).not.toContain('10.0.0.1:')
-    expect(wrapper.text()).not.toContain('10.0.0.2:')
-    const failedRow = wrapper.findAll('.node-detail-card .ant-table-row').find((r) => r.text().includes('10.0.0.3:'))
-    expect(failedRow).toBeTruthy()
-    expect(failedRow!.text()).toContain('检测失败')
-  })
-
-  it('3.2b 未检测=0 且失败=0 且存在节点 → 绿横幅「全部 N 个节点上次检测通过」', async () => {
-    okApiMock([nodeItem(1, 1, { last_status: 'passed' }), nodeItem(2, 1, { last_status: 'passed' })], {
-      nodes: 2,
-      nodes_online: 2,
-      nodes_untested: 0,
-    })
-    const { wrapper } = await mountDashboard()
-    expect(wrapper.text()).toContain('全部 2 个节点上次检测通过')
-  })
-
-  it('3.2c 存在未检测节点 → 不显示全通过横幅', async () => {
-    okApiMock([nodeItem(1, 1, { last_status: 'passed' }), nodeItem(2, 1, null)], {
-      nodes: 2,
-      nodes_online: 2,
-      nodes_untested: 1,
-    })
-    const { wrapper } = await mountDashboard()
-    expect(wrapper.text()).not.toContain('上次检测通过')
-  })
-
-  it('3.3 副标题「平台资源统计与快捷入口」；集群卡标题「集群」；最近路由标题「最近创建的路由」', async () => {
-    okApiMock()
-    const { wrapper } = await mountDashboard()
-    expect(wrapper.text()).toContain('平台资源统计与快捷入口')
-    expect(wrapper.text()).not.toContain('网关运行状态')
-    expect(wrapper.text()).toContain('集群')
-    expect(wrapper.text()).toContain('最近创建的路由')
-    expect(wrapper.text()).not.toContain('集群状态')
-    expect(wrapper.text()).not.toContain('最近路由')
-  })
-
-  it('3.4 集群「显示名称」空值占位「—」', async () => {
-    okApiMock()
-    const { wrapper } = await mountDashboard()
-    // clusterItem(2, 0, null) → 显示名称列渲染「—」（限定双栏区=集群表，排除最近路由表行）
-    const rows = wrapper.findAll('.dashboard-columns .ant-table-row')
+    const card = cardByTitle(wrapper, '最近创建的路由')
+    const rows = card.findAll('tbody tr')
     expect(rows.length).toBe(2)
-    expect(rows[1].text()).toContain('—')
+    expect(rows[0].text()).toContain('alpha')
+    expect(rows[0].find('.pipe-uri').text()).toBe('/r1/*')
+    expect(rows[0].find('.ps-tag.ps-pub').text()).toBe('v1')
+  })
+
+  it('最近路由卡未发布态：current_version=null → 未发布徽标', async () => {
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/dashboard/stats') return Promise.resolve({ data: { ...STATS } })
+      if (url === '/dashboard/recent-routes') return Promise.resolve({ data: { items: [routeItem(1, 'alpha', null)] } })
+      if (url === '/clusters') return Promise.resolve({ data: { items: [] } })
+      return Promise.reject(new Error('unexpected GET: ' + url))
+    })
+    mockListNodes.mockResolvedValue({ data: { total: 0, page: 1, page_size: 500, items: [] } })
+    const { wrapper } = await mountDashboard()
+    const card = cardByTitle(wrapper, '最近创建的路由')
+    expect(card.find('.ps-tag.ps-unpub').text()).toBe('未发布')
+  })
+
+  it('快捷入口单卡合并：运维组在前、资源组在后；q-cnt 计数；feature 圆点', async () => {
+    okApiMock()
+    const { wrapper } = await mountDashboard({ role: 'admin' })
+    const quickCard = wrapper.find('.quick-card')
+    expect(quickCard.find('.dc-title').text()).toBe('快捷入口')
+    const chips = quickCard.findAll('.quick-chip')
+    const titles = chips.map((c) => c.text())
+    // 运维组在前（节点任务中心 first）、资源组在后（插件组在插件元数据前）
+    expect(titles.findIndex((t) => t.includes('节点任务中心'))).toBeLessThan(
+      titles.findIndex((t) => t.includes('插件组')),
+    )
+    // 运维类（feature 门控）带 q-dot；关闭 feature → off 灰点
+    const taskChip = chips.find((c) => c.text().includes('节点任务中心'))!
+    expect(taskChip.find('.q-dot').exists()).toBe(true)
+    // 资源类计数
+    const plgChip = chips.find((c) => c.text().includes('插件组'))!
+    expect(plgChip.find('.q-cnt').text()).toBe(String(STATS.plugin_configs))
+  })
+
+  it('页头动作 = 更新于 + 刷新；无「新建集群」（用户裁决）', async () => {
+    okApiMock()
+    const { wrapper } = await mountDashboard({ role: 'admin' })
+    const actions = wrapper.findAll('.page-header-actions button').map((b) => b.text())
+    expect(actions).toEqual(['刷新'])
+    expect(wrapper.text()).not.toContain('新建集群')
   })
 })
 
-// ── restricted-data-scoping 批次 2：空态文案角色区分（D5）+ 受限口径一致 ──
-describe('Dashboard - 受限视角空态文案与口径一致（restricted-data-scoping 批次 2）', () => {
+// ── 权限键映射防漂移补充 + 类型化（沿用旧源码守卫） ─────────────────────
+describe('Dashboard - 源码守卫', () => {
+  it('recentRoutes/clusterStatus 类型化，无 ref<any[]>', () => {
+    const src = readFileSync(resolve(process.cwd(), 'src/views/Dashboard.vue'), 'utf-8')
+    expect(src).toContain('ref<RecentRouteRow[]>')
+    expect(src).toContain('ref<ClusterRow[]>')
+    expect(src).not.toMatch(/ref<any\[\]>/)
+  })
+
+  it('时间渲染禁 toLocaleString；「更新于」走 formatMonthDayTime 单点', () => {
+    const src = readFileSync(resolve(process.cwd(), 'src/views/Dashboard.vue'), 'utf-8')
+    expect(src).not.toMatch(/toLocaleString/)
+    expect(src).toContain('formatMonthDayTime')
+  })
+})
+
+// ── 受限视角空态文案与口径一致（restricted-data-scoping 批次 2 意图延续） ──
+describe('Dashboard - 受限视角空态文案与口径一致', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
   })
 
-  /** 空数据 mock（零分配受限口径形状）：三数据源全空、stats 集群域计数归零，users 保持全局（批次 1 契约） */
   function emptyApiMock() {
     mockApiGet.mockImplementation((url: string) => {
       if (url === '/dashboard/stats') {
@@ -947,7 +808,7 @@ describe('Dashboard - 受限视角空态文案与口径一致（restricted-data-
     mockListNodes.mockResolvedValue({ data: { total: 0, page: 1, page_size: 500, items: [] } })
   }
 
-  it('R2.1a 非管理员空数据区 → 「暂无可见{资源}，前往{资源}管理 →」，不出现「去创建」，CTA 链接保留', async () => {
+  it('非管理员空数据区 → 「暂无可见{资源}，前往{资源}管理 →」，不出现「去创建」', async () => {
     emptyApiMock()
     const { wrapper } = await mountDashboard({ role: 'user', permissions: ['clusters', 'nodes', 'routes'] })
 
@@ -956,16 +817,14 @@ describe('Dashboard - 受限视角空态文案与口径一致（restricted-data-
     expect(texts.some((t) => t.includes('暂无可见集群，前往集群管理'))).toBe(true)
     expect(texts.some((t) => t.includes('暂无可见节点，前往节点管理'))).toBe(true)
     expect(texts.some((t) => t.includes('暂无可见路由，前往路由管理'))).toBe(true)
-    // SHALL NOT「去创建」：受限用户创建通常是管理员动作，集群存在只是未分配
     expect(wrapper.text()).not.toContain('去创建')
-    // CTA 链接保留（被分配数据可在管理页查看，链接目标与现有一致）
     const hrefs = ctas.map((c) => c.attributes('href'))
     expect(hrefs).toContain('/clusters')
     expect(hrefs).toContain('/nodes')
     expect(hrefs).toContain('/routes')
   })
 
-  it('R2.1b 管理员空数据区 → 保持既有「还没有{资源}，去创建/去添加 →」文案，不出现受限文案', async () => {
+  it('管理员空数据区 → 「还没有{资源}，去创建/去添加 →」，不出现受限文案', async () => {
     emptyApiMock()
     const { wrapper } = await mountDashboard({ role: 'admin' })
     const text = wrapper.text()
@@ -975,9 +834,7 @@ describe('Dashboard - 受限视角空态文案与口径一致（restricted-data-
     expect(text).not.toContain('暂无可见')
   })
 
-  it('R2.3 受限口径一致：stats 与明细同源同值 → 统计卡数字与明细卡数据一致（集群/节点/路由）', async () => {
-    // 批次 1 契约形状：非管理员 stats 集群域计数与明细端点（/clusters、/nodes、/dashboard/recent-routes）
-    // 同为分配口径；此处以同源同值 mock 钉住前端「两处各渲染自己数据源」的口径一致渲染
+  it('受限口径一致：stats 与明细同源同值 → 大数卡数字与状态卡行数一致', async () => {
     mockApiGet.mockImplementation((url: string) => {
       if (url === '/dashboard/stats') {
         return Promise.resolve({
@@ -1005,19 +862,31 @@ describe('Dashboard - 受限视角空态文案与口径一致（restricted-data-
 
     const statValue = (label: string) =>
       wrapper
-        .findAll('.stat-card')
-        .find((c) => c.find('.stat-card-label').text() === label)!
-        .find('.stat-card-value')
+        .findAll('.dstat')
+        .find((d) => d.find('.d-label').text() === label)!
+        .find('.d-num')
         .text()
-    // 集群：stats.clusters=2 且 /clusters 2 条 → 统计卡 2 ⇔ 集群卡「共 2 个」
+    // 集群：stats.clusters=2 ⇔ 集群卡 2 行
     expect(statValue('集群')).toBe('2')
-    expect(wrapper.text()).toContain('共 2 个')
-    // 路由：stats.routes=2 且 recent-routes 2 条 → 统计卡 2 ⇔ 「共 2 条」
+    expect(cardByTitle(wrapper, '集群').findAll('tbody tr').length).toBe(2)
+    // 路由：stats.routes=2 ⇔ 最近路由卡 2 行
     expect(statValue('路由')).toBe('2')
-    expect(wrapper.text()).toContain('共 2 条')
-    // 节点：stats.nodes=2（online=2 untested=0）且 /nodes 2 条 → 统计卡 2 + 三态摘要 ⇔ 全通过横幅
+    expect(cardByTitle(wrapper, '最近创建的路由').findAll('tbody tr').length).toBe(2)
+    // 节点：stats.nodes=2（online=2）⇔ 副文案 健康 2 · 离线 0
     expect(statValue('节点')).toBe('2')
-    expect(wrapper.text()).toContain('通过 2 · 未检测 0 · 失败 0')
-    expect(wrapper.text()).toContain('全部 2 个节点上次检测通过')
+    expect(
+      wrapper
+        .findAll('.dstat')
+        .find((d) => d.find('.d-label').text() === '节点')!
+        .find('.d-sub')
+        .text(),
+    ).toBe('健康 2 · 离线 0')
+  })
+})
+
+// formatMonthDayTime 仍被「更新于」消费（导入保留断言，防 dead import）
+describe('Dashboard - 时间语言', () => {
+  it('「更新于」文案 = formatMonthDayTime 输出形状（MM/DD HH:mm）', async () => {
+    expect(formatMonthDayTime('2026-10-10T06:30:00')).toMatch(/^\d{2}\/\d{2} \d{2}:\d{2}$/)
   })
 })

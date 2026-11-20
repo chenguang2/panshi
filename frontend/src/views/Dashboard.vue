@@ -19,215 +19,169 @@
       <button class="btn btn-secondary banner-retry" :disabled="loading" @click="retryFailed">重试</button>
     </div>
 
-    <!-- 统计卡（403 防御：静默隐藏） -->
+    <!-- ── 大数统计（403 防御：静默隐藏；设计稿 dstat：色相左条 + mono 大数） ── -->
     <template v-if="!denied.stats">
       <div v-if="loadErrors.stats" class="card area-error">
         <span class="area-error-text">加载失败</span>
         <button class="btn btn-secondary" :disabled="loading" @click="retryKey('stats')">重试</button>
       </div>
-      <div v-else class="stats-grid" :class="{ 'stats-grid-loading': statsFirstLoading }">
-        <StatCard
-          v-for="c in visibleStatCards"
-          :key="c.key"
-          :value="statsLoaded ? String(stats[c.key]) : '…'"
-          :label="c.label"
-          :subtitle="c.subtitle"
-          :accent="c.accent"
-          :to="c.to"
-        >
-          <template #icon>
-            <span class="stat-icon" :class="c.accent" v-html="c.icon"></span>
-          </template>
-        </StatCard>
+      <div v-else class="dash-stats" :class="{ 'dash-stats-loading': statsFirstLoading }">
+        <router-link v-for="c in visibleStatCards" :key="c.key" :to="c.to" class="dstat" :class="statHueClass(c.key)">
+          <span class="d-top" v-html="c.icon"></span>
+          <span class="d-num">{{ statsLoaded ? stats[c.key] : '…' }}</span>
+          <span class="d-sub">
+            <template v-if="c.key === 'nodes'">{{ nodeSubtitle }}</template>
+            <template v-else>{{ c.subtitle }}</template>
+          </span>
+          <span class="d-label">{{ c.label }}</span>
+        </router-link>
       </div>
     </template>
 
-    <div class="dashboard-columns">
-      <!-- 集群区（无权限不渲染且不请求） -->
+    <!-- ── 三列状态卡（集群 / 节点连通状态 / 最近创建的路由；无权限不渲染且不请求） ── -->
+    <div class="dash-cards">
+      <!-- 集群 -->
       <template v-if="canClustersCard">
         <div v-if="loadErrors.clusters" class="card area-error">
           <span class="area-error-text">加载失败</span>
           <button class="btn btn-secondary" :disabled="loading" @click="retryKey('clusters')">重试</button>
         </div>
-        <template v-else>
-          <TableCard
-            v-if="clusterStatus.length || loading"
-            :columns="clusterColumns"
-            :data-source="clusterStatus"
-            :pagination="false"
-            size="small"
-            :loading="loading"
-          >
-            <template #header>
-              <span class="table-card-title">集群</span>
-              <span class="table-card-count">共 {{ clusterStatus.length }} 个</span>
-            </template>
-            <template #bodyCell="{ column, record }">
-              <template v-if="column.key === 'status'">
-                <BadgeStatus
-                  :text="record.status === 1 ? '已启用' : '已禁用'"
-                  :status="record.status === 1 ? 'online' : 'offline'"
-                />
-              </template>
-              <template v-else-if="column.key === 'display_name'">{{ record.display_name || '—' }}</template>
-            </template>
-            <template #footer>
-              <router-link to="/clusters" class="table-card-link">查看全部集群 &rarr;</router-link>
-            </template>
-          </TableCard>
-          <div v-else class="card">
-            <div class="card-header">
-              <span class="table-card-title">集群</span>
-              <span class="table-card-count">共 0 个</span>
-            </div>
-            <div class="card-body empty-body">
-              <router-link to="/clusters" class="empty-cta">
-                {{ isAdmin ? '还没有集群，去创建' : '暂无可见集群，前往集群管理' }}
-                &rarr;
-              </router-link>
-            </div>
+        <div v-else class="dash-card">
+          <div class="dc-head">
+            <span class="dc-title">集群</span>
+            <span v-if="clusterStatus.length" class="dc-badge">{{ clusterStatus.length }} 总数</span>
+            <span class="t-spacer"></span>
+            <router-link to="/clusters" class="dc-link">查看全部集群 →</router-link>
           </div>
-        </template>
+          <table v-if="clusterStatus.length">
+            <tbody>
+              <tr v-for="c in clusterStatus" :key="c.id">
+                <td>
+                  <span class="c-strong">{{ c.display_name || c.name }}</span>
+                  <span class="c-dim c-mono"> {{ c.name }}</span>
+                </td>
+                <td class="c-c">
+                  <span class="ps-tag" :class="c.status === 1 ? 'ps-pub' : 'ps-unpub'">{{
+                    c.status === 1 ? '已启用' : '已禁用'
+                  }}</span>
+                </td>
+                <td class="c-r">
+                  <span
+                    class="c-mono c-dim"
+                    :class="{ 'c-warn': (c.healthy_node_count || 0) < (c.node_count || 0) && (c.node_count || 0) > 0 }"
+                    title="健康节点 / 节点总数"
+                    >{{ c.healthy_node_count || 0 }}/{{ c.node_count || 0 }}</span
+                  >
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div v-else-if="!loading" class="dc-empty">
+            <router-link to="/clusters" class="empty-cta">
+              {{ isAdmin ? '还没有集群，去创建' : '暂无可见集群，前往集群管理' }} →
+            </router-link>
+          </div>
+          <div v-else class="dc-empty"><span class="c-dim">加载中…</span></div>
+        </div>
       </template>
 
-      <!-- 节点区（无权限不渲染且不请求）：明细收敛 TableCard 单实现（D7） -->
+      <!-- 节点连通状态 -->
       <template v-if="canNodesCard">
         <div v-if="loadErrors.nodes" class="card area-error">
           <span class="area-error-text">加载失败</span>
           <button class="btn btn-secondary" :disabled="loading" @click="retryKey('nodes')">重试</button>
         </div>
-        <template v-else>
+        <div v-else class="dash-card">
+          <div class="dc-head">
+            <span class="dc-title">节点连通状态</span>
+            <span v-if="nodesLoaded" class="dc-badges">
+              <span class="dc-badge dc-ok">检测通过 {{ summaryPassed }}</span>
+              <span v-if="summaryUntested" class="dc-badge">未检测 {{ summaryUntested }}</span>
+              <span v-if="summaryFailed" class="dc-badge dc-bad">检测失败 {{ summaryFailed }}</span>
+            </span>
+          </div>
           <div v-if="nodesTruncated" class="truncate-notice">节点数超过明细上限，失败清单可能不完整</div>
-          <TableCard
-            v-if="failedNodes.length || loading"
-            class="node-detail-card"
-            :columns="nodeColumns"
-            :data-source="failedNodes"
-            :pagination="false"
-            size="small"
-            :loading="loading"
-          >
-            <template #header>
-              <span class="table-card-title">节点连通状态</span>
-              <span v-if="nodesLoaded" class="node-summary">
-                <BadgeStatus :text="`检测通过 ${summaryPassed}`" status="online" />
-                <BadgeStatus :text="`未检测 ${summaryUntested}`" status="neutral" />
-                <BadgeStatus v-if="summaryFailed" :text="`检测失败 ${summaryFailed}`" status="offline" />
-              </span>
-            </template>
-            <template #bodyCell="{ column, record }">
-              <template v-if="column.key === 'addr'">
-                <span class="node-addr">{{ record.ip }}:{{ record.service_port }}</span>
-              </template>
-              <template v-else-if="column.key === 'cluster'">
-                {{ record.cluster_name || clusterName(record.cluster_id) }}
-              </template>
-              <template v-else-if="column.key === 'result'">
-                <BadgeStatus text="检测失败" status="offline" />
-              </template>
-            </template>
-            <template #footer>
-              <router-link to="/nodes" class="table-card-link">查看全部节点 &rarr;</router-link>
-            </template>
-          </TableCard>
-          <div v-else-if="nodesLoaded && nodes.length" class="card">
-            <div class="card-header">
-              <span class="table-card-title">节点连通状态</span>
-              <span class="node-summary">
-                <BadgeStatus :text="`检测通过 ${summaryPassed}`" status="online" />
-                <BadgeStatus :text="`未检测 ${summaryUntested}`" status="neutral" />
-              </span>
-            </div>
-            <div class="card-body allpass-body">
-              <div v-if="summaryUntested === 0" class="all-online">全部 {{ nodes.length }} 个节点上次检测通过</div>
-              <router-link to="/nodes" class="table-card-link">查看全部节点 &rarr;</router-link>
-            </div>
+          <table v-if="dashboardNodeRows.length">
+            <tbody>
+              <tr v-for="n in dashboardNodeRows" :key="n.id">
+                <td>
+                  <span class="c-mono c-strong">{{ n.ip }}</span
+                  ><span class="c-dim c-mono">:{{ n.service_port }}</span>
+                </td>
+                <td class="c-dim">{{ n.cluster_name || clusterName(n.cluster_id) }}</td>
+                <td class="c-r" style="width: 96px">
+                  <span class="ps-tag" :class="n.status === 1 ? 'ps-pub' : 'ps-partial'">{{
+                    n.status === 1 ? '检测通过' : '检测失败'
+                  }}</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div v-else-if="!loading" class="dc-empty">
+            <router-link to="/nodes" class="empty-cta">
+              {{ isAdmin ? '还没有节点，去添加' : '暂无可见节点，前往节点管理' }} →
+            </router-link>
           </div>
-          <div v-else-if="!loading" class="card">
-            <div class="card-header">
-              <span class="table-card-title">节点连通状态</span>
-            </div>
-            <div class="card-body empty-body">
-              <router-link to="/nodes" class="empty-cta">
-                {{ isAdmin ? '还没有节点，去添加' : '暂无可见节点，前往节点管理' }}
-                &rarr;
-              </router-link>
-            </div>
+          <div v-else class="dc-empty"><span class="c-dim">加载中…</span></div>
+          <div v-if="dashboardNodeRows.length" class="dc-foot">
+            <router-link to="/nodes" class="dc-link">查看全部节点 →</router-link>
           </div>
-        </template>
+        </div>
+      </template>
+
+      <!-- 最近创建的路由 -->
+      <template v-if="canRoutesCard">
+        <div v-if="loadErrors.routes" class="card area-error">
+          <span class="area-error-text">加载失败</span>
+          <button class="btn btn-secondary" :disabled="loading" @click="retryKey('routes')">重试</button>
+        </div>
+        <div v-else class="dash-card">
+          <div class="dc-head">
+            <span class="dc-title">最近创建的路由</span>
+            <span v-if="recentRoutes.length" class="dc-badge">{{ recentRoutes.length }} 条</span>
+            <span class="t-spacer"></span>
+            <router-link to="/routes" class="dc-link">查看全部路由 →</router-link>
+          </div>
+          <table v-if="recentRoutes.length">
+            <tbody>
+              <tr v-for="r in recentRoutes" :key="r.id">
+                <td>
+                  <span class="c-strong">{{ r.name }}</span>
+                </td>
+                <td>
+                  <span class="pipe-uri">{{ r.uri }}</span>
+                </td>
+                <td class="c-r">
+                  <span class="ps-tag" :class="routeTagCls(r)">{{ routeTagText(r) }}</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div v-else-if="!loading" class="dc-empty">
+            <router-link to="/routes" class="empty-cta">
+              {{ isAdmin ? '还没有路由，去创建' : '暂无可见路由，前往路由管理' }} →
+            </router-link>
+          </div>
+          <div v-else class="dc-empty"><span class="c-dim">加载中…</span></div>
+        </div>
       </template>
     </div>
 
-    <!-- 最近路由区（无权限不渲染且不请求） -->
-    <template v-if="canRoutesCard">
-      <div v-if="loadErrors.routes" class="card area-error">
-        <span class="area-error-text">加载失败</span>
-        <button class="btn btn-secondary" :disabled="loading" @click="retryKey('routes')">重试</button>
-      </div>
-      <template v-else>
-        <TableCard
-          v-if="recentRoutes.length || loading"
-          :columns="routeColumns"
-          :data-source="recentRoutes"
-          :pagination="false"
-          size="small"
-          :loading="loading"
-          :custom-row="routeRowAttrs"
+    <!-- ── 快捷入口（运维操作 + 更多资源合并单卡；feature 圆点 + countKey 计数） ── -->
+    <div v-if="visibleQuickLinks.length || visibleMoreLinks.length" class="quick-card">
+      <span class="dc-title">快捷入口</span>
+      <div class="quick-row">
+        <router-link
+          v-for="l in allQuickChips"
+          :key="l.path"
+          :to="l.path"
+          class="quick-chip"
+          :class="{ 'quick-chip-muted': l.muted }"
         >
-          <template #header>
-            <span class="table-card-title">最近创建的路由</span>
-            <span class="table-card-count">共 {{ recentRoutes.length }} 条</span>
-          </template>
-          <template #bodyCell="{ column, record }">
-            <template v-if="column.key === 'status'">
-              <BadgeStatus
-                :text="record.status === 1 ? '启用' : '禁用'"
-                :status="record.status === 1 ? 'online' : 'offline'"
-              />
-            </template>
-            <template v-else-if="column.key === 'created_at'">{{ formatMonthDayTime(record.created_at) }}</template>
-          </template>
-          <template #footer>
-            <router-link to="/routes" class="table-card-link">查看全部路由 &rarr;</router-link>
-          </template>
-        </TableCard>
-        <div v-else class="card">
-          <div class="card-header">
-            <span class="table-card-title">最近创建的路由</span>
-            <span class="table-card-count">共 0 条</span>
-          </div>
-          <div class="card-body empty-body">
-            <router-link to="/routes" class="empty-cta">
-              {{ isAdmin ? '还没有路由，去创建' : '暂无可见路由，前往路由管理' }}
-              &rarr;
-            </router-link>
-          </div>
-        </div>
-      </template>
-    </template>
-
-    <div class="dashboard-columns quick-columns">
-      <div v-if="visibleQuickLinks.length" class="card">
-        <div class="card-header">
-          <span class="table-card-title">快捷入口（运维操作）</span>
-        </div>
-        <div class="card-body quick-body">
-          <router-link v-for="l in visibleQuickLinks" :key="l.path" :to="l.path" class="quick-chip">
-            {{ l.title }}
-            <span v-if="l.countKey && statsLoaded" class="chip-count">{{ stats[l.countKey] }}</span>
-          </router-link>
-        </div>
-      </div>
-      <div v-if="visibleMoreLinks.length" class="card">
-        <div class="card-header">
-          <span class="table-card-title">更多资源（配置与查询）</span>
-        </div>
-        <div class="card-body quick-body">
-          <router-link v-for="l in visibleMoreLinks" :key="l.path" :to="l.path" class="quick-chip quick-chip-muted">
-            {{ l.title }}
-            <span v-if="l.countKey && statsLoaded" class="chip-count">{{ stats[l.countKey] }}</span>
-          </router-link>
-        </div>
+          <span v-if="l.feature" class="q-dot" :class="{ off: !featuresStore.has(l.feature) }"></span>
+          {{ l.title }}
+          <span v-if="l.countKey && statsLoaded" class="q-cnt">{{ stats[l.countKey] }}</span>
+        </router-link>
       </div>
     </div>
   </div>
@@ -238,8 +192,6 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/api'
 import PageHeader from '@/components/PageHeader.vue'
-import StatCard from '@/components/StatCard.vue'
-import TableCard from '@/components/TableCard.vue'
 import BadgeStatus from '@/components/BadgeStatus.vue'
 import { listNodes } from '@/api/nodes'
 import { PAGE_SIZE_CARD_GRID } from '@/constants'
@@ -302,6 +254,7 @@ interface RecentRouteRow {
   status: number
   cluster_name?: string
   created_at?: string
+  current_version?: number | null
 }
 
 /** 集群行（概览只需 id/name/display_name/status） */
@@ -310,6 +263,8 @@ interface ClusterRow {
   name: string
   display_name?: string | null
   status: number
+  node_count?: number
+  healthy_node_count?: number
 }
 
 type LoadKey = 'stats' | 'clusters' | 'nodes' | 'routes'
@@ -347,6 +302,7 @@ const lastUpdated = ref<string | null>(null)
 /** chip 计数徽章（消费 stats 闲置计数）；风险副标注（D8）已随「数据库管理」红字提示移除——入口按钮只做跳转，风险提示归目标页 */
 interface ChipExtra {
   countKey?: 'plugin_configs' | 'plugin_metadata' | 'global_rules' | 'static_resources' | 'users'
+  muted?: boolean
 }
 
 /** 快捷入口 = 运维操作（键值映射见 D4，2026-10-10 从 AppSidebar 逐项核实；防漂移测试钉住） */
@@ -381,6 +337,22 @@ const moreLinks: Array<LinkItem & Gate & ChipExtra> = [
 
 const visibleQuickLinks = computed(() => quickLinks.filter(canEnter))
 const visibleMoreLinks = computed(() => moreLinks.filter(canEnter))
+
+/** 快捷入口单卡合并（dashboard-cluster-parity 3.4：设计稿单卡；运维组在前、资源组在后） */
+const allQuickChips = computed(() => [...visibleQuickLinks.value, ...visibleMoreLinks.value])
+
+/** 大数统计卡色相（设计稿：集群 c1 / 节点 c3 / 上游 c5 / 路由 c7） */
+function statHueClass(key: string): string {
+  return { clusters: 'cluster-c1', nodes: 'cluster-c3', upstreams: 'cluster-c5', routes: 'cluster-c7' }[key] ?? ''
+}
+
+/** 最近路由卡发布徽标（后端透出 current_version；「待发布」依赖 published_at 回查不引入——列表页为准） */
+function routeTagText(r: { current_version?: number | null }): string {
+  return r.current_version ? `v${r.current_version}` : '未发布'
+}
+function routeTagCls(r: { current_version?: number | null }): string {
+  return r.current_version ? 'ps-pub' : 'ps-unpub'
+}
 
 interface StatCardItem extends Gate {
   key: 'clusters' | 'nodes' | 'upstreams' | 'routes'
@@ -442,12 +414,6 @@ const routeColumns = [
   { title: '创建时间', key: 'created_at' },
 ]
 
-/** 行点击定位（spec 7.2）：仅对具备 routes 权限的用户绑定点击与可点击样式 */
-function routeRowAttrs(): Record<string, unknown> {
-  if (!canEnter({ permission: 'routes' })) return {}
-  return { class: 'clickable-row', onClick: () => router.push('/routes') }
-}
-
 const clusterColumns = [
   { title: '名称', dataIndex: 'name', key: 'name' },
   { title: '显示名称', dataIndex: 'display_name', key: 'display_name' },
@@ -467,14 +433,19 @@ const nodeColumns = [
 const summaryPassed = computed(() => Math.max(0, stats.value.nodes_online - stats.value.nodes_untested))
 const summaryUntested = computed(() => stats.value.nodes_untested)
 const summaryFailed = computed(() => Math.max(0, stats.value.nodes - stats.value.nodes_online))
-/** 统计卡节点副标题动态三态（D2） */
+/** 统计卡节点副标题（设计稿语义：健康 N · 离线 M；未检测属在线侧，由节点卡徽章表达） */
 const nodeSubtitle = computed(() =>
-  statsLoaded.value
-    ? `通过 ${summaryPassed.value} · 未检测 ${summaryUntested.value} · 失败 ${summaryFailed.value}`
-    : '加载中…',
+  statsLoaded.value ? `健康 ${stats.value.nodes_online} · 离线 ${summaryFailed.value}` : '加载中…',
 )
 /** 明细截断：listNodes 达分页上限时失败清单可能不完整（软措辞兜住恰好 500 的假阳性） */
 const nodesTruncated = computed(() => nodes.value.length >= PAGE_SIZE_CARD_GRID)
+
+/** 卡内明细行（21.10 设计稿混排：失败节点在前、通过节点补齐，上限 8 行——失败永远可见） */
+const dashboardNodeRows = computed(() => {
+  const failed = nodes.value.filter((n) => n.status !== 1)
+  const passed = nodes.value.filter((n) => n.status === 1)
+  return [...failed, ...passed].slice(0, 8)
+})
 // 明细行（仅检测失败节点，TableCard 数据源）
 const failedNodes = computed(() => nodes.value.filter((n) => n.status !== 1))
 
@@ -586,231 +557,273 @@ onMounted(() => {
   gap: 20px;
 }
 
-.stats-grid {
+/* ── 大数统计（设计稿 dstat：色相左条 + mono 大数 + 副文案） ── */
+.dash-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
 }
-
-/* 首次加载统计卡容器半透明降交互（D3 加载态） */
-.stats-grid-loading {
+.dash-stats-loading {
   opacity: 0.45;
   pointer-events: none;
 }
-
-/* 错误横幅（D3） */
-.load-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 16px;
-  border-radius: var(--radius-md);
-  font-size: 13px;
-}
-.load-banner-danger {
-  background: var(--danger-bg, color-mix(in srgb, var(--danger) 10%, transparent));
-  color: var(--danger);
-}
-.load-banner-partial {
-  background: var(--warning-bg, color-mix(in srgb, var(--warning) 12%, transparent));
-  color: var(--warning);
-}
-.banner-retry {
-  flex-shrink: 0;
-}
-
-/* 「更新于」时间锚点 + 手动刷新（D6） */
-.updated-at {
-  font-size: 12px;
-  color: var(--muted);
-}
-
-/* 分区轻量错误条 */
-.area-error {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px 16px;
-  font-size: 13px;
-  color: var(--danger);
-}
-.area-error-text {
-  font-weight: 500;
-}
-
-.stat-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.stat-icon svg {
-  width: 20px;
-  height: 20px;
-}
-
-.stat-icon.cluster {
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--accent);
-}
-.stat-icon.node {
-  background: color-mix(in srgb, var(--info) 12%, transparent);
-  color: var(--info);
-}
-.stat-icon.route {
-  background: color-mix(in srgb, var(--success) 12%, transparent);
-  color: var(--success);
-}
-.stat-icon.upstream {
-  background: color-mix(in srgb, var(--warning) 12%, transparent);
-  color: var(--warning);
-}
-
-.dashboard-columns {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-}
-
-.node-summary {
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-}
-
-/* 失败节点明细区：防离线清单无限撑高（D7），表头/脚链固定、表格体滚动 */
-.node-detail-card {
-  max-height: 320px;
-  overflow-y: auto;
-}
-
-/* 全通过横幅卡（非表格态） */
-.allpass-body {
+.dstat {
+  position: relative;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 16px;
-}
-
-.node-addr {
-  font-family: var(--font-mono);
-  color: var(--fg);
-}
-
-.all-online {
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
-  background: var(--success-bg);
-  color: var(--success);
-  font-size: 13px;
-}
-
-.table-card-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--fg);
-}
-
-.table-card-count {
-  font-size: 11px;
-  color: var(--muted);
-  font-family: var(--font-mono);
-  font-weight: 500;
-}
-
-.table-card-link {
-  font-size: 12px;
-  color: var(--accent);
+  gap: 2px;
+  padding: 14px 16px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
   text-decoration: none;
-  font-weight: 500;
+  transition:
+    border-color 0.15s,
+    transform 0.15s,
+    box-shadow 0.15s;
+}
+.dstat::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--cc, var(--accent));
+}
+.dstat:hover {
+  border-color: oklch(56% 0.16 210 / 45%);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+.dstat .d-top {
+  font-size: 12px;
+  color: var(--muted);
+}
+.dstat .d-top :deep(svg) {
+  width: 14px;
+  height: 14px;
+  vertical-align: -2px;
+  color: var(--cc, var(--accent));
+}
+.dstat .d-num {
+  font-size: 26px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--fg);
+  line-height: 1.15;
+}
+.dstat .d-sub {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.dstat .d-label {
+  position: absolute;
+  right: 16px;
+  top: 14px;
+  font-size: 12px;
+  color: var(--muted);
 }
 
-.table-card-link:hover {
-  text-decoration: underline;
+/* ── 三列状态卡 ── */
+.dash-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
 }
-
-/* 空态引导 CTA（D3 空态） */
-.empty-body {
+.dash-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  min-width: 0;
+}
+.dc-head {
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 28px 16px;
+  gap: 8px;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--border);
 }
-
-.empty-cta {
+.dc-title {
   font-size: 13px;
-  color: var(--accent);
-  text-decoration: none;
+  font-weight: 700;
+  color: var(--fg);
 }
-
-.empty-cta:hover {
+.dc-badge {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: oklch(50% 0.018 240 / 8%);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.dc-badge.dc-ok {
+  color: var(--success);
+  background: oklch(55% 0.15 145 / 10%);
+}
+.dc-badge.dc-bad {
+  color: var(--danger);
+  background: oklch(55% 0.19 25 / 10%);
+}
+.dc-badges {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.dc-link {
+  font-size: 12px;
+  color: var(--accent);
+  white-space: nowrap;
+}
+.dc-link:hover {
   text-decoration: underline;
 }
-
-.quick-body {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+.dash-card table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.dash-card td {
+  padding: 8px 14px;
+  border-top: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dash-card tbody tr:first-child td {
+  border-top: none;
+}
+.dash-card tbody tr {
+  transition: background 0.12s;
+}
+.dash-card tbody tr:hover {
+  background: oklch(56% 0.16 210 / 4%);
+}
+.c-c {
+  width: 76px;
+  text-align: right;
+}
+.c-r {
+  width: 64px;
+  text-align: right;
+}
+.c-strong {
+  font-weight: 600;
+}
+.c-strong + .c-dim {
+  margin-left: 6px;
+}
+.c-mono {
+  font-family: var(--font-mono);
+}
+.c-dim {
+  color: var(--muted);
+}
+.c-warn {
+  color: var(--warning);
+  font-weight: 600;
+}
+.pipe-uri {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  color: var(--fg);
+}
+.dc-empty {
+  padding: 20px 14px;
+  text-align: center;
+}
+.dc-foot {
+  border-top: 1px solid var(--border);
+  padding: 9px 14px;
+}
+.truncate-notice {
+  padding: 6px 14px;
+  font-size: 11.5px;
+  color: var(--warning);
+  border-bottom: 1px solid var(--border);
 }
 
+/* ── 快捷入口（单卡合并） ── */
+.quick-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  padding: 14px;
+}
+.quick-card .dc-title {
+  display: block;
+  margin-bottom: 10px;
+}
+.quick-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
 .quick-chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px 12px;
+  gap: 5px;
+  height: 26px;
+  padding: 0 10px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: 999px;
   background: var(--surface);
-  color: var(--fg);
-  font-size: 13px;
-  text-decoration: none;
-  transition:
-    color 0.15s,
-    border-color 0.15s;
-}
-
-.quick-chip:hover {
-  color: var(--accent);
-  border-color: var(--accent);
-}
-
-.quick-chip-muted {
-  color: var(--muted);
-}
-
-/* chip 尾部 mono 计数徽章 + 高危副标注（D8） */
-.chip-count {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--muted);
-  background: var(--bg);
-  border-radius: 8px;
-  padding: 0 6px;
-  line-height: 16px;
-}
-
-/* 明细截断提示（软措辞，D5） */
-.truncate-notice {
   font-size: 12px;
   color: var(--muted);
-  padding: 8px 16px;
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg);
+  text-decoration: none;
+  transition:
+    color 0.12s,
+    border-color 0.12s,
+    background 0.12s;
+}
+.quick-chip:hover {
+  border-color: oklch(56% 0.16 210 / 40%);
+  color: var(--accent);
+  background: var(--accent-bg);
+}
+.quick-chip .q-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--success);
+  flex-shrink: 0;
+}
+.quick-chip .q-dot.off {
+  background: var(--muted);
+}
+.quick-chip .q-cnt {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--muted);
 }
 
-/* 最近路由行点击定位（spec 7.2，仅 routes 权限用户绑定） */
-.clickable-row {
-  cursor: pointer;
+/* ── 断点（与 card-grid 同规范：3 列 → ≤1200 2 列 → ≤768 1 列） ── */
+@media (max-width: 1200px) {
+  .dash-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .dash-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
-
-@media (max-width: 900px) {
-  .dashboard-columns {
+@media (max-width: 768px) {
+  .dash-stats {
+    grid-template-columns: 1fr;
+  }
+  .dash-cards {
     grid-template-columns: 1fr;
   }
 }

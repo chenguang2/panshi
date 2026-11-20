@@ -37,6 +37,10 @@ class RecentRouteItem(BaseModel):
     status: int
     cluster_name: str
     created_at: datetime
+    # 发布状态（dashboard-cluster-parity 3.3：设计稿发布徽标；只读字段，publish_resource
+    # 既有的列，无 schema/迁移改动）。注：pending_publish 依赖 published_at（ConfigVersion
+    # 回查），dashboard 卡不引入该查询——「待发布」态以路由列表页为准，本卡只区分 vN / 未发布。
+    current_version: int | None = None
 
     class Config:
         from_attributes = True
@@ -155,6 +159,7 @@ async def get_recent_routes(
             status=route.status,
             cluster_name=display_name or cluster_name,
             created_at=route.created_at,
+            current_version=route.current_version,
         )
         for route, cluster_name, display_name in rows
     ]

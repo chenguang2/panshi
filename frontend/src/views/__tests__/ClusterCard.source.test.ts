@@ -16,13 +16,15 @@ describe('集群卡片组件化统一 · 组件存在性', () => {
     const p = resolve(process.cwd(), 'src/components/ClusterCard.vue')
     expect(existsSync(p), 'ClusterCard.vue 必须存在').toBe(true)
     const s = readFileSync(p, 'utf-8')
-    expect(s).toContain('cl-card-stats')
-    expect(s).toContain('cl-card-name')
-    expect(s).toContain('cl-card-nodes')
+    // 21.11：l5-panel 解剖（旧 cl-card-* 类退场，守卫随解剖更新）
+    expect(s).toContain('l5-panel')
+    expect(s).toContain('lp-name')
+    expect(s).toContain('lp-tag tech')
+    expect(s).toContain('stat-grid')
     expect(s).toContain('cl-route-badge')
     expect(s).toContain('title="健康节点 / 节点总数"')
-    expect(s).toContain('集群标识: ')
     expect(s).toContain('集群名: ')
+    expect(s).toContain('clusterHueClass')
   })
 
   it('#id 尾注已删除：CentralList 不再渲染 cl-card-id，数字 ID 仅经主标题 tooltip 露出', () => {

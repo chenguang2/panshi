@@ -1,129 +1,163 @@
 <template>
-  <div class="cl-card std-card">
-    <div class="cl-card-topbar">
-      <div class="cl-topbar-ident">
-        <span class="cl-topbar-name" :title="identTitle">
-          <CodeOutlined class="cl-topbar-icon" />
-          {{ cluster.name }}
-        </span>
+  <article class="l5-panel std-card cl-card" :class="clusterHueClass(props.cluster.id)">
+    <div class="lp-head">
+      <div class="lp-title">
+        <span class="lp-name" :title="nameTitle">{{ cluster.display_name || cluster.name }}</span>
+        <span class="lp-tag tech" :title="identTitle">{{ cluster.name }}</span>
+        <slot name="topbar-extra" />
       </div>
-      <slot name="topbar-extra" />
-    </div>
-    <div class="cl-card-header">
-      <div class="cl-card-info">
-        <div class="cl-card-name" :title="nameTitle">{{ cluster.display_name || cluster.name }}</div>
-        <div v-if="subtitle" class="cl-card-desc">{{ subtitle }}</div>
-      </div>
-      <div class="cl-card-meta">
-        <span v-if="cluster.status === 1" class="badge badge-success"
-          ><span class="status-dot online"></span>已启用</span
-        >
-        <span v-else class="badge badge-danger"><span class="status-dot offline"></span>已禁用</span>
-        <span
-          class="cl-version-chip"
-          :class="versionChip.published ? 'is-published' : 'is-unpublished'"
-          :title="VERSION_CHIP_TOOLTIP"
-          >{{ versionChip.text }}</span
-        >
-        <span v-if="routeBadge" class="badge cl-route-badge" :class="routeBadge.cls">{{ routeBadge.label }}</span>
+      <div class="lp-status">
+        <span v-if="cluster.status === 1" class="badge badge-success">已启用</span>
+        <span v-else class="badge badge-danger">已禁用</span>
+        <span class="ps-tag" :class="versionChip.published ? 'ps-pub' : 'ps-unpub'" :title="VERSION_CHIP_TOOLTIP">{{
+          versionChip.text
+        }}</span>
+        <span v-if="routeBadge" class="lp-tag cl-route-badge" :class="routeBadge.cls">{{ routeBadge.label }}</span>
       </div>
     </div>
-    <div v-if="statClick" class="cl-card-stats">
+    <div class="lp-body">
+      <div class="lp-row">
+        <span class="lp-k">描述</span>
+        <span class="lp-v dim" :title="cluster.description || ''">{{ cluster.description || '—' }}</span>
+      </div>
+      <div class="lp-row">
+        <span class="lp-k">节点</span>
+        <template v-if="cluster.nodes && cluster.nodes.length > 0">
+          <div class="lp-chips">
+            <span
+              v-for="n in visibleNodes"
+              :key="n.id"
+              class="node-chip"
+              :class="{ off: n.status !== 1 }"
+              :title="`管理端口 ${n.management_port}`"
+            >
+              <span class="dot"></span>{{ n.ip }}:{{ n.service_port }}
+            </span>
+            <span v-if="cluster.nodes.length > 3" class="node-more">…还有 {{ cluster.nodes.length - 3 }} 个</span>
+          </div>
+          <span class="lp-cnt" :class="healthCls" title="健康节点 / 节点总数"
+            >{{ cluster.healthy_node_count }}/{{ cluster.node_count }} 健康</span
+          >
+        </template>
+        <span v-else class="lp-v dim">未挂节点</span>
+      </div>
+      <div v-if="offlineNotice" class="lp-notice alert alert-warning">
+        <span class="n-ico"><StrokeIcon name="warning" :size="13" /></span>
+        <span class="n-txt">{{ offlineNotice }}</span>
+      </div>
+    </div>
+    <!-- 统计格：statClick 接管（统一管理直切 Tab）/ router-link 深链（集群管理跳资源页）双分支 -->
+    <div v-if="statClick" class="stat-grid">
       <div
-        class="cl-stat-cell cl-stat-link"
+        class="stat-cell"
         :class="healthCls"
-        title="健康节点 / 节点总数"
+        title="健康节点 / 节点总数（点击进入统一管理 · 节点）"
         @click="onStatClick('nodes')"
       >
-        <div class="cl-stat-value">{{ cluster.healthy_node_count }}/{{ cluster.node_count }}</div>
-        <div class="cl-stat-label">节点</div>
+        <div class="sv">{{ cluster.healthy_node_count }}/{{ cluster.node_count }}</div>
+        <div class="sl">节点</div>
       </div>
-      <div class="cl-stat-cell cl-stat-link" @click="onStatClick('upstreams')">
-        <div class="cl-stat-value">{{ cluster.upstream_count }}</div>
-        <div class="cl-stat-label">上游</div>
+      <div class="stat-cell" title="进入统一管理 · 上游" @click="onStatClick('upstreams')">
+        <div class="sv">{{ cluster.upstream_count }}</div>
+        <div class="sl">上游</div>
       </div>
-      <div class="cl-stat-cell cl-stat-link" @click="onStatClick('routes')">
-        <div class="cl-stat-value">{{ cluster.route_count }}</div>
-        <div class="cl-stat-label">路由</div>
+      <div class="stat-cell" title="进入统一管理 · 路由" @click="onStatClick('routes')">
+        <div class="sv">{{ cluster.route_count }}</div>
+        <div class="sl">路由</div>
       </div>
-      <div class="cl-stat-cell cl-stat-link" @click="onStatClick('pluginConfigs')">
-        <div class="cl-stat-value">{{ cluster.plugin_config_count }}</div>
-        <div class="cl-stat-label">插件组</div>
+      <div class="stat-cell" title="进入统一管理 · 插件组" @click="onStatClick('pluginConfigs')">
+        <div class="sv">{{ cluster.plugin_config_count }}</div>
+        <div class="sl">插件组</div>
       </div>
-      <div class="cl-stat-cell cl-stat-link" @click="onStatClick('globalRules')">
-        <div class="cl-stat-value">{{ cluster.global_rule_count }}</div>
-        <div class="cl-stat-label">全局规则</div>
+      <div class="stat-cell" title="进入统一管理 · 全局规则" @click="onStatClick('globalRules')">
+        <div class="sv">{{ cluster.global_rule_count }}</div>
+        <div class="sl">全局规则</div>
       </div>
-      <div class="cl-stat-cell cl-stat-link" @click="onStatClick('pluginMetadata')">
-        <div class="cl-stat-value">{{ cluster.plugin_metadata_count }}</div>
-        <div class="cl-stat-label">插件元数据</div>
+      <div class="stat-cell" title="进入统一管理 · 插件元数据" @click="onStatClick('pluginMetadata')">
+        <div class="sv">{{ cluster.plugin_metadata_count }}</div>
+        <div class="sl">插件元数据</div>
       </div>
-      <div class="cl-stat-cell cl-stat-link" @click="onStatClick('staticResources')">
-        <div class="cl-stat-value">{{ cluster.static_resource_count }}</div>
-        <div class="cl-stat-label">静态资源</div>
+      <div class="stat-cell" title="进入统一管理 · 静态资源" @click="onStatClick('staticResources')">
+        <div class="sv">{{ cluster.static_resource_count }}</div>
+        <div class="sl">静态资源</div>
       </div>
     </div>
-    <div v-else class="cl-card-stats">
+    <div v-else class="stat-grid">
       <router-link
         :to="{ path: '/nodes', query: { cluster_id: cluster.id } }"
-        class="cl-stat-cell cl-stat-link"
+        class="stat-cell"
         :class="healthCls"
         title="健康节点 / 节点总数"
-        ><div class="cl-stat-value">{{ cluster.healthy_node_count }}/{{ cluster.node_count }}</div>
-        <div class="cl-stat-label">节点</div></router-link
       >
-      <router-link :to="{ path: '/upstreams', query: { cluster_id: cluster.id } }" class="cl-stat-cell cl-stat-link"
-        ><div class="cl-stat-value">{{ cluster.upstream_count }}</div>
-        <div class="cl-stat-label">上游</div></router-link
+        <div class="sv">{{ cluster.healthy_node_count }}/{{ cluster.node_count }}</div>
+        <div class="sl">节点</div>
+      </router-link>
+      <router-link
+        :to="{ path: '/upstreams', query: { cluster_id: cluster.id } }"
+        class="stat-cell"
+        title="查看该集群的上游列表"
       >
-      <router-link :to="{ path: '/routes', query: { cluster_id: cluster.id } }" class="cl-stat-cell cl-stat-link"
-        ><div class="cl-stat-value">{{ cluster.route_count }}</div>
-        <div class="cl-stat-label">路由</div></router-link
+        <div class="sv">{{ cluster.upstream_count }}</div>
+        <div class="sl">上游</div>
+      </router-link>
+      <router-link
+        :to="{ path: '/routes', query: { cluster_id: cluster.id } }"
+        class="stat-cell"
+        title="查看该集群的路由列表"
       >
+        <div class="sv">{{ cluster.route_count }}</div>
+        <div class="sl">路由</div>
+      </router-link>
       <router-link
         :to="{ path: '/plugin-configs', query: { cluster_id: cluster.id } }"
-        class="cl-stat-cell cl-stat-link"
-        ><div class="cl-stat-value">{{ cluster.plugin_config_count }}</div>
-        <div class="cl-stat-label">插件组</div></router-link
+        class="stat-cell"
+        title="查看该集群的插件组"
       >
-      <router-link :to="{ path: '/global-rules', query: { cluster_id: cluster.id } }" class="cl-stat-cell cl-stat-link"
-        ><div class="cl-stat-value">{{ cluster.global_rule_count }}</div>
-        <div class="cl-stat-label">全局规则</div></router-link
+        <div class="sv">{{ cluster.plugin_config_count }}</div>
+        <div class="sl">插件组</div>
+      </router-link>
+      <router-link
+        :to="{ path: '/global-rules', query: { cluster_id: cluster.id } }"
+        class="stat-cell"
+        title="查看该集群的全局规则"
       >
+        <div class="sv">{{ cluster.global_rule_count }}</div>
+        <div class="sl">全局规则</div>
+      </router-link>
       <router-link
         :to="{ path: '/plugin-metadata', query: { cluster_id: cluster.id } }"
-        class="cl-stat-cell cl-stat-link"
-        ><div class="cl-stat-value">{{ cluster.plugin_metadata_count }}</div>
-        <div class="cl-stat-label">插件元数据</div></router-link
+        class="stat-cell"
+        title="查看该集群的插件元数据"
       >
+        <div class="sv">{{ cluster.plugin_metadata_count }}</div>
+        <div class="sl">插件元数据</div>
+      </router-link>
       <router-link
         :to="{ path: '/static-resources', query: { cluster_id: cluster.id } }"
-        class="cl-stat-cell cl-stat-link"
-        ><div class="cl-stat-value">{{ cluster.static_resource_count }}</div>
-        <div class="cl-stat-label">静态资源</div></router-link
+        class="stat-cell"
+        title="查看该集群的静态资源"
       >
+        <div class="sv">{{ cluster.static_resource_count }}</div>
+        <div class="sl">静态资源</div>
+      </router-link>
     </div>
-    <div v-if="cluster.nodes && cluster.nodes.length > 0" class="cl-card-nodes">
-      <span v-for="n in visibleNodes" :key="n.id" class="cl-node-tag" :class="n.status === 1 ? 'online' : 'offline'">
-        <span class="status-dot" :class="n.status === 1 ? 'online' : 'offline'"></span>
-        {{ n.ip }}:{{ n.service_port }}
-      </span>
-      <span v-if="cluster.nodes.length > 3" class="node-more">...还有 {{ cluster.nodes.length - 3 }} 个</span>
-    </div>
-    <div v-if="$slots.actions" class="cl-card-actions">
+    <div v-if="$slots.actions" class="lp-foot">
       <slot name="actions"></slot>
     </div>
     <slot name="footer"></slot>
-  </div>
+  </article>
 </template>
 
 <script setup lang="ts">
 // 集群卡片（档位 C 统一实现）：集群管理 / 统一管理两页共用。
-// 纯展示组件：不拉取中继区域等信息——routeBadge 由页面计算后传入（null = 不渲染路径徽章）。
-// 页面差异经 slot 注入：topbar（统一管理的最大化按钮）、actions（按钮组 + #id 尾注）、footer（扩展位）。
+// mockup-parity-standard 21.11：卡片重写为 l5-panel 解剖（与全部卡片页同语言）——
+// lp-head（显示名 + 标识 tech tag）/ lp-status（启用徽标 + 配置版本微标 + 中继徽章）/
+// lp-body（描述 + 节点 chips + 健康比）/ stat-grid 七格（色相分域可点）/
+// lp-foot 由页面 slot 注入（两页动作行同构）。纯展示组件：不发请求。
 import { computed } from 'vue'
-import { CodeOutlined } from '@ant-design/icons-vue'
 import type { Cluster } from '@/types'
+import StrokeIcon from '@/components/StrokeIcon.vue'
+import { clusterHueClass } from '@/utils/clusterHue'
 
 const props = defineProps<{
   cluster: Cluster
@@ -136,10 +170,6 @@ const props = defineProps<{
 function onStatClick(key: string) {
   props.statClick?.(key)
 }
-
-/** 回退式二显副标题：description 优先 → 回退「集群标识: name」（仅 display_name 存在时）→ 无 */
-/** 副标题纯描述（批 8：回退「集群标识: name」移除——技术身份恒显于标题条身份区，回退为重复） */
-const subtitle = computed<string | null>(() => props.cluster.description || null)
 
 /** 标题条身份 tooltip（数字 ID 唯一露出面随身份条迁移） */
 const identTitle = computed(() => `集群标识（API/管理面使用）: ${props.cluster.name} · ID: ${props.cluster.id}`)
@@ -175,194 +205,117 @@ const healthCls = computed(() => {
 
 /** 节点 tag 最多展示前 3 个 */
 const visibleNodes = computed(() => props.cluster.nodes?.slice(0, 3) ?? [])
+
+/** 离线节点警示（卡片页 lp-notice 语言；数量与首个 IP 具体化，与 republish 提示同构） */
+const offlineNotice = computed<string | null>(() => {
+  const off = (props.cluster.nodes ?? []).filter((n) => n.status !== 1)
+  if (!off.length) return null
+  const first = off[0]
+  return `${off.length} 个节点离线（${first.ip}:${first.service_port}${off.length > 1 ? ' 等' : ''}），发布将跳过该节点`
+})
 </script>
 
 <style scoped>
-/* 卡片解剖样式唯一收敛点（两页本地副本已删除；漂移取舍见组件化报告）：
-   - topbar/stats/stats 数值字号取 CentralList 版（较新）；
-   - card-desc 保留两行截断（CentralList 获得描述副标题后需防长文撑高卡片）；
-   - card-meta 取纵向堆叠版（路径徽章 + 状态徽章并列的结构超集）。 */
-/* 卡片容器四件套/hover 已上移共享 .std-card（style.css 卡片一致性单点） */
-.cl-card-topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 3px 12px 3px 16px;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--accent);
-  background: oklch(56% 0.16 210 / 8%);
-  border-bottom: 1px solid oklch(56% 0.16 210 / 12%);
-}
-
-/* 标题条技术身份区（批 8）：图标 + name 等宽弱色；区域经路径徽章表达（不在此重复） */
-.cl-topbar-ident {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.cl-card {
   min-width: 0;
 }
-.cl-topbar-name {
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-weight: 600;
-  letter-spacing: 0.2px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  cursor: default;
+/* 节点 chips（设计稿 node-chip 语言；在线/离线圆点 + mono 地址） */
+.node-chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-}
-.cl-topbar-icon {
-  font-size: 12px;
-  opacity: 0.75;
-}
-
-.cl-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 8px;
-  padding: 12px 20px 0;
-}
-.cl-card-info {
-  flex: 1;
-  min-width: 0;
-}
-.cl-card-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--fg);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.cl-card-desc {
-  font-size: 12px;
-  color: var(--muted);
-  margin-top: 2px;
-  line-height: 1.5;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.cl-card-meta {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
-  flex-shrink: 0;
-  margin-left: 12px;
-}
-.cl-route-badge {
-  white-space: nowrap;
-}
-.cl-version-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 1px 8px;
+  gap: 5px;
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
   border-radius: 999px;
-  font-size: 11px;
-  line-height: 1.5;
-  border: 1px solid var(--border);
-  color: var(--muted);
   background: var(--bg);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--muted);
   white-space: nowrap;
 }
-.cl-version-chip.is-published {
-  color: var(--success);
-  border-color: oklch(55% 0.15 145 / 35%);
-  background: oklch(55% 0.15 145 / 10%);
-}
-
-.cl-card-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
-  background: oklch(50% 0 0 / 4%);
-  border-radius: var(--radius-md);
-  overflow: hidden;
+.node-chip .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--success);
   flex-shrink: 0;
-  margin: 4px 16px;
 }
-.cl-stat-cell {
-  text-align: center;
-  padding: 5px 12px;
-  transition: all 0.15s;
+.node-chip.off {
+  opacity: 0.8;
 }
-.cl-stat-cell + .cl-stat-cell {
-  border-left: 1px solid var(--border);
-}
-.cl-stat-cell:hover {
-  background: oklch(100% 0 0 / 6%);
-}
-.cl-stat-value {
-  font-family: var(--font-mono);
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--accent);
-  line-height: 1.3;
-}
-.cl-stat-label {
-  font-size: 11px;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  white-space: nowrap;
-  margin-top: 2px;
-}
-.cl-stat-cell.is-danger .cl-stat-value {
-  color: var(--danger);
-}
-.cl-stat-cell.is-warning .cl-stat-value {
-  color: var(--warning);
-}
-.cl-stat-link {
-  text-decoration: none;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  cursor: pointer;
-}
-
-.cl-card-nodes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 0 20px 8px;
-}
-.cl-node-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-size: 11px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  font-family: var(--font-mono);
-}
-.cl-node-tag.online {
-  border-color: oklch(55% 0.15 145 / 25%);
-}
-.cl-node-tag.offline {
-  border-color: oklch(55% 0.18 28 / 25%);
+.node-chip.off .dot {
+  background: var(--muted);
 }
 .node-more {
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--muted);
-  padding: 2px 4px;
+  align-self: center;
 }
-
-.cl-card-actions {
-  display: flex;
+/* 健康比分级（沿用 cluster-ux-close-loop 3.3 语义：0 健康红 / 不足橙） */
+.lp-cnt.is-danger {
+  color: var(--danger);
+  font-weight: 600;
+}
+.lp-cnt.is-warning {
+  color: var(--warning);
+  font-weight: 600;
+}
+.stat-cell.is-danger .sv {
+  color: var(--danger);
+}
+.stat-cell.is-warning .sv {
+  color: var(--warning);
+}
+.stat-cell.is-danger,
+.stat-cell.is-warning {
+  cursor: pointer;
+}
+/* 中继徽章（页面传入：经中继 accent 淡底 / 直连灰） */
+.cl-route-badge {
+  border-color: oklch(56% 0.16 210 / 30%);
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+.cl-route-badge.is-direct {
+  color: var(--muted);
+}
+/* 统计格（设计稿 stat-grid 语言；共享 .stat-cell 底座之上补色相分域） */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 6px;
-  align-items: center;
-  flex-wrap: wrap;
-  margin-top: auto;
-  padding: 10px 20px 16px;
-  border-top: 1px solid var(--border);
+  margin: 0 14px 4px;
+}
+.stat-cell {
+  display: block;
+  text-align: center;
+  padding: 7px 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  text-decoration: none;
+  color: inherit;
+  transition:
+    border-color 0.12s,
+    background 0.12s,
+    transform 0.12s;
+}
+.stat-cell:hover {
+  border-color: oklch(56% 0.16 210 / 45%);
+  background: var(--accent-bg);
+  transform: translateY(-1px);
+}
+.stat-cell .sv {
+  font-size: 15px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--fg);
+  line-height: 1.1;
+}
+.stat-cell .sl {
+  font-size: 10.5px;
+  color: var(--muted);
+  margin-top: 2px;
 }
 </style>

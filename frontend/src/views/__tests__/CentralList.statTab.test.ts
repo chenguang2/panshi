@@ -85,7 +85,8 @@ async function mountPage(): Promise<VueWrapper> {
 }
 
 function statCells(wrapper: VueWrapper) {
-  return wrapper.findAll('.cl-card .cl-stat-cell.cl-stat-link')
+  // 21.11：统计格解剖化（.l5-panel .stat-cell）
+  return wrapper.findAll('.l5-panel .stat-cell')
 }
 
 describe('统一管理 · 统计格点击 → 本页集群详情 Tab（方案 A）', () => {

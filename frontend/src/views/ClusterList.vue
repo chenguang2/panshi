@@ -18,74 +18,117 @@
       @close="backupDialogVisible = false"
     />
 
-    <div class="cl-header-actions">
-      <SearchInput v-model="filterText" placeholder="搜索集群名称或显示名..." />
-      <select
-        v-model="groupFilter"
-        :title="groupFilter.startsWith('__') ? '' : groupFilter"
-        class="form-input"
-        style="width: 140px; flex-shrink: 0"
+    <!-- 卡片页面板（r15 与列表页同构；设计页 clusters.html）：工具条 / 状态行 / 网格
+         同处一个 .l5-card 面板——2026-11-20 修复「分组|平铺」工具条漂在面板外（用户实测）。 -->
+    <div class="l5-card cl-card-page">
+      <TableToolbar
+        v-model:mode="cardMode"
+        :count="filteredClusters.length"
+        count-unit="个集群"
+        :show-count="false"
+        :refreshing="loading"
+        @refresh="loadClusters"
       >
-        <option value="__all__">全部分组</option>
-        <option v-for="g in groupOptions" :key="g" :value="g === '' ? '__ung__' : g">{{ g || '未分组' }}</option>
-      </select>
-      <select v-model="statusFilter" class="form-input" style="width: 110px; flex-shrink: 0">
-        <option value="all">全部状态</option>
-        <option value="enabled">已启用</option>
-        <option value="disabled">已禁用</option>
-      </select>
-      <span class="text-sm text-muted">共 {{ filteredClusters.length }} 个集群</span>
-      <button v-if="hasCollapsed" class="btn btn-secondary btn-sm" @click="expandAllGroups">全部展开</button>
-      <button v-if="hasExpanded" class="btn btn-secondary btn-sm" @click="collapseAllGroups">全部收起</button>
-    </div>
+        <template #filters>
+          <SearchInput v-model="filterText" placeholder="搜索集群名称或显示名..." :width="150" />
+          <select
+            v-model="groupFilter"
+            :title="groupFilter.startsWith('__') ? '' : groupFilter"
+            class="l5-select"
+            style="width: 104px"
+          >
+            <option value="__all__">全部分组</option>
+            <option v-for="g in groupOptions" :key="g" :value="g === '' ? '__ung__' : g">{{ g || '未分组' }}</option>
+          </select>
+        </template>
+        <template #mode-extra>
+          <button
+            v-if="cardMode === 'group'"
+            type="button"
+            class="tool-btn fold-all-btn"
+            data-test="card-fold-all"
+            :title="pageHasFolded ? '展开全部分组' : '收起全部分组'"
+            @click="toggleFoldAll"
+          >
+            <StrokeIcon :name="pageHasFolded ? 'expandAll' : 'collapseAll'" :size="13" />
+            <span class="fold-all-label">{{ pageHasFolded ? '全部展开' : '全部收起' }}</span>
+          </button>
+        </template>
+      </TableToolbar>
 
-    <div v-if="loading" class="loading-state">加载中...</div>
-    <div v-else-if="filteredClusters.length === 0" class="cl-empty">
-      <!-- 空状态两分支（cluster-ux-close-loop B6.4）：从未创建 vs 筛选无结果 -->
-      <template v-if="hasActiveFilters">
-        <div class="cl-empty-icon">◈</div>
-        <div class="cl-empty-text">没有符合筛选条件的集群</div>
-        <button class="btn btn-secondary btn-sm" @click="clearFilters">清除筛选</button>
-      </template>
-      <template v-else>
-        <div class="cl-empty-icon">◈</div>
-        <div class="cl-empty-text">还没有集群</div>
-        <button class="btn btn-primary" @click="showAddModal">新建集群</button>
-      </template>
-    </div>
-    <div v-else>
-      <div v-for="group in groupedClusters" :key="group.name" class="cl-group">
-        <div class="cl-group-header" @click="toggleGroup(group.name)">
-          <span class="cl-group-arrow">{{ expandedGroups[group.name] ? '▾' : '▸' }}</span>
-          <span class="cl-group-name">{{ group.name || '未分组' }}</span>
-          <span class="cl-group-count">(共{{ group.clusters.length }}个)</span>
-          <a-button size="small" class="expand-group-btn" @click.stop="toggleGroup(group.name)">
-            {{ expandedGroups[group.name] ? '收起' : '展开' }}
-          </a-button>
+      <!-- 状态 chips（#85①：状态 = 带计数 chips 单一形态，替代旧状态下拉） -->
+      <div class="l5-chiprow" data-test="status-chip-row">
+        <span class="chiprow-label">状态</span>
+        <div class="f-chips status-chips" role="group" aria-label="按启用状态筛选">
+          <button
+            v-for="t in statusTabs"
+            :key="t.key"
+            type="button"
+            class="f-chip chip-status"
+            :class="{ active: statusFilter === t.key }"
+            :aria-pressed="statusFilter === t.key ? 'true' : 'false'"
+            @click="statusFilter = t.key"
+          >
+            {{ t.label }}<span class="f-count">{{ t.count }}</span>
+          </button>
         </div>
-        <div v-show="expandedGroups[group.name]" class="cl-grid card-grid">
-          <ClusterCard v-for="c in group.clusters" :key="c.id" :cluster="c" :route-badge="routeBadge(c)">
-            <template #actions>
-              <button class="btn btn-secondary btn-sm cl-action-btn" @click="viewCluster(c)">详情</button>
-              <button class="btn btn-ghost btn-sm cl-action-btn" @click="testCluster(c)">连接测试</button>
-              <button class="btn btn-ghost btn-sm cl-action-btn" @click="openDrift(c)">漂移检测</button>
-              <button class="btn btn-ghost btn-sm cl-action-btn" @click="editCluster(c)">编辑</button>
-              <a-dropdown :trigger="['click']">
-                <button class="btn btn-ghost btn-sm cl-action-btn" type="button">更多 ▾</button>
-                <template #overlay>
-                  <a-menu @click="onCardMenuClick($event, c)">
-                    <a-menu-item key="backup">备份下载</a-menu-item>
-                    <a-menu-item key="export">导出 Excel</a-menu-item>
-                  </a-menu>
-                </template>
-              </a-dropdown>
-              <button class="btn btn-ghost btn-sm cl-action-btn" style="color: var(--danger)" @click="deleteCluster(c)">
-                删除
-              </button>
-              <span style="flex: 1"></span>
-            </template>
-          </ClusterCard>
-        </div>
+        <span class="t-spacer"></span>
+      </div>
+
+      <div v-if="loading" class="loading-state">加载中...</div>
+      <div v-else-if="filteredClusters.length === 0" class="cl-empty">
+        <!-- 空状态两分支（cluster-ux-close-loop B6.4）：从未创建 vs 筛选无结果 -->
+        <template v-if="hasActiveFilters">
+          <div class="cl-empty-icon">◈</div>
+          <div class="cl-empty-text">没有符合筛选条件的集群</div>
+          <button class="btn btn-secondary btn-sm" @click="clearFilters">清除筛选</button>
+        </template>
+        <template v-else>
+          <div class="cl-empty-icon">◈</div>
+          <div class="cl-empty-text">还没有集群</div>
+          <button class="btn btn-primary" @click="showAddModal">新建集群</button>
+        </template>
+      </div>
+      <div v-else class="cl-grid-wrap card-grid" :class="[`mode-${cardMode}`]">
+        <template v-for="g in renderGroups" :key="g.clusterId">
+          <ClusterBand
+            v-if="cardMode === 'group'"
+            :name="g.clusterName || '未分组'"
+            :group="g.groupName"
+            :count-label="countLabelOf(g.count)"
+            :secondary="secondaryOf(g.rows)"
+            :hue-class="g.hueClass"
+            :folded="isFolded(g.clusterId)"
+            @toggle="toggleFold(g.clusterId)"
+          />
+          <div v-for="c in g.rows" v-show="cardMode !== 'group' || groupVisible(g.clusterId)" :key="c.id">
+            <ClusterCard :cluster="c" :route-badge="routeBadge(c)">
+              <template #actions>
+                <button class="btn btn-secondary btn-sm cl-action-btn" @click="viewCluster(c)">详情</button>
+                <button class="btn btn-ghost btn-sm cl-action-btn" @click="testCluster(c)">连接测试</button>
+                <button class="btn btn-ghost btn-sm cl-action-btn" @click="openDrift(c)">漂移检测</button>
+                <button class="btn btn-ghost btn-sm cl-action-btn" @click="editCluster(c)">编辑</button>
+                <a-dropdown :trigger="['click']">
+                  <button class="btn btn-ghost btn-sm cl-action-btn" type="button">更多 ▾</button>
+                  <template #overlay>
+                    <a-menu @click="onCardMenuClick($event, c)">
+                      <a-menu-item key="backup">备份下载</a-menu-item>
+                      <a-menu-item key="export">导出 Excel</a-menu-item>
+                    </a-menu>
+                  </template>
+                </a-dropdown>
+                <button
+                  class="btn btn-ghost btn-sm cl-action-btn"
+                  style="color: var(--danger)"
+                  @click="deleteCluster(c)"
+                >
+                  删除
+                </button>
+                <span style="flex: 1"></span>
+              </template>
+            </ClusterCard>
+          </div>
+        </template>
       </div>
     </div>
 
@@ -171,6 +214,10 @@ import ClusterDetailModal from '@/components/ClusterDetailModal.vue'
 import ClusterDriftDrawer from '@/components/ClusterDriftDrawer.vue'
 import ClusterBackupDialog from '@/components/ClusterBackupDialog.vue'
 import ClusterCard from '@/components/ClusterCard.vue'
+import TableToolbar from '@/components/TableToolbar.vue'
+import ClusterBand from '@/components/ClusterBand.vue'
+import StrokeIcon from '@/components/StrokeIcon.vue'
+import { useCardClusterGrouping } from '@/composables/useCardClusterGrouping'
 import api from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import { useClusterRouteBadge } from '@/composables/useClusterRouteBadge'
@@ -287,6 +334,13 @@ const groupedClusters = computed(() => {
   for (const key of keys) groups.push({ name: key, clusters: map.get(key)! })
   return groups
 })
+
+// ── 状态 chips（#85①；语义沿用既有 statusFilter 哨兵）──
+const statusTabs = computed(() => [
+  { key: 'all', label: '全部', count: filteredClusters.value.length },
+  { key: 'enabled', label: '已启用', count: filteredClusters.value.filter((c) => c.status === 1).length },
+  { key: 'disabled', label: '已禁用', count: filteredClusters.value.filter((c) => c.status !== 1).length },
+])
 
 const hasCollapsed = computed(() => Object.values(expandedGroups.value).some((v) => !v))
 const hasExpanded = computed(() => Object.values(expandedGroups.value).some((v) => v))
@@ -500,23 +554,56 @@ function deleteCluster(c: Cluster) {
 onMounted(() => {
   loadClusters()
 })
+
+// ── 集群分组 / 平铺双模式（共享组合式 + ClusterBand，AGENTS #87/#88）──
+// 组级次要指标（设计稿：节点 N · 路由 N）= 组内聚合
+const {
+  mode: cardMode,
+  groups: cardGroups,
+  countLabel: countLabelOf,
+  secondaryOf,
+  isFolded,
+  toggleFold,
+  pageHasFolded,
+  toggleFoldAll,
+  groupVisible,
+} = useCardClusterGrouping<Cluster>({
+  rows: () => filteredClusters.value,
+  unit: '个集群',
+  // 分组键 = 分组名（composable 以 clusterIdOf 为分堆键；此处传组伪 id——稳定序，band 色相随之）
+  clusterIdOf: (c) => groupIdOf(c.group_name || ''),
+  clusterNameOf: (c) => c.group_name || '未分组',
+  groupNameOf: () => '',
+  secondary: (rows) => {
+    const nodes = rows.reduce((acc, c) => acc + (c.node_count || 0), 0)
+    const routes = rows.reduce((acc, c) => acc + (c.route_count || 0), 0)
+    return `节点 ${nodes} · 路由 ${routes}`
+  },
+})
+
+/** 组伪 id：与 groupedClusters 同序（未分组置顶 + 字母序），供 composable 分堆与色相 */
+const groupIdOf = (name: string): number => {
+  const idx = groupedClusters.value.findIndex((g) => (g.name || '') === name)
+  return idx >= 0 ? idx + 1 : 999
+}
+
+const renderGroups = computed(() =>
+  cardMode.value === 'group'
+    ? cardGroups.value
+    : [
+        {
+          clusterId: -1,
+          clusterName: '',
+          groupName: '',
+          hueClass: 'cluster-c1',
+          rows: filteredClusters.value,
+          count: filteredClusters.value.length,
+        },
+      ],
+)
 </script>
 
 <style scoped>
-.cl-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 20px;
-  flex-wrap: nowrap;
-}
-.cl-header-actions .search-input-wrap {
-  width: 200px;
-  flex-shrink: 0;
-}
-.cl-header-actions :deep(.form-input) {
-  width: 100%;
-}
 .loading-state {
   text-align: center;
   padding: 60px 0;
@@ -691,9 +778,5 @@ onMounted(() => {
 }
 
 @media (max-width: 768px) {
-  .cl-header-actions {
-    flex-direction: column;
-    align-items: stretch;
-  }
 }
 </style>

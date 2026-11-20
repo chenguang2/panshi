@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>概览 · 方案 C（卡片型） — 磐石网关管理平台</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+/* 该页独有：头部大数统计（4 张可点统计卡，同卡片页统计格语言）与表格卡网格；
+   表格解剖走 theme.css .l5-table 共享类 */
+.dash-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 24px; }
+.dstat { position: relative; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); padding: 14px 16px 12px; display: flex; flex-direction: column; gap: 2px; text-decoration: none; transition: all .15s; box-shadow: var(--shadow-sm); }
+.dstat::before { content: ''; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 2px 2px 0; background: var(--cc, var(--accent)); }
+.dstat:hover { border-color: oklch(56% 0.16 210 / 45%); transform: translateY(-1px); box-shadow: var(--shadow-md); }
+.dstat .d-top { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); }
+.dstat .d-top svg { width: 14px; height: 14px; color: var(--cc, var(--accent)); }
+.dstat .d-num { font-size: 26px; font-weight: 700; font-family: var(--font-mono); color: var(--fg); line-height: 1.15; }
+.dstat .d-sub { font-size: 11.5px; color: var(--muted); }
+.dstat .d-sub b { color: var(--success); font-weight: 600; }
+.dstat .d-sub b.warn { color: var(--warning); }
+.updated-at { font-size: 11.5px; color: var(--muted); margin-right: 4px; align-self: center; white-space: nowrap; }
+
+.dash-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 24px; }
+.dash-card { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-sm); overflow: hidden; }
+.dash-card .dc-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px 10px; border-bottom: 1px solid var(--border); }
+.dash-card .dc-title { font-size: 13px; font-weight: 700; color: var(--fg); }
+.dash-card .dc-badges { display: flex; gap: 5px; margin-left: auto; align-items: center; }
+.dash-card .dc-link { font-size: 12px; color: var(--accent); white-space: nowrap; }
+.dash-card .dc-link:hover { text-decoration: underline; }
+.dash-card table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.dash-card td { padding: 8px 14px; border-top: 1px solid var(--border); font-size: 12.5px; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash-card tbody tr { transition: background .12s; }
+.dash-card tbody tr:hover { background: oklch(56% 0.16 210 / 4%); }
+.dash-card tbody tr:first-child td { border-top: none; }
+.c-dim { color: var(--muted); }
+.c-mono { font-family: var(--font-mono); }
+.c-strong { font-weight: 600; }
+.pipe-uri { font-family: var(--font-mono); font-size: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; color: var(--fg); }
+
+/* 快捷入口（与现实现 quick-chip 同语义，走设计 token） */
+.quick-card { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-sm); padding: 14px; }
+.quick-card .dc-title { font-size: 13px; font-weight: 700; color: var(--fg); margin-bottom: 10px; display: block; }
+.quick-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.quick-chip { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); font-size: 12px; color: var(--muted); text-decoration: none; transition: all .12s; }
+.quick-chip:hover { border-color: oklch(56% 0.16 210 / 40%); color: var(--accent); background: var(--accent-bg); }
+.quick-chip .q-cnt { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); }
+.quick-chip .q-dot { width: 5px; height: 5px; border-radius: 999px; background: var(--success); }
+.quick-chip.q-warn .q-dot { background: var(--warning); }
+</style>
+</head>
+<body>
+<div class="app-layout">
+  <aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="sidebar-logo-icon">磐</div>
+    <span class="sidebar-logo-text">磐石</span>
+    <span class="sidebar-logo-version">v1.0</span>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">核心功能</div>
+      <a class="nav-item active" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h5v5H3v-5zm7 0h5v5h-5v-5z"/></svg><span>概览</span></a>
+      <a class="nav-item" href="central.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="14" height="5" rx="1"/><rect x="2" y="10" width="14" height="5" rx="1"/></svg><span>统一管理</span></a>
+      <a class="nav-item" href="clusters.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="3"/><circle cx="3.5" cy="4" r="1.6"/><circle cx="14.5" cy="4" r="1.6"/><circle cx="3.5" cy="14" r="1.6"/><circle cx="14.5" cy="14" r="1.6"/><path d="M4.8 5.1 6.6 7m6.6-1.9-1.8 1.9M4.8 12.9 6.6 11m6.6 1.9-1.8-1.9"/></svg><span>集群管理</span></a>
+      <a class="nav-item" href="nodes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="3"/><circle cx="3.5" cy="4" r="1.6"/><circle cx="14.5" cy="4" r="1.6"/><circle cx="3.5" cy="14" r="1.6"/><circle cx="14.5" cy="14" r="1.6"/><path d="M4.8 5.1 6.6 7m6.6-1.9-1.8 1.9M4.8 12.9 6.6 11m6.6 1.9-1.8-1.9"/></svg><span>节点管理</span></a>
+      <a class="nav-item" href="upstreams.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>上游管理</span></a>
+      <a class="nav-item" href="routes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l5-7v5h9v4H7v5l-5-7z"/></svg><span>路由管理</span></a>
+      <a class="nav-item" href="plugin-groups.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h5v5H3v-5zm7 0h5v5h-5v-5z"/></svg><span>插件组</span></a>
+      <a class="nav-item" href="plugin-metadata.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h8l3 3v9a1 1 0 01-1 1H5a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M9 7v4M9 13v-1"/></svg><span>插件元数据</span></a>
+      <a class="nav-item" href="global-rules.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l6 3v4c0 3-2.5 5.5-6 7-3.5-1.5-6-4-6-7V5l6-3z"/></svg><span>全局规则</span></a>
+      <a class="nav-item" href="static-resources.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3a1 1 0 011-1h6l4 4v10a1 1 0 01-1 1H6a1 1 0 01-1-1V3zM11 2v4h4"/></svg><span>静态资源</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">证书管理</div>
+      <a class="nav-item" href="ca-certs.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="12.5" r="2.5"/><path d="M8 12.5h7M13 12.5v2.5M15 12.5v2.5"/></svg><span>CA 根证书</span></a>
+      <a class="nav-item" href="server-certs.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="10" height="8" rx="1"/><path d="M6.5 8V6a2.5 2.5 0 015 0v2"/></svg><span>服务器证书</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">边缘网络</div>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="14" height="10" rx="1"/><path d="M6 8h6M9 8v4"/></svg><span>edge.env 配置</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9h4l2-4 3 8 2-4h3"/></svg><span>流量监控</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">运维管理</div>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="6"/><path d="M9 5v4l3 2"/></svg><span>任务中心</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="12" height="12" rx="1"/><path d="M3 8h12M8 8v7"/></svg><span>系统管理</span></a>
+    </div>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="sidebar-user"><div class="sidebar-user-avatar">a</div><div><div class="sidebar-user-name">admin</div><div class="sidebar-user-role">超级管理员</div></div></div>
+  </div>
+  </aside>
+
+  <div class="main-area">
+    <header class="top-header">
+      <div class="top-header-breadcrumb"><a href="#">首页</a><span>/</span><span>概览</span></div>
+      <div class="top-header-actions">
+        <div class="h-search">
+          <input type="text" placeholder="搜索功能或页面...">
+          <svg class="s-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        </div>
+        <div class="header-user"><div class="header-avatar">管</div><span>管理员</span></div>
+      </div>
+    </header>
+
+    <div class="content-area">
+      <div class="page-header" style="margin-bottom:20px;">
+        <div>
+          <h1>概览<span class="ph-inline"><span class="ph-lite lite-accent"><b>8</b> 集群</span><span class="ph-lite"><b>31</b> 节点</span></span></h1>
+          <p>平台资源统计与快捷入口</p>
+        </div>
+        <div class="page-header-actions">
+          <span class="updated-at" title="数据采样时间；点「刷新」重新拉取">更新于 11/20 19:18</span>
+          <button class="btn btn-secondary" onclick="location.reload()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 11-2.64-6.36"/><path d="M21 3v6h-6"/></svg>刷新</button>
+        </div>
+      </div>
+
+      <!-- ── 头部大数统计（4 张可点统计卡；左条 = 资源色相，同卡片页统计格语言） ── -->
+      <div class="dash-stats">
+        <a class="dstat cluster-c1" href="clusters.html">
+          <span class="d-top"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="12" height="4" rx="1"/><rect x="5" y="8" width="8" height="3" rx="1"/><rect x="6" y="13" width="6" height="3" rx="1"/></svg>集群</span>
+          <span class="d-num">8</span>
+          <span class="d-sub">多集群管理 · 4 分组</span>
+        </a>
+        <a class="dstat cluster-c3" href="nodes.html">
+          <span class="d-top"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="4" r="2"/><circle cx="4" cy="14" r="2"/><circle cx="14" cy="14" r="2"/><path d="M9 6v3M4 12l2-2M14 12l-2-2"/></svg>节点</span>
+          <span class="d-num">31</span>
+          <span class="d-sub">健康 <b>29</b> · 离线 <b class="warn">2</b></span>
+        </a>
+        <a class="dstat cluster-c5" href="upstreams.html">
+          <span class="d-top"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v12M5 10l4 4 4-4M2 16h14"/></svg>上游</span>
+          <span class="d-num">24</span>
+          <span class="d-sub">后端服务</span>
+        </a>
+        <a class="dstat cluster-c7" href="routes.html">
+          <span class="d-top"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l4-6v4h10v4H6v4l-4-6z"/></svg>路由</span>
+          <span class="d-num">132</span>
+          <span class="d-sub">API 路由规则</span>
+        </a>
+      </div>
+
+      <!-- ── 三列状态卡：集群 / 节点连通状态 / 最近创建的路由 ── -->
+      <div class="dash-cards">
+        <!-- 集群 -->
+        <div class="dash-card">
+          <div class="dc-head">
+            <span class="dc-title">集群</span>
+            <span class="dc-badges"><span class="ph-lite"><b>8</b> 总数</span></span>
+            <span class="t-spacer"></span>
+            <a class="dc-link" href="clusters.html">查看全部集群 →</a>
+          </div>
+          <table>
+            <tbody>
+              <tr>
+                <td><span class="c-strong">生产集群 A</span> <span class="c-dim">prod-a</span></td>
+                <td style="width:84px;text-align:right;padding-right:14px;"><span class="ps-tag ps-pub">已启用</span></td>
+                <td style="width:64px;text-align:right;padding-right:14px;"><span class="c-mono c-dim" title="健康节点 / 节点总数">3/3</span></td>
+              </tr>
+              <tr>
+                <td><span class="c-strong">支付集群</span> <span class="c-dim">pay-gw</span></td>
+                <td style="width:84px;text-align:right;padding-right:14px;"><span class="ps-tag ps-pub">已启用</span></td>
+                <td style="width:64px;text-align:right;padding-right:14px;"><span class="c-mono" style="color:var(--warning)" title="健康节点 / 节点总数">2/3</span></td>
+              </tr>
+              <tr>
+                <td><span class="c-strong">内容分发集群</span> <span class="c-dim">cdn-edge</span></td>
+                <td style="width:84px;text-align:right;padding-right:14px;"><span class="ps-tag ps-pub">已启用</span></td>
+                <td style="width:64px;text-align:right;padding-right:14px;"><span class="c-mono c-dim" title="健康节点 / 节点总数">2/2</span></td>
+              </tr>
+              <tr>
+                <td><span class="c-strong">压测集群</span> <span class="c-dim">bench</span></td>
+                <td style="width:84px;text-align:right;padding-right:14px;"><span class="ps-tag ps-unpub">已禁用</span></td>
+                <td style="width:64px;text-align:right;padding-right:14px;"><span class="c-mono c-dim" title="健康节点 / 节点总数">0/1</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- 节点连通状态 -->
+        <div class="dash-card">
+          <div class="dc-head">
+            <span class="dc-title">节点连通状态</span>
+            <span class="dc-badges">
+              <span class="ph-lite"><b>29</b> 检测通过</span>
+              <span class="ph-lite"><b>2</b> 检测失败</span>
+            </span>
+          </div>
+          <table>
+            <tbody>
+              <tr>
+                <td><span class="c-strong">192.168.1.16</span><span class="c-dim"> :8080</span></td>
+                <td><span class="c-dim">支付集群</span></td>
+                <td style="width:96px;text-align:right;"><span class="ps-tag ps-partial" title="上次连通检测失败">检测失败</span></td>
+              </tr>
+              <tr>
+                <td><span class="c-strong">192.168.2.13</span><span class="c-dim"> :8080</span></td>
+                <td><span class="c-dim">预发主集群</span></td>
+                <td style="width:96px;text-align:right;"><span class="ps-tag ps-partial" title="上次连通检测失败">检测失败</span></td>
+              </tr>
+              <tr>
+                <td><span class="c-strong">192.168.1.11</span><span class="c-dim"> :8080</span></td>
+                <td><span class="c-dim">生产集群 A</span></td>
+                <td style="width:96px;text-align:right;"><span class="ps-tag ps-pub" title="连通检测通过">检测通过</span></td>
+              </tr>
+              <tr>
+                <td><span class="c-strong">192.168.1.12</span><span class="c-dim"> :8080</span></td>
+                <td><span class="c-dim">生产集群 A</span></td>
+                <td style="width:96px;text-align:right;"><span class="ps-tag ps-pub" title="连通检测通过">检测通过</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- 最近创建的路由 -->
+        <div class="dash-card">
+          <div class="dc-head">
+            <span class="dc-title">最近创建的路由</span>
+            <span class="t-spacer"></span>
+            <a class="dc-link" href="routes.html">查看全部路由 →</a>
+          </div>
+          <table>
+            <tbody>
+              <tr>
+                <td><span class="c-strong">订单创建</span></td>
+                <td><span class="pipe-uri">/api/orders</span></td>
+                <td style="width:88px;text-align:right;padding-right:14px;"><span class="ps-tag ps-pub">v3</span></td>
+              </tr>
+              <tr>
+                <td><span class="c-strong">用户查询接口</span></td>
+                <td><span class="pipe-uri">/api/users/*</span></td>
+                <td style="width:88px;text-align:right;padding-right:14px;"><span class="ps-tag ps-pending" title="配置已修改，发布后生效">待发布</span></td>
+              </tr>
+              <tr>
+                <td><span class="c-strong">健康探测</span></td>
+                <td><span class="pipe-uri">/healthz</span></td>
+                <td style="width:88px;text-align:right;padding-right:14px;"><span class="ps-tag ps-pub">v1</span></td>
+              </tr>
+              <tr>
+                <td><span class="c-strong">静态资源路由</span></td>
+                <td><span class="pipe-uri">/static/*</span></td>
+                <td style="width:88px;text-align:right;padding-right:14px;"><span class="ps-tag ps-unpub" title="从未发布或已全部回滚">未发布</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── 快捷入口（运维操作 + 资源入口 + 指标；countKey 计数 + 运行态圆点） ── -->
+      <div class="quick-card">
+        <span class="dc-title">快捷入口</span>
+        <div class="quick-row">
+          <a class="quick-chip" href="#"><span class="q-dot"></span>节点任务中心</a>
+          <a class="quick-chip" href="#"><span class="q-dot"></span>审计日志</a>
+          <a class="quick-chip" href="#">数据库管理</a>
+          <a class="quick-chip" href="#">主机清单</a>
+          <a class="quick-chip" href="#"><span class="q-dot"></span>自启动管理</a>
+          <a class="quick-chip" href="#"><span class="q-dot"></span>Edge 直连</a>
+          <a class="quick-chip" href="#">用户管理</a>
+          <a class="quick-chip" href="plugin-groups.html">插件组<span class="q-cnt">3</span></a>
+          <a class="quick-chip" href="plugin-metadata.html">插件元数据<span class="q-cnt">2</span></a>
+          <a class="quick-chip" href="global-rules.html">全局规则<span class="q-cnt">1</span></a>
+          <a class="quick-chip" href="static-resources.html">静态资源<span class="q-cnt">1</span></a>
+          <a class="quick-chip" href="#">指标总览</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

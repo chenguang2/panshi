@@ -433,7 +433,8 @@ describe('CentralList.vue - 空状态与 actions 统一（B6）', () => {
   it('卡片 actions 统一顺序「详情 / 连接测试 / 漂移检测 / 编辑 / 删除」，详情为 btn-secondary', async () => {
     const wrapper = await mountCentral(oneCluster)
     await flushPromises()
-    const actionsRow = wrapper.find('.cl-card-actions')
+    // 21.11：卡片解剖 l5-panel 化——actions slot 落 .lp-foot（旧 .cl-card-actions 仅存于展开区名称行）
+    const actionsRow = wrapper.find('.lp-foot')
     expect(actionsRow.exists()).toBe(true)
     const labels = actionsRow.findAll('button').map((b) => b.text())
     expect(labels).toEqual(['详情', '连接测试', '漂移检测', '编辑', '更多 ▾', '删除'])
@@ -601,7 +602,8 @@ describe('CentralList.vue 刷新保状态与延迟加载（central-management-ux
     await flushPromises()
 
     // 统计格「路由」→ 最大化并切到路由 Tab
-    const statCell = wrapper.findAll('.cl-stat-cell').find((c) => c.text().includes('路由'))
+    // 21.11：统计格解剖化（.stat-cell）
+    const statCell = wrapper.findAll('.stat-cell').find((c) => c.text().includes('路由'))
     expect(statCell).toBeTruthy()
     await statCell!.trigger('click')
     await flushPromises()
