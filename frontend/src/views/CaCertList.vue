@@ -2,7 +2,9 @@
   <div class="ssl-page">
     <PageHeader title="CA 根证书" description="平台自建 CA 的信任锚点 · 可放心分发给最终用户安装">
       <template #actions>
-        <button class="btn btn-primary" @click="openCaCreateDialog">＋ 创建 CA 根证书</button>
+        <button class="btn btn-primary" @click="openCaCreateDialog">
+          <StrokeIcon name="plus" :size="13" /> 创建 CA 根证书
+        </button>
       </template>
     </PageHeader>
 

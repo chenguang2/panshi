@@ -5,7 +5,7 @@
         <PageStatBadges :items="headerStatItems" />
       </template>
       <template #actions>
-        <button class="btn btn-primary" @click="openCreateModal">+ 新建上游</button>
+        <button class="btn btn-primary" @click="openCreateModal"><StrokeIcon name="plus" :size="13" /> 新建上游</button>
       </template>
     </PageHeader>
 

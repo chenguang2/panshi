@@ -6,7 +6,9 @@
         <button class="btn btn-secondary" :aria-pressed="batchMode" @click="toggleBatchMode">
           {{ batchMode ? '退出批量管理' : '批量管理' }}
         </button>
-        <button class="btn btn-primary" @click="openCreateWizard">+ 新建四层代理</button>
+        <button class="btn btn-primary" @click="openCreateWizard">
+          <StrokeIcon name="plus" :size="13" /> 新建四层代理
+        </button>
       </template>
     </PageHeader>
 

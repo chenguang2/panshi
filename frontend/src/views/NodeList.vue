@@ -8,7 +8,7 @@
         <button class="btn btn-secondary" @click="openBatchImport">
           <StrokeIcon name="upload" :size="13" /> 批量导入
         </button>
-        <button class="btn btn-primary" @click="openAddModal">+ 添加节点</button>
+        <button class="btn btn-primary" @click="openAddModal"><StrokeIcon name="plus" :size="13" /> 添加节点</button>
       </template>
     </PageHeader>
 

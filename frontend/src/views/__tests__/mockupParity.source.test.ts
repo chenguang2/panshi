@@ -87,14 +87,16 @@ describe('mockup-parity：页面接线锚点', () => {
     expect(layout).toMatch(/padding: 24px;/)
     expect(layout).not.toContain('border-bottom: 2px solid var(--accent)')
   })
-  it('节点页：批量条 l5-batchbar（has-sel + 清除选择），批量导入在页头（先于「+ 添加节点」）', () => {
+  it('节点页：批量条 l5-batchbar（has-sel + 清除选择），批量导入在页头（先于「添加节点」）', () => {
     const s = page('NodeList.vue')
     expect(s).toContain('class="l5-batchbar" :class="{ \'has-sel\': selectedNodeKeys.length > 0 }"')
     expect(s).toContain('清除选择')
     const importPos = s.indexOf('批量导入')
-    const addPos = s.indexOf('+ 添加节点')
+    // page-header-actions-standard：加号前缀退场，改由 StrokeIcon 的 plus 承担
+    const addPos = s.indexOf('<StrokeIcon name="plus" :size="13" /> 添加节点')
     expect(importPos).toBeGreaterThan(-1)
     expect(addPos).toBeGreaterThan(importPos)
+    expect(s).not.toContain('+ 添加节点')
   })
   it('三页：列配置触发器带 ▾（CaretDownOutlined）', () => {
     for (const f of ['NodeList.vue', 'UpstreamList.vue', 'RouteList.vue']) {

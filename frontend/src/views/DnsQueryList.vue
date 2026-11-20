@@ -9,7 +9,9 @@
         <button class="btn btn-secondary" :aria-pressed="batchMode" @click="toggleBatchMode">
           {{ batchMode ? '退出批量管理' : '批量管理' }}
         </button>
-        <button class="btn btn-primary" @click="openCreateForm">+ 新建 DNS 代理路由</button>
+        <button class="btn btn-primary" @click="openCreateForm">
+          <StrokeIcon name="plus" :size="13" /> 新建 DNS 代理路由
+        </button>
       </template>
     </PageHeader>
 

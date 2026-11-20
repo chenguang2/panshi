@@ -6,7 +6,9 @@
         <button class="btn btn-secondary" :aria-pressed="batchMode" @click="toggleBatchMode">
           {{ batchMode ? '退出批量管理' : '批量管理' }}
         </button>
-        <button class="btn btn-primary" @click="openAddModal">+ 添加静态资源</button>
+        <button class="btn btn-primary" @click="openAddModal">
+          <StrokeIcon name="plus" :size="13" /> 添加静态资源
+        </button>
       </template>
     </PageHeader>
 
