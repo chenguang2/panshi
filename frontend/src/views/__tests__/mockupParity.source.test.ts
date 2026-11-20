@@ -652,7 +652,7 @@ describe('mockup-parity r15（卡片页与列表页同构：工具条 / 状态�
       s.indexOf('批量管理</button>') === -1
         ? s.indexOf("batchMode ? '退出批量管理' : '批量管理'")
         : s.indexOf('批量管理</button>')
-    const createIdx = s.indexOf('新建四层代理</button>')
+    const createIdx = s.indexOf('新建四层代理')
     expect(batchIdx).toBeGreaterThan(-1)
     expect(createIdx).toBeGreaterThan(-1)
     expect(batchIdx).toBeLessThan(createIdx)

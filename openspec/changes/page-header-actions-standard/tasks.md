@@ -29,5 +29,5 @@
 
 - [x] 4.1 新增 `src/views/__tests__/pageHeaderActions.source.test.ts`（70 例）：禁 `+`/`＋` 前缀、primary ≤ 1 且最右、禁 inline margin、禁内联 `<svg>`（图标必须来自 `StrokeIcon`）
 - [x] 4.2 同文件第二段：设计页 HTML 与实现页头按钮数量一一对应 + 设计页无前缀（14 对）
-- [x] 4.3 `vue-tsc -b` 干净；全量 `vitest --maxWorkers=4`：3165 passed / 2 failed（`mockupParity` 断言反转已修；`DbBackupRestoreWizard.ux` 单跑 21/21 绿，判定 #58 波动）；`openspec validate --all` 见收口记录
+- [x] 4.3 `vue-tsc -b` 干净；全量 `vitest --maxWorkers=4` 两轮：首轮 3165 passed / 2 failed（`mockupParity` 两处旧文案断言已反转；`DbBackupRestoreWizard.ux` 单跑 21/21 绿），次轮 3166 passed / 1 failed（`RelayGateways` 单跑 63/63 绿）——均判定 #58 波动；`openspec validate --all` 223 passed / 0 failed
 - [x] 4.4 真机 1600 视口逐页 DOM 核对 12 页（`/tmp/opencode/parity-central/check-headers.mjs` 输出 + `hdr-*.png`）：按钮文案/主次/图标/inline margin 全部符合规范；`hdr-nodes.png` 目检通过
