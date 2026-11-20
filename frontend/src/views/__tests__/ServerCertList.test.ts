@@ -86,7 +86,6 @@ describe('ServerCertList 分发警示页（ssl-cert-management）', () => {
     expect(banner.text()).toContain('请勿将服务器证书分发给终端用户')
     expect(banner.text()).toContain('CA 根证书')
     expect(banner.text()).toContain('立即失效')
-    expect(banner.text()).toContain('客户端证书')
     const goBtn = banner.findAll('button').find((b) => b.text().includes('前往 CA 根证书下载'))
     expect(goBtn).toBeDefined()
     await goBtn!.trigger('click')
@@ -121,38 +120,36 @@ describe('ServerCertList 分发警示页（ssl-cert-management）', () => {
   it('client 证书卡片无「下载证书」按钮（引导查看抽屉）', async () => {
     setupGet([mockCert({ id: 3, name: 'client1', cert_type: 'client' }), caCert])
     const w = await mountPage()
-    const card = w.findAll('.ssl-card').find((c) => c.text().includes('client1'))
-    const btns = card!.findAll('button').map((b) => b.text())
-    expect(btns).not.toContain('下载证书')
-    expect(btns).not.toContain('版本管理')
-    expect(btns).toContain('查看')
+    const card = w.findAll('.l5-panel').find((c) => c.text().includes('client1'))
+    // 卡片页推广：下载证书/版本管理入卡脚 ⋯ 菜单（.mi-main 主文案精确断言）
+    await card!.find('.lp-foot .op-btn').trigger('click')
+    const items = card!.findAll('.l5-menu .mi-main').map((b) => b.text())
+    expect(items).not.toContain('下载证书')
+    expect(items).not.toContain('版本管理')
+    expect(items).toContain('查看')
   })
 
-  it('server 卡片提供「下载证书」入口，点击打开分发弹窗（证书上下文正确）', async () => {
+  it('server 卡片菜单无「下载证书」（下载入口下线，2026-11-20 用户裁决）', async () => {
     const w = await mountPage()
-    const dlBtn = w.findAll('button').find((b) => b.text() === '下载证书')
-    expect(dlBtn).toBeDefined()
-    await dlBtn!.trigger('click')
-    const dialog = w.findComponent({ name: 'SslCertDownloadDialog' })
-    expect(dialog.exists()).toBe(true)
-    expect(dialog.props('cert').name).toBe('srv')
+    await w.find('.lp-foot .op-btn').trigger('click')
+    const items = w.findAll('.l5-menu .mi-main').map((b) => b.text())
+    expect(items).not.toContain('下载证书')
+    expect(items).toEqual(['查看', '版本管理', '删除'])
   })
 
-  it('顶部操作栏含「添加已有证书」「生成证书」；计数「N 个服务器证书」', async () => {
+  it('页头动作：「生成证书」保留，「添加已有证书」已移除（2026-11-20 用户裁决）；计数归 chips', async () => {
     const w = await mountPage()
-    expect(w.findAll('button').some((b) => b.text().includes('添加已有证书'))).toBe(true)
+    expect(w.findAll('button').some((b) => b.text().includes('添加已有证书'))).toBe(false)
     expect(w.findAll('button').some((b) => b.text() === '生成证书')).toBe(true)
-    expect(w.text()).toContain('共 1 个服务器证书')
+    // 计数归 chips「全部 N」（AGENTS #86，工具条不再显示「共 N 个」）
+    expect(w.text()).toContain('全部')
+    expect(w.findAll('.f-chip.chip-status')[0]?.text()).toContain('1')
   })
 
-  it('页头层级（全站规范）：生成证书=唯一 primary（平台主路径），添加已有证书=次级', async () => {
+  it('页头层级：生成证书 = 唯一 primary（平台主路径）', async () => {
     const w = await mountPage()
-    const addBtn = w.findAll('button').find((b) => b.text().includes('添加已有证书'))
     const genBtn = w.findAll('button').find((b) => b.text() === '生成证书')
-    expect(addBtn, '应有添加已有证书按钮').toBeTruthy()
     expect(genBtn, '应有生成证书按钮').toBeTruthy()
-    expect(addBtn!.classes()).not.toContain('btn-primary')
-    expect(addBtn!.classes()).toContain('btn-secondary')
     expect(genBtn!.classes()).toContain('btn-primary')
   })
 
@@ -210,7 +207,7 @@ describe('ServerCertList 匹配名单同步（ssl-cert-rollback-consistency）',
     const ServerCertList = (await import('../ServerCertList.vue')).default
     const w = mount(ServerCertList, { global: { stubs } })
     await flushPromises()
-    const card = w.findAll('.ssl-card').find((c) => c.text().includes('srv'))
+    const card = w.findAll('.l5-panel').find((c) => c.text().includes('srv'))
     expect(card!.text()).toContain('匹配名单与证书 SAN 不一致')
     expect(card!.findAll('button').some((b) => b.text() === '同步')).toBe(true)
   })

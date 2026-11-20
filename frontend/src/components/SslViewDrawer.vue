@@ -38,40 +38,6 @@
                   <a-tag color="purple">CA 根证书</a-tag>
                 </a-descriptions-item>
               </a-descriptions>
-
-              <!-- CA 操作 -->
-              <div class="ca-actions" style="margin-top: 12px; display: flex; gap: 8px">
-                <button class="btn btn-primary btn-sm" @click="downloadCaCert(cert)">下载 CA 证书 (.crt)</button>
-                <button class="btn btn-ghost btn-sm" style="color: var(--danger)" @click="caKeyConfirmVisible = true">
-                  下载 CA 私钥
-                </button>
-              </div>
-
-              <!-- CA 私钥下载确认弹窗 -->
-              <div class="modal-overlay" :style="{ display: caKeyConfirmVisible ? 'flex' : 'none' }">
-                <div class="modal" style="max-width: 420px">
-                  <div class="modal-header">
-                    <h2>下载 CA 私钥</h2>
-                    <button class="modal-close" @click="caKeyConfirmVisible = false">&times;</button>
-                  </div>
-                  <div class="modal-body">
-                    <p style="font-size: 14px; line-height: 1.6">
-                      下载 CA 私钥属于<strong style="color: var(--danger)">高风险操作</strong
-                      >，确认后私钥将以明文形式下载。<strong style="color: var(--danger)"
-                        >CA 私钥绝不可分发给终端用户</strong
-                      >（私钥仅用于签发证书）。
-                    </p>
-                    <p style="font-size: 13px; color: var(--muted); margin-top: 8px">请确保在安全环境中操作。</p>
-                    <div v-if="caKeyError" class="form-error" style="margin-top: 12px">{{ caKeyError }}</div>
-                  </div>
-                  <div class="modal-footer">
-                    <button class="btn btn-ghost" @click="caKeyConfirmVisible = false">取消</button>
-                    <button class="btn btn-danger" @click="doDownloadCaKey" :disabled="caKeyDownloading">
-                      {{ caKeyDownloading ? '下载中...' : '确认下载' }}
-                    </button>
-                  </div>
-                </div>
-              </div>
             </template>
 
             <!-- SSL 证书专用视图 -->
@@ -158,27 +124,14 @@
               </template>
             </template>
 
-            <!-- 客户端证书特定操作 -->
-            <div v-if="cert.cert_type === 'client'" style="margin-top: 12px">
-              <button class="btn btn-primary btn-sm" @click="downloadClientBundle(cert)">下载客户端证书包</button>
-            </div>
             <div class="section-header">
               <a-divider style="flex: 1; min-width: 0">证书内容 (PEM)</a-divider>
-              <button
-                class="btn btn-ghost btn-sm download-btn"
-                @click="downloadCert('cert', cert.cert, `${cert.name}.crt`)"
-              >
-                📥 下载
-              </button>
             </div>
             <pre class="cert-preview">{{ cert.cert }}</pre>
             <div v-if="!cert.is_ca && cert.has_private_key" class="section-header">
               <a-divider style="flex: 1; min-width: 0">私钥内容 (PEM)</a-divider>
               <button class="btn btn-ghost btn-sm download-btn" @click="togglePrivateKey">
                 {{ showPrivateKey ? '🙈 隐藏' : '👁 显示' }}
-              </button>
-              <button class="btn btn-ghost btn-sm download-btn" @click="downloadPrivateKey(`${cert.name}_key.pem`)">
-                📥 下载
               </button>
             </div>
             <pre v-if="!cert.is_ca && cert.has_private_key" class="cert-preview">{{
@@ -187,12 +140,6 @@
             <template v-if="cert.algorithm === 'sm2' && cert.sign_cert">
               <div class="section-header">
                 <a-divider style="flex: 1; min-width: 0">签名证书 (sign_cert)</a-divider>
-                <button
-                  class="btn btn-ghost btn-sm download-btn"
-                  @click="downloadCert('sign_cert', cert.sign_cert, `${cert.name}_sign.crt`)"
-                >
-                  📥 下载
-                </button>
               </div>
               <pre class="cert-preview">{{ cert.sign_cert }}</pre>
             </template>
@@ -201,12 +148,6 @@
                 <a-divider style="flex: 1; min-width: 0">签名私钥 (sign_key)</a-divider>
                 <button class="btn btn-ghost btn-sm download-btn" @click="toggleSignKey">
                   {{ showSignKey ? '🙈 隐藏' : '👁 显示' }}
-                </button>
-                <button
-                  class="btn btn-ghost btn-sm download-btn"
-                  @click="downloadPrivateKey(`${cert.name}_sign_key.pem`)"
-                >
-                  📥 下载
                 </button>
               </div>
               <pre class="cert-preview">{{
@@ -265,7 +206,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import { message } from 'ant-design-vue'
-import { downloadPem, buildCertZip, downloadBlob, downloadCertFile, buildCertFileName } from '@/utils/download'
+import { downloadPem } from '@/utils/download'
 import { formatDateOnly } from '@/utils/format'
 import {
   expireBadgeClass,
@@ -307,9 +248,6 @@ const viewExpanded = ref<Record<string, boolean>>({})
 const mtlsViewExpanded = ref(false)
 const showPrivateKey = ref(false)
 const showSignKey = ref(false)
-const caKeyConfirmVisible = ref(false)
-const caKeyDownloading = ref(false)
-const caKeyError = ref('')
 // ssl-ux-review-fixes 9.3：私钥经按需端点取回后缓存展示（响应已掩码，本地无明文）
 const liveKeys = ref<{ private_key: string; sign_key: string }>({ private_key: '', sign_key: '' })
 const liveKeysLoading = ref(false)
@@ -359,10 +297,6 @@ function toggleViewLog(index: string | number) {
   viewExpanded.value[String(index)] = !viewExpanded.value[String(index)]
 }
 
-function downloadCert(_type: string, content: string, filename: string) {
-  if (content) downloadPem(content, filename)
-}
-
 // ssl-ux-review-fixes 9.3：👁/📥 经按需端点取钥（单实现：ensureLiveKeys + liveKeys 缓存）
 async function togglePrivateKey() {
   if (!showPrivateKey.value) await ensureLiveKeys()
@@ -372,58 +306,6 @@ async function togglePrivateKey() {
 async function toggleSignKey() {
   if (!showSignKey.value) await ensureLiveKeys()
   showSignKey.value = !showSignKey.value
-}
-
-async function downloadPrivateKey(filename: string) {
-  await ensureLiveKeys()
-  const content = filename.endsWith('_sign_key.pem') ? liveKeys.value.sign_key : liveKeys.value.private_key
-  if (content) {
-    downloadPem(content, filename)
-  } else if (!liveKeysLoading.value) {
-    message.error('私钥不可用')
-  }
-}
-
-function downloadCaCert(cert: any) {
-  if (cert.cert) {
-    const cluster = { display_name: props.clusterLabel, cluster_id: cert.cluster_id }
-    downloadCertFile(cert.cert, buildCertFileName(cluster, cert.name))
-  }
-}
-
-async function doDownloadCaKey() {
-  if (!props.cert) return
-  caKeyDownloading.value = true
-  caKeyError.value = ''
-  try {
-    // ssl-ux-review-fixes 9.2：统一按需私钥端点（/ca-key 已删除）
-    const res = await fetchSslPrivateKey(Number(props.cert.cluster_id), Number(props.cert.id))
-    const keyPem = res.data?.private_key
-    if (keyPem) {
-      downloadPem(keyPem, `${props.cert.name}_ca_key.pem`)
-      message.success('CA 私钥已下载')
-      caKeyConfirmVisible.value = false
-    } else {
-      caKeyError.value = 'CA 私钥不可用'
-    }
-  } catch {
-    caKeyError.value = '下载 CA 私钥失败'
-  } finally {
-    caKeyDownloading.value = false
-  }
-}
-
-async function downloadClientBundle(cert: any) {
-  try {
-    // ssl-ux-review-fixes 9.3：客户端证书包含私钥，先经按需端点取回再打包
-    const res = await fetchSslPrivateKey(Number(cert.cluster_id), Number(cert.id))
-    const merged = { ...cert, key: res.data?.private_key || '', sign_key: res.data?.sign_key || '' }
-    const blob = await buildCertZip(merged, ['sign_cert', 'sign_key', 'cert', 'key'])
-    downloadBlob(blob, `${cert.name}_client_bundle.zip`)
-    message.success('客户端证书包已下载')
-  } catch {
-    message.error('打包下载失败')
-  }
 }
 </script>
 

@@ -6,6 +6,23 @@
 <title>CA 根证书 · 方案 C（卡片型） — 磐石网关管理平台</title>
 <link rel="stylesheet" href="theme.css">
 <style>
+/* ── 现实现 ssl-page-shared.css 同款：分发横幅 + 安装指引折叠面板 ── */
+.cert-banner { display: flex; gap: 12px; align-items: flex-start; border-radius: var(--radius-lg); padding: 14px 16px; margin-bottom: 16px; border: 1px solid; }
+.banner-icon { width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #fff; }
+.cert-banner-ok { background: var(--success-bg); border-color: oklch(55% 0.15 145 / 30%); }
+.cert-banner-ok .banner-icon { background: var(--success); }
+.cert-banner-ok .banner-text { color: oklch(38% 0.08 145); }
+.cert-banner-ok .banner-text b { color: oklch(40% 0.14 145); }
+.cert-banner-ok .banner-text p { margin: 4px 0 0; font-size: 12.5px; line-height: 1.65; }
+.install-guide { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); margin-bottom: 16px; overflow: hidden; }
+.install-guide > summary { list-style: none; cursor: pointer; padding: 11px 16px; font-size: 13px; font-weight: 600; color: var(--accent); display: flex; align-items: center; gap: 8px; user-select: none; }
+.install-guide > summary::-webkit-details-marker { display: none; }
+.install-guide > summary::before { content: '▸'; transition: transform 0.15s; font-size: 11px; }
+.install-guide[open] > summary::before { transform: rotate(90deg); }
+.guide-body { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; padding: 4px 16px 16px; }
+.guide-col h4 { font-size: 12px; margin: 0 0 6px; }
+.guide-col ol { margin: 0; padding-left: 18px; font-size: 12px; color: var(--muted); line-height: 1.8; }
+.guide-col code { font-family: var(--font-mono); font-size: 11px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; }
 /* 该页独有：仅页头字号微调，卡片解剖一律走 theme.css 共享类 */
 .page-header h1 { font-size: 21px; }
 </style>
@@ -73,18 +90,66 @@
       <div class="page-header" style="margin-bottom:20px;">
         <div>
           <h1>CA 根证书<span class="ph-inline"><span class="ph-lite lite-warn"><b>1</b> 即将过期</span><span class="ph-lite lite-bad"><b>1</b> 已过期</span></span></h1>
-          <p>平台自建 CA 的信任锚点，可放心分发给最终用户安装</p>
+          <p>平台自建 CA 的信任锚点 · 可放心分发给最终用户安装</p>
         </div>
         <div class="page-header-actions">
-          <button class="btn btn-secondary"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h11v14H4z"/><path d="M8 9h4M8 13h4"/><path d="M17 8h2v11h-2"/></svg>安装指引</button>
+          <button class="btn btn-secondary" id="openGuideBtn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h11v14H4z"/><path d="M8 9h4M8 13h4"/><path d="M17 8h2v11h-2"/></svg>查看安装指引</button>
           <button class="btn btn-primary"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>创建 CA 根证书</button>
         </div>
       </div>
 
-      <div class="alert alert-info" style="margin-bottom:16px;">
-        <span class="alert-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></span>
-        <div class="alert-content">根证书是<b>信任锚点</b>：单文件 <code class="c-mono">.crt</code>、不含任何私钥，可放心分发给最终用户；发给用户时请附上对应系统的安装步骤。含私钥的<b>服务器证书请勿分发</b>。</div>
+      <div class="cert-banner cert-banner-ok">
+        <span class="banner-icon">✓</span>
+        <div class="banner-text">
+          <b>CA 根证书可以放心下载分发给用户</b>
+          <p>
+            这是让各内部系统显示「安全」的正确选择：用户只需安装根证书（单文件
+            <b>.crt</b
+            >，不含任何私钥），即可信任平台签发的全部服务器证书。服务器证书本身<b>不需要</b>、也<b>不应该</b>分发给用户。
+          </p>
+        </div>
       </div>
+      <details ref="guideRef" class="install-guide" id="installGuide">
+        <summary>📥 用户安装指引（发给用户时请附带对应系统的步骤）</summary>
+        <div class="guide-body">
+          <div class="guide-col">
+            <h4>Windows</h4>
+            <ol>
+              <li>双击下载的 <code>.crt</code> 文件</li>
+              <li>点击「安装证书」</li>
+              <li>存储位置选「本地计算机」</li>
+              <li>选「将所有的证书都放入下列存储」→ 浏览选择「<b>受信任的根证书颁发机构</b>」</li>
+              <li>完成，重启浏览器生效</li>
+            </ol>
+          </div>
+          <div class="guide-col">
+            <h4>macOS</h4>
+            <ol>
+              <li>双击 <code>.crt</code> 打开「钥匙串访问」</li>
+              <li>添加到「系统」钥匙串</li>
+              <li>双击该证书 → 信任 → 设为「<b>始终信任</b>」</li>
+            </ol>
+          </div>
+          <div class="guide-col">
+            <h4>Chrome 浏览器</h4>
+            <ol>
+              <li>打开 Chrome，地址栏输入 <code>chrome://settings/security</code>（或 设置 → 隐私与安全 → 安全）</li>
+              <li>滚动到「高级」→ 点击「<b>管理证书</b>」</li>
+              <li>切换到「证书颁发机构」→ 点击「<b>导入</b>」选择 <code>.crt</code> 文件</li>
+              <li>勾选「<b>信任此 CA 标识网站</b>」→ 确定，重启 Chrome 生效</li>
+              <li>Windows 下会打开系统导入向导（按上方 Windows 步骤操作即可）</li>
+            </ol>
+          </div>
+          <div class="guide-col">
+            <h4>Linux (Debian/Ubuntu)</h4>
+            <ol>
+              <li><code>sudo cp xxx.crt /usr/local/share/ca-certificates/</code></li>
+              <li><code>sudo update-ca-certificates</code></li>
+            </ol>
+          </div>
+        </div>
+      </details>
+
 
       <div class="l5-card">
         <div class="l5-toolbar nowrap" style="gap:4px;">
@@ -106,20 +171,31 @@
             <option>开发集群</option>
           </select>
           <span class="t-spacer"></span>
+          <span class="l5-count">共 <b>6</b> 个 CA 根证书</span>
           <button class="tool-btn" title="重新拉取列表"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 11-2.64-6.36"/><path d="M21 3v6h-6"/></svg>刷新</button>
+          <button class="tool-btn fold-all-btn" data-fold-all title="收起当页全部分组"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7 4 12 9 17 4"/><polyline points="7 20 12 15 17 20"/></svg>全部收起</button>
+          <div class="seg" id="modeSeg"><span class="seg-opt all active" data-mode="group">分组</span><span class="seg-opt" data-mode="flat">平铺</span></div>
         </div>
 
         <div class="card-grid">
 
-          <!-- ① 有效 -->
-          <article class="l5-panel">
+          <div class="l5-band cluster-c1" data-fold="ca-g1" role="button" tabindex="0" aria-expanded="true" aria-controls="band-ca-g1">
+            <button class="g-chev" data-band="ca-g1" aria-expanded="true" title="收起本组" aria-label="折叠 / 展开本组"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button>
+            <span class="b-name">生产环境</span>
+            <span class="b-count">2 个证书</span>
+            <span class="b-spacer"></span>
+            <span class="b-hint">即将过期 <b>1</b></span>
+          </div>
+          <div class="band-cards" id="band-ca-g1">
+<!-- ① 有效（生产集群） -->
+          <article class="l5-panel cluster-c1">
             <div class="lp-head">
               <div class="lp-title">
                 <span class="lp-name" title="平台根 CA">平台根 CA</span>
                 <span class="lp-tag">生产集群</span>
                 <span class="lp-tag group">生产环境</span>
               </div>
-              <div class="lp-status"><span class="badge badge-neutral">剩余 3401 天</span></div>
+              <div class="lp-status"><span class="badge badge-success">CA 根证书</span><span class="badge badge-success">剩余 3401 天</span></div>
             </div>
             <div class="lp-body">
               <div class="lp-row"><span class="lp-k">CN</span><span class="lp-v mono" title="Panshi Root CA 2024">Panshi Root CA 2024</span></div>
@@ -131,25 +207,62 @@
               <div class="menu-anchor">
                 <button class="op-btn" data-menu-btn="ca-0" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
                 <div class="l5-menu" id="ca-0">
-                  <button class="mi"><span class="mi-main">查看</span><span class="mi-sub">完整证书链与指纹</span></button>
-                  <button class="mi"><span class="mi-main">编辑</span></button>
-                  <button class="mi"><span class="mi-main">分发说明</span><span class="mi-sub">Windows / macOS / Chrome / Linux 安装步骤</span></button>
+                  <button class="mi"><span class="mi-main">查看</span><span class="mi-sub">完整证书内容与指纹</span></button>
                   <hr class="menu-sep">
-                  <button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删除后已安装该根证书的终端将无法校验平台签发的服务器证书</span></button>
+                  <button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删除后无法再向新用户分发该根证书（已发布证书在 Edge 上不受影响）</span></button>
                 </div>
               </div>
             </div>
           </article>
 
-          <!-- ② 有效 -->
-          <article class="l5-panel">
+          <!-- ③ 即将过期 · 卡片内嵌警告（生产集群） -->
+          <article class="l5-panel cluster-c1">
+            <div class="lp-head">
+              <div class="lp-title">
+                <span class="lp-name" title="合作方根 CA">合作方根 CA</span>
+                <span class="lp-tag">生产集群</span>
+              </div>
+              <div class="lp-status"><span class="badge badge-success">CA 根证书</span><span class="badge badge-warn">剩余 17 天</span></div>
+            </div>
+            <div class="lp-body">
+              <div class="lp-row"><span class="lp-k">CN</span><span class="lp-v mono" title="Partner Root CA">Partner Root CA</span></div>
+              <div class="lp-row"><span class="lp-k">有效期</span><span class="lp-v mono" title="2025-12-05 → 2026-12-05">2025-12-05 → 2026-12-05</span></div>
+            </div>
+            <div class="lp-notice alert alert-warning">
+              <span class="n-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+              <span class="n-txt">该 CA 将于 <b>17 天</b>内过期：过期后所有已安装此证书的终端将重新显示「不安全」。请尽快更换 CA 并重新分发根证书。</span>
+            </div>
+            <div class="lp-foot">
+              <button class="op-pub">下载根证书</button>
+              <div class="menu-anchor">
+                <button class="op-btn" data-menu-btn="ca-2" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
+                <div class="l5-menu" id="ca-2">
+                  <button class="mi"><span class="mi-main">查看</span><span class="mi-sub">完整证书内容与指纹</span></button>
+                  <hr class="menu-sep">
+                  <button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删除后无法再向新用户分发该根证书（已发布证书在 Edge 上不受影响）</span></button>
+                </div>
+              </div>
+            </div>
+          </article>
+          </div>
+
+          <div class="l5-band cluster-c2" data-fold="ca-g2" role="button" tabindex="0" aria-expanded="true" aria-controls="band-ca-g2">
+            <button class="g-chev" data-band="ca-g2" aria-expanded="true" title="收起本组" aria-label="折叠 / 展开本组"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button>
+            <span class="b-name">预发环境</span>
+            <span class="b-count">2 个证书</span>
+            <span class="b-spacer"></span>
+            <span class="b-hint">全部有效</span>
+          </div>
+          <div class="band-cards" id="band-ca-g2">
+<!-- ② 有效（预发集群） -->
+          <article class="l5-panel cluster-c2">
             <div class="lp-head">
               <div class="lp-title">
                 <span class="lp-name" title="内网根 CA">内网根 CA</span>
                 <span class="lp-tag">预发集群</span>
                 <span class="lp-tag group">预发环境</span>
               </div>
-              <div class="lp-status"><span class="badge badge-neutral">剩余 1937 天</span></div>
+              <div class="lp-status"><span class="badge badge-success">CA 根证书</span><span class="badge badge-success">剩余 1937 天</span></div>
             </div>
             <div class="lp-body">
               <div class="lp-row"><span class="lp-k">CN</span><span class="lp-v mono" title="Intranet Root CA">Intranet Root CA</span></div>
@@ -161,121 +274,23 @@
               <div class="menu-anchor">
                 <button class="op-btn" data-menu-btn="ca-1" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
                 <div class="l5-menu" id="ca-1">
-                  <button class="mi"><span class="mi-main">查看</span><span class="mi-sub">完整证书链与指纹</span></button>
-                  <button class="mi"><span class="mi-main">编辑</span></button>
-                  <button class="mi"><span class="mi-main">分发说明</span><span class="mi-sub">Windows / macOS / Chrome / Linux 安装步骤</span></button>
+                  <button class="mi"><span class="mi-main">查看</span><span class="mi-sub">完整证书内容与指纹</span></button>
                   <hr class="menu-sep">
-                  <button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删除后已安装该根证书的终端将无法校验平台签发的服务器证书</span></button>
+                  <button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删除后无法再向新用户分发该根证书（已发布证书在 Edge 上不受影响）</span></button>
                 </div>
               </div>
             </div>
           </article>
 
-          <!-- ③ 即将过期 · 卡片内嵌警告 -->
-          <article class="l5-panel">
-            <div class="lp-head">
-              <div class="lp-title">
-                <span class="lp-name" title="合作方根 CA">合作方根 CA</span>
-                <span class="lp-tag">生产集群</span>
-              </div>
-              <div class="lp-status"><span class="badge badge-warn">剩余 17 天</span></div>
-            </div>
-            <div class="lp-body">
-              <div class="lp-row"><span class="lp-k">CN</span><span class="lp-v mono" title="Partner Root CA">Partner Root CA</span></div>
-              <div class="lp-row"><span class="lp-k">有效期</span><span class="lp-v mono" title="2025-12-05 → 2026-12-05">2025-12-05 → 2026-12-05</span></div>
-            </div>
-            <div class="lp-notice alert alert-warning">
-              <span class="n-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
-              <span class="n-txt">17 天后过期，请提前创建并分发新根证书</span>
-              <button class="n-act">创建新 CA</button>
-            </div>
-            <div class="lp-foot">
-              <button class="op-pub">下载根证书</button>
-              <div class="menu-anchor">
-                <button class="op-btn" data-menu-btn="ca-2" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
-                <div class="l5-menu" id="ca-2">
-                  <button class="mi"><span class="mi-main">查看</span><span class="mi-sub">完整证书链与指纹</span></button>
-                  <button class="mi"><span class="mi-main">编辑</span></button>
-                  <button class="mi"><span class="mi-main">分发说明</span><span class="mi-sub">Windows / macOS / Chrome / Linux 安装步骤</span></button>
-                  <hr class="menu-sep">
-                  <button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删除后已安装该根证书的终端将无法校验平台签发的服务器证书</span></button>
-                </div>
-              </div>
-            </div>
-          </article>
-
-          <!-- ④ 已过期 · 卡片内嵌危险 -->
-          <article class="l5-panel">
-            <div class="lp-head">
-              <div class="lp-title">
-                <span class="lp-name" title="旧测试根 CA">旧测试根 CA</span>
-                <span class="lp-tag">开发集群</span>
-                <span class="lp-tag group">开发环境</span>
-              </div>
-              <div class="lp-status"><span class="badge badge-danger">已过期 281 天</span></div>
-            </div>
-            <div class="lp-body">
-              <div class="lp-row"><span class="lp-k">CN</span><span class="lp-v mono" title="Legacy Test CA">Legacy Test CA</span></div>
-              <div class="lp-row"><span class="lp-k">有效期</span><span class="lp-v mono" title="2021-02-10 → 2026-02-10">2021-02-10 → 2026-02-10</span></div>
-            </div>
-            <div class="lp-notice alert alert-error">
-              <span class="n-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3.2 21.4 20H2.6L12 3.2z" fill="currentColor"/><path d="M12 9.4v4M12 16.6v.1" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></span>
-              <span class="n-txt">已过期：已安装终端重新提示「不安全」</span>
-              <button class="n-act">创建新 CA</button>
-            </div>
-            <div class="lp-foot">
-              <button class="op-pub" disabled title="证书已过期，请创建并分发新根证书">下载根证书</button>
-              <div class="menu-anchor">
-                <button class="op-btn" data-menu-btn="ca-3" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
-                <div class="l5-menu" id="ca-3">
-                  <button class="mi"><span class="mi-main">查看</span><span class="mi-sub">完整证书链与指纹</span></button>
-                  <button class="mi"><span class="mi-main">编辑</span></button>
-                  <button class="mi"><span class="mi-main">分发说明</span><span class="mi-sub">Windows / macOS / Chrome / Linux 安装步骤</span></button>
-                  <hr class="menu-sep">
-                  <button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删除后已安装该根证书的终端将无法校验平台签发的服务器证书</span></button>
-                </div>
-              </div>
-            </div>
-          </article>
-
-          <!-- ⑤ 有效 -->
-          <article class="l5-panel">
-            <div class="lp-head">
-              <div class="lp-title">
-                <span class="lp-name" title="开发根 CA">开发根 CA</span>
-                <span class="lp-tag">开发集群</span>
-              </div>
-              <div class="lp-status"><span class="badge badge-neutral">剩余 3331 天</span></div>
-            </div>
-            <div class="lp-body">
-              <div class="lp-row"><span class="lp-k">CN</span><span class="lp-v mono" title="Dev Root CA 2026">Dev Root CA 2026</span></div>
-              <div class="lp-row"><span class="lp-k">有效期</span><span class="lp-v mono" title="2026-01-01 → 2036-01-01">2026-01-01 → 2036-01-01</span></div>
-              <div class="lp-row"><span class="lp-k">指纹</span><span class="lp-v mono dim" title="SHA-256 前 6 组">C7:10:5B:2A:F4:66</span></div>
-            </div>
-            <div class="lp-foot">
-              <button class="op-pub">下载根证书</button>
-              <div class="menu-anchor">
-                <button class="op-btn" data-menu-btn="ca-4" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
-                <div class="l5-menu" id="ca-4">
-                  <button class="mi"><span class="mi-main">查看</span><span class="mi-sub">完整证书链与指纹</span></button>
-                  <button class="mi"><span class="mi-main">编辑</span></button>
-                  <button class="mi"><span class="mi-main">分发说明</span><span class="mi-sub">Windows / macOS / Chrome / Linux 安装步骤</span></button>
-                  <hr class="menu-sep">
-                  <button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删除后已安装该根证书的终端将无法校验平台签发的服务器证书</span></button>
-                </div>
-              </div>
-            </div>
-          </article>
-
-          <!-- ⑥ 有效 -->
-          <article class="l5-panel">
+          <!-- ⑥ 有效（预发集群） -->
+          <article class="l5-panel cluster-c2">
             <div class="lp-head">
               <div class="lp-title">
                 <span class="lp-name" title="网关自建 CA">网关自建 CA</span>
                 <span class="lp-tag">预发集群</span>
                 <span class="lp-tag group">预发环境</span>
               </div>
-              <div class="lp-status"><span class="badge badge-neutral">剩余 2465 天</span></div>
+              <div class="lp-status"><span class="badge badge-success">CA 根证书</span><span class="badge badge-success">剩余 2465 天</span></div>
             </div>
             <div class="lp-body">
               <div class="lp-row"><span class="lp-k">CN</span><span class="lp-v mono" title="Panshi GW CA">Panshi GW CA</span></div>
@@ -287,15 +302,81 @@
               <div class="menu-anchor">
                 <button class="op-btn" data-menu-btn="ca-5" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
                 <div class="l5-menu" id="ca-5">
-                  <button class="mi"><span class="mi-main">查看</span><span class="mi-sub">完整证书链与指纹</span></button>
-                  <button class="mi"><span class="mi-main">编辑</span></button>
-                  <button class="mi"><span class="mi-main">分发说明</span><span class="mi-sub">Windows / macOS / Chrome / Linux 安装步骤</span></button>
+                  <button class="mi"><span class="mi-main">查看</span><span class="mi-sub">完整证书内容与指纹</span></button>
                   <hr class="menu-sep">
-                  <button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删除后已安装该根证书的终端将无法校验平台签发的服务器证书</span></button>
+                  <button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删除后无法再向新用户分发该根证书（已发布证书在 Edge 上不受影响）</span></button>
                 </div>
               </div>
             </div>
           </article>
+          </div>
+
+          <div class="l5-band cluster-c6" data-fold="ca-g3" role="button" tabindex="0" aria-expanded="true" aria-controls="band-ca-g3">
+            <button class="g-chev" data-band="ca-g3" aria-expanded="true" title="收起本组" aria-label="折叠 / 展开本组"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button>
+            <span class="b-name">开发环境</span>
+            <span class="b-count">2 个证书</span>
+            <span class="b-spacer"></span>
+            <span class="b-hint">已过期 <b>1</b></span>
+          </div>
+          <div class="band-cards" id="band-ca-g3">
+<!-- ④ 已过期 · 卡片内嵌危险（开发集群） -->
+          <article class="l5-panel cluster-c6">
+            <div class="lp-head">
+              <div class="lp-title">
+                <span class="lp-name" title="旧测试根 CA">旧测试根 CA</span>
+                <span class="lp-tag">开发集群</span>
+                <span class="lp-tag group">开发环境</span>
+              </div>
+              <div class="lp-status"><span class="badge badge-success">CA 根证书</span><span class="badge badge-danger">已过期 281 天</span></div>
+            </div>
+            <div class="lp-body">
+              <div class="lp-row"><span class="lp-k">CN</span><span class="lp-v mono" title="Legacy Test CA">Legacy Test CA</span></div>
+              <div class="lp-row"><span class="lp-k">有效期</span><span class="lp-v mono" title="2021-02-10 → 2026-02-10">2021-02-10 → 2026-02-10</span></div>
+            </div>
+            <div class="lp-notice alert alert-error">
+              <span class="n-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3.2 21.4 20H2.6L12 3.2z" fill="currentColor"/><path d="M12 9.4v4M12 16.6v.1" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></span>
+              <span class="n-txt">该 CA 将于 <b>281 天</b>内已经过期：过期后所有已安装此证书的终端将重新显示「不安全」。请尽快更换 CA 并重新分发根证书。</span>
+            </div>
+            <div class="lp-foot">
+              <button class="op-pub">下载根证书</button>
+              <div class="menu-anchor">
+                <button class="op-btn" data-menu-btn="ca-3" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
+                <div class="l5-menu" id="ca-3">
+                  <button class="mi"><span class="mi-main">查看</span><span class="mi-sub">完整证书内容与指纹</span></button>
+                  <hr class="menu-sep">
+                  <button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删除后无法再向新用户分发该根证书（已发布证书在 Edge 上不受影响）</span></button>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <!-- ⑤ 有效（开发集群） -->
+          <article class="l5-panel cluster-c6">
+            <div class="lp-head">
+              <div class="lp-title">
+                <span class="lp-name" title="开发根 CA">开发根 CA</span>
+                <span class="lp-tag">开发集群</span>
+              </div>
+              <div class="lp-status"><span class="badge badge-success">CA 根证书</span><span class="badge badge-success">剩余 3331 天</span></div>
+            </div>
+            <div class="lp-body">
+              <div class="lp-row"><span class="lp-k">CN</span><span class="lp-v mono" title="Dev Root CA 2026">Dev Root CA 2026</span></div>
+              <div class="lp-row"><span class="lp-k">有效期</span><span class="lp-v mono" title="2026-01-01 → 2036-01-01">2026-01-01 → 2036-01-01</span></div>
+              <div class="lp-row"><span class="lp-k">指纹</span><span class="lp-v mono dim" title="SHA-256 前 6 组">C7:10:5B:2A:F4:66</span></div>
+            </div>
+            <div class="lp-foot">
+              <button class="op-pub">下载根证书</button>
+              <div class="menu-anchor">
+                <button class="op-btn" data-menu-btn="ca-4" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
+                <div class="l5-menu" id="ca-4">
+                  <button class="mi"><span class="mi-main">查看</span><span class="mi-sub">完整证书内容与指纹</span></button>
+                  <hr class="menu-sep">
+                  <button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删除后无法再向新用户分发该根证书（已发布证书在 Edge 上不受影响）</span></button>
+                </div>
+              </div>
+            </div>
+          </article>
+          </div>
 
         </div>
 
@@ -322,7 +403,36 @@
       if (!was) menu.classList.add('open');
     });
   });
+  var guideBtn = document.getElementById('openGuideBtn');
+  if (guideBtn) guideBtn.addEventListener('click', function () {
+    var g = document.getElementById('installGuide');
+    if (!g) return;
+    g.open = true;
+    g.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
   document.addEventListener('click', closeAll);
+  // band 折叠（与卡片页同款）
+  document.querySelectorAll('.l5-band').forEach(function (band) {
+    band.addEventListener('click', function (e) {
+      if (!e.target.closest('.g-chev')) return;
+      var cards = document.getElementById(band.getAttribute('aria-controls'));
+      var open = band.getAttribute('aria-expanded') === 'true';
+      band.setAttribute('aria-expanded', String(!open));
+      if (cards) cards.style.display = open ? 'none' : '';
+    });
+  });
+  // 分组|平铺切换
+  document.querySelectorAll('.seg .seg-opt').forEach(function (opt) {
+    opt.addEventListener('click', function () {
+      document.querySelectorAll('.seg .seg-opt').forEach(function (o) { o.classList.remove('active'); });
+      opt.classList.add('active');
+      var card = document.querySelector('.l5-card');
+      var flat = opt.dataset.mode === 'flat';
+      card.classList.toggle('mode-flat', flat);
+      card.classList.toggle('mode-group', !flat);
+      document.querySelectorAll('.l5-band').forEach(function (b) { b.style.display = flat ? 'none' : ''; });
+    });
+  });
   document.querySelectorAll('a[href="#"]').forEach(function (a) { a.addEventListener('click', function (e) { e.preventDefault(); }); });
 })();
 </script>

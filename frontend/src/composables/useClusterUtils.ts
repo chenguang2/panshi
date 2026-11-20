@@ -169,6 +169,8 @@ export function showDeleteConfirm(opts: {
   defaultSelectOnline?: boolean
   /** 子集勾选后果行（{n} 占位未选节点数）：勾选 Edge 且未全选时显示（opt-in） */
   subsetConsequence?: string
+  /** 纯数据库资源删除（CA 根证书等仅存 DB 的资源）：隐藏「Edge 节点」勾选与节点清单，scope 只剩「数据库」（CA 根证书仅保存数据库，2026-11-20 用户裁决） */
+  dbOnly?: boolean
 }) {
   let deleteDb = false
   let deleteEdge = false
@@ -445,43 +447,54 @@ export function showDeleteConfirm(opts: {
                   h('span', { style: 'color:var(--muted);font-size:12px;' }, '删除数据库中的记录'),
                 ],
               ),
-              h(
-                'label',
-                { style: 'display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--fg);' },
-                [
-                  h('input', {
-                    type: 'checkbox',
-                    checked: deleteEdge,
-                    onInput: (e: Event) => {
-                      deleteEdge = (e.target as HTMLInputElement).checked
-                      if (!deleteEdge) selectedNodeIds.clear()
-                      updateOkDisabled()
-                      renderModal()
-                    },
-                    style: 'width:16px;height:16px;accent-color:var(--accent);cursor:pointer;',
-                  }),
-                  h('span', { style: 'font-weight:500;' }, 'Edge 节点'),
-                  h(
-                    'span',
-                    { style: 'color:var(--muted);font-size:12px;' },
-                    opts.noNodeSelection ? '删除各集群全部在线节点上的配置' : '从 Edge 节点中删除',
+              opts.dbOnly
+                ? null
+                : h(
+                    'label',
+                    { style: 'display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--fg);' },
+                    [
+                      h('input', {
+                        type: 'checkbox',
+                        checked: deleteEdge,
+                        onInput: (e: Event) => {
+                          deleteEdge = (e.target as HTMLInputElement).checked
+                          if (!deleteEdge) selectedNodeIds.clear()
+                          updateOkDisabled()
+                          renderModal()
+                        },
+                        style: 'width:16px;height:16px;accent-color:var(--accent);cursor:pointer;',
+                      }),
+                      h('span', { style: 'font-weight:500;' }, 'Edge 节点'),
+                      h(
+                        'span',
+                        { style: 'color:var(--muted);font-size:12px;' },
+                        opts.noNodeSelection ? '删除各集群全部在线节点上的配置' : '从 Edge 节点中删除',
+                      ),
+                    ],
                   ),
-                ],
-              ),
               nodeSection,
               nodesUnavailableSection,
               edgeConsequenceRow,
               // 未勾选 Edge 删除时提示：平台记录删除不影响节点运行（upstream-ux-close-loop 4.7）
-              deleteEdge
-                ? null
-                : h(
+              opts.dbOnly
+                ? h(
                     'div',
                     {
                       style:
                         'margin-top:10px;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);font-size:12px;color:var(--muted);',
                     },
-                    platformOnlyHintText,
-                  ),
+                    'CA 根证书仅保存于平台数据库，删除不影响 Edge 节点',
+                  )
+                : deleteEdge
+                  ? null
+                  : h(
+                      'div',
+                      {
+                        style:
+                          'margin-top:10px;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);font-size:12px;color:var(--muted);',
+                      },
+                      platformOnlyHintText,
+                    ),
             ]),
           ]),
       },

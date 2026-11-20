@@ -2,7 +2,6 @@
   <div class="ssl-page">
     <PageHeader title="服务器证书" description="部署在 Edge 网关上的 TLS 证书 · 由平台发布到节点">
       <template #actions>
-        <button class="btn btn-secondary" @click="openCreateDrawer">+ 添加已有证书</button>
         <button class="btn btn-primary" style="margin-left: 8px" @click="openGenerateDialog">生成证书</button>
       </template>
     </PageHeader>
@@ -14,34 +13,73 @@
         <b>请勿将服务器证书分发给终端用户</b>
         <p>
           服务器证书只部署在网关上，<b>不是</b>信任锚点——把它装进用户系统会显示「不安全」。让用户系统显示「安全」的正确方式是安装
-          <b>CA 根证书</b>。另外：证书更新或重新生成后，已下载的服务器证书副本<b>立即失效</b>。 客户端证书（用于 mTLS
-          双向认证）请在该证书的「查看」抽屉中下载完整安装包。
+          <b>CA 根证书</b>。另外：证书更新或重新生成后，已下载的服务器证书副本<b>立即失效</b>。
         </p>
       </div>
       <button class="btn btn-secondary banner-action" @click="goCaPage">前往 CA 根证书下载 →</button>
     </div>
 
-    <div class="ssl-header-actions">
-      <SearchInput v-model="searchText" placeholder="搜索证书名称..." @input="onSearch" />
-      <select
-        v-model="groupFilter"
-        :title="groupFilter.startsWith('__') ? '' : groupFilter"
-        class="form-input"
-        style="width: 140px; flex-shrink: 0"
-        @change="onGroupChange"
-      >
-        <option value="__all__">全部分组</option>
-        <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
-        <option value="__ung__">未分组</option>
-      </select>
-      <ClusterSelect
-        v-model="clusterFilter"
-        :clusters="filteredClusters"
-        allow-all
-        style="width: 160px; flex-shrink: 0"
-        @change="loadCerts"
-      />
-      <span class="text-sm text-muted">共 {{ totalCount }} 个服务器证书</span>
+    <TableToolbar
+      v-model:mode="cardMode"
+      :count="totalCount"
+      count-unit="个服务器证书"
+      :show-count="false"
+      :refreshing="loading"
+      @refresh="loadCerts"
+    >
+      <template #filters>
+        <SearchInput v-model="searchText" placeholder="搜索证书名称..." :width="150" @input="onSearch" />
+        <select
+          v-model="groupFilter"
+          :title="groupFilter.startsWith('__') ? '' : groupFilter"
+          class="l5-select"
+          style="width: 104px"
+          @change="onGroupChange"
+        >
+          <option value="__all__">全部分组</option>
+          <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
+          <option value="__ung__">未分组</option>
+        </select>
+        <ClusterSelect
+          v-model="clusterFilter"
+          :clusters="filteredClusters"
+          allow-all
+          style="width: 120px"
+          @change="loadCerts"
+        />
+      </template>
+      <template #mode-extra>
+        <button
+          v-if="cardMode === 'group'"
+          type="button"
+          class="tool-btn fold-all-btn"
+          data-test="card-fold-all"
+          :title="pageHasFolded ? '展开全部集群组' : '收起全部集群组'"
+          @click="toggleFoldAll"
+        >
+          <StrokeIcon :name="pageHasFolded ? 'expandAll' : 'collapseAll'" :size="13" />
+          <span class="fold-all-label">{{ pageHasFolded ? '全部展开' : '全部收起' }}</span>
+        </button>
+      </template>
+    </TableToolbar>
+
+    <!-- 发布状态 chips（filter-architecture：状态 = 带计数 chips 单一形态） -->
+    <div class="l5-chiprow" data-test="status-chip-row">
+      <span class="chiprow-label">状态</span>
+      <div class="f-chips status-chips" role="group" aria-label="按发布状态筛选">
+        <button
+          v-for="t in statusTabs"
+          :key="t.key"
+          type="button"
+          class="f-chip chip-status"
+          :class="{ active: statusFilter === t.key }"
+          :aria-pressed="statusFilter === t.key ? 'true' : 'false'"
+          @click="statusFilter = t.key"
+        >
+          {{ t.label }}<span class="f-count">{{ t.count }}</span>
+        </button>
+      </div>
+      <span class="t-spacer"></span>
     </div>
 
     <div v-if="loading" class="loading-state">加载中...</div>
@@ -54,24 +92,39 @@
       <div class="ssl-empty-icon">🔒</div>
       <div class="ssl-empty-text">暂无服务器证书</div>
     </div>
-    <div v-else class="ssl-grid">
-      <SslCertCard
-        v-for="cert in displayedCerts"
-        :key="cert.id"
-        :cert="cert"
-        variant="server"
-        :ca-name="caNameOf(cert)"
-        :sni-mismatch="cert.sni_mismatch === true"
-        @view="viewCert"
-        @download="openDownloadDialog"
-        @edit="openEditDrawer"
-        @delete="deleteCert"
-        @publish="publishCert"
-        @version="openVersionManagement"
-        @ca-click="goCaPage"
-        @sync-sni="syncSni"
-        @preview-diff="openPublishPreview"
-      />
+    <div v-else class="sc-grid card-grid l5-card" :class="[`mode-${cardMode}`]">
+      <template v-for="g in renderGroups" :key="g.clusterId">
+        <ClusterBand
+          v-if="cardMode === 'group'"
+          :name="g.clusterName"
+          :group="g.groupName"
+          :count-label="countLabelOf(g.count)"
+          :secondary="secondaryOf(g.rows)"
+          :hue-class="g.hueClass"
+          :folded="isFolded(g.clusterId)"
+          @toggle="toggleFold(g.clusterId)"
+        />
+        <SslCertCard
+          v-for="cert in g.rows"
+          :key="cert.id"
+          :cert="cert"
+          variant="server"
+          :ca-name="caNameOf(cert)"
+          :sni-mismatch="cert.sni_mismatch === true"
+          :partial-notice="partialNoticeText(cert)"
+          :class="{ 'is-folded': cardMode === 'group' && !groupVisible(g.clusterId) }"
+          @view="viewCert"
+          @download="openDownloadDialog"
+          @edit="openEditDrawer"
+          @delete="deleteCert"
+          @publish="publishCert"
+          @version="openVersionManagement"
+          @ca-click="goCaPage"
+          @sync-sni="syncSni"
+          @preview-diff="openPublishPreview"
+          @republish="republishFailedNodes"
+        />
+      </template>
     </div>
 
     <SslFormDrawer
@@ -126,6 +179,7 @@
       v-model:visible="publishVisible"
       title="发布 SSL 证书"
       :cluster-id="publishClusterId"
+      :preselected-node-ids="publishPreselected"
       @confirm="onPublishConfirm"
       @cancel="publishVisible = false"
     />
@@ -146,6 +200,11 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import ClusterSelect from '@/components/ClusterSelect.vue'
+import TableToolbar from '@/components/TableToolbar.vue'
+import ClusterBand from '@/components/ClusterBand.vue'
+import StrokeIcon from '@/components/StrokeIcon.vue'
+import { useCardClusterGrouping } from '@/composables/useCardClusterGrouping'
+import { useRepublishFailedNodes, noticeTextFromPublishDetail } from '@/composables/useRepublishFailedNodes'
 import { PAGE_SIZE_CARD_GRID } from '@/constants'
 import api from '@/api'
 import PageHeader from '@/components/PageHeader.vue'
@@ -203,6 +262,72 @@ const displayedCerts = computed(() => {
     return ga.localeCompare(gb)
   })
 })
+
+// ── 发布状态 chips（filter-architecture：状态 = 带计数 chips 单一形态）──
+type PublishStatusKey = 'all' | 'unpublished' | 'pending' | 'published'
+const statusFilter = ref<PublishStatusKey>('all')
+function publishStatusOf(c: any): Exclude<PublishStatusKey, 'all'> {
+  if (c.pending_publish === true) return 'pending'
+  if (c.current_version) return 'published'
+  return 'unpublished'
+}
+const statusTabs = computed(() => {
+  const c = { unpublished: 0, pending: 0, published: 0 }
+  for (const cert of certs.value) c[publishStatusOf(cert) as keyof typeof c]++
+  return [
+    { key: 'all' as const, label: '全部', count: certs.value.length },
+    { key: 'unpublished' as const, label: '未发布', count: c.unpublished },
+    { key: 'pending' as const, label: '待发布', count: c.pending },
+    { key: 'published' as const, label: '已发布', count: c.published },
+  ]
+})
+
+// rowsFiltered：状态 chips + 集群/搜索（displayedCerts 已含集群/搜索过滤）
+const rowsFiltered = computed(() =>
+  statusFilter.value === 'all'
+    ? displayedCerts.value
+    : displayedCerts.value.filter((c: any) => publishStatusOf(c) === statusFilter.value),
+)
+
+// ── 集群分组 / 平铺双模式（共享组合式 + ClusterBand，AGENTS #87/#88）──
+const {
+  mode: cardMode,
+  groups: cardGroups,
+  countLabel: countLabelOf,
+  secondaryOf,
+  isFolded,
+  toggleFold,
+  pageHasFolded,
+  toggleFoldAll,
+  groupVisible,
+} = useCardClusterGrouping<any>({
+  rows: () => rowsFiltered.value,
+  unit: '个证书',
+  clusterIdOf: (c) => c.cluster_id,
+  clusterNameOf: (c) => c.cluster_name,
+  groupNameOf: (c) => c.cluster_group_name,
+  secondary: (rows) => {
+    // 签发 CA 分布（设计稿：签发 · Panshi Root CA 2024 等 3 家）
+    const names = [...new Set(rows.map((c: any) => caNameOf(c)).filter(Boolean))] as string[]
+    if (!names.length) return '签发 · —'
+    return names.length === 1 ? `签发 · ${names[0]}` : `签发 · ${names[0]} 等 ${names.length} 家`
+  },
+})
+
+const renderGroups = computed(() =>
+  cardMode.value === 'group'
+    ? cardGroups.value
+    : [
+        {
+          clusterId: -1,
+          clusterName: '',
+          groupName: '',
+          hueClass: 'cluster-c1',
+          rows: rowsFiltered.value,
+          count: rowsFiltered.value.length,
+        },
+      ],
+)
 
 // E3：签发 CA 行——前端以 ca_cert_id → name 映射解析（零后端）；无效引用显示「—」
 const caNameOf = (cert: any) => {
@@ -302,10 +427,6 @@ async function loadClusters() {
   }
 }
 
-function openCreateDrawer() {
-  editingCert.value = null
-  formVisible.value = true
-}
 function openEditDrawer(cert: any) {
   editingCert.value = cert
   formVisible.value = true
@@ -413,7 +534,40 @@ function publishCert(cert: any) {
   publishingCert.value = cert
   publishClusterId.value = cert.cluster_id
   publishRefreshFn.value = loadCerts
+  // 防上一次「重发失败节点」残留泄漏到常规发布
+  publishPreselected.value = []
   publishVisible.value = true
+}
+
+// ── 重发失败节点（republish-failed-nodes：预览取失败集合并预选，单一实现）──
+const { loading: republishLoading, resolve: resolveFailedNodes } = useRepublishFailedNodes()
+// 解析成功后的具体文案缓存（会话内按证书 id；主键全库唯一）
+const republishNotices = ref<Record<number, string>>({})
+const publishPreselected = ref<number[]>([])
+
+/** 卡内「发布未完全生效」文案：会话内预览解析缓存 → 泛化（SSL 无持久化明细列，两级回退） */
+function partialNoticeText(cert: any): string | null {
+  if (cert.last_publish_status !== 'partial' || cert.pending_publish === true) return null
+  return (
+    noticeTextFromPublishDetail(cert?.last_publish_detail) ??
+    republishNotices.value[cert?.id] ??
+    '发布未完全生效，请查看发布差异'
+  )
+}
+
+async function republishFailedNodes(cert: any): Promise<void> {
+  const outcome = await resolveFailedNodes({ id: cert.id, cluster_id: cert.cluster_id }, 'ssl')
+  if (!outcome) return
+  if (outcome.ok && outcome.noticeText) {
+    republishNotices.value[cert.id] = outcome.noticeText
+    publishingCert.value = cert
+    publishClusterId.value = cert.cluster_id
+    publishRefreshFn.value = loadCerts
+    publishPreselected.value = outcome.failedNodeIds
+    publishVisible.value = true
+  } else {
+    message.warning('未能获取失败节点，请通过「查看差异」排查')
+  }
 }
 
 // 发布差异预览（publish-diff-preview-batch2）：弹窗自持拉取；「去发布」接既有发布流程

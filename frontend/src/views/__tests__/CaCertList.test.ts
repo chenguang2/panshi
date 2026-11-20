@@ -123,7 +123,9 @@ describe('CaCertList 分发页（ssl-cert-management）', () => {
       return Promise.reject(new Error('unexpected GET: ' + url))
     })
     const w = await mountPage()
-    const delBtn = w.findAll('button').find((b) => b.text() === '删除')
+    // 卡片页推广（2026-11-20）：删除入卡脚 ⋯ 菜单（r5 危险组）——先开菜单再点
+    await w.find('.lp-foot .op-btn').trigger('click')
+    const delBtn = w.findAll('.l5-menu .mi-main').find((b) => b.text() === '删除')
     await delBtn!.trigger('click')
     await flushPromises()
     expect(mockShowDeleteConfirm).toHaveBeenCalledTimes(1)
@@ -135,19 +137,21 @@ describe('CaCertList 分发页（ssl-cert-management）', () => {
 
   it('删除未被引用的 CA：无 extraWarning', async () => {
     const w = await mountPage()
-    const delBtn = w.findAll('button').find((b) => b.text() === '删除')
+    await w.find('.lp-foot .op-btn').trigger('click')
+    const delBtn = w.findAll('.l5-menu .mi-main').find((b) => b.text() === '删除')
     await delBtn!.trigger('click')
     await flushPromises()
     const opts = mockShowDeleteConfirm.mock.calls[0][0]
     expect(opts.extraWarning).toBeUndefined()
   })
 
-  it('「查看安装指引」展开面板并滚动定位', async () => {
+  it('「查看安装指引」按钮已移除（2026-11-20 用户裁决；指引折叠面板本体保留、summary 点击展开）', async () => {
     const w = await mountPage()
-    const guide = w.find('.install-guide').element as HTMLDetailsElement
-    expect(guide.open).toBe(false)
-    const btn = w.findAll('button').find((b) => b.text() === '查看安装指引')
-    await btn!.trigger('click')
-    expect(guide.open).toBe(true)
+    expect(w.findAll('button').some((b) => b.text() === '查看安装指引')).toBe(false)
+    const guide = w.find('.install-guide')
+    expect(guide.exists()).toBe(true)
+    // summary 点击仍可展开（面板自身可用）
+    await guide.find('summary').trigger('click')
+    expect((guide.element as HTMLDetailsElement).open).toBe(true)
   })
 })

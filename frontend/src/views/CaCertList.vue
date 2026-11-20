@@ -2,8 +2,7 @@
   <div class="ssl-page">
     <PageHeader title="CA 根证书" description="平台自建 CA 的信任锚点 · 可放心分发给最终用户安装">
       <template #actions>
-        <button class="btn btn-secondary" @click="openGuide">查看安装指引</button>
-        <button class="btn btn-primary" style="margin-left: 8px" @click="openCaCreateDialog">＋ 创建 CA 根证书</button>
+        <button class="btn btn-primary" @click="openCaCreateDialog">＋ 创建 CA 根证书</button>
       </template>
     </PageHeader>
 
@@ -21,7 +20,7 @@
     </div>
 
     <!-- 用户安装指引（折叠面板，四段：Windows/macOS/Chrome/Linux） -->
-    <details ref="guideRef" class="install-guide">
+    <details class="install-guide">
       <summary>📥 用户安装指引（发给用户时请附带对应系统的步骤）</summary>
       <div class="guide-body">
         <div class="guide-col">
@@ -62,28 +61,48 @@
       </div>
     </details>
 
-    <div class="ssl-header-actions">
-      <SearchInput v-model="searchText" placeholder="搜索证书名称..." @input="onSearch" />
-      <select
-        v-model="groupFilter"
-        :title="groupFilter.startsWith('__') ? '' : groupFilter"
-        class="form-input"
-        style="width: 140px; flex-shrink: 0"
-        @change="onGroupChange"
-      >
-        <option value="__all__">全部分组</option>
-        <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
-        <option value="__ung__">未分组</option>
-      </select>
-      <ClusterSelect
-        v-model="clusterFilter"
-        :clusters="filteredClusters"
-        allow-all
-        style="width: 160px; flex-shrink: 0"
-        @change="loadCerts"
-      />
-      <span class="text-sm text-muted">共 {{ totalCount }} 个 CA 根证书</span>
-    </div>
+    <TableToolbar
+      v-model:mode="cardMode"
+      :count="totalCount"
+      count-unit="个 CA 根证书"
+      :refreshing="loading"
+      @refresh="loadCerts"
+    >
+      <template #filters>
+        <SearchInput v-model="searchText" placeholder="搜索证书名称..." :width="150" @input="onSearch" />
+        <select
+          v-model="groupFilter"
+          :title="groupFilter.startsWith('__') ? '' : groupFilter"
+          class="l5-select"
+          style="width: 104px"
+          @change="onGroupChange"
+        >
+          <option value="__all__">全部分组</option>
+          <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
+          <option value="__ung__">未分组</option>
+        </select>
+        <ClusterSelect
+          v-model="clusterFilter"
+          :clusters="filteredClusters"
+          allow-all
+          style="width: 120px"
+          @change="loadCerts"
+        />
+      </template>
+      <template #mode-extra>
+        <button
+          v-if="cardMode === 'group'"
+          type="button"
+          class="tool-btn fold-all-btn"
+          data-test="card-fold-all"
+          :title="pageHasFolded ? '展开全部集群组' : '收起全部集群组'"
+          @click="toggleFoldAll"
+        >
+          <StrokeIcon :name="pageHasFolded ? 'expandAll' : 'collapseAll'" :size="13" />
+          <span class="fold-all-label">{{ pageHasFolded ? '全部展开' : '全部收起' }}</span>
+        </button>
+      </template>
+    </TableToolbar>
 
     <div v-if="loading" class="loading-state">加载中...</div>
     <div v-else-if="hasActiveFilter && displayedCerts.length === 0" class="ssl-empty">
@@ -96,16 +115,29 @@
       <div class="ssl-empty-text">暂无 CA 根证书</div>
       <button class="btn btn-primary" style="margin-top: 12px" @click="openCaCreateDialog">创建 CA 根证书</button>
     </div>
-    <div v-else class="ssl-grid">
-      <SslCertCard
-        v-for="cert in displayedCerts"
-        :key="cert.id"
-        :cert="cert"
-        variant="ca"
-        @view="viewCert"
-        @download="downloadCa"
-        @delete="deleteCert"
-      />
+    <div v-else class="ca-grid card-grid l5-card" :class="[`mode-${cardMode}`]">
+      <template v-for="g in renderGroups" :key="g.clusterId">
+        <ClusterBand
+          v-if="cardMode === 'group'"
+          :name="g.clusterName"
+          :group="g.groupName"
+          :count-label="countLabelOf(g.count)"
+          :secondary="secondaryOf(g.rows)"
+          :hue-class="g.hueClass"
+          :folded="isFolded(g.clusterId)"
+          @toggle="toggleFold(g.clusterId)"
+        />
+        <SslCertCard
+          v-for="cert in g.rows"
+          :key="cert.id"
+          :cert="cert"
+          variant="ca"
+          :class="{ 'is-folded': cardMode === 'group' && !groupVisible(g.clusterId) }"
+          @view="viewCert"
+          @download="downloadCa"
+          @delete="deleteCert"
+        />
+      </template>
     </div>
 
     <SslViewDrawer v-model:visible="viewDrawerVisible" :cert="viewingCert" :cluster-label="viewingClusterLabel" />
@@ -124,6 +156,10 @@ import { ref, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { PAGE_SIZE_CARD_GRID } from '@/constants'
 import ClusterSelect from '@/components/ClusterSelect.vue'
+import TableToolbar from '@/components/TableToolbar.vue'
+import ClusterBand from '@/components/ClusterBand.vue'
+import StrokeIcon from '@/components/StrokeIcon.vue'
+import { useCardClusterGrouping } from '@/composables/useCardClusterGrouping'
 import api from '@/api'
 import PageHeader from '@/components/PageHeader.vue'
 import SslCertCard from '@/components/SslCertCard.vue'
@@ -140,7 +176,6 @@ const loading = ref(false)
 const searchText = ref('')
 const groupFilter = ref('__all__')
 const clusterFilter = ref<string | number>('')
-const guideRef = ref<HTMLDetailsElement | null>(null)
 
 const groupOptions = computed(() => {
   const names = new Set(clusters.value.map((c: any) => c.group_name || ''))
@@ -170,6 +205,48 @@ const displayedCerts = computed(() => {
     return ga.localeCompare(gb)
   })
 })
+
+// ── 集群分组 / 平铺双模式（共享组合式 + ClusterBand，AGENTS #87/#88）──
+const {
+  mode: cardMode,
+  groups: cardGroups,
+  countLabel: countLabelOf,
+  secondaryOf,
+  isFolded,
+  toggleFold,
+  pageHasFolded,
+  toggleFoldAll,
+  groupVisible,
+} = useCardClusterGrouping<any>({
+  rows: () => displayedCerts.value,
+  unit: '个证书',
+  clusterIdOf: (c) => c.cluster_id,
+  clusterNameOf: (c) => c.cluster_name,
+  groupNameOf: (c) => c.cluster_group_name,
+  secondary: (rows) => {
+    const expiring = rows.filter(
+      (c: any) => c.expire_days !== null && c.expire_days !== undefined && c.expire_days <= 30,
+    )
+    if (expiring.some((c: any) => (c.expire_days ?? 0) < 0)) return '已过期 <b>1</b>'
+    if (expiring.length) return `即将过期 <b>${expiring.length}</b>`
+    return '全部有效'
+  },
+})
+
+const renderGroups = computed(() =>
+  cardMode.value === 'group'
+    ? cardGroups.value
+    : [
+        {
+          clusterId: -1,
+          clusterName: '',
+          groupName: '',
+          hueClass: 'cluster-c1',
+          rows: displayedCerts.value,
+          count: displayedCerts.value.length,
+        },
+      ],
+)
 
 const viewDrawerVisible = ref(false)
 const viewingCert = ref<any | null>(null)
@@ -243,14 +320,6 @@ async function loadClusters() {
   }
 }
 
-function openGuide() {
-  const el = guideRef.value
-  if (el) {
-    el.open = true
-    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
-}
-
 function openCaCreateDialog() {
   caCreateVisible.value = true
 }
@@ -285,14 +354,6 @@ async function deleteCert(cert: any) {
     /* 统计失败不阻断删除 */
   }
 
-  let nodes: { id: number; ip: string; management_port: number }[] = []
-  try {
-    const res = await api.get(`/clusters/${cert.cluster_id}/nodes`)
-    nodes = res.data?.items || []
-  } catch {
-    /* ignore */
-  }
-
   const refHint =
     refCount > 0
       ? `该 CA 仍被 ${refCount} 张服务器证书引用：已发布证书在 Edge 上不受影响，但删除后无法再向新用户分发该根证书。`
@@ -301,14 +362,15 @@ async function deleteCert(cert: any) {
   showDeleteConfirm({
     title: `确定要删除 CA 根证书 "${cert.name}" 吗？`,
     apiEndpoint: `/clusters/${cert.cluster_id}/ssl/${cert.id}`,
-    nodes,
+    // CA 根证书仅保存于数据库：删除弹窗只显示「数据库」scope（2026-11-20 用户裁决）
+    dbOnly: true,
     extraWarning: refHint || undefined,
     edgeConsequenceHint: refCount > 0 ? `该 CA 仍被 ${refCount} 张服务器证书引用` : undefined,
     onOk: async (deleteDb, deleteEdge, nodeIds) => {
       await executeDeleteWithProgress({
         title: `删除 CA 根证书: ${cert.name}`,
         apiEndpoint: `/clusters/${cert.cluster_id}/ssl/${cert.id}`,
-        cluster: { id: cert.cluster_id, nodes },
+        cluster: { id: cert.cluster_id },
         deleteDb,
         deleteEdge,
         nodeIds,

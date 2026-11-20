@@ -1,21 +1,29 @@
 <script setup lang="ts">
-// ssl-cert-management：CA 根证书 / 服务器证书 共享卡片（单一实现，两页复用，禁止再内联拷贝）。
-// 页面差异经 variant 表达；操作全部 emit，业务（发布/删除/下载流程）留在页面。
-import PublishStatusTag from '@/components/PublishStatusTag.vue'
-import PublishDiffButton from '@/components/PublishDiffButton.vue'
-import { getGroupColorStyle, getCardBorderStyle } from '@/composables/useGroupColors'
-import { isReservedSni, splitSniString } from '@/utils/sniTags'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { certTypeLabel, formatSslProtocols, expireBadgeClass, expireBadgeText } from '@/utils/sslLabel'
 import { formatDateOnly } from '@/utils/format'
+import PublishStatusTag from '@/components/PublishStatusTag.vue'
+import PublishDiffButton from '@/components/PublishDiffButton.vue'
+import StrokeIcon from '@/components/StrokeIcon.vue'
+import { clusterHueClass } from '@/utils/clusterHue'
+import { isReservedSni, splitSniString } from '@/utils/sniTags'
 
-const props = defineProps<{
-  cert: Record<string, any>
-  variant: 'ca' | 'server'
-  /** 服务器证书的签发 CA 名称（页面经 ca_cert_id 映射解析；null = 引用无效/外部签发） */
-  caName?: string | null
-  /** 匹配名单（sni）与证书 SAN 不一致（后端派生；仅 server 形态展示） */
-  sniMismatch?: boolean
-}>()
+// ssl-cert-management：CA 根证书 / 服务器证书 共享卡片（单一实现，两页复用，禁止再内联拷贝）。
+// mockup-parity 卡片页推广（2026-11-20）：容器 = l5-panel 解剖（lp-head/lp-body/lp-foot），
+// 集群色相 = clusterHueClass（band 左条/平铺左缘同源）；提示条 = 共享 lp-notice。
+const props = withDefaults(
+  defineProps<{
+    variant: 'ca' | 'server'
+    cert: Record<string, any>
+    /** 服务器证书的签发 CA 名称（页面经 ca_cert_id 映射解析；null = 引用无效/外部签发） */
+    caName?: string | null
+    /** 匹配名单（sni）与证书 SAN 不一致（后端派生；仅 server 形态展示） */
+    sniMismatch?: boolean
+    /** server 卡片「部分失败」提示文案（republish-failed-nodes 三级回退，页面传入；空 = 不渲染） */
+    partialNotice?: string | null
+  }>(),
+  { caName: null, sniMismatch: false, partialNotice: null },
+)
 
 const emit = defineEmits<{
   (e: 'view', cert: Record<string, any>): void
@@ -27,6 +35,7 @@ const emit = defineEmits<{
   (e: 'ca-click'): void
   (e: 'sync-sni', cert: Record<string, any>): void
   (e: 'preview-diff', cert: Record<string, any>): void
+  (e: 'republish', cert: Record<string, any>): void
 }>()
 
 // CA 临期红色警示（E4）：CA 过期 = 所有已装终端全部失效，强度高于普通证书临期徽章
@@ -35,42 +44,61 @@ const caExpiring =
   props.cert.expire_days !== null &&
   props.cert.expire_days !== undefined &&
   props.cert.expire_days <= 30
+
+// ── 卡内 ⋯ 菜单（每卡一个；flip-up + 文档级关闭）──
+const menuOpen = ref(false)
+const menuFlipUp = ref(false)
+function toggleMenu(event?: MouseEvent): void {
+  menuOpen.value = !menuOpen.value
+  if (!menuOpen.value) return
+  const rect = (event?.currentTarget as HTMLElement | null)?.getBoundingClientRect()
+  menuFlipUp.value = rect ? rect.bottom + 200 > window.innerHeight : false
+}
+function closeMenu(): void {
+  menuOpen.value = false
+}
+function onDocClick(): void {
+  if (menuOpen.value) closeMenu()
+}
+onMounted(() => document.addEventListener('click', onDocClick))
+onUnmounted(() => document.removeEventListener('click', onDocClick))
+
+function menuEmit(fn: (cert: Record<string, any>) => void): void {
+  closeMenu()
+  fn(props.cert)
+}
+const menuId = computed(() => `scm-${props.variant}-${props.cert.id ?? 'x'}`)
+
+const publishable = computed(() => props.variant === 'server' && props.cert.cert_type !== 'client')
 </script>
 
 <template>
-  <div class="ssl-card" :class="{ 'ssl-card-alert': caExpiring }" :style="getCardBorderStyle(cert.cluster_group_name)">
-    <div v-if="caExpiring" class="ssl-card-alert-msg">
-      ⚠️ 该 CA 将于 <b>{{ Math.abs(cert.expire_days) }} 天</b>内{{
-        cert.expire_days < 0 ? '已经' : ''
-      }}过期：过期后所有已安装此证书的终端将重新显示「不安全」。请尽快更换 CA 并重新分发根证书。
+  <article class="l5-panel std-card ssl-cert-card" :class="clusterHueClass(cert.cluster_id)">
+    <!-- 平铺模式身份 strip（分组模式由 band 承担，CSS 互斥） -->
+    <div class="lp-strip">
+      <span class="lp-tag lp-cluster">{{ cert.cluster_name || '-' }}</span>
+      <span v-if="cert.cluster_group_name" class="lp-tag group lp-group">{{ cert.cluster_group_name }}</span>
     </div>
-    <div v-if="variant === 'server' && sniMismatch" class="ssl-card-alert-msg sni-warn">
-      ⚠️ 匹配名单与证书 SAN 不一致（Edge 匹配名单缺少证书实际覆盖的域名/IP）
-      <button class="btn btn-secondary btn-sm" style="margin-left: 8px" @click="emit('sync-sni', cert)">同步</button>
-    </div>
-    <div class="ssl-card-topbar" :style="getGroupColorStyle(cert.cluster_group_name)">
-      <span>{{ cert.cluster_name || '-' }}</span>
-      <span v-if="cert.cluster_group_name" class="group-badge">{{ cert.cluster_group_name }}</span>
-      <span class="topbar-spacer"></span>
-      <span
-        v-if="variant === 'ca'"
-        class="algo-badge algo-sm"
-        style="background: oklch(55% 0.18 160/18%); color: oklch(40% 0.2 160); border-color: oklch(55% 0.18 160/30%)"
-        >CA 根证书</span
-      >
-      <span v-else-if="cert.algorithm === 'sm2'" class="algo-badge algo-sm">🇨🇳 国密</span>
-      <span v-else class="algo-badge algo-international">🌐 国际</span>
-    </div>
-    <div class="ssl-card-header">
-      <div class="ssl-card-info">
-        <div class="ssl-card-name">{{ cert.name }}</div>
-        <div v-if="cert.description" class="ssl-card-desc">{{ cert.description }}</div>
+
+    <div class="lp-head">
+      <div class="lp-title">
+        <span class="lp-name" :title="cert.name">{{ cert.name }}</span>
+        <span v-if="variant === 'server' && cert.algorithm === 'sm2'" class="algo-badge algo-sm">🇨🇳 国密</span>
+        <span v-else-if="variant === 'server'" class="algo-badge algo-international">🌐 国际</span>
+        <span class="lp-tag lp-cluster">{{ cert.cluster_name || '-' }}</span>
+        <span v-if="cert.cluster_group_name" class="lp-tag group lp-group">{{ cert.cluster_group_name }}</span>
       </div>
-      <div class="ssl-card-meta">
-        <span v-if="variant === 'ca'" class="badge badge-success">CA 根证书</span>
-        <!-- ssl-ux-review-fixes 组 2：单一 PublishStatusTag 呈现四态，去掉「● 已发布」双徽章冗余 -->
-        <!-- publish-diff-preview-batch2（D2）：待发布/partial 旁 ▾ 差异预览，emit 上抛业务留页面 -->
-        <span v-else class="status-cell-flex">
+      <div class="lp-status status-cell-flex">
+        <template v-if="variant === 'ca'">
+          <span class="badge badge-success">CA 根证书</span>
+          <span
+            v-if="cert.expire_days !== null && cert.expire_days !== undefined"
+            class="badge"
+            :class="`badge-${expireBadgeClass(cert.expire_days)}`"
+            >{{ expireBadgeText(cert.expire_days) }}</span
+          >
+        </template>
+        <template v-else>
           <PublishStatusTag
             :version="cert.current_version"
             :published-at="cert.published_at"
@@ -82,28 +110,32 @@ const caExpiring =
             :last-publish-status="cert.last_publish_status ?? null"
             @click.stop="emit('preview-diff', cert)"
           />
-        </span>
+        </template>
       </div>
     </div>
-    <div class="ssl-card-body">
-      <div v-if="variant === 'server'" class="ssl-card-row">
-        <label>SNI</label
-        ><span class="ssl-sni-tags">
-          <template v-for="s in splitSniString(cert.sni)" :key="s">
-            <span class="sni-tag" :class="{ 'sni-tag-locked': isReservedSni(s) }"
-              >{{ s }}<span v-if="isReservedSni(s)" class="sni-tag-reserved">系统保留</span></span
-            >
-          </template>
-          <span v-if="!cert.sni" class="text-muted">-</span>
+
+    <div class="lp-body">
+      <div v-if="variant === 'server'" class="lp-row">
+        <span class="lp-k">SNI</span>
+        <span class="lp-v">
+          <span class="ssl-sni-tags">
+            <template v-for="s in splitSniString(cert.sni)" :key="s">
+              <span class="sni-tag" :class="{ 'sni-tag-locked': isReservedSni(s) }"
+                >{{ s }}<span v-if="isReservedSni(s)" class="sni-tag-reserved">系统保留</span></span
+              >
+            </template>
+            <span v-if="!cert.sni" class="lp-v dim">-</span>
+          </span>
         </span>
       </div>
       <!-- ssl-ux-review-fixes 4.3：CA 的 sni 字段存 CN，直译 SNI 语义错位 → 显示 CN 行 -->
-      <div v-if="variant === 'ca'" class="ssl-card-row">
-        <label>CN</label><span>{{ cert.sni || '-' }}</span>
+      <div v-if="variant === 'ca'" class="lp-row">
+        <span class="lp-k">CN</span>
+        <span class="lp-v mono">{{ cert.sni || '-' }}</span>
       </div>
-      <div v-if="variant === 'server'" class="ssl-card-row">
-        <label>类型</label
-        ><span
+      <div v-if="variant === 'server'" class="lp-row">
+        <span class="lp-k">类型</span>
+        <span class="lp-v"
           >{{ certTypeLabel(cert.cert_type)
           }}<span
             v-if="cert.create_method === 'local_generate'"
@@ -114,25 +146,27 @@ const caExpiring =
         >
       </div>
       <!-- E3：签发 CA 行——可点击跳转 CA 页，让「该给用户发哪个根证书」可追溯 -->
-      <div v-if="variant === 'server'" class="ssl-card-row">
-        <label>签发 CA</label
-        ><span
-          ><span v-if="caName" class="ca-link" title="查看签发此证书的 CA 根证书" @click="emit('ca-click')">{{
+      <div v-if="variant === 'server'" class="lp-row">
+        <span class="lp-k">签发 CA</span>
+        <span class="lp-v"
+          ><span v-if="caName" class="ca-link" title="查看签发此证书的 CA 根证书" @click.stop="emit('ca-click')">{{
             caName
           }}</span
-          ><span v-else class="text-muted">—</span></span
+          ><span v-else class="lp-v dim">—</span></span
         >
       </div>
       <!-- uapm 修复：IP SAN 只烧在证书体里，序列化期解析透出后卡片可见 -->
-      <div v-if="cert.ip_sans && cert.ip_sans.length" class="ssl-card-row">
-        <label>IP</label
-        ><span class="ssl-sni-tags">
-          <span v-for="ip in cert.ip_sans" :key="ip" class="sni-tag">{{ ip }}</span>
+      <div v-if="cert.ip_sans && cert.ip_sans.length" class="lp-row">
+        <span class="lp-k">IP</span>
+        <span class="lp-v">
+          <span class="ssl-sni-tags">
+            <span v-for="ip in cert.ip_sans" :key="ip" class="sni-tag">{{ ip }}</span>
+          </span>
         </span>
       </div>
-      <div v-if="cert.algorithm" class="ssl-card-row">
-        <label>算法</label
-        ><span
+      <div v-if="cert.algorithm" class="lp-row">
+        <span class="lp-k">算法</span>
+        <span class="lp-v"
           ><span v-if="variant === 'ca' && cert.algorithm === 'sm2'" class="badge algo-sm">CA 根证书 SM2</span
           ><span v-if="variant === 'ca' && cert.algorithm === 'rsa'" class="badge algo-international"
             >CA 根证书 RSA</span
@@ -149,15 +183,15 @@ const caExpiring =
           ></span
         >
       </div>
-      <div v-if="cert.ssl_protocols" class="ssl-card-row">
-        <label>协议</label><span>{{ formatSslProtocols(cert.ssl_protocols) }}</span>
+      <div v-if="cert.ssl_protocols" class="lp-row">
+        <span class="lp-k">协议</span><span class="lp-v">{{ formatSslProtocols(cert.ssl_protocols) }}</span>
       </div>
-      <div v-if="cert.expire_at" class="ssl-card-row">
-        <label>有效期</label
-        ><span class="ssl-expire-text"
+      <div v-if="cert.expire_at" class="lp-row">
+        <span class="lp-k">有效期</span>
+        <span class="lp-v mono"
           >{{ formatDateOnly(cert.expire_at)
           }}<span
-            v-if="cert.expire_days !== null && cert.expire_days !== undefined"
+            v-if="variant === 'server' && cert.expire_days !== null && cert.expire_days !== undefined"
             class="ssl-expire-badge"
             :class="expireBadgeClass(cert.expire_days)"
             >{{ expireBadgeText(cert.expire_days) }}</span
@@ -165,124 +199,82 @@ const caExpiring =
         >
       </div>
     </div>
-    <div class="ssl-card-actions">
-      <button class="btn btn-ghost btn-sm ssl-action-btn" @click="emit('view', cert)">查看</button>
-      <!-- client 证书不提供分发下载（其语义是随私钥交付用户，走查看抽屉 bundle） -->
-      <button
-        v-if="variant === 'ca' || cert.cert_type !== 'client'"
-        class="btn btn-ghost btn-sm ssl-action-btn"
-        @click="emit('download', cert)"
+
+    <!-- CA 临期警示（E4，现实现原文） -->
+    <div v-if="caExpiring" class="lp-notice alert alert-error">
+      <span class="n-ico"><StrokeIcon name="warning" :size="13" /></span>
+      <span class="n-txt"
+        >该 CA 将于 <b>{{ Math.abs(cert.expire_days) }} 天</b>内{{
+          cert.expire_days < 0 ? '已经' : ''
+        }}过期：过期后所有已安装此证书的终端将重新显示「不安全」。请尽快更换 CA 并重新分发根证书。</span
       >
-        {{ variant === 'ca' ? '下载根证书' : '下载证书' }}
-      </button>
-      <button v-if="variant === 'server'" class="btn btn-ghost btn-sm ssl-action-btn" @click="emit('edit', cert)">
-        编辑
-      </button>
-      <button class="btn btn-ghost btn-sm ssl-action-btn" style="color: var(--danger)" @click="emit('delete', cert)">
-        删除
-      </button>
-      <span style="flex: 1"></span>
-      <button
-        v-if="variant === 'server' && cert.cert_type !== 'client'"
-        class="btn btn-secondary btn-sm"
-        @click="emit('publish', cert)"
-      >
-        发布
-      </button>
-      <button
-        v-if="variant === 'server' && cert.cert_type !== 'client'"
-        class="btn btn-secondary btn-sm"
-        @click="emit('version', cert)"
-      >
-        版本管理
-      </button>
     </div>
-  </div>
+    <!-- SNI 匹配名单不一致（现实现原文） -->
+    <div v-if="variant === 'server' && sniMismatch" class="lp-notice alert alert-warning">
+      <span class="n-ico"><StrokeIcon name="warning" :size="13" /></span>
+      <span class="n-txt">匹配名单与证书 SAN 不一致（Edge 匹配名单缺少证书实际覆盖的域名/IP）</span>
+      <button class="n-act" @click.stop="emit('sync-sni', cert)">同步</button>
+    </div>
+    <!-- 部分失败：文案两态（republish-failed-nodes）+ 重发 / 查看差异双动作 -->
+    <div v-if="variant === 'server' && partialNotice" class="lp-notice alert alert-error">
+      <span class="n-ico"><StrokeIcon name="warning" :size="13" /></span>
+      <span class="n-txt">{{ partialNotice }}</span>
+      <button class="n-act" @click.stop="emit('republish', cert)">重发失败节点</button>
+      <button class="n-act ghost" @click.stop="emit('preview-diff', cert)">查看差异</button>
+    </div>
+
+    <div class="lp-foot" @click.stop>
+      <template v-if="variant === 'ca'">
+        <button class="op-pub" @click="emit('download', cert)">下载根证书</button>
+        <div class="menu-anchor">
+          <button type="button" class="op-btn" title="更多操作" aria-label="更多操作" @click.stop="toggleMenu($event)">
+            <StrokeIcon name="dots" :size="14" />
+          </button>
+          <div class="l5-menu" :id="menuId" :class="{ open: menuOpen, 'flip-up': menuFlipUp }">
+            <button class="mi" @click="menuEmit((c) => emit('view', c))">
+              <span class="mi-main">查看</span>
+              <span class="mi-sub">完整证书内容与指纹</span>
+            </button>
+            <hr class="menu-sep" />
+            <button class="mi danger" @click="menuEmit((c) => emit('delete', c))">
+              <span class="mi-main">删除</span>
+              <span class="mi-sub">删除后无法再向新用户分发该根证书（已发布证书在 Edge 上不受影响）</span>
+            </button>
+          </div>
+        </div>
+      </template>
+      <template v-else>
+        <button v-if="publishable" class="op-pub" @click="emit('publish', cert)">发布</button>
+        <div class="menu-anchor">
+          <button type="button" class="op-btn" title="更多操作" aria-label="更多操作" @click.stop="toggleMenu($event)">
+            <StrokeIcon name="dots" :size="14" />
+          </button>
+          <div class="l5-menu" :id="menuId" :class="{ open: menuOpen, 'flip-up': menuFlipUp }">
+            <button class="mi" @click="menuEmit((c) => emit('view', c))">
+              <span class="mi-main">查看</span>
+              <span class="mi-sub">完整证书内容与指纹</span>
+            </button>
+            <button v-if="publishable" class="mi" @click="menuEmit((c) => emit('version', c))">
+              <span class="mi-main">版本管理</span>
+              <span class="mi-sub">历史版本查看与回滚</span>
+            </button>
+            <hr class="menu-sep" />
+            <button class="mi danger" @click="menuEmit((c) => emit('delete', c))">
+              <span class="mi-main">删除</span>
+              <span class="mi-sub">删平台配置，可同步删 Edge 已发布配置（弹窗可选）</span>
+            </button>
+          </div>
+        </div>
+      </template>
+    </div>
+  </article>
 </template>
 
 <style scoped>
-.ssl-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  transition: box-shadow 0.2s;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+.ssl-cert-card {
+  min-width: 0;
 }
-.ssl-card:hover {
-  box-shadow: var(--shadow-md);
-}
-.ssl-card-alert {
-  border-top: 3px solid var(--danger);
-}
-.ssl-card-alert-msg {
-  background: var(--danger-bg);
-  color: oklch(45% 0.17 28);
-  font-size: 12px;
-  padding: 8px 16px;
-  line-height: 1.55;
-  border-bottom: 1px solid oklch(55% 0.18 28 / 15%);
-}
-.sni-warn {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px;
-  background: oklch(72% 0.14 70 / 14%);
-  color: oklch(40% 0.09 70);
-  border-bottom: 1px solid oklch(72% 0.14 70 / 30%);
-}
-.ssl-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 8px;
-  padding: 12px 20px 0;
-}
-.ssl-card-info {
-  flex: 1;
-}
-.ssl-card-name {
-  font-size: 14px;
-  font-weight: 600;
-}
-.ssl-card-desc {
-  font-size: 12px;
-  color: var(--muted);
-  margin-top: 2px;
-  line-height: 1.5;
-}
-.ssl-card-meta {
-  text-align: right;
-  flex-shrink: 0;
-  margin-left: 12px;
-}
-.ssl-card-topbar {
-  padding: 4px 16px;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--accent);
-  background: oklch(56% 0.16 210 / 8%);
-  border-bottom: 1px solid oklch(56% 0.16 210 / 12%);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.ssl-card-body {
-  padding: 4px 20px 8px;
-}
-.ssl-card-row {
-  display: flex;
-  gap: 8px;
-  font-size: 12px;
-  margin-bottom: 2px;
-}
-.ssl-card-row label {
-  color: var(--muted);
-  min-width: 40px;
-}
+/* sni/算法/有效期等专有元素沿用现实现原样式（SslCertCard 单点） */
 .ssl-sni-tags {
   display: inline-flex;
   flex-wrap: wrap;
@@ -328,17 +320,12 @@ const caExpiring =
 .ca-link:hover {
   text-decoration: underline;
 }
-.ssl-expire-text {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-family: var(--font-mono);
-}
 .ssl-expire-badge {
   font-size: 11px;
   font-weight: 600;
   padding: 1px 7px;
   border-radius: 10px;
+  margin-left: 6px;
   white-space: nowrap;
 }
 .ssl-expire-badge.danger {
@@ -356,25 +343,6 @@ const caExpiring =
   color: var(--muted);
   border: 1px solid var(--border);
 }
-.ssl-card-actions {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  flex-wrap: wrap;
-  margin-top: auto;
-  padding: 10px 20px 16px;
-  border-top: 1px solid var(--border);
-}
-.ssl-action-btn {
-  background: none !important;
-  background-color: transparent !important;
-}
-.ssl-action-btn:hover {
-  background: var(--bg) !important;
-}
-.topbar-spacer {
-  flex: 1;
-}
 .algo-badge {
   font-size: 11px;
   font-weight: 600;
@@ -391,8 +359,5 @@ const caExpiring =
   background: oklch(55% 0.12 240 / 14%);
   color: oklch(42% 0.14 240);
   border: 1px solid oklch(55% 0.12 240 / 25%);
-}
-.text-muted {
-  color: var(--muted);
 }
 </style>

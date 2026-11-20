@@ -152,27 +152,18 @@ describe('SslViewDrawer 私钥按需获取（ssl-ux-review-fixes 9.3）', () => 
     expect(w.text()).not.toContain('私钥内容 (PEM)')
   })
 
-  it('📥 下载私钥经按需端点取钥', async () => {
+  it('私钥区无「📥 下载」按钮（抽屉纯查看，2026-11-20 下线下载入口）', async () => {
     const w = await mountView(baseCert({ cluster_id: 5 }))
     const keyHeader = w.findAll('.section-header').find((h) => h.text().includes('私钥内容 (PEM)'))
     expect(keyHeader).toBeDefined()
-    const dlBtn = keyHeader!.findAll('button').find((b) => b.text().includes('下载'))
-    await dlBtn!.trigger('click')
-    await new Promise((r) => setTimeout(r, 0))
-    expect(mockFetchKey).toHaveBeenCalledWith(5, 1)
+    const btns = keyHeader!.findAll('button').map((b) => b.text())
+    expect(btns.some((t) => t.includes('下载'))).toBe(false)
   })
 
-  it('CA 私钥确认下载走统一按需端点（不再调 /ssl/{id}/ca-key）', async () => {
+  it('CA 私钥下载入口已下线（唯一入口随抽屉纯查看移除，2026-11-20 用户裁决）', async () => {
     const w = await mountView(baseCert({ is_ca: true, cert_type: 'server', has_private_key: true }))
-    const caBtn = w.findAll('button').find((b) => b.text().includes('下载 CA 私钥'))
-    expect(caBtn).toBeDefined()
-    await caBtn!.trigger('click')
-    await w.vm.$nextTick()
-    // 确认弹窗内「确认下载」
-    const confirmBtn = w.findAll('button').find((b) => b.text().includes('确认下载'))
-    await confirmBtn!.trigger('click')
-    await new Promise((r) => setTimeout(r, 0))
-    expect(mockFetchKey).toHaveBeenCalled()
+    expect(w.findAll('button').some((b) => b.text().includes('下载 CA 私钥'))).toBe(false)
+    expect(w.text()).not.toContain('高风险操作')
   })
 })
 
@@ -181,15 +172,12 @@ describe('SslViewDrawer 下载文件名（ssl-cert-management）', () => {
     vi.clearAllMocks()
   })
 
-  it('证书文件下载后缀为 .crt', async () => {
+  it('证书内容 PEM 段无下载按钮（抽屉纯查看）', async () => {
     const w = await mountView(baseCert())
-    const dlBtn = w.findAll('button').find((b) => b.text().includes('📥 下载'))
-    expect(dlBtn).toBeDefined()
-    await dlBtn!.trigger('click')
-    expect(mockDownloadPem).toHaveBeenCalledWith('CERT-PEM', 'srv.crt')
+    expect(w.findAll('button').some((b) => b.text().includes('📥 下载'))).toBe(false)
   })
 
-  it('CA 证书下载文件名与分发页一致：{集群名}_{名称}.crt', async () => {
+  it('CA 证书顶部下载区已下线（卡片「下载根证书」承担分发下载）', async () => {
     const SslViewDrawer = (await import('../SslViewDrawer.vue')).default
     const w2 = mount(SslViewDrawer, {
       props: {
@@ -200,18 +188,12 @@ describe('SslViewDrawer 下载文件名（ssl-cert-management）', () => {
       global: { stubs: { ...stubs, Teleport: true } },
     })
     await w2.vm.$nextTick()
-    const btn = w2.findAll('button').find((b) => b.text().includes('下载 CA 证书'))
-    expect(btn).toBeDefined()
-    await btn!.trigger('click')
-    expect(mockDownloadCertFile).toHaveBeenCalledWith('CERT-PEM', '生产集团_企业根CA.crt')
+    expect(w2.findAll('button').some((b) => b.text().includes('下载 CA 证书'))).toBe(false)
   })
 
-  it('CA 私钥高风险确认弹窗含「绝不可分发给终端用户」', async () => {
+  it('CA 私钥高风险确认弹窗已随入口下线', async () => {
     const w = await mountView(baseCert({ is_ca: true, name: '企业根CA' }))
-    const dangerBtn = w.findAll('button').find((b) => b.text() === '下载 CA 私钥')
-    expect(dangerBtn).toBeDefined()
-    await dangerBtn!.trigger('click')
-    expect(w.text()).toContain('绝不可分发给终端用户')
+    expect(w.text()).not.toContain('绝不可分发给终端用户')
   })
 })
 

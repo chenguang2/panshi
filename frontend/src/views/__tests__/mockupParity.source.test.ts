@@ -846,6 +846,8 @@ describe('mockup-parity · 重发失败节点六页接线（republish-failed-nod
     'PluginConfigList.vue',
     'GlobalRuleList.vue',
     'PluginMetadataList.vue',
+    // 服务器证书页 2026-11-20 补接（SSL 升级为卡片页后同构；preview registry 'ssl' 既有）
+    'ServerCertList.vue',
   ]
 
   it('六页均接共享 useRepublishFailedNodes（禁页面内自解析预览响应）', () => {
@@ -857,7 +859,8 @@ describe('mockup-parity · 重发失败节点六页接线（republish-failed-nod
       // 解析成功文案缓存 + 双动作按钮
       expect(s, `${f} 缺 republishNotices 缓存`).toContain('republishNotices')
       expect(s, `${f} 缺重发按钮`).toContain('重发失败节点')
-      expect(s, `${f} 缺查看差异次动作`).toContain('class="n-act ghost"')
+      // ServerCertList 的「查看差异」ghost 动作在 SslCertCard 卡内单点（下方专段钉住）
+      if (f !== 'ServerCertList.vue') expect(s, `${f} 缺查看差异次动作`).toContain('class="n-act ghost"')
       expect(s, `${f} 弹窗未接预选`).toContain(':preselected-node-ids="publishPreselected"')
     }
   })
@@ -868,6 +871,15 @@ describe('mockup-parity · 重发失败节点六页接线（republish-failed-nod
       // 重发入口设置、常规入口清空——至少一处「复位」存在
       expect(s, `${f} 缺预选复位`).toContain('publishPreselected.value = []')
     }
+  })
+
+  it('SslCertCard partial 提示条单点：server 专属 + 双动作（republish/查看差异）', () => {
+    const s = readFileSync(resolve(process.cwd(), 'src/components/SslCertCard.vue'), 'utf-8')
+    expect(s).toContain('partialNotice')
+    expect(s).toContain("variant === 'server' && partialNotice")
+    expect(s).toContain('重发失败节点')
+    expect(s).toContain('class="n-act ghost"')
+    expect(s).toContain("emit('republish', cert)")
   })
 
   it('静态资源页不迁移（D7：取持久化明细，语义更精确）；notice 双动作样式走 style.css 单点', () => {
@@ -895,5 +907,58 @@ describe('plugin-ref-filter · 插件引用服务端过滤（插件组/全局规
       expect(s, `${f} matchPluginRef 客户端过滤回潮`).not.toContain('matchPluginRef')
       expect(s, `${f} pluginRefFilter 回潮`).not.toContain('pluginRefFilter')
     }
+  })
+})
+
+describe('mockup-parity · CA 根证书/服务器证书卡片页推广（2026-11-20）', () => {
+  it('两页接 TableToolbar + ClusterBand 分组|平铺（#87/#88 同构）', () => {
+    for (const [f, unit] of [
+      ['CaCertList.vue', '个 CA 根证书'],
+      ['ServerCertList.vue', '个服务器证书'],
+    ] as const) {
+      const s = page(f)
+      expect(s, `${f} 缺 TableToolbar`).toContain('<TableToolbar')
+      expect(s, `${f} 缺 ClusterBand`).toContain('<ClusterBand')
+      expect(s, `${f} 缺分组组合式`).toContain('useCardClusterGrouping')
+      expect(s, `${f} 缺平铺 class`).toContain('`mode-${cardMode}`')
+      expect(s, `${f} 计数单位`).toContain(unit)
+      // 旧外壳退场
+      expect(s, `${f} ssl-header-actions 回潮`).not.toContain('ssl-header-actions')
+      expect(s, `${f} ssl-grid 回潮`).not.toContain('class="ssl-grid"')
+    }
+  })
+
+  it('CA 页：无 chips 行（真实页面无状态档）；分发横幅 + 安装指引保留', () => {
+    const s = page('CaCertList.vue')
+    expect(s).not.toContain('l5-chiprow')
+    expect(s).toContain('cert-banner-ok')
+    expect(s).toContain('install-guide')
+  })
+
+  it('服务器证书页：发布状态 chips 单一形态（#85①）+ 警示横幅', () => {
+    const s = page('ServerCertList.vue')
+    expect(s).toContain('class="l5-chiprow"')
+    expect(s).toContain('statusTabs')
+    expect(s).toContain('publishStatusOf')
+    expect(s, '状态归 chips 后工具条不再显示「共 N 个」').toContain(':show-count="false"')
+    expect(s).toContain('cert-banner-warn')
+  })
+
+  it('SslCertCard 单点：l5-panel 解剖 + 真实文案提示条 + 脚部主操作/⋯ 菜单', () => {
+    const s = readFileSync(resolve(process.cwd(), 'src/components/SslCertCard.vue'), 'utf-8')
+    expect(s).toContain('l5-panel')
+    expect(s).toContain('clusterHueClass')
+    expect(s).not.toContain('ssl-card-topbar')
+    // 真实文案（E4 / sniMismatch）
+    expect(s).toContain('过期后所有已安装此证书的终端将重新显示「不安全」')
+    expect(s).toContain('匹配名单与证书 SAN 不一致')
+    // foot 主操作（变体分派）+ ⋯ 菜单主文案集合
+    expect(s).toContain('>下载根证书</button>')
+    expect(s).toContain('mi-main">查看</span>')
+    expect(s).toContain('mi-main">删除</span>')
+    expect(s).toContain('已发布证书在 Edge 上不受影响')
+    // 发布/差异接线保留
+    expect(s).toContain('<PublishStatusTag')
+    expect(s).toContain('<PublishDiffButton')
   })
 })

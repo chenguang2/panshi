@@ -6,6 +6,17 @@
 <title>服务器证书 · 方案 C（卡片型） — 磐石网关管理平台</title>
 <link rel="stylesheet" href="theme.css">
 <style>
+.algo-badge { font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 3px; line-height: 1.6; }
+.algo-sm { background: oklch(65% 0.18 30 / 18%); color: oklch(50% 0.22 30); border: 1px solid oklch(65% 0.18 30 / 30%); }
+.algo-international { background: oklch(55% 0.12 240 / 14%); color: oklch(42% 0.14 240); border: 1px solid oklch(55% 0.12 240 / 25%); }
+.cert-banner { display: flex; gap: 12px; align-items: flex-start; border-radius: var(--radius-lg); padding: 14px 16px; margin-bottom: 16px; border: 1px solid; }
+.banner-icon { width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #fff; }
+.cert-banner-warn { background: oklch(72% 0.14 70 / 16%); border-color: oklch(72% 0.14 70 / 45%); }
+.cert-banner-warn .banner-icon { background: oklch(72% 0.14 70); }
+.cert-banner-warn .banner-text { color: oklch(38% 0.07 70); }
+.cert-banner-warn .banner-text b { color: oklch(45% 0.12 70); }
+.cert-banner-warn .banner-text p { margin: 4px 0 0; font-size: 12.5px; line-height: 1.65; }
+.banner-action { margin-left: auto; align-self: center; flex-shrink: 0; white-space: nowrap; }
 /* 该页独有：仅页头字号微调，卡片解剖一律走 theme.css 共享类 */
 .page-header h1 { font-size: 21px; }
 </style>
@@ -81,10 +92,17 @@
         </div>
       </div>
 
-      <div class="alert alert-error" style="margin-bottom:16px;">
-        <span class="alert-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3.2 21.4 20H2.6L12 3.2z" fill="currentColor"/><path d="M12 9.4v4M12 16.6v.1" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></span>
-        <div class="alert-content"><b>服务器证书含私钥，请勿分发给最终用户</b>——它不是信任锚点，装进用户系统会显示「不安全」；证书更新或重新生成后，已分发出去的旧副本立即失效。让用户信任请分发 CA 根证书。</div>
-        <a class="btn btn-secondary btn-sm alert-act" href="ca-certs.html">前往 CA 根证书</a>
+      <div class="cert-banner cert-banner-warn">
+        <span class="banner-icon">⚠</span>
+        <div class="banner-text">
+          <b>请勿将服务器证书分发给终端用户</b>
+          <p>
+            服务器证书只部署在网关上，<b>不是</b>信任锚点——把它装进用户系统会显示「不安全」。让用户系统显示「安全」的正确方式是安装
+            <b>CA 根证书</b>。另外：证书更新或重新生成后，已下载的服务器证书副本<b>立即失效</b>。 客户端证书（用于 mTLS
+            双向认证）请在该证书的「查看」抽屉中下载完整安装包。
+          </p>
+        </div>
+        <button class="btn btn-secondary banner-action" onclick="location.href='ca-certs.html'">前往 CA 根证书下载 →</button>
       </div>
 
       <div class="l5-card mode-group" id="l5card">
@@ -136,6 +154,7 @@
             <div class="lp-head">
               <div class="lp-title">
                 <span class="lp-name" title="生产 API 证书">生产 API 证书</span>
+                <span class="algo-badge algo-international">🌐 国际</span>
                 
                 
               </div>
@@ -169,6 +188,7 @@
             <div class="lp-head">
               <div class="lp-title">
                 <span class="lp-name" title="门户站点证书">门户站点证书</span>
+                <span class="algo-badge algo-sm">🇨🇳 国密</span>
                 
                 
               </div>
@@ -183,8 +203,8 @@
             </div>
             <div class="lp-notice alert alert-warning">
               <span class="n-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
-              <span class="n-txt">14 天后过期，请续期后重新发布</span>
-              <button class="n-act">更新证书</button>
+              <span class="n-txt">匹配名单与证书 SAN 不一致（Edge 匹配名单缺少证书实际覆盖的域名/IP）</span>
+              <button class="n-act">同步</button>
             </div>
             <div class="lp-foot">
               <button class="op-pub">发布</button>
@@ -207,6 +227,7 @@
             <div class="lp-head">
               <div class="lp-title">
                 <span class="lp-name" title="CDN 加速证书">CDN 加速证书</span>
+                <span class="algo-badge algo-international">🌐 国际</span>
                 
               </div>
               <div class="lp-status">
@@ -248,6 +269,7 @@
             <div class="lp-head">
               <div class="lp-title">
                 <span class="lp-name" title="管理后台证书">管理后台证书</span>
+                <span class="algo-badge algo-international">🌐 国际</span>
                 
                 
               </div>
@@ -260,12 +282,7 @@
               <div class="lp-row"><span class="lp-k">域名</span><span class="lp-v split"><span class="tr mono">admin.example.com</span><span class="c-dim">·</span><span class="c-mono">2026-10-30</span><span class="badge badge-danger">已过期 19 天</span></span></div>
               <div class="lp-row group-only"><span class="lp-k">签发</span><span class="lp-v dim" title="证书由该 CA 签发">DigiCert Global G2</span></div>
             </div>
-            <div class="lp-notice alert alert-error">
-              <span class="n-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3.2 21.4 20H2.6L12 3.2z" fill="currentColor"/><path d="M12 9.4v4M12 16.6v.1" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></span>
-              <span class="n-txt">已过期：客户端握手将失败</span>
-              <button class="n-act">更新证书</button>
-            </div>
-            <div class="lp-foot">
+                        <div class="lp-foot">
               <button class="op-pub" disabled title="证书已过期，请更新证书后再发布">发布</button>
               <div class="menu-anchor">
                 <button class="op-btn" data-menu-btn="sc-2" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
@@ -295,6 +312,7 @@
             <div class="lp-head">
               <div class="lp-title">
                 <span class="lp-name" title="开发测试证书">开发测试证书</span>
+                <span class="algo-badge algo-international">🌐 国际</span>
                 
                 
               </div>
@@ -334,6 +352,7 @@
             <div class="lp-head">
               <div class="lp-title">
                 <span class="lp-name" title="支付网关证书">支付网关证书</span>
+                <span class="algo-badge algo-sm">🇨🇳 国密</span>
                 
               </div>
               <div class="lp-status"><span class="ps-tag ps-unpub">未发布</span></div>
@@ -342,12 +361,7 @@
               <div class="lp-row"><span class="lp-k">域名</span><span class="lp-v split" title="pay.example.com / api.pay.example.com / m.pay.example.com / cashier.example.com / notify.example.com"><span class="tr mono">pay.example.com +4</span><span class="c-dim">·</span><span class="c-mono">2027-08-19</span><span class="badge badge-neutral">剩余 274 天</span></span></div>
               <div class="lp-row group-only"><span class="lp-k">签发</span><span class="lp-v dim" title="证书由该 CA 签发">GlobalSign RSA OV</span></div>
             </div>
-            <div class="lp-notice alert alert-info">
-              <span class="n-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></span>
-              <span class="n-txt">未绑定集群：发布不会下发到任何节点</span>
-              <button class="n-act">去绑定</button>
-            </div>
-            <div class="lp-foot">
+                        <div class="lp-foot">
               <button class="op-pub">发布</button>
               <div class="menu-anchor">
                 <button class="op-btn" data-menu-btn="sc-4" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
