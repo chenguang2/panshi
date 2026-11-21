@@ -1116,7 +1116,7 @@ describe('central-management-parity 批 A：最大化面板 Tab 解剖单点（s
     expect(s).toContain('.max-panel .dbody .node-table.grid-table .ant-table-cell {')
   })
 
-  it('单元格与行内按钮尺寸 + 分页条无上边框', () => {
+  it('单元格与行内按钮尺寸 + 分页条独立成带（上边框 + 10px 内距）', () => {
     const s = section()
     // 设计 .l5-table tbody td 实测 10px 12px（表头保持 9px 12px）
     expect(s).toMatch(
@@ -1129,6 +1129,9 @@ describe('central-management-parity 批 A：最大化面板 Tab 解剖单点（s
       /\.max-panel \.dbody \.node-table \.ant-table-tbody \.action-trigger-btn \{[\s\S]*?width: 26px !important;[\s\S]*?background: transparent !important;/,
     )
     expect(s).toContain('.max-panel .dbody .l5-pager {')
-    expect(s).toMatch(/\.max-panel \.dbody \.l5-pager \{[\s\S]*?border-top: none;/)
+    // 用户 2026-11-21 反馈：分页条须与独立列表页同形态（上边框分隔 + 10px 内距），不贴最后一行
+    expect(s).toMatch(
+      /\.max-panel \.dbody \.l5-pager \{[\s\S]*?border-top: 1px solid var\(--border\);[\s\S]*?padding: 10px 0;/,
+    )
   })
 })

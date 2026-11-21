@@ -3881,10 +3881,11 @@ th.resizable {
   border-color: oklch(56% 0.16 210 / 30%) !important;
 }
 
-/* ── 分页条（components/ListPager.vue）：设计 tab-body 内嵌形态，无上边框 ── */
+/* ── 分页条（components/ListPager.vue）：与独立列表页同形态——独立一条分页带
+   （上边框 + 10px 内距），不再紧贴最后一行（用户 2026-11-21 实测反馈：无间隔）── */
 .max-panel .dbody .l5-pager {
-  border-top: none;
-  padding: 12px 0 0;
+  border-top: 1px solid var(--border);
+  padding: 10px 0;
 }
 
 /* 设计无单元格竖线（三条形内）：grid-table 的全站竖线在面板内豁免，列拖拽握把线
