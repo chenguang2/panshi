@@ -21,14 +21,37 @@ export interface StaticResourceRouteEligibility {
   reasons: string[]
 }
 
+/** 单条资格检查（表单三条勾叉提示与下拉标注同源消费） */
+export interface StaticResourceRouteCheck {
+  key: 'uri' | 'published' | 'plugin'
+  /** 表单提示文案（完整句，供勾叉行渲染） */
+  label: string
+  /** 下拉后缀里的短原因 */
+  reason: string
+  ok: boolean
+}
+
+/**
+ * 三条件逐条判定——`staticResourceRouteEligibility` 与表单三条勾叉提示的唯一来源。
+ * 未选择路由时全部判 false（占位态显示三叉）。
+ */
+export function staticResourceRouteChecks(
+  route: StaticResourceRouteLike | null | undefined,
+): StaticResourceRouteCheck[] {
+  const uriOk = !!route?.uri && route.uri.endsWith('/*')
+  const publishedOk = route?.current_version != null
+  const pluginOk = (route?.plugins || []).some((p) => p.plugin_name === STATIC_RESOURCE_PLUGIN_NAME)
+  return [
+    { key: 'uri', label: '路由路径必须以 /* 结尾', reason: '路径须以 /* 结尾', ok: uriOk },
+    { key: 'published', label: '路由必须已发布到 Edge 节点', reason: '未发布', ok: publishedOk },
+    { key: 'plugin', label: '路由必须挂载 static_resource 插件', reason: '未挂静态资源插件', ok: pluginOk },
+  ]
+}
+
 /** 三条件判定；不合格原因按「路径 → 发布 → 插件」顺序返回 */
 export function staticResourceRouteEligibility(route: StaticResourceRouteLike): StaticResourceRouteEligibility {
-  const reasons: string[] = []
-  if (!route.uri || !route.uri.endsWith('/*')) reasons.push('路径须以 /* 结尾')
-  if (route.current_version == null) reasons.push('未发布')
-  const hasPlugin = (route.plugins || []).some((p) => p.plugin_name === STATIC_RESOURCE_PLUGIN_NAME)
-  if (!hasPlugin) reasons.push('未挂静态资源插件')
-  return { eligible: reasons.length === 0, reasons }
+  const failed = staticResourceRouteChecks(route).filter((c) => !c.ok)
+  return { eligible: failed.length === 0, reasons: failed.map((c) => c.reason) }
 }
 
 /** 下拉 option 后缀：不合格加「（原因1、原因2）」，合格返回空串（视图拼接 `${name} (${uri})${suffix}`） */

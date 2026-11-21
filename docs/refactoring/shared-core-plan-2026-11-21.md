@@ -29,7 +29,7 @@
 | 路由 | `ClusterRoutes.vue:220-374`（内联 4 tab） | `RouteFormModal.vue`（722 行） | 页面多 `cluster_id`；方法选择 UI 不同（面板 `a-select multiple` vs 页面胶囊 chips） | **直接复用（UI 会变）** |
 | 插件组 | `ClusterPluginConfigs.vue:82-118`（手写 modal） | `PluginEntityFormModal.vue` | 页面多 `cluster_id` | **直接复用** |
 | 全局规则 | `ClusterGlobalRules.vue:85-94` | 同一 `PluginEntityFormModal` | 无 | **已完成** |
-| 静态资源 | `ClusterStaticResources.vue:127-190`（a-form + a-select） | `StaticResourceList.vue:279-334`（原生 select，多 `cluster_id` / `name` / `url_path`） | 校验逻辑同源（`useClusterStaticResources` 的 `uriValid/publishedValid/pluginValid`），模板两份 | **需新抽取** |
+| 静态资源 | `ClusterStaticResources.vue:127-190`（a-form + a-select） | `StaticResourceList.vue:279-334`（原生 select，多 `cluster_id`；`name`/`url_path` 是**死字段**：`formData` 里有但模板不渲染、提交不发送） | 校验逻辑同源（`useClusterStaticResources` 的 `uriValid/publishedValid/pluginValid`），模板两份 | **已抽共享组件（B2a）**；字段集 = 所属集群 + 路由 + 描述 |
 | 插件元数据 | 无创建表单（点卡片直接 `POST`） | `PluginMetadataList.vue:271-310`（集群 + 插件双选） | 编辑共用 `PluginEditorDrawer`，回填/提交各写一份 | **需新抽取** |
 
 ### 2.3 表格核心差异（阻塞点）
@@ -57,7 +57,7 @@
 2. 表单统一出现「所属集群」字段：面板传入单集群并**禁用**（信息可见、不可改）。
 3. 节点表单校验统一到页面口径（`max:255` 等）；历史数据可能首次出现字段级提示。
 4. 上游「节点列表」编辑器改为页面同款（原生表格行）。
-5. 面板静态资源表单会多出 `name` / `url_path` 两个可编辑字段（页面已有）。
+5. ~~面板静态资源表单会多出 `name` / `url_path` 两个可编辑字段~~ **勘误（B2a 核实）**：这两个是页面 `formData` 里的死字段（模板不渲染、提交不发送），由后端按路由与 ZIP 推导；共享表单不含它们，面板零功能损失。B2a 实际的变化是：路由下拉统一为可搜索 `a-select`（页面原先为原生 `select`），ZIP 空/错误态统一为页面版视觉。
 
 **收益**：删除约 **900–1,400 行**；校验/提示/提交口径单点。
 
@@ -146,4 +146,5 @@
     - `execText` 传完整文案（含「检测」后缀由调用方拼）、`healthTitle` 保留、`clusterResourceState.loading` 可选；
     - 泛型 `<Row, ClusterLike>`：B4 一律用推断，必要时显式写两个参数。
   - [已完成 2026-11-21] **B1.5** 清理三个 composable 的表单死代码：生产 −1,197 / +31（`useClusterUpstreams` 939→288、`useClusterRoutes` 664→275、`useClusterPluginEntity` 293→181），测试 −809；新增 `panelFormDeadCode.source.test.ts` 防回填。保留项：列表加载 / 动作分发 / 发布 / 版本 / 列配置 / 选择态，以及 deps 里「调用方仍在传」的字段（不改公开签名）。
-  - [待开始] B2 / B3 / B4 / B5
+  - [已完成 2026-11-21] **B2a** 静态资源：抽 `StaticResourceFormModal` + `ZipContentsModal`，面板与页面共用；资格判定收敛到 `utils/staticResourceRoute.staticResourceRouteChecks()` 单一入口；两侧字段集 = 所属集群 + 路由 + 描述（`name`/`url_path` 经核实为死字段，见 3.1 勘误）。
+  - [待开始] B2b 节点（单条 + 批量导入合并）、B2c 插件元数据（创建弹窗）；B3 / B4 / B5

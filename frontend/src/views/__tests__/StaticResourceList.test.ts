@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
 import { itGroupFilterSuite } from './helpers/groupFilterSuite'
-import ClusterSelect from '@/components/ClusterSelect.vue'
 
 const mockApiGet = vi.fn()
 const mockApiPost = vi.fn()
@@ -367,7 +366,21 @@ describe('StaticResourceList.vue 发布日志 · 经中继 / 直连 标注', () 
   })
 })
 
-describe('StaticResourceList.vue 添加弹窗 · #204 路由下拉占位守卫', () => {
+describe('StaticResourceList.vue 表单/ZIP 弹窗共用接线（B2a）', () => {
+  const sharedStubs = {
+    ...stubs,
+    StaticResourceFormModal: {
+      name: 'StaticResourceFormModal',
+      props: ['visible', 'editingResource', 'clusters', 'defaultClusterId', 'lockCluster'],
+      template: '<div class="sr-form-stub" />',
+    },
+    ZipContentsModal: {
+      name: 'ZipContentsModal',
+      props: ['visible', 'clusterId', 'resourceId', 'resourceName', 'title'],
+      template: '<div class="zip-modal-stub" />',
+    },
+  }
+
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
@@ -375,38 +388,80 @@ describe('StaticResourceList.vue 添加弹窗 · #204 路由下拉占位守卫',
       if (url === '/static_resources') return Promise.resolve({ data: MOCK_DATA })
       if (url === '/clusters')
         return Promise.resolve({ data: { items: [{ id: 1, display_name: '生产集群', group_name: '线上' }] } })
-      if (url === '/clusters/1/routes') return Promise.resolve({ data: [] })
       return Promise.reject(new Error('unknown url'))
     })
   })
 
-  // 约束 #204：原生 select 的模型初值/重置点必须与占位 option value='' 精确匹配——
-  // null 会被 select 渲染器判为无匹配 option → selectedIndex=-1 → 下拉框整块空白（非占位文案）
-  it('add modal shows route select placeholder (selectedIndex=0, not blank)', async () => {
+  async function mountPage() {
     const StaticResourceList = (await import('../StaticResourceList.vue')).default
-    const wrapper = mount(StaticResourceList, { global: { stubs } })
+    const wrapper = mount(StaticResourceList, { global: { stubs: sharedStubs } })
     await flushPromises()
     await wrapper.vm.$nextTick()
+    return wrapper
+  }
+
+  function menuItem(card: ReturnType<typeof mount>, mainText: string) {
+    return card.findAll('.mi').find((b) => b.find('.mi-main').text() === mainText)!
+  }
+
+  it('页头「添加静态资源」→ 共享表单以新增态打开（集群全量、不锁集群）', async () => {
+    const wrapper = await mountPage()
+    const form = wrapper.findComponent({ name: 'StaticResourceFormModal' })
+    expect(form.exists()).toBe(true)
+    expect(form.props('visible')).toBe(false)
+    // 页面形态不锁集群（面板传 lock-cluster）；新增态无预选集群
+    expect(form.props('lockCluster')).toBeUndefined()
+    expect(form.props('defaultClusterId')).toBeUndefined()
     await wrapper
       .findAll('button')
       .find((b) => b.text().includes('添加静态资源'))!
       .trigger('click')
     await wrapper.vm.$nextTick()
-    const overlay = wrapper.findAll('.modal-overlay').find((o) => o.text().includes('所属集群'))!
-    // 集群字段已换装 ClusterSelect（a-select 族，非原生 select）——原生 select 仅剩路由下拉
-    const selects = overlay.findAll('select')
-    expect(selects.length).toBe(1)
-    const routeSelect = selects[0]
-    expect(routeSelect.element.selectedIndex).toBe(0)
-    expect((routeSelect.element.selectedOptions[0]?.textContent || '').trim()).toBe('请选择路由')
-    // 重置点守卫：选完集群（ClusterSelect 契约填值）后路由下拉仍回落到占位（watch 重置 route_id=''）
-    const clusterComp = overlay.findComponent(ClusterSelect)
-    expect(clusterComp.exists()).toBe(true)
-    await clusterComp.vm.$emit('update:modelValue', 1)
-    await flushPromises()
+    expect(form.props('visible')).toBe(true)
+    expect(form.props('editingResource')).toBeNull()
+    expect(form.props('clusters')).toEqual([{ id: 1, display_name: '生产集群', group_name: '线上' }])
+  })
+
+  // 断言反转（#217）：原「内联弹窗内原生 select 占位（selectedIndex=0）」不复存在——
+  // 路由下拉迁入共享组件（a-select，value=null 触发占位），占位/重置守卫见
+  // src/components/__tests__/StaticResourceFormModal.test.ts
+  it('内联表单与内联 ZIP 弹窗已移除（#srFormModal / #zipContentsModal 不再渲染）', async () => {
+    const wrapper = await mountPage()
+    expect(wrapper.find('#srFormModal').exists()).toBe(false)
+    expect(wrapper.find('#zipContentsModal').exists()).toBe(false)
+    const zip = wrapper.findComponent({ name: 'ZipContentsModal' })
+    expect(zip.exists()).toBe(true)
+    expect(zip.props('visible')).toBe(false)
+  })
+
+  it('⋯ 菜单「编辑」→ 共享表单携带该记录打开；saved 触发本页刷新', async () => {
+    const wrapper = await mountPage()
+    const card = wrapper.findAll('.sr-card').find((c) => c.text().includes('static-files'))!
+    await card.find('.op-btn').trigger('click')
     await wrapper.vm.$nextTick()
-    expect(routeSelect.element.selectedIndex).toBe(0)
-    expect((routeSelect.element.selectedOptions[0]?.textContent || '').trim()).toBe('请选择路由')
+    await menuItem(card, '编辑').trigger('click')
+    await wrapper.vm.$nextTick()
+    const form = wrapper.findComponent({ name: 'StaticResourceFormModal' })
+    expect(form.props('visible')).toBe(true)
+    expect(form.props('editingResource')).toMatchObject({ id: 1, cluster_id: 1 })
+    const before = mockApiGet.mock.calls.filter((c) => c[0] === '/static_resources').length
+    form.vm.$emit('saved')
+    await flushPromises()
+    expect(mockApiGet.mock.calls.filter((c) => c[0] === '/static_resources').length).toBeGreaterThan(before)
+  })
+
+  it('⋯ 菜单「查看 ZIP 内容」→ 共享 ZIP 弹窗带集群/资源/名称打开', async () => {
+    const wrapper = await mountPage()
+    const card = wrapper.findAll('.sr-card').find((c) => c.text().includes('static-files'))!
+    await card.find('.op-btn').trigger('click')
+    await wrapper.vm.$nextTick()
+    await menuItem(card, '查看 ZIP 内容').trigger('click')
+    await wrapper.vm.$nextTick()
+    const zip = wrapper.findComponent({ name: 'ZipContentsModal' })
+    expect(zip.props('visible')).toBe(true)
+    expect(zip.props('clusterId')).toBe(1)
+    expect(zip.props('resourceId')).toBe(1)
+    expect(zip.props('resourceName')).toBe('static-files')
   })
 })
 

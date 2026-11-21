@@ -199,12 +199,19 @@ describe('ClusterStaticResources.vue（Tab）· static-resources-ux-close-loop �
   })
 
   it('路由下拉不合格标注（3.2：legacy 无 /* 结尾）+ 合格路由无后缀', async () => {
+    // B2a：路由清单由共享 StaticResourceFormModal 自持拉取（面板不再复用 cluster.routes）
+    const cluster = mkCluster()
+    apiGet.mockImplementation(async (url: string) => {
+      if (url === '/clusters/7/routes') return { data: { items: cluster.routes } }
+      return { data: {} }
+    })
     const w = await mountTab()
-    // 打开添加弹窗后 editingCluster 就绪，路由 options 才渲染
+    // 打开添加弹窗后共享表单按预选集群拉取路由，options 才渲染
     await w
       .findAll('button')
       .find((b) => b.text().includes('添加静态资源'))!
       .trigger('click')
+    await flushPromises()
     await w.vm.$nextTick()
     expect(w.text()).toContain('legacy (/x)（路径须以 /* 结尾、未挂静态资源插件）')
     expect(w.text()).toContain('norel (/r/*)（未发布）')

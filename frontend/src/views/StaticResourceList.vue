@@ -276,62 +276,14 @@
       </div>
     </div>
 
-    <!-- Add/Edit Modal -->
-    <div class="modal-overlay" id="srFormModal" :style="{ display: formVisible ? 'flex' : 'none' }">
-      <div class="modal">
-        <div class="modal-header">
-          <h2>{{ formMode === 'add' ? '添加静态资源' : '编辑静态资源' }}</h2>
-          <button class="modal-close" @click="formVisible = false">&times;</button>
-        </div>
-        <div class="modal-body">
-          <div class="form-group">
-            <label class="form-label">所属集群 <span class="required">*</span></label>
-            <ClusterSelect v-model="formData.cluster_id" :clusters="clusters" :disabled="formMode === 'edit'" />
-          </div>
-          <div class="form-group">
-            <label class="form-label"
-              >{{ formMode === 'add' ? '选择路由' : '关联路由（可换绑）' }} <span class="required">*</span></label
-            >
-            <select v-model="formData.route_id" class="form-input" @change="onRouteChange">
-              <option value="">请选择路由</option>
-              <option
-                v-for="r in availableRoutes"
-                :key="r.id"
-                :value="r.id"
-                :disabled="!staticResourceRouteEligibility(r).eligible"
-              >
-                {{ r.name }} ({{ r.uri }}){{ routeEligibilitySuffix(r) }}
-              </option>
-            </select>
-            <div class="route-validation">
-              <div class="form-hint">选择路由的要求：</div>
-              <div class="route-validation-item" :class="uriValid ? 'valid' : 'invalid'">
-                {{ uriValid ? '✅' : '❌' }} 路由路径必须以 /* 结尾
-              </div>
-              <div class="route-validation-item" :class="publishedValid ? 'valid' : 'invalid'">
-                {{ publishedValid ? '✅' : '❌' }} 路由必须已发布到 Edge 节点
-              </div>
-              <div class="route-validation-item" :class="pluginValid ? 'valid' : 'invalid'">
-                {{ pluginValid ? '✅' : '❌' }} 路由必须挂载 static_resource 插件
-              </div>
-              <div v-if="editRouteChanged" class="route-validation-item" style="color: #fa8c16">
-                ⚠ 换绑路由后需重新上传并发布到 Edge 节点
-              </div>
-            </div>
-          </div>
-          <div class="form-group">
-            <label class="form-label">描述</label>
-            <textarea v-model="formData.description" class="form-input" rows="2" placeholder="可选描述"></textarea>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" @click="formVisible = false">取消</button>
-          <button class="btn btn-primary" @click="handleSubmit" :disabled="formMode === 'add' && !formValid">
-            {{ formMode === 'add' ? '创建' : '保存' }}
-          </button>
-        </div>
-      </div>
-    </div>
+    <!-- Add/Edit Modal（B2a：与集群统一管理「静态资源」Tab 共用同一表单组件；集群不锁、全量可选） -->
+    <StaticResourceFormModal
+      :visible="formVisible"
+      :editing-resource="editingResource"
+      :clusters="clusters"
+      @close="closeForm"
+      @saved="onFormSaved"
+    />
 
     <PublishConfirmModal
       v-model:visible="publishVisible"
@@ -356,79 +308,28 @@
       @publish-requested="onVmPublishRequested"
     />
 
-    <!-- ZIP Contents Modal -->
-    <div class="modal-overlay" id="zipContentsModal" :style="{ display: zipContentsModalVisible ? 'flex' : 'none' }">
-      <div class="modal modal-wide" style="max-width: 800px">
-        <div class="modal-header">
-          <h2>ZIP 内容 — {{ zipContentsResource?.name || '' }}</h2>
-          <button class="modal-close" @click="closeZipContents">&times;</button>
-        </div>
-        <div class="modal-body" style="max-height: 60vh; overflow: auto">
-          <div v-if="zipContentsLoading" class="loading-state">加载中...</div>
-          <div v-else-if="zipContentsError" class="sr-empty">
-            <div class="sr-empty-icon" style="color: var(--danger)">⚠</div>
-            <div class="sr-empty-text" style="color: var(--danger)">{{ zipContentsError }}</div>
-          </div>
-          <div v-else-if="zipContentsData.items.length === 0" class="sr-empty">
-            <div class="sr-empty-icon">📦</div>
-            <div class="sr-empty-text">{{ zipContentsMessage || 'ZIP 包内无文件' }}</div>
-          </div>
-          <div v-else>
-            <div
-              v-if="zipContentsData.items.length < zipContentsData.total_count"
-              style="margin-bottom: 8px; font-size: 12px; color: var(--muted)"
-            >
-              仅显示前 {{ zipContentsData.items.length }} 个 / 共 {{ zipContentsData.total_count }} 个文件
-            </div>
-            <table class="zip-table">
-              <thead>
-                <tr>
-                  <th style="width: 50%">文件名</th>
-                  <th style="width: 15%; text-align: right">文件大小</th>
-                  <th style="width: 15%; text-align: right">压缩后</th>
-                  <th style="width: 20%; text-align: right">修改时间</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="(item, idx) in zipContentsData.items" :key="idx">
-                  <td style="font-family: var(--font-mono); font-size: 12px">{{ item.name }}</td>
-                  <td style="text-align: right; font-family: var(--font-mono); font-size: 12px">
-                    {{ formatFileSize(item.file_size) }}
-                  </td>
-                  <td style="text-align: right; font-family: var(--font-mono); font-size: 12px">
-                    {{ formatFileSize(item.compressed_size) }}
-                  </td>
-                  <td style="text-align: right; font-family: var(--font-mono); font-size: 12px">
-                    {{ formatDate(item.modified) }}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" @click="closeZipContents">关闭</button>
-        </div>
-      </div>
-    </div>
+    <!-- ZIP Contents Modal（B2a：与集群统一管理「静态资源」Tab 共用同一组件，拉取在组件内） -->
+    <ZipContentsModal
+      :visible="zipVisible"
+      :cluster-id="zipClusterId"
+      :resource-id="zipResourceId"
+      :resource-name="zipResourceName"
+      @close="closeZipContents"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, watch, onMounted, onUnmounted, type Ref } from 'vue'
+import { ref, computed, onMounted, onUnmounted, type Ref } from 'vue'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
-import { formatFileSize, formatDate, formatDateTime } from '@/utils/format'
+import { formatFileSize, formatDateTime } from '@/utils/format'
 import ClusterSelect from '@/components/ClusterSelect.vue'
-import {
-  staticResourceRouteEligibility,
-  routeEligibilitySuffix,
-  staticResourceState,
-} from '@/utils/staticResourceRoute'
+import { staticResourceState } from '@/utils/staticResourceRoute'
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
 import { message } from 'ant-design-vue'
-import { PAGE_SIZE_CARD_GRID, PAGE_SIZE_DROPDOWN } from '@/constants'
+import { PAGE_SIZE_CARD_GRID } from '@/constants'
 
 import api from '@/api'
 import type { Cluster } from '@/types'
@@ -439,6 +340,8 @@ import ClusterBand from '@/components/ClusterBand.vue'
 import StrokeIcon from '@/components/StrokeIcon.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
+import StaticResourceFormModal from '@/components/StaticResourceFormModal.vue'
+import ZipContentsModal from '@/components/ZipContentsModal.vue'
 import StaticResourceStateTag from '@/components/StaticResourceStateTag.vue'
 import type { StaticResource } from '@/types'
 import {
@@ -449,7 +352,6 @@ import {
   resultStatusLabel,
 } from '@/composables/useClusterUtils'
 import { useClusterStaticResources } from '@/composables/useClusterStaticResources'
-import { showDangerConfirm } from '@/composables/useOverlayModal'
 import { useCardClusterGrouping } from '@/composables/useCardClusterGrouping'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { clusterHueClass } from '@/utils/clusterHue'
@@ -729,67 +631,6 @@ const publishRefreshFn = ref<() => Promise<void>>(loadResources)
 const publishPreselected = ref<number[]>([])
 // 7.3：配置异常态 tooltip 指路文案（两入口同文案）
 const BROKEN_ROUTE_TIP = '关联路由不存在，请删除该资源或重建路由'
-const formVisible = ref(false)
-const formMode = ref<'add' | 'edit'>('add')
-const formData = reactive({
-  cluster_id: '' as number | string,
-  // 铁律（约束 #204 派生）：原生 select 的模型初值/重置点必须与占位 option value='' 精确匹配
-  route_id: '' as number | string,
-  name: '',
-  url_path: '',
-  description: '',
-})
-const editingResource = ref<any | null>(null)
-const availableRoutes = ref<any[]>([])
-// static-resources-ux-close-loop 8.3：编辑打开时的原路由绑定（换绑检测基准）
-const editingOriginalRouteId = ref<number | null>(null)
-const editRouteChanged = computed(() => formMode.value === 'edit' && formData.route_id !== editingOriginalRouteId.value)
-
-const uriValid = computed(() => {
-  const route = availableRoutes.value.find((r: any) => r.id === formData.route_id)
-  return route ? (route.uri || '').trim().endsWith('/*') : false
-})
-const publishedValid = computed(() => {
-  const route = availableRoutes.value.find((r: any) => r.id === formData.route_id)
-  return route ? !!(route.current_version || route.published_at) : false
-})
-const pluginValid = computed(() => {
-  const route = availableRoutes.value.find((r: any) => r.id === formData.route_id)
-  if (!route) return false
-  return (route.plugins || []).some((p: any) => p.plugin_name === 'static_resource')
-})
-const formValid = computed(() => formData.route_id && uriValid.value && publishedValid.value && pluginValid.value)
-
-const zipContentsModalVisible = ref(false)
-const zipContentsResource = ref<any | null>(null)
-const zipContentsLoading = ref(false)
-const zipContentsError = ref('')
-const zipContentsData = ref<{ items: any[]; total_count: number }>({ items: [], total_count: 0 })
-const zipContentsMessage = ref('')
-
-async function viewZipContents(sr: any) {
-  zipContentsResource.value = sr
-  zipContentsModalVisible.value = true
-  zipContentsLoading.value = true
-  zipContentsError.value = ''
-  zipContentsData.value = { items: [], total_count: 0 }
-  zipContentsMessage.value = ''
-  try {
-    const res = await api.get(`/clusters/${sr.cluster_id}/static-resources/${sr.id}/zip-contents`)
-    zipContentsData.value = res.data
-    zipContentsMessage.value = res.data.message || ''
-  } catch (e: any) {
-    zipContentsError.value = e?.response?.data?.detail || '获取 ZIP 内容失败'
-  } finally {
-    zipContentsLoading.value = false
-  }
-}
-
-function closeZipContents() {
-  zipContentsModalVisible.value = false
-  zipContentsResource.value = null
-}
-
 // ── 上传走共享流（static-resources-ux-close-loop 1.2）────────────────────────
 // 本地 input+api.post 直传实现已删除，改用 useClusterStaticResources.uploadStaticResource
 // （预检 + 进度弹窗 + 结果行，与集群统一管理 Tab 同款）；上传中禁用全部上传按钮。
@@ -809,108 +650,48 @@ const { uploadStaticResource, uploading: srUploading } = useClusterStaticResourc
   afterUpload: () => loadResources(),
 })
 
-async function openAddModal() {
-  formMode.value = 'add'
-  formData.cluster_id = ''
-  formData.route_id = ''
-  formData.name = ''
-  formData.url_path = ''
-  formData.description = ''
+// ── B2a 表单共用（shared-core-plan 3.1）：页面只持有开关与刷新，
+//    字段集/资格校验/换绑二次确认全在共享 StaticResourceFormModal 内（与集群 Tab 同款）。 ──
+const formVisible = ref(false)
+const editingResource = ref<StaticResource | null>(null)
+
+function openAddModal(): void {
   editingResource.value = null
-  availableRoutes.value = []
   formVisible.value = true
 }
 
-function editResource(sr: any) {
-  formMode.value = 'edit'
-  formData.cluster_id = sr.cluster_id
-  formData.route_id = sr.route_id
-  editingOriginalRouteId.value = sr.route_id ?? null
-  formData.name = sr.name
-  formData.url_path = sr.url_path || ''
-  formData.description = sr.description || ''
+function editResource(sr: StaticResource): void {
   editingResource.value = sr
-  // 8.3：换绑下拉需要该集群路由清单（不合格项 disabled + 标注）
-  if (sr.cluster_id) void loadRoutes(sr.cluster_id)
   formVisible.value = true
 }
 
-async function loadRoutes(cid: number | string) {
-  try {
-    const res = await api.get(`/clusters/${cid}/routes`, { params: { page_size: PAGE_SIZE_DROPDOWN } })
-    availableRoutes.value = res.data.items || []
-  } catch {
-    availableRoutes.value = []
-  }
+function closeForm(): void {
+  formVisible.value = false
+  editingResource.value = null
 }
 
-function onRouteChange() {}
+/** 保存成功（组件已 emit saved + close）：刷新本页列表 */
+function onFormSaved(): void {
+  closeForm()
+  void loadResources()
+}
 
-watch(
-  () => formData.cluster_id,
-  (cid) => {
-    if (cid && formMode.value === 'add') {
-      formData.route_id = ''
-      loadRoutes(cid)
-    }
-  },
-)
+// ── ZIP 内容弹窗（B2a 共享 ZipContentsModal：内容拉取/加载/错误/空态均在组件内）──
+const zipVisible = ref(false)
+const zipClusterId = ref<number | null>(null)
+const zipResourceId = ref<number | null>(null)
+const zipResourceName = ref('')
 
-async function handleSubmit() {
-  if (formMode.value === 'add') {
-    const cid = formData.cluster_id
-    if (!cid) {
-      message.warning('请选择所属集群')
-      return
-    }
-    try {
-      await api.post(`/clusters/${cid}/static-resources`, {
-        route_id: formData.route_id,
-        description: formData.description,
-      })
-      message.success('静态资源已创建')
-      formVisible.value = false
-      loadResources()
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail || '创建失败')
-    }
-  } else if (editingResource.value) {
-    // static-resources-ux-close-loop 8.3：编辑换绑——变更时校验资格并二次确认
-    const routeChanged = editRouteChanged.value && editingOriginalRouteId.value !== null && !!formData.route_id
-    if (routeChanged && !formValid.value) {
-      message.warning('请选择符合条件（已发布到 Edge 节点且路径以 /* 结尾）的路由')
-      return
-    }
+function viewZipContents(sr: StaticResource): void {
+  zipClusterId.value = sr.cluster_id ?? null
+  zipResourceId.value = sr.id
+  zipResourceName.value = sr.name
+  zipVisible.value = true
+}
 
-    const doUpdate = async () => {
-      const payload: Record<string, unknown> = { description: formData.description }
-      if (routeChanged) payload.route_id = formData.route_id
-      await api.put(
-        `/clusters/${editingResource.value.cluster_id}/static-resources/${editingResource.value.id}`,
-        payload,
-      )
-      message.success(routeChanged ? '静态资源已换绑，请重新上传并发布' : '静态资源已更新')
-      formVisible.value = false
-      loadResources()
-    }
-
-    if (routeChanged) {
-      showDangerConfirm('换绑路由', '换绑路由后需重新上传并发布到 Edge 节点。确定换绑？', '确认换绑', async () => {
-        try {
-          await doUpdate()
-        } catch (e: any) {
-          message.error(e?.response?.data?.detail || '更新失败')
-        }
-      })
-      return
-    }
-
-    try {
-      await doUpdate()
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail || '更新失败')
-    }
-  }
+function closeZipContents(): void {
+  zipVisible.value = false
+  zipResourceId.value = null
 }
 
 function applyPublishContext(sr: any) {
@@ -1087,69 +868,6 @@ const headerStatItems = computed(() => {
 .text-muted {
   color: var(--muted);
 }
-.form-group {
-  margin-bottom: 16px;
-}
-
-.form-label {
-  display: block;
-  margin-bottom: 6px;
-  font-size: 13px;
-  color: var(--muted);
-  font-weight: 500;
-}
-
-.required {
-  color: var(--danger);
-}
-
-.form-hint {
-  font-size: 11px;
-  color: var(--muted);
-  margin-top: 4px;
-}
-
-.form-value {
-  font-size: 13px;
-  color: var(--fg);
-  padding: 6px 0;
-}
-
-.route-validation {
-  margin-top: 6px;
-  font-size: 12px;
-}
-
-.route-validation-item {
-  font-size: 11px;
-  margin-top: 2px;
-}
-.route-validation-item.valid {
-  color: #52c41a;
-}
-.route-validation-item.invalid {
-  color: #ff4d4f;
-}
-
-.zip-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-.zip-table th,
-.zip-table td {
-  padding: 6px 10px;
-  border-bottom: 1px solid var(--border);
-}
-.zip-table th {
-  font-size: 11px;
-  color: var(--muted);
-  font-weight: 500;
-  text-transform: uppercase;
-  position: sticky;
-  top: 0;
-  background: var(--surface);
-}
-.zip-table tbody tr:hover {
-  background: oklch(50% 0 0 / 4%);
-}
+/* 表单（.form-group/.form-label/.route-validation）与 ZIP 表格样式随共享组件迁走（B2a），
+   两入口不再各写一份。 */
 </style>

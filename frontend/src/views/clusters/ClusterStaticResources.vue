@@ -1,7 +1,7 @@
 <template>
   <div class="tab-content">
     <div class="node-actions">
-      <a-button size="small" type="primary" @click="showAddStaticResource(cluster)">
+      <a-button size="small" type="primary" @click="openAddStaticResource()">
         <StrokeIcon name="plus" :size="13" /> 添加静态资源
       </a-button>
     </div>
@@ -70,7 +70,7 @@
             >
               查看 ZIP
             </button>
-            <button class="tool-btn" title="编辑" @click.stop="editStaticResource(cluster, sr)">编辑</button>
+            <button class="tool-btn" title="编辑" @click.stop="openEditStaticResource(sr)">编辑</button>
             <button
               class="tool-btn"
               :title="!sr.id ? '请先保存资源后再上传' : '上传 ZIP 包'"
@@ -119,75 +119,22 @@
       </div>
       <div v-if="!cluster.static_resources || cluster.static_resources.length === 0" style="width: 100%">
         <EmptyState title="暂无静态资源" description="上传 ZIP 后由 Edge 直接对外提供静态文件">
-          <a-button size="small" type="primary" @click="showAddStaticResource(cluster)">添加静态资源</a-button>
+          <a-button size="small" type="primary" @click="openAddStaticResource()">添加静态资源</a-button>
         </EmptyState>
       </div>
     </div>
 
-    <!-- Static Resource Modal -->
-    <Teleport to="body">
-      <div class="modal-overlay" :style="{ display: staticResourceModalVisible ? 'flex' : 'none' }">
-        <div class="modal" style="max-width: 600px">
-          <div class="modal-header">
-            <h2>{{ staticResourceFormMode === 'add' ? '添加静态资源' : '编辑静态资源' }}</h2>
-            <button class="modal-close" @click="staticResourceModalVisible = false">&times;</button>
-          </div>
-          <div class="modal-body">
-            <a-form :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-              <a-form-item :label="staticResourceFormMode === 'add' ? '选择路由' : '关联路由（可换绑）'" required>
-                <a-select
-                  v-model:value="staticResourceFormData.route_id"
-                  placeholder="请选择路由"
-                  show-search
-                  :filter-option="
-                    (input: string, option: { value: string; label: string }) =>
-                      (option.label || '').toLowerCase().includes(input.toLowerCase())
-                  "
-                  @change="onStaticResourceRouteChange"
-                >
-                  <a-select-option
-                    v-for="r in staticResourceEditingCluster?.routes || []"
-                    :key="r.id"
-                    :value="r.id"
-                    :disabled="!staticResourceRouteEligibility(r).eligible"
-                  >
-                    {{ r.name }} ({{ r.uri }}){{ routeEligibilitySuffix(r) }}
-                  </a-select-option>
-                </a-select>
-                <div style="margin-top: 6px; font-size: 12px">
-                  <div style="color: #999">选择路由的要求：</div>
-                  <div :style="{ color: !uriValid ? '#ff4d4f' : '#52c41a' }">
-                    {{ uriValid ? '✅' : '❌' }} 路由路径必须以 /* 结尾
-                  </div>
-                  <div :style="{ color: !publishedValid ? '#ff4d4f' : '#52c41a' }">
-                    {{ publishedValid ? '✅' : '❌' }} 路由必须已发布到 Edge 节点
-                  </div>
-                  <div :style="{ color: !pluginValid ? '#ff4d4f' : '#52c41a' }">
-                    {{ pluginValid ? '✅' : '❌' }} 路由必须挂载 static_resource 插件
-                  </div>
-                  <div v-if="staticResourceRouteChanged" style="color: #fa8c16">
-                    ⚠ 换绑路由后需重新上传并发布到 Edge 节点
-                  </div>
-                </div>
-              </a-form-item>
-              <a-form-item label="描述" name="description">
-                <a-textarea v-model:value="staticResourceFormData.description" :rows="2" placeholder="可选描述" />
-              </a-form-item>
-            </a-form>
-          </div>
-          <div class="modal-footer">
-            <button class="btn btn-secondary" @click="staticResourceModalVisible = false">取消</button>
-            <button
-              class="btn btn-primary"
-              @click="handleStaticResourceSubmit"
-              :disabled="staticResourceFormMode === 'add' && !staticResourceFormValid"
-            >
-              {{ staticResourceFormMode === 'add' ? '创建' : '保存' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
+    <!-- B2a 表单共用（shared-core-plan 3.1）：表单/资格校验/换绑二次确认全在共享
+         StaticResourceFormModal 内；面板只负责开关 + 列表刷新，集群锁定为当前集群。 -->
+    <StaticResourceFormModal
+      :visible="srFormVisible"
+      :editing-resource="editingSr"
+      :clusters="formClusters"
+      :default-cluster-id="props.cluster.id"
+      lock-cluster
+      @close="closeSrForm"
+      @saved="onSrFormSaved"
+    />
 
     <!-- Version Management Modal -->
     <VersionManagementModal
@@ -203,76 +150,29 @@
       @publish-requested="onVmPublishRequested"
     />
 
-    <!-- ZIP 内容弹窗（static-resources-ux-close-loop 3.4：Tab 卡片「查看 ZIP」，与全局页同款） -->
-    <Teleport to="body">
-      <div class="modal-overlay" :style="{ display: zipContentsModalVisible ? 'flex' : 'none' }">
-        <div class="modal" style="max-width: 800px">
-          <div class="modal-header">
-            <h2>ZIP 内容 — {{ zipContentsResource?.name || '' }}</h2>
-            <button class="modal-close" @click="closeZipContents">&times;</button>
-          </div>
-          <div class="modal-body" style="max-height: 60vh; overflow: auto">
-            <div v-if="zipContentsLoading" class="loading-state">加载中...</div>
-            <div v-else-if="zipContentsError" class="empty-hint" style="color: var(--danger)">
-              {{ zipContentsError }}
-            </div>
-            <div v-else-if="zipContentsItems.length === 0" class="empty-hint">
-              {{ zipContentsMessage || 'ZIP 包内无文件' }}
-            </div>
-            <template v-else>
-              <div
-                v-if="zipContentsItems.length < zipContentsTotal"
-                style="margin-bottom: 8px; font-size: 12px; color: var(--muted)"
-              >
-                仅显示前 {{ zipContentsItems.length }} 个 / 共 {{ zipContentsTotal }} 个文件
-              </div>
-              <table class="zip-table">
-                <thead>
-                  <tr>
-                    <th style="width: 50%">文件名</th>
-                    <th style="width: 15%; text-align: right">文件大小</th>
-                    <th style="width: 15%; text-align: right">压缩后</th>
-                    <th style="width: 20%; text-align: right">修改时间</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="(item, idx) in zipContentsItems" :key="idx">
-                    <td style="font-family: var(--font-mono); font-size: 12px">{{ item.name }}</td>
-                    <td style="text-align: right; font-family: var(--font-mono); font-size: 12px">
-                      {{ formatFileSize(item.file_size) }}
-                    </td>
-                    <td style="text-align: right; font-family: var(--font-mono); font-size: 12px">
-                      {{ formatFileSize(item.compressed_size) }}
-                    </td>
-                    <td style="text-align: right; font-family: var(--font-mono); font-size: 12px">
-                      {{ formatDate(item.modified) }}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </template>
-          </div>
-        </div>
-      </div>
-    </Teleport>
+    <!-- ZIP 内容弹窗（static-resources-ux-close-loop 3.4；B2a 收敛为共享 ZipContentsModal，自持拉取） -->
+    <ZipContentsModal
+      :visible="zipVisible"
+      :cluster-id="props.cluster.id"
+      :resource-id="zipResourceId"
+      :resource-name="zipResourceName"
+      @close="closeZipContents"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import api from '@/api'
-import type { Cluster } from '@/types'
+import type { Cluster, StaticResource } from '@/types'
 import StrokeIcon from '@/components/StrokeIcon.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
+import StaticResourceFormModal from '@/components/StaticResourceFormModal.vue'
+import ZipContentsModal from '@/components/ZipContentsModal.vue'
 import { useClusterStaticResources } from '@/composables/useClusterStaticResources'
 import type { VersionModalState } from '@/composables/useClusterPluginConfigs'
-import { formatDate, formatDateTime, formatFileSize } from '@/utils/format'
-import {
-  staticResourceRouteEligibility,
-  routeEligibilitySuffix,
-  staticResourceState,
-} from '@/utils/staticResourceRoute'
+import { formatDateTime, formatFileSize } from '@/utils/format'
+import { staticResourceState } from '@/utils/staticResourceRoute'
 import StaticResourceStateTag from '@/components/StaticResourceStateTag.vue'
 
 const props = defineProps<{
@@ -305,24 +205,12 @@ const versionModal: VersionModalState = {
 }
 
 const {
-  staticResourceFormData,
-  staticResourceModalVisible,
-  staticResourceFormMode,
-  staticResourceEditingCluster,
-  staticResourceFormValid,
-  staticResourceRouteChanged,
-  uriValid,
-  publishedValid,
-  pluginValid,
-  showAddStaticResource,
-  editStaticResource,
-  handleStaticResourceSubmit,
   deleteStaticResource,
   uploadStaticResource,
   uploading: srUploading,
   publishStaticResource,
   openStaticResourceVersionManagement,
-  onStaticResourceRouteChange,
+  loadStaticResources,
 } = useClusterStaticResources({
   clusters: computed(() => props.clusters),
   versionModal,
@@ -336,43 +224,50 @@ const BROKEN_ROUTE_TIP = '关联路由不存在，请删除该资源或重建路
 // Alias to match template usage from original ClusterList.vue
 const uploadStaticResourceZip = uploadStaticResource
 
-// ── ZIP 内容弹窗（static-resources-ux-close-loop 3.4）──────────────────────
-interface ZipItem {
-  name: string
-  file_size: number
-  compressed_size: number
-  modified: string
-}
-const zipContentsModalVisible = ref(false)
-const zipContentsLoading = ref(false)
-const zipContentsError = ref('')
-const zipContentsMessage = ref('')
-const zipContentsItems = ref<ZipItem[]>([])
-const zipContentsTotal = ref(0)
-const zipContentsResource = ref<{ id: number; name: string } | null>(null)
+// ── B2a 表单共用：面板自持开关，表单/校验/换绑二次确认全在共享 StaticResourceFormModal 内 ──
+const srFormVisible = ref(false)
+const editingSr = ref<StaticResource | null>(null)
+/** 面板只有一个集群：单元素清单 + lock-cluster（组件内集群选择禁用） */
+const formClusters = computed(() => [
+  { id: props.cluster.id, name: props.cluster.name, display_name: props.cluster.display_name },
+])
 
-async function viewZipContents(sr: { id: number; name: string; file_size?: number | null }) {
+function openAddStaticResource(): void {
+  editingSr.value = null
+  srFormVisible.value = true
+}
+
+function openEditStaticResource(sr: StaticResource): void {
+  editingSr.value = sr
+  srFormVisible.value = true
+}
+
+function closeSrForm(): void {
+  srFormVisible.value = false
+  editingSr.value = null
+}
+
+/** 保存成功（组件已 emit saved + close）：刷新该集群静态资源列表 */
+async function onSrFormSaved(): Promise<void> {
+  closeSrForm()
+  await loadStaticResources(props.cluster)
+}
+
+// ── ZIP 内容弹窗（B2a 共享 ZipContentsModal，内容拉取在组件内）──────────────────
+const zipVisible = ref(false)
+const zipResourceId = ref<number | null>(null)
+const zipResourceName = ref('')
+
+function viewZipContents(sr: StaticResource): void {
   if (!sr.id) return
-  zipContentsResource.value = { id: sr.id, name: sr.name }
-  zipContentsModalVisible.value = true
-  zipContentsLoading.value = true
-  zipContentsError.value = ''
-  zipContentsMessage.value = ''
-  try {
-    const res = await api.get(`/clusters/${props.cluster.id}/static-resources/${sr.id}/zip-contents`)
-    zipContentsItems.value = res.data.items || []
-    zipContentsTotal.value = res.data.total_count || 0
-    zipContentsMessage.value = res.data.message || ''
-  } catch {
-    zipContentsError.value = '获取 ZIP 内容失败'
-  } finally {
-    zipContentsLoading.value = false
-  }
+  zipResourceId.value = sr.id
+  zipResourceName.value = sr.name
+  zipVisible.value = true
 }
 
-function closeZipContents() {
-  zipContentsModalVisible.value = false
-  zipContentsResource.value = null
+function closeZipContents(): void {
+  zipVisible.value = false
+  zipResourceId.value = null
 }
 
 function onVersionPublished() {
@@ -490,34 +385,11 @@ async function onVmPublishRequested() {
   border-color: var(--warning, #faad14) !important;
 }
 
-.empty-hint {
-  width: 100%;
-  text-align: center;
-  padding: 40px;
-  color: var(--muted);
-}
 .loading-state {
   text-align: center;
   padding: 48px 0;
   color: var(--muted);
   font-size: 14px;
 }
-.zip-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12px;
-}
-.zip-table th,
-.zip-table td {
-  border-bottom: 1px solid var(--border);
-  padding: 6px 8px;
-  text-align: left;
-}
-.zip-table th {
-  color: var(--muted);
-  font-weight: 600;
-}
-.zip-table tbody tr:hover {
-  background: var(--bg);
-}
+/* ZIP 内容弹窗样式随共享 ZipContentsModal 迁走（B2a），面板不再各写一份 */
 </style>

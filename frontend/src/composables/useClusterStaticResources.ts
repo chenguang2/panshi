@@ -33,6 +33,9 @@ interface StaticResourceDeps {
 export function useClusterStaticResources(deps: StaticResourceDeps) {
   const { clusters, versionModal, openPublishModal, loadRoutes, afterUpload } = deps
 
+  // ── 以下表单态 / 资格校验 / 打开 / 提交（至 handleStaticResourceSubmit 结束）已迁至共享
+  //    StaticResourceFormModal（B2a），两入口（面板 Tab / 静态资源页）均不再消费；
+  //    本批按计划保留原实现，B1.5 式清理留到后续批次（届时连同本注释一并删除）。 ──
   const staticResourceFormData = reactive({
     route_id: null as number | null,
     name: '',
@@ -213,6 +216,8 @@ export function useClusterStaticResources(deps: StaticResourceDeps) {
     }
   }
 
+  // 表单已迁至 StaticResourceFormModal（B2a）：以下 open/submit 仅供历史调用与既有测试，
+  // 生产两入口不再触发（清理见文件头注释）。
   const deleteStaticResource = async (cluster: Cluster, sr: StaticResource) => {
     showDeleteConfirm({
       title: `确定要删除静态资源 "${sr.name}" 吗？`,
