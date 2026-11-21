@@ -67,15 +67,18 @@ test.describe('Route CRUD', () => {
   })
 
   test('should show pagination in route table', async ({ page }) => {
-    // 直连全量列表（首卡统计深链可能落在 0 路由集群 → 无分页可断言）
+    // 直连全量列表（深链指定集群可能落在 0 路由集群 → 无分页可断言）
     await page.goto('/routes')
     const table = page.locator('.route-table')
     await expect(table).toBeVisible({ timeout: 15000 })
 
-    const pagination = page.locator('.ant-pagination')
-    await expect(pagination).toBeVisible({ timeout: 15000 })
+    // 列表分页已由 a-table 内置分页迁到表外共享分页条 ListPager（AGENTS #54：
+    // 分组列表的组标记行会吃掉内置分页的页容量），解剖 = `.l5-pager`，每页选择器 = `.pager-select`
+    const pager = page.locator('.l5-pager')
+    await expect(pager).toBeVisible({ timeout: 15000 })
+    await expect(pager.locator('.p-info')).toContainText('条路由')
 
-    const pageSizeSelect = page.locator('.ant-pagination-options-size-changer')
+    const pageSizeSelect = pager.locator('.pager-select')
     await expect(pageSizeSelect).toBeVisible({ timeout: 15000 })
   })
 

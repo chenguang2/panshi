@@ -10,13 +10,16 @@ test.describe('Node and Upstream Validation', () => {
     await gotoResourcePage(page, '节点')
     await expect(page.locator('button:has-text("添加节点")')).toBeVisible({ timeout: 15000 })
     await page.locator('button:has-text("添加节点")').click()
-    const modal = page.locator('.modal-overlay').filter({ hasText: '添加节点' })
+    // NodeFormModal（B2b-1 共享表单）改用 AntDV a-form + rules：校验文案渲染为
+    // `.ant-form-item-explain-error`（旧内联表单的 `.form-error` + 「保存」按钮文案已随之退场，
+    // 新增态主按钮文案为「创建」，类锚点 `.node-form-submit` 更稳）
+    const modal = page.locator('.modal-overlay:visible').filter({ hasText: '添加节点' })
     await expect(modal).toBeVisible()
 
-    await modal.locator('.btn-primary').filter({ hasText: '保存' }).click()
+    await modal.locator('.node-form-submit').click()
 
-    // 保存触发前端校验：错误提示渲染由 toBeVisible 自动等待（原固定 sleep + count() 非自动等待）
-    const errorMsgs = modal.locator('.form-error')
+    // 保存触发前端校验：错误提示渲染由 toBeVisible 自动等待
+    const errorMsgs = modal.locator('.ant-form-item-explain-error')
     await expect(errorMsgs.first()).toBeVisible()
 
     await modal.locator('.modal-close').first().click()
@@ -26,14 +29,14 @@ test.describe('Node and Upstream Validation', () => {
     await gotoResourcePage(page, '节点')
     await expect(page.locator('button:has-text("添加节点")')).toBeVisible({ timeout: 15000 })
     await page.locator('button:has-text("添加节点")').click()
-    const modal = page.locator('.modal-overlay').filter({ hasText: '添加节点' })
+    const modal = page.locator('.modal-overlay:visible').filter({ hasText: '添加节点' })
     await expect(modal).toBeVisible()
 
-    const ipInput = modal.locator('input.form-input').first()
+    const ipInput = modal.locator('input.node-form-ip')
     await ipInput.fill('999.999.999.999')
-    await modal.locator('.btn-primary').filter({ hasText: '保存' }).click()
+    await modal.locator('.node-form-submit').click()
 
-    const errorMsg = modal.locator('.form-error').filter({ hasText: 'IP 地址格式不正确' })
+    const errorMsg = modal.locator('.ant-form-item-explain-error').filter({ hasText: 'IP 地址格式不正确' })
     await expect(errorMsg.first()).toBeVisible()
 
     await modal.locator('.modal-close').first().click()

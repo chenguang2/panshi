@@ -19,19 +19,19 @@ const VERSION_RESOURCES = [
 /**
  * 进入资源列表并打开第一行的版本管理弹窗；空库返回 null（调用方以 if (!modal) return 收尾）。
  * F2：AntD 空表默认渲染 tr.ant-table-placeholder 占位行——旧守卫 tbody tr.first().isVisible()
- * 命中占位行恒真、从不触发 skip；改为等「数据行 or 占位行」出现后探测占位行，空库优雅跳过。
+ * 命中占位行恒真、从不触发 skip。现改为直接锁定「带行内动作触发器（⋯）的行」：分组视图的首个
+ * tbody 行是组标记行、没有 `.action-trigger-btn`，按功能元素定位同时免疫分组/平铺两态与加载竞态。
  */
 async function openVersionModal(page: import('@playwright/test').Page, statLabel: string, tableSelector: string) {
   await gotoResourcePage(page, statLabel)
   const table = page.locator(tableSelector)
-  const placeholder = table.locator('.ant-table-placeholder')
-  const dataRow = table.locator('tbody tr:not(.ant-table-placeholder)').first()
-  await dataRow
-    .or(placeholder)
+  await expect(table).toBeVisible({ timeout: 10000 })
+  const dataRow = table
+    .locator('tbody tr')
+    .filter({ has: page.locator('.action-trigger-btn') })
     .first()
-    .waitFor({ state: 'visible', timeout: 10000 })
-    .catch(() => {})
-  if (await placeholder.isVisible()) {
+  const hasRow = await dataRow.isVisible({ timeout: 5000 }).catch(() => false)
+  if (!hasRow) {
     test.skip(`无${statLabel}数据`)
     return null
   }

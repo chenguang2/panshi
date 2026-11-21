@@ -68,6 +68,9 @@ test.describe('Cluster Management', () => {
   test('should show cluster groups on central management without vite error overlay', async ({ page }) => {
     await page.goto('/central-management')
     await expect(page.locator('.vite-error-overlay')).toHaveCount(0, { timeout: 3000 })
-    await expect(page.locator('.cluster-name-item').first()).toBeVisible({ timeout: 15000 })
+    // 旧「集群名快捷小条」`.cluster-name-item` 已随统一管理两态模型退场（AGENTS：CentralList 旧壳断言反转），
+    // 现锚定共享面板壳 + 集群卡片（ClusterCard 根节点 `.cl-card`）渲染
+    await expect(page.locator('.l5-card.cm-card-page')).toBeVisible({ timeout: 15000 })
+    await expect(page.locator('.cl-card').first()).toBeVisible({ timeout: 15000 })
   })
 })

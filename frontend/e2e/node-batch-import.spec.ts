@@ -44,7 +44,9 @@ test.describe('Node Batch Import E2E', () => {
     const nodesTab = page.locator('.dtabs .dt').filter({ hasText: '集群节点' }).first()
     if (await nodesTab.isVisible().catch(() => false)) await nodesTab.click()
 
-    const toolbar = page.locator('.node-actions')
+    // 面板节点 Tab 自 shared-core-plan A 试点起直接渲染 NodeList 的 scoped 形态，
+    // 工具条是共享 .l5-toolbar（旧面板自有的 .node-actions 已随 ClusterNodes 退场）
+    const toolbar = page.locator('.l5-toolbar').first()
     await expect(toolbar).toBeVisible({ timeout: 10000 })
 
     const nodeTable = page.locator('.tab-content .ant-table-tbody').first()
