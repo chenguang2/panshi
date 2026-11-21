@@ -6,7 +6,7 @@
       </a-button>
     </div>
     <div v-if="loading" class="loading-state">加载中...</div>
-    <div v-if="!loading" style="display: flex; flex-wrap: wrap; gap: 16px; padding: 16px 0">
+    <div v-if="!loading" style="display: flex; flex-wrap: wrap; gap: 16px; padding: 16px">
       <div
         v-for="sr in cluster.static_resources"
         :key="sr.id"

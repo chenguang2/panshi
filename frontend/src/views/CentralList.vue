@@ -186,11 +186,11 @@
         </span>
         <div class="cl-card-actions">
           <button class="btn btn-secondary" @click.stop="viewClusterDetail(maximizedCluster)">详情</button>
-          <button class="btn btn-ghost" @click.stop="testCluster(maximizedCluster)">连接测试</button>
-          <button class="btn btn-ghost" @click.stop="editCluster(maximizedCluster)">编辑</button>
-          <button class="btn btn-ghost" @click.stop="exportCluster(maximizedCluster)">导出 Excel</button>
-          <button class="btn btn-ghost" @click.stop="openBackupDownload(maximizedCluster)">备份下载</button>
-          <button class="btn btn-ghost" style="color: var(--danger)" @click.stop="deleteCluster(maximizedCluster)">
+          <button class="btn btn-secondary" @click.stop="testCluster(maximizedCluster)">连接测试</button>
+          <button class="btn btn-secondary" @click.stop="editCluster(maximizedCluster)">编辑</button>
+          <button class="btn btn-secondary" @click.stop="exportCluster(maximizedCluster)">导出 Excel</button>
+          <button class="btn btn-secondary" @click.stop="openBackupDownload(maximizedCluster)">备份下载</button>
+          <button class="btn btn-secondary" style="color: var(--danger)" @click.stop="deleteCluster(maximizedCluster)">
             删除
           </button>
         </div>

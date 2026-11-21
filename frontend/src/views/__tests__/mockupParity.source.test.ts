@@ -1129,9 +1129,60 @@ describe('central-management-parity 批 A：最大化面板 Tab 解剖单点（s
       /\.max-panel \.dbody \.node-table \.ant-table-tbody \.action-trigger-btn \{[\s\S]*?width: 26px !important;[\s\S]*?background: transparent !important;/,
     )
     expect(s).toContain('.max-panel .dbody .l5-pager {')
-    // 用户 2026-11-21 反馈：分页条须与独立列表页同形态（上边框分隔 + 10px 内距），不贴最后一行
+    // 用户 2026-11-21 反馈：分页条须与独立列表页同形态（上边框分隔 + 10px 16px 内距），
+    // 且落在封闭容器内部——右缘内距与工具条对齐（卡片包表格，见下一 describe）
     expect(s).toMatch(
-      /\.max-panel \.dbody \.l5-pager \{[\s\S]*?border-top: 1px solid var\(--border\);[\s\S]*?padding: 10px 0;/,
+      /\.max-panel \.dbody \.l5-pager \{[\s\S]*?border-top: 1px solid var\(--border\);[\s\S]*?padding: 10px 16px;/,
     )
+  })
+})
+
+// ── 统一管理 · 最大化面板 Tab 内容封闭容器（2026-11-21 用户裁决）──
+// 7 个 Tab 的内容与左侧菜单对应模块同构：一张 1px 边框卡片包住「工具条 + 表格/卡片网格 + 分页条」。
+// 硬约束：内层不加 box-shadow（面板本身是卡片，叠加会成双层阴影）。
+// DOM 事实：Tab 根节点是切换动效包裹层 `.max-swap` 的子代，故选择器经 `.max-swap`；
+// `.plugin-metadata` 变体是防未来重构漂移的兜底（当前被 CentralList 的 `.tab-content` 包裹）。
+describe('最大化面板：Tab 内容封闭容器（tab-content card，2026-11-21）', () => {
+  const block = () => {
+    const m = css.match(
+      /\.max-panel \.dbody \.max-swap > \.tab-content,\n\.max-panel \.dbody \.max-swap > \.plugin-metadata \{[\s\S]*?\n\}/,
+    )
+    expect(m, '缺少 Tab 内容封闭容器规则').not.toBeNull()
+    return m![0]
+  }
+
+  it('两个 Tab 根节点都进封闭容器（.tab-content / .plugin-metadata）', () => {
+    const b = block()
+    expect(b).toContain('.max-panel .dbody .max-swap > .tab-content,')
+    expect(b).toContain('.max-panel .dbody .max-swap > .plugin-metadata {')
+    expect(b).toContain('background: var(--surface);')
+    expect(b).toContain('border: 1px solid var(--border);')
+    expect(b).toContain('border-radius: var(--radius-lg);')
+    expect(b).toContain('overflow: hidden;')
+  })
+
+  it('内层容器不带阴影（双层阴影已排除）', () => {
+    expect(block()).not.toContain('box-shadow')
+  })
+
+  it('工具条 = 带内距的下边线带（12px 16px，不再靠自己 margin 与表格拉开）', () => {
+    const s = css.slice(css.indexOf('统一管理 · 最大化面板 Tab 内容解剖'))
+    expect(s).toMatch(
+      /\.max-panel \.dbody \.node-actions \{[\s\S]*?margin-bottom: 0;[\s\S]*?padding: 12px 16px;[\s\S]*?border-bottom: 1px solid var\(--border\);/,
+    )
+  })
+
+  it('卡片 Tab 网格内距四向 16px（不再贴容器左右边框）', () => {
+    for (const f of [
+      'views/clusters/ClusterPluginConfigs.vue',
+      'views/clusters/ClusterGlobalRules.vue',
+      'views/clusters/ClusterStaticResources.vue',
+    ]) {
+      const src = readFileSync(resolve(process.cwd(), 'src', f), 'utf-8')
+      expect(src, `${f} 网格内距`).toContain('gap: 16px; padding: 16px"')
+      expect(src, `${f} 不得留 16px 0`).not.toContain('gap: 16px; padding: 16px 0"')
+    }
+    const pm = readFileSync(resolve(process.cwd(), 'src/components/PluginMetadata.vue'), 'utf-8')
+    expect(pm).toMatch(/\.plugin-metadata \{\n {2}padding: 16px;/)
   })
 })

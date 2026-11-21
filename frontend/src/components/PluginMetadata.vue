@@ -498,7 +498,7 @@ watch(
 
 <style scoped>
 .plugin-metadata {
-  padding: 8px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
   height: 100%;

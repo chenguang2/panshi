@@ -11,7 +11,7 @@
       <a-button size="small" @click="retryLoad">重试</a-button>
     </div>
     <div v-else-if="loading" class="loading-state">加载中...</div>
-    <div v-else style="display: flex; flex-wrap: wrap; gap: 16px; padding: 16px 0">
+    <div v-else style="display: flex; flex-wrap: wrap; gap: 16px; padding: 16px">
       <div v-for="gr in cluster.global_rules" :key="gr.id" class="plugin-config-card">
         <div class="pcc-header">
           <strong class="pcc-title">{{ gr.name }}</strong>
