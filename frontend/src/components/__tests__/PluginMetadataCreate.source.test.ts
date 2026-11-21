@@ -1,7 +1,7 @@
 // B2c 源码守卫：插件元数据创建弹窗是唯一创建入口。
-// ① 面板「可用插件」卡片上不得再有「添加」快捷入口（用户裁决：只留弹窗）；
+// ① 面板可用插件分类树已按用户裁决移除（面板形态与独立页一致，只留已配置列表）；
 // ② 面板与独立页必须引用共享创建弹窗，不得各自内联创建弹窗/直接调创建 API；
-// ③ 三处可选插件过滤共用 utils/pluginMetadataCatalog 单点实现（不得再复制一套）。
+// ③ 可选插件过滤共用 utils/pluginMetadataCatalog 单点实现（不得再复制一套）。
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -15,14 +15,18 @@ const PAGE = 'views/PluginMetadataList.vue'
 const MODAL = 'components/PluginMetadataCreateModal.vue'
 
 describe('插件元数据创建入口单源（B2c）', () => {
-  it('面板可用插件卡不得再有「添加」按钮 / addPlugin（卡片仅作信息展示）', () => {
+  it('面板只留「已配置插件」单列：可用插件分类树（面板/分类头/树内卡片）已按用户裁决移除', () => {
     const s = src(PANEL)
     expect(s).not.toMatch(/add-btn/)
     expect(s).not.toMatch(/addPlugin/)
-    // 信息展示保留：可用插件树与卡片仍在（否则空态/计数断言无从谈起）
-    expect(s).toMatch(/available-panel/)
-    expect(s).toMatch(/plugin-card/)
-    expect(s).toMatch(/plugin-card-desc/)
+    // 树结构类名不得回流（形态与独立页 /plugin-metadata 一致）
+    for (const cls of ['available-panel', 'plugin-tree', 'tree-item', 'tree-connector', 'category-header']) {
+      expect(s, `${cls} 不应再出现在面板`).not.toContain(cls)
+    }
+    expect(s).not.toMatch(/plugin-card/)
+    // 可选插件数据不再由面板拉取/过滤（创建弹窗自持）
+    expect(s).not.toMatch(/filterMetadataPlugins/)
+    expect(s).not.toMatch(/metadataPlugins/)
   })
 
   it('面板工具条提供「添加插件元数据」主按钮（打开共享弹窗）', () => {
@@ -55,7 +59,8 @@ describe('插件元数据创建入口单源（B2c）', () => {
   })
 
   it('可选插件过滤共用 utils/pluginMetadataCatalog（单一实现）', () => {
-    for (const f of [PANEL, PAGE, MODAL]) {
+    // 面板已无可用插件清单（用户裁决移除分类树）：只剩独立页 + 共享创建弹窗两个消费方
+    for (const f of [PAGE, MODAL]) {
       expect(src(f), `${f} 必须走共享过滤函数`).toMatch(/filterMetadataPlugins/)
     }
     const util = src('utils/pluginMetadataCatalog.ts')

@@ -7,40 +7,9 @@
         <StrokeIcon name="plus" :size="13" /> 添加插件元数据
       </a-button>
     </div>
+    <!-- 面板形态与独立页 /plugin-metadata 一致（用户裁决）：只有已配置列表，
+         可用插件（分类树）不再在面板内展示——可选插件由创建弹窗自持拉取。 -->
     <div class="plugin-panels">
-      <div class="panel available-panel">
-        <div class="panel-header">
-          <span>可用插件</span>
-          <span class="plugin-count">({{ availablePlugins.length }})</span>
-        </div>
-        <div class="plugin-list">
-          <template v-for="group in pluginGroups" :key="group.key">
-            <div class="category-header" :class="'cat-' + group.key" @click="toggleCategory(group.key)">
-              <CaretDownOutlined v-if="expandedCategories[group.key]" class="tree-toggle" />
-              <CaretRightOutlined v-else class="tree-toggle" />
-              <span class="category-label">{{ group.label }}</span>
-              <span class="category-count">({{ group.plugins.length }})</span>
-            </div>
-            <div v-if="expandedCategories[group.key]" class="plugin-tree">
-              <div v-for="plugin in group.plugins" :key="plugin.name" class="tree-item">
-                <div class="tree-connector"></div>
-                <div class="plugin-card" :class="'border-' + group.key">
-                  <div class="plugin-card-body">
-                    <div class="plugin-card-name">{{ plugin.name }}</div>
-                    <div class="plugin-card-desc">{{ plugin.description }}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </template>
-          <EmptyState
-            v-if="pluginGroups.length === 0"
-            title="未找到可配置的插件"
-            description="插件目录中的插件已全部配置，或被特性开关过滤"
-          />
-        </div>
-      </div>
-
       <div class="panel configured-panel">
         <div class="panel-header">
           <span>已配置插件</span>
@@ -164,9 +133,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { message } from 'ant-design-vue'
-import { CaretDownOutlined, CaretRightOutlined } from '@ant-design/icons-vue'
 import api from '@/api'
 import PluginEditorDrawer from './PluginEditorDrawer.vue'
 import VersionManagementModal from './VersionManagementModal.vue'
@@ -178,11 +146,9 @@ import EmptyState from '@/components/EmptyState.vue'
 import StrokeIcon from '@/components/StrokeIcon.vue'
 import PluginMetadataCreateModal from '@/components/PluginMetadataCreateModal.vue'
 import { formatDate } from '@/utils/format'
-import { filterMetadataPlugins } from '@/utils/pluginMetadataCatalog'
 import type { PluginMetadata } from '@/types'
 import { showDeleteConfirm, executePublish, executeDeleteWithProgress } from '@/composables/useClusterUtils'
 import { showOverlayModal } from '@/composables/useOverlayModal'
-import { useFeaturesStore } from '@/stores/features'
 
 interface Plugin {
   name: string
@@ -204,7 +170,6 @@ const props = defineProps<{
   clusterName?: string
 }>()
 
-const searchText = ref('')
 const allPlugins = ref<Plugin[]>([])
 const configuredPlugins = ref<ConfiguredPlugin[]>([])
 
@@ -235,47 +200,6 @@ function handlePublishCancel() {
 
 const editingPluginName = ref<string>('')
 
-// 插件分类元数据（标签映射）
-const CATEGORY_CONFIG: Record<string, string> = {
-  flow: '流量控制',
-  rewrite: '请求/响应重写',
-  auth: '认证',
-  process: '数据处理',
-  static: '静态资源',
-  security: '安全防护',
-  monitor: '监控',
-}
-
-const expandedCategories = reactive<Record<string, boolean>>({
-  flow: true,
-  rewrite: true,
-  process: true,
-  static: true,
-  security: true,
-  monitor: true,
-  auth: true,
-})
-
-function toggleCategory(key: string) {
-  expandedCategories[key] = !expandedCategories[key]
-}
-
-const pluginGroups = computed(() => {
-  const result: { key: string; label: string; plugins: Plugin[] }[] = []
-  const catMap: Record<string, { key: string; label: string; plugins: Plugin[] }> = {}
-  for (const plugin of availablePlugins.value) {
-    const key = plugin.category || 'other'
-    if (!catMap[key]) {
-      catMap[key] = { key, label: CATEGORY_CONFIG[key] || key, plugins: [] }
-    }
-    catMap[key].plugins.push(plugin)
-  }
-  for (const key of Object.keys(catMap).sort()) {
-    if (catMap[key].plugins.length > 0) result.push(catMap[key])
-  }
-  return result
-})
-
 const viewDrawerVisible = ref(false)
 const viewingPlugin = ref<ConfiguredPlugin | null>(null)
 
@@ -286,28 +210,14 @@ const editingPluginInfo = ref<Partial<Plugin> | null>(null)
 const versionModalVisible = ref(false)
 const versionModalPluginName = ref('')
 
-const featuresStore = useFeaturesStore()
-
 // ── 添加插件元数据（B2c）：共享创建弹窗，集群由 Tab 上下文决定（锁定）──
 const createVisible = ref(false)
 const createClusterOptions = computed(() => [
   { id: props.clusterId, name: props.clusterName || `集群 ${props.clusterId}` },
 ])
 
-const availablePlugins = computed(() =>
-  // plugin-metadata-plugins-config：可选 = 目录 ∩ features.yaml 专用清单
-  // plugin_metadata_plugins（空/未配置 = 不限制），再做「未配置去重」；
-  // 与独立页同一份清单与同一条过滤实现（utils/pluginMetadataCatalog 单点）。
-  filterMetadataPlugins(
-    allPlugins.value,
-    featuresStore.metadataPlugins,
-    configuredPlugins.value.map((p) => p.plugin_name),
-  ),
-)
-
 const loadPlugins = async () => {
-  // features 清单兜底加载（main.ts 启动已预载；失败静默 = 不限制）
-  featuresStore.load().catch(() => {})
+  // 仅用于编辑/版本还原抽屉的 schema 与描述（可选插件清单与已配置去重由创建弹窗自持）
   try {
     const res = await api.get('/plugins/builtin')
     allPlugins.value = res.data.plugins || []
@@ -533,7 +443,7 @@ watch(
 
 .plugin-panels {
   display: flex;
-  gap: 16px;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
   padding: 16px;
@@ -547,12 +457,8 @@ watch(
   overflow: hidden;
 }
 
-.available-panel {
-  flex: 4;
-}
-
 .configured-panel {
-  flex: 6;
+  flex: 1;
 }
 
 .panel-header {
@@ -605,180 +511,12 @@ watch(
   background: var(--bg);
 }
 
-/* ── 分类树形结构 ── */
-.category-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 10px;
-  cursor: pointer;
-  background: var(--bg);
-  border-left: 3px solid transparent;
-  margin-top: 4px;
-  border-radius: 4px;
-  transition: background 0.15s;
-}
-.category-header:hover {
-  background: oklch(56% 0.16 210 / 10%);
-}
-.category-header .tree-toggle {
-  font-size: 11px;
-  color: var(--accent);
-  opacity: 0.6;
-}
-.category-label {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--fg);
-}
-.category-count {
-  font-size: 11px;
-  color: var(--muted);
-  margin-left: auto;
-}
-
-.cat-flow {
-  border-left-color: var(--accent);
-}
-.cat-rewrite {
-  border-left-color: var(--warning);
-}
-.cat-process {
-  border-left-color: var(--success);
-}
-.cat-auth {
-  border-left-color: var(--accent);
-}
-.cat-static {
-  border-left-color: var(--info);
-}
-.cat-security {
-  border-left-color: var(--danger);
-}
-.cat-monitor {
-  border-left-color: var(--accent);
-}
-.cat-other {
-  border-left-color: var(--muted);
-}
-
-.plugin-tree {
-  padding: 4px 0 4px 28px;
-  position: relative;
-}
-.plugin-tree::before {
-  content: '';
-  position: absolute;
-  left: 13px;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: var(--accent);
-  opacity: 0.3;
-}
-
-.tree-item {
-  position: relative;
-  display: flex;
-  margin-bottom: 6px;
-}
-.tree-item:last-child {
-  margin-bottom: 0;
-}
-
-.tree-connector {
-  position: absolute;
-  left: -15px;
-  top: 0;
-  width: 13px;
-  height: 100%;
-  pointer-events: none;
-}
-.tree-connector::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 2px;
-  height: 100%;
-  background: var(--accent);
-  opacity: 0.3;
-}
-.tree-connector::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 18px;
-  width: 11px;
-  height: 2px;
-  background: var(--accent);
-  opacity: 0.3;
-}
-
-.plugin-card {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg);
-  min-width: 0;
-}
-
-.plugin-card-body {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.plugin-card-name {
-  font-weight: 600;
-  font-size: 14px;
-  color: var(--accent);
-  overflow-wrap: break-word;
-}
-.plugin-card-desc {
-  font-size: 14px;
-  color: var(--muted);
-  line-height: 1.4;
-  overflow-wrap: break-word;
-}
-
-.border-flow {
-  border-left: 3px solid var(--accent);
-}
-.border-rewrite {
-  border-left: 3px solid var(--warning);
-}
-.border-process {
-  border-left: 3px solid var(--success);
-}
-.border-auth {
-  border-left: 3px solid var(--accent);
-}
-.border-static {
-  border-left: 3px solid var(--info);
-}
-.border-security {
-  border-left: 3px solid var(--danger);
-}
-.border-monitor {
-  border-left: 3px solid var(--accent);
-}
-.border-other {
-  border-left: 3px solid var(--muted);
-}
-
 .plugin-item.configured {
   flex-direction: column;
   align-items: stretch;
 }
 
-/* 右侧面板样式 */
+/* 已配置插件条目（单列面板） */
 .plugin-info {
   flex: 1;
   min-width: 0;
@@ -793,11 +531,6 @@ watch(
 .plugin-name {
   font-weight: 500;
   color: var(--fg);
-}
-.plugin-desc {
-  font-size: 12px;
-  color: var(--muted);
-  margin-top: 4px;
 }
 
 .plugin-actions {

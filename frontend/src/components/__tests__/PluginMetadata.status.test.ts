@@ -227,66 +227,25 @@ describe('PluginMetadata.vue 版本恢复出口条接线（4.1/4.2）', () => {
   })
 })
 
-// ── plugin-metadata-plugins-config：可用插件面板按 features.yaml 专用清单过滤 ──
-// 与独立页同一份 plugin_metadata_plugins 清单（空/未配置 = 不限制），已配置去重继续生效。
-describe('PluginMetadata.vue 可用插件清单过滤（与独立页同清单）', () => {
+// ── 面板形态回归独立页（用户裁决 2026-11-21）：只留「已配置插件」单列 ──
+// 可用插件（分类树）已从面板移除——可选插件清单由共享创建弹窗自持拉取，
+// 面板不再需要 /system/features 的 plugin_metadata_plugins 过滤。
+describe('PluginMetadata.vue 单列已配置面板（可用插件树已移除）', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
+    setupApi()
   })
 
-  const CATALOG = [
-    { name: 'data_center', description: '数据中心', category: 'process' },
-    { name: 'redirect', description: '重定向', category: 'rewrite' },
-    { name: 'traceid', description: 'TraceID 追踪', category: 'monitor' },
-  ]
-
-  function setupApi(list: string[] | undefined) {
-    mockApiGet.mockImplementation((url: string) => {
-      if (url === '/system/features')
-        return Promise.resolve({
-          data: {
-            features: {},
-            enabled_plugins: [],
-            ...(list === undefined ? {} : { plugin_metadata_plugins: list }),
-          },
-        })
-      if (url === '/plugins/builtin') return Promise.resolve({ data: { plugins: CATALOG } })
-      if (url === '/clusters/1/plugin-metadata') return Promise.resolve({ data: METADATA_RESPONSE })
-      return Promise.reject(new Error('unexpected GET: ' + url))
-    })
-  }
-
-  it('清单内且未配置才可选：redirect 入选、traceid 清单外被滤、data_center 已配置被去重排除', async () => {
-    setupApi(['data_center', 'redirect'])
+  it('渲染已配置列表，不再渲染可用插件面板/分类树/树内卡片', async () => {
     const wrapper = await mountTab()
-    const availablePanel = wrapper.find('.available-panel')
-    expect(availablePanel.exists()).toBe(true)
-    expect(availablePanel.text()).toContain('(1)')
-    expect(availablePanel.text()).toContain('redirect')
-    expect(availablePanel.text()).not.toContain('traceid')
-    expect(availablePanel.text()).not.toContain('data_center')
-    wrapper.unmount()
-  })
-
-  it('清单空 = 不限制（目录全量可选，仅已配置去重）', async () => {
-    setupApi([])
-    const wrapper = await mountTab()
-    const availablePanel = wrapper.find('.available-panel')
-    expect(availablePanel.text()).toContain('(2)')
-    expect(availablePanel.text()).toContain('redirect')
-    expect(availablePanel.text()).toContain('traceid')
-    expect(availablePanel.text()).not.toContain('data_center')
-    wrapper.unmount()
-  })
-
-  it('清单 key 缺失 = 不限制（向后兼容）', async () => {
-    setupApi(undefined)
-    const wrapper = await mountTab()
-    const availablePanel = wrapper.find('.available-panel')
-    expect(availablePanel.text()).toContain('(2)')
-    expect(availablePanel.text()).toContain('redirect')
-    expect(availablePanel.text()).toContain('traceid')
+    expect(wrapper.find('.configured-panel').exists()).toBe(true)
+    expect(wrapper.find('.plugin-item.configured').exists()).toBe(true)
+    for (const sel of ['.available-panel', '.plugin-tree', '.category-header', '.plugin-card', '.tree-item']) {
+      expect(wrapper.find(sel).exists(), `${sel} 不应再渲染`).toBe(false)
+    }
+    expect(wrapper.text()).not.toContain('可用插件')
+    expect(wrapper.text()).toContain('已配置插件')
     wrapper.unmount()
   })
 })

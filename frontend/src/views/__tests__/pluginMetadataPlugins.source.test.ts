@@ -13,9 +13,10 @@ function src(...parts: string[]): string {
 
 const ENTRY_FILES = [
   'views/PluginMetadataList.vue',
-  'components/PluginMetadata.vue',
-  // B2c：创建入口收敛进共享弹窗后，弹窗成为第三个消费方（同一份清单、同一条过滤实现）
+  // B2c：创建入口收敛进共享弹窗后，弹窗成为第二个消费方（同一份清单、同一条过滤实现）
   'components/PluginMetadataCreateModal.vue',
+  // 统一管理面板（components/PluginMetadata.vue）已按用户裁决 2026-11-21 移除「可用插件」分类树，
+  // 不再消费该清单——可选插件只在创建弹窗内呈现；面板只剩已配置列表。
 ]
 
 describe('插件元数据可用插件单源守卫（features.yaml 清单，写死开关退役）', () => {
@@ -24,6 +25,12 @@ describe('插件元数据可用插件单源守卫（features.yaml 清单，写�
       expect(src(f), `${f} 必须消费 featuresStore.metadataPlugins`).toMatch(/featuresStore\.metadataPlugins/)
       expect(src(f), `${f} 必须有 features 清单兜底加载`).toMatch(/featuresStore\.load\(\)/)
     }
+  })
+
+  it('统一管理面板不再自行拉取/过滤可选插件（清单单源，防止第二份实现回流）', () => {
+    const s = src('components/PluginMetadata.vue')
+    expect(s).not.toMatch(/featuresStore/)
+    expect(s).not.toMatch(/filterMetadataPlugins/)
   })
 
   it('两入口源码与类型声明不再出现写死开关字段', () => {
