@@ -171,11 +171,15 @@
         <button class="restore-btn" title="还原为集群卡片列表" @click="restoreMaximize">✕ 还原</button>
       </div>
       <div class="max-name-row">
-        <span class="cname">{{ maximizedCluster.display_name || maximizedCluster.name }}</span>
-        <span v-if="maximizedCluster.display_name" class="chint">{{ maximizedCluster.name }}</span>
-        <span v-if="maximizedRouteBadge" class="lp-tag cl-route-badge" :class="maximizedRouteBadge.cls">{{
-          maximizedRouteBadge.label
-        }}</span>
+        <!-- 名称行身份区：:key 只作用于这个 inline span（切集群时重挂载 → 播一次 maxIdent），
+             不波及下方 Tab 子组件；动作按钮组留在外面靠 margin-left:auto 靠右 -->
+        <span :key="maximizedCluster.id" class="max-ident">
+          <span class="cname">{{ maximizedCluster.display_name || maximizedCluster.name }}</span>
+          <span v-if="maximizedCluster.display_name" class="chint">{{ maximizedCluster.name }}</span>
+          <span v-if="maximizedRouteBadge" class="lp-tag cl-route-badge" :class="maximizedRouteBadge.cls">{{
+            maximizedRouteBadge.label
+          }}</span>
+        </span>
         <div class="cl-card-actions">
           <button class="btn btn-secondary" @click.stop="viewClusterDetail(maximizedCluster)">详情</button>
           <button class="btn btn-ghost" @click.stop="testCluster(maximizedCluster)">连接测试</button>
@@ -341,55 +345,59 @@
         </span>
       </div>
       <div class="dbody">
-        <ClusterUpstreams
-          v-if="maximizedCluster.activeTab === 'upstreams'"
-          :cluster="maximizedCluster"
-          :clusters="clusters"
-          :open-publish-modal="openPublishModal"
-          @refresh="loadClusters"
-        />
-        <ClusterRoutes
-          v-else-if="maximizedCluster.activeTab === 'routes'"
-          :cluster="maximizedCluster"
-          :clusters="clusters"
-          :open-publish-modal="openPublishModal"
-          :show-delete-confirm="showDeleteConfirm"
-          :load-plugin-configs="loadPluginConfigs"
-          @refresh="loadClusters"
-        />
-        <ClusterPluginConfigs
-          v-else-if="maximizedCluster.activeTab === 'pluginConfigs'"
-          :cluster="maximizedCluster"
-          :clusters="clusters"
-          :open-publish-modal="openPublishModal"
-          :available-plugins="availablePlugins"
-          :load-available-plugins="loadAvailablePlugins"
-          :loading="loading"
-          @refresh="loadClusters"
-        />
-        <ClusterGlobalRules
-          v-else-if="maximizedCluster.activeTab === 'globalRules'"
-          :cluster="maximizedCluster"
-          :clusters="clusters"
-          :open-publish-modal="openPublishModal"
-          :available-plugins="availablePlugins"
-          :load-available-plugins="loadAvailablePlugins"
-          :loading="loading"
-          @refresh="loadClusters"
-        />
-        <ClusterStaticResources
-          v-else-if="maximizedCluster.activeTab === 'staticResources'"
-          :cluster="maximizedCluster"
-          :clusters="clusters"
-          :open-publish-modal="openPublishModal"
-          :load-routes="loadRoutes"
-          :loading="loading"
-          @refresh="loadClusters"
-        />
-        <div v-else-if="maximizedCluster.activeTab === 'globalPlugins'" class="tab-content">
-          <PluginMetadata :cluster-id="maximizedCluster.id" :nodes="maximizedCluster.nodes" />
+        <!-- 切换动效包裹层：绝不给本层加 :key（否则 7 个 Tab 子组件整体重挂载，丢滚动/选中态并重复拉取）；
+             重播靠 swapClass（fx-cluster dir-next|prev / fx-tab），260ms 后清类避免 transform 长期残留 -->
+        <div ref="swapEl" class="max-swap" :class="swapClass">
+          <ClusterUpstreams
+            v-if="maximizedCluster.activeTab === 'upstreams'"
+            :cluster="maximizedCluster"
+            :clusters="clusters"
+            :open-publish-modal="openPublishModal"
+            @refresh="loadClusters"
+          />
+          <ClusterRoutes
+            v-else-if="maximizedCluster.activeTab === 'routes'"
+            :cluster="maximizedCluster"
+            :clusters="clusters"
+            :open-publish-modal="openPublishModal"
+            :show-delete-confirm="showDeleteConfirm"
+            :load-plugin-configs="loadPluginConfigs"
+            @refresh="loadClusters"
+          />
+          <ClusterPluginConfigs
+            v-else-if="maximizedCluster.activeTab === 'pluginConfigs'"
+            :cluster="maximizedCluster"
+            :clusters="clusters"
+            :open-publish-modal="openPublishModal"
+            :available-plugins="availablePlugins"
+            :load-available-plugins="loadAvailablePlugins"
+            :loading="loading"
+            @refresh="loadClusters"
+          />
+          <ClusterGlobalRules
+            v-else-if="maximizedCluster.activeTab === 'globalRules'"
+            :cluster="maximizedCluster"
+            :clusters="clusters"
+            :open-publish-modal="openPublishModal"
+            :available-plugins="availablePlugins"
+            :load-available-plugins="loadAvailablePlugins"
+            :loading="loading"
+            @refresh="loadClusters"
+          />
+          <ClusterStaticResources
+            v-else-if="maximizedCluster.activeTab === 'staticResources'"
+            :cluster="maximizedCluster"
+            :clusters="clusters"
+            :open-publish-modal="openPublishModal"
+            :load-routes="loadRoutes"
+            :loading="loading"
+            @refresh="loadClusters"
+          />
+          <div v-else-if="maximizedCluster.activeTab === 'globalPlugins'" class="tab-content">
+            <PluginMetadata :cluster-id="maximizedCluster.id" :nodes="maximizedCluster.nodes" />
+          </div>
+          <ClusterNodes v-else :cluster="maximizedCluster" @refresh="loadClusters" />
         </div>
-        <ClusterNodes v-else :cluster="maximizedCluster" @refresh="loadClusters" />
       </div>
     </div>
 
@@ -549,7 +557,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch, watchEffect, onMounted, h, nextTick } from 'vue'
+import { ref, reactive, computed, watch, watchEffect, onMounted, onUnmounted, h, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import {
@@ -666,11 +674,68 @@ const maximizedCluster = computed(() => clusters.value.find((c) => c.id === maxi
 /** 最大化面板中继徽章（页面 routeBadge 单点的只读镜像） */
 const maximizedRouteBadge = computed(() => (maximizedCluster.value ? routeBadge(maximizedCluster.value) : null))
 
+// ── 面板切换动效（方案 A）：切集群 = 方向滑入；只切 Tab = 纯淡入（不位移，避免误以为换了集群）──
+// 重播机制：swapOn 先 false → nextTick + 读一次 offsetWidth 强制重排 → true；260ms 后清类，
+// 避免 transform 长期残留在 .max-swap 上（会成为 position: fixed 后代的包含块）。
+type SwapKind = 'cluster' | 'tab'
+type SwapDir = 'next' | 'prev'
+const swapKind = ref<SwapKind>('cluster')
+const swapDir = ref<SwapDir>('next')
+const swapOn = ref(false)
+const swapEl = ref<HTMLElement | null>(null)
+let swapTimer: ReturnType<typeof setTimeout> | null = null
+
+/** 动效类名（模板 :class 唯一来源；未播放时为 null，不留任何动画声明） */
+const swapClass = computed(() => {
+  if (!swapOn.value) return null
+  if (swapKind.value === 'tab') return 'fx-tab'
+  return `fx-cluster dir-${swapDir.value}`
+})
+
+/** 目标集群相对当前集群的位置：右→next（从右侧推入）/ 左→prev；找不到下标（首次进入/被筛掉）回落 next */
+function resolveSwapDir(targetId: number): SwapDir {
+  const list = filteredClusters.value
+  const to = list.findIndex((c) => c.id === targetId)
+  const from = list.findIndex((c) => c.id === maximizedClusterId.value)
+  if (to < 0 || from < 0) return 'next'
+  // 首尾不循环：末→首仍按「目标在左」= prev
+  return to > from ? 'next' : 'prev'
+}
+
+async function playSwap(kind: SwapKind, dir: SwapDir = 'next') {
+  if (swapTimer !== null) {
+    clearTimeout(swapTimer)
+    swapTimer = null
+  }
+  swapKind.value = kind
+  swapDir.value = dir
+  swapOn.value = false
+  await nextTick()
+  if (swapEl.value) void swapEl.value.offsetWidth
+  swapOn.value = true
+  swapTimer = setTimeout(() => {
+    swapOn.value = false
+    swapTimer = null
+  }, 260)
+}
+
+onUnmounted(() => {
+  if (swapTimer !== null) {
+    clearTimeout(swapTimer)
+    swapTimer = null
+  }
+})
+
 function maximizeCluster(cluster: Cluster) {
   // 保留旧行为：最大化即折叠全部分组（还原为网格时紧凑）
   collapseAllGroups()
   cluster.activeTab = cluster.activeTab || 'nodes'
+  // 动效判定必须在改写 maximizedClusterId 之前取（from 下标依赖旧值）
+  const changed = maximizedClusterId.value !== cluster.id
+  const dir = resolveSwapDir(cluster.id)
   maximizedClusterId.value = cluster.id
+  // 首次进入最大化与原地切换集群同一动效；重复点击当前集群不重播
+  if (changed) void playSwap('cluster', dir)
 }
 
 function restoreMaximize() {
@@ -684,6 +749,7 @@ function switchMaximizedCluster(clusterId: number) {
   // 把当前活动 Tab 带到目标集群并触发按需加载（旧实现切新集群会回落节点 Tab）
   const curTab = maximizedCluster.value?.activeTab
   if (curTab) cluster.activeTab = curTab
+  // 集群动效在 maximizeCluster 内统一播放（dir 由 resolveSwapDir 按 mini-bar 下标算）
   maximizeCluster(cluster)
   if (curTab) handleTabClick(cluster, curTab)
 }
@@ -700,8 +766,11 @@ const onClusterSaved = () => {
 }
 
 function switchTab(cluster: Cluster, key: string) {
+  // 仅同集群切页签 → 纯淡入（fx-tab）；点当前页签不重播
+  const changed = cluster.activeTab !== key
   cluster.activeTab = key
   handleTabClick(cluster, key)
+  if (changed) void playSwap('tab')
 }
 
 // ── 统计格点击接管（方案 A）：统计格直切本页集群多 Tab 资源浏览器，不跳全局列表页 ──
@@ -719,8 +788,10 @@ const STAT_TAB_KEYS: Record<string, string> = {
 
 /** 打开该集群的多 Tab 资源浏览器（最大化）并直切对应 Tab；未知 key 兜底节点 Tab */
 function openStatTab(cluster: Cluster, key: string) {
+  // 先落到目标 Tab 再最大化：进入面板只播一次集群滑入（否则紧随的 switchTab 会把动效改成 fx-tab）
+  cluster.activeTab = STAT_TAB_KEYS[key] || 'nodes'
   maximizeCluster(cluster)
-  switchTab(cluster, STAT_TAB_KEYS[key] || 'nodes')
+  handleTabClick(cluster, cluster.activeTab)
 }
 
 const handleTabClick = async (cluster: Cluster, key: string) => {
@@ -1459,6 +1530,99 @@ onMounted(async () => {
 .max-name-row .btn {
   height: 28px;
 }
+/* 名称行身份区（集群名/标识/路由徽章）：独立 span 便于切集群时单独重播淡入；
+   :key="maximizedCluster.id" 只重挂载这个 inline span，动作按钮组仍在外面 */
+.max-name-row .max-ident {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.max-ident {
+  animation: maxIdent 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+/* 集群色相条跟随切换渐变（切集群时 --cc 变化，240ms 过渡避免硬切） */
+.max-name-row::before {
+  transition: background-color 240ms ease-out;
+}
+
+/* ── 切换动效（方案 A）──
+   .max-swap 是 Tab 内容的包裹层，切换时由 swapClass 挂 fx-cluster / fx-tab：
+   切集群 = 方向滑入（内容从目标方向推入 22px）+ 淡入；只切 Tab = 纯淡入不位移。
+   类在 260ms 后清除（见 playSwap），避免 transform 长期残留成为 position: fixed 后代的包含块。 */
+.max-swap {
+  position: relative;
+}
+.max-swap.fx-cluster.dir-next {
+  animation: maxInNext 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.max-swap.fx-cluster.dir-prev {
+  animation: maxInPrev 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.max-swap.fx-tab {
+  animation: maxTabFade 140ms ease-out both;
+}
+@keyframes maxInNext {
+  from {
+    opacity: 0;
+    transform: translate3d(22px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes maxInPrev {
+  from {
+    opacity: 0;
+    transform: translate3d(-22px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes maxTabFade {
+  from {
+    opacity: 0.85;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes maxIdent {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 6px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .max-swap.fx-cluster,
+  .max-swap.fx-tab {
+    animation: maxReducedFade 90ms linear both !important;
+  }
+  .max-ident {
+    animation: none !important;
+  }
+  .mini-item {
+    transition-duration: 1ms !important;
+  }
+  .max-name-row::before {
+    transition-duration: 1ms !important;
+  }
+}
+@keyframes maxReducedFade {
+  from {
+    opacity: 0.85;
+  }
+  to {
+    opacity: 1;
+  }
+}
 
 .dtabs {
   display: flex;
@@ -1810,7 +1974,10 @@ onMounted(async () => {
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
-  transition: all 0.12s;
+  transition:
+    background-color 160ms ease-out,
+    color 160ms ease-out,
+    border-color 160ms ease-out;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--muted);

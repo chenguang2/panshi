@@ -62,3 +62,12 @@
 - [x] 7.8 批次 B 补列（用户裁决「只补列」）：集群节点默认列加「Edge安装路径」（220，ellipsis）、路由默认列加「方法」（110，胶囊，前 2 枚 + title 全量）与「描述」（200，ellipsis）；默认列序对齐设计（名称/URI/方法/优先级/发布状态/描述/操作）
 - [x] 7.6 独立列表页 `RouteList` / `UpstreamList` 菜单顺序统一到 #81（复制/编辑 → 删除(红+解释) → 版本管理），加源码守卫防回退
 - [x] 7.7 验证：面板内计算值逐项对齐（td 10×12、卡脚 30/发布 24、上游无溢出）；`clusters` 套 + CentralList + mockupParity + pageHeaderActions 426 例绿；`vue-tsc -b` 干净；全量 vitest 仅未改动文件波动（隔离复绿）
+
+## 8. 最大化面板集群切换动效（方案 A，2026-11-21）
+
+> 规格由 @designer 产出、用户选定 A（方向滑入）。实现修正：**不用 `:key` 重挂载**（会丢子组件状态并重复请求），改为「类切换 + 强制重排」重播。
+
+- [x] 8.1 规格确认：内容区 `translate3d(±22px)` + 淡入 200ms `cubic-bezier(0.22,1,0.36,1)`；方向按 `filteredClusters` 下标（首尾不循环）；名称行 `.max-ident` 180ms 上浮 6px；胶囊过渡 160ms；色相条 240ms
+- [x] 8.2 实现：`.max-swap` 包裹 7 个 Tab 分支（无 key）+ `swapKind/swapDir/swapOn` 重播；`switchTab` 用 `fx-tab`（140ms 纯淡入）；首次进入播 `fx-cluster`
+- [x] 8.3 降级：`prefers-reduced-motion: reduce` → 仅 90ms 淡入，无位移；列表刷新不重播
+- [x] 8.4 守卫与验收：源码断言（无 `:key`、关键帧存在、reduced-motion 块、动效块无布局属性）+ 真机 animationName/duration、无横向滚动、三张截图

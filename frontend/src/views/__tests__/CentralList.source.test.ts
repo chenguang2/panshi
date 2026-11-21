@@ -37,3 +37,82 @@ describe('统一管理·卡片动作单循环一致（central-management-parity 
     }
   })
 })
+
+// ── 最大化面板切换动效（方案 A，2026-11-21）────────────────────────────────
+// 红线：动效层绝不能带 :key（会让 7 个 Tab 子组件整体重挂载，丢滚动/选中态并重复拉取）；
+// 动效只许动 opacity/transform；reduced-motion 必须降级为纯淡入；切换只用方向类，不影响布局。
+describe('统一管理·最大化面板切换动效（方案 A）', () => {
+  const s = () => src()
+
+  /** 动效段（.max-swap 规则起点 → .dtabs 之前的全部 CSS） */
+  function animSection() {
+    const text = src()
+    const start = text.indexOf('.max-swap {')
+    expect(start, '缺少切换动效段（.max-swap 规则）').toBeGreaterThan(-1)
+    const end = text.indexOf('.dtabs {', start)
+    expect(end, '动效段未正确收口').toBeGreaterThan(start)
+    return text.slice(start, end)
+  }
+
+  it('动效包裹层 .max-swap 不带 :key（Tab 子组件不得整体重挂载）', () => {
+    const text = s()
+    const tagStart = text.indexOf('class="max-swap"')
+    expect(tagStart, '缺少 .max-swap 包裹层').toBeGreaterThan(-1)
+    const tagStartAt = text.lastIndexOf('<', tagStart)
+    const tagEnd = text.indexOf('>', tagStart)
+    const tag = text.slice(tagStartAt, tagEnd)
+    expect(tag).toContain('ref="swapEl"')
+    expect(tag).toContain(':class="swapClass"')
+    expect(tag, '.max-swap 禁止 :key（会重挂载 Tab 子组件）').not.toContain(':key')
+    // 七个 Tab 分支原样搬入包裹层（结构未丢）
+    for (const comp of [
+      'ClusterUpstreams',
+      'ClusterRoutes',
+      'ClusterPluginConfigs',
+      'ClusterGlobalRules',
+      'ClusterStaticResources',
+      'PluginMetadata',
+      'ClusterNodes',
+    ]) {
+      expect(text.slice(tagStartAt, text.indexOf('<!-- Node Form Modal -->'))).toContain(`<${comp}`)
+    }
+  })
+
+  it('三个关键帧齐备：方向滑入两条 + 切 Tab 淡入', () => {
+    const a = animSection()
+    expect(a).toContain('@keyframes maxInNext')
+    expect(a).toContain('@keyframes maxInPrev')
+    expect(a).toContain('@keyframes maxTabFade')
+    expect(a).toContain('@keyframes maxIdent')
+    // 200ms 同缓动、切 Tab 140ms；方向类按 dir-next / dir-prev 区分
+    expect(a).toMatch(/\.max-swap\.fx-cluster\.dir-next \{[\s\S]*?animation: maxInNext 200ms/)
+    expect(a).toMatch(/\.max-swap\.fx-cluster\.dir-prev \{[\s\S]*?animation: maxInPrev 200ms/)
+    expect(a).toMatch(/\.max-swap\.fx-tab \{[\s\S]*?animation: maxTabFade 140ms/)
+  })
+
+  it('reduced-motion 降级为纯淡入（关闭位移与身份区动画）', () => {
+    const a = animSection()
+    const start = a.indexOf('@media (prefers-reduced-motion: reduce)')
+    expect(start, '缺少 prefers-reduced-motion 块').toBeGreaterThan(-1)
+    const block = a.slice(start)
+    expect(block).toContain('maxReducedFade 90ms')
+    expect(block).toContain('.max-ident')
+    expect(block).toContain('animation: none !important')
+    expect(block).toContain('.mini-item')
+  })
+
+  it('动效只动 opacity/transform，不含布局属性动画', () => {
+    const a = animSection()
+    for (const prop of ['height:', 'margin:', 'top:', 'left:']) {
+      expect(a.includes(prop), `动效段不得出现布局属性 ${prop}`).toBe(false)
+    }
+  })
+
+  it('切 Tab 仅在 activeTab 真变化时播放（开同页签不重播）', () => {
+    const text = s()
+    expect(text).toMatch(/const changed = cluster\.activeTab !== key[\s\S]*?if \(changed\) void playSwap\('tab'\)/)
+    // 集群切换方向按 mini-bar 下标判定（末→首回落 prev，不循环）
+    expect(text).toMatch(/return to > from \? 'next' : 'prev'/)
+    expect(text).toContain('void swapEl.value.offsetWidth')
+  })
+})
