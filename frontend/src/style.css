@@ -2412,9 +2412,9 @@ body.col-move-dragging * {
   margin-bottom: 14px;
 }
 
-/* 空态动作按钮 = 面板工具条同口径（30px / 12px 400 / 浅底描边，含 primary——
-   空态里的「添加 X」不是实心强调；实测未加此规则时卡片 Tab 渲染成实心 accent、
-   表格 Tab 渲染成 24px 浅底，同一批次两套观感）。声明值与 `.max-panel .dbody .node-actions .ant-btn` 同源。 */
+/* 空态动作按钮（30px / 12px 400 / 浅底描边，含 primary——空态里的「添加 X」不是实心强调；
+   实测未加此规则时卡片 Tab 渲染成实心 accent、表格 Tab 渲染成 24px 浅底，同一批次两套观感）。
+   2026-11-22：面板工具条已无 antd 按钮（原生 `.btn` 族），本规则是该口径的唯一声明点。 */
 .empty5 .e-actions .ant-btn {
   display: inline-flex;
   align-items: center;
@@ -3740,7 +3740,7 @@ th.resizable {
    基线：docs/ui/Live-Artifact-5/proposal-c/central.html 状态二（`.max-panel` 内 `.dbody.tab-body`）
    作用域 = `.max-panel .dbody`，不影响面板外同名类（Tab 卡片的样式另有任务）。
    级联裁决：CentralList.vue 的 scoped `:deep(.dbody)`（3 类）/ `:deep(.node-table)`（3 类）段
-   带 !important，本段一律 4 类选择器（`.max-panel .dbody .<node-actions|node-table>`）压过，
+   带 !important，本段一律 4 类选择器（`.max-panel .dbody .node-table …`）压过，
    冲突属性同时带 !important，避免与构建顺序耦合。
    ═══════════════════════════════════════════════════════════════════════════════ */
 
@@ -3787,68 +3787,11 @@ th.resizable {
   margin-right: 16px;
 }
 
-/* ── 工具条 = 设计 .tab-toolbar / .tool-btn ──
-   封闭容器内改为「带内距 + 下分隔线」的工具条带（对齐独立列表页 .l5-toolbar 的 12px 16px） */
-.max-panel .dbody .node-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-bottom: 0;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border);
-}
-/* 设计 .tool-btn：高 30、12px/400、浅底 + 1px 边（含「添加 X」——不是实心 accent） */
-.max-panel .dbody .node-actions .ant-btn {
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  gap: 6px !important;
-  height: 30px !important;
-  padding: 0 10px !important;
-  font-size: 12px !important;
-  font-weight: 400 !important;
-  line-height: 1 !important;
-  border-radius: var(--radius-sm) !important;
-  background: var(--surface) !important;
-  border: 1px solid var(--border) !important;
-  color: var(--fg) !important;
-  box-shadow: none !important;
-}
-.max-panel .dbody .node-actions .ant-btn-primary {
-  background: var(--surface) !important;
-  border-color: var(--border) !important;
-  color: var(--fg) !important;
-}
-/* 设计 .tool-btn:hover：边框/文字转 accent + 淡 accent 底（压过 .ant-btn-primary:hover 的实心） */
-.max-panel .dbody .node-actions .ant-btn:hover {
-  background: var(--accent-bg) !important;
-  border-color: var(--accent) !important;
-  color: var(--accent) !important;
-}
-.max-panel .dbody .node-actions .ant-btn-dangerous {
-  color: var(--danger) !important;
-}
-.max-panel .dbody .node-actions .ant-btn-dangerous:hover {
-  background: oklch(55% 0.18 28 / 8%) !important;
-  border-color: var(--danger) !important;
-  color: var(--danger) !important;
-}
-.max-panel .dbody .node-actions .ant-btn:disabled {
-  opacity: 0.45 !important;
-  cursor: not-allowed !important;
-}
-.max-panel .dbody .node-actions .ant-divider-vertical {
-  border-color: var(--border) !important;
-  height: 18px !important;
-  margin: 0 4px !important;
-}
-.max-panel .dbody .node-actions .toolbar-right {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
+/* ── 工具条 ──
+   2026-11-22（A 推广清理）：面板七个 Tab 已全部是独立页组件的 scoped 形态，面板内不再有专属
+   工具条容器（原 `node-actions` 选择器在全仓 .vue 模板已零匹配）。工具条按钮统一为原生
+   `.btn.btn-primary` / `.btn.btn-secondary`（见 .l5-toolbar / .btn 系列规则），故原「面板内
+   antd 按钮改版」9 条规则（30px/浅底描边等）已删除。 */
 
 /* ── 表格解剖 = 设计 .l5-table ── */
 .max-panel .dbody .node-table {
@@ -4015,7 +3958,8 @@ th.resizable {
      · `.max-panel .dbody .node-table .ant-table-tbody .ant-btn`（行内动作 24px，0,5,0）
    实测未加本规则时：卡片 Tab 空态按钮 = 实心 accent 24.8px、表格 Tab = 浅底 24px，同一批次两套观感。
    本规则与后者特异性相同（0,5,0），故**必须位于其之后**（文件末尾）才能生效——
-   空态按钮口径 = 面板工具条 `.max-panel .dbody .node-actions .ant-btn`（30px / 12px 400 / 浅底描边）。 */
+   空态按钮口径 = 页面级空态按钮基线（30px / 12px 400 / 浅底描边；原生 `.btn` 族为工具条口径，
+   面板内不再有 antd 工具条，故不与之对齐）。 */
 .max-panel .dbody .empty5 .e-actions .ant-btn,
 .max-panel .dbody .empty5 .e-actions .ant-btn-primary {
   height: 30px !important;

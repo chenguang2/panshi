@@ -371,7 +371,6 @@ import { useClusterStaticResources } from '@/composables/useClusterStaticResourc
 import { useCardClusterGrouping } from '@/composables/useCardClusterGrouping'
 import { useBatchDelete } from '@/composables/useBatchDelete'
 import { clusterHueClass } from '@/utils/clusterHue'
-import type { VersionModalState } from '@/composables/useClusterPluginConfigs'
 import SearchInput from '@/components/SearchInput.vue'
 
 const resources = ref<any[]>([])
@@ -769,20 +768,9 @@ const publishPreselected = ref<number[]>([])
 const BROKEN_ROUTE_TIP = '关联路由不存在，请删除该资源或重建路由'
 // ── 上传走共享流（static-resources-ux-close-loop 1.2）────────────────────────
 // 本地 input+api.post 直传实现已删除，改用 useClusterStaticResources.uploadStaticResource
-// （预检 + 进度弹窗 + 结果行，与集群统一管理 Tab 同款）；上传中禁用全部上传按钮。
-const versionModal: VersionModalState = {
-  type: ref<'static_resource'>('static_resource'),
-  visible: vmVisible,
-  resourceId: vmId,
-  clusterId: vmClusterId,
-  resourceName: vmName,
-  edgeUuid: ref(''),
-}
+// （预检 + 进度弹窗 + 结果行）；上传中禁用全部上传按钮。
 const { uploadStaticResource, uploading: srUploading } = useClusterStaticResources({
   clusters: clusters as Ref<Cluster[]>,
-  versionModal,
-  openPublishModal: async () => [],
-  loadRoutes: async () => {},
   // 上传成功后同步刷新本页列表并通知面板（ZIP 上传成功 → 资源总量/集群卡片立即更新）
   afterUpload: () => loadAfterWrite(),
 })

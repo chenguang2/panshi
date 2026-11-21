@@ -234,3 +234,17 @@
 - **`openspec/specs/plugin-metadata-management/spec.md`** 的 Scenario「统一管理 Tab 添加入口同清单过滤」仍描述「面板展示可添加插件（目录分类卡片）」。面板已按用户裁决移除该树（commit `98f260d3`），添加入口改为工具条按钮 + 共享创建弹窗。
 - 建议：用一份小变更（MODIFIED 该 Scenario）把表述改为「两处添加入口共用同一创建弹窗；`plugin_metadata_plugins` 清单过滤由弹窗单点承担，面板不承载可选插件清单」，随后 `openspec validate --all` 收口。
 - 状态：**已完成（2026-11-21）**。变更 `panel-plugin-metadata-entry-modal` 已归档（`openspec/changes/archive/2026-11-21-panel-plugin-metadata-entry-modal`），主 spec 的该 Scenario 正文已按实现改写（场景标题保留 + HTML 注释记录裁决来源），`openspec validate --all` → 224 passed / 0 failed。
+
+## 八、A 推广清理（2026-11-22，生产死代码删除）
+
+面板七个 Tab 全部 scoped 化后，面板专属工厂与运行态字段均已零生产引用，本批按「除自身与测试外引用数 0 才删」逐项清理（净 −4,017 行：4,352 删 / 335 增，含 8 个整文件删除；`vue-tsc -b` 0 error、全量 vitest 绿（波动按 #58 隔离复验）、真机七 Tab + 七独立页 console 0 error）。
+
+**整文件删除**：`composables/useClusterRoutes.ts`、`useClusterUpstreams.ts`、`useClusterPluginConfigs.ts`、`useClusterGlobalRules.ts`（+ 各自专属测试 `useClusterRoutes.test.ts`/`useClusterUpstreams.test.ts`）、`useResourceListState.ts`（B0 适配层，`clusterResourceState`/`localResourceState` 双侧零消费）+ `useResourceListState.test.ts`；`panelFormDeadCode.source.test.ts` 改为「禁回流」守卫（4 文件必须不存在）。
+
+**成员级裁剪**：`useClusterNodes.ts` 1089→约 280 行（保留 `nginxState`/`nodeCellRuntime`/`nodeCellExecText`/`createCancelNodeInstallHandler`/`allNodeActionButtons`/`requestNodeBatchCreate`/`useClusterNodes().loadNodes`）；`useClusterStaticResources.ts` 437→约 150 行（仅 ZIP 上传流）；`useClusterUtils.ts` 删 `showBatchResultModal`/`publishStatusRender`（及 `PublishStatusTag` 导入）；`types/index.ts` 的 `Cluster` 删 upstreams/routes 子表缓存、全部 `selected*`（`selectedPluginConfig` 保留，`useClusterPluginEntity` 仍写）、`staticResourcesLoading`/`selectedStaticResource`、`RoutePagination`/`UpstreamPagination`。
+
+**面板壳**：`CentralList.vue` 删 `ConfigDiff` 抽屉（`diff*` 无任何置位点——数据库对比唯一入口在 NodeList 自身抽屉）、`onRefresh`/`loadClustersFn` 前置引用、`CLUSTER_RUNTIME_KEYS` 收窄为 `activeTab` + 节点子表键。
+
+**CSS**：`style.css` 删面板专属 `.max-panel .dbody .node-actions*` 9 条（模板零匹配，真机实测 0 元素）；`.max-panel .dbody .empty5 .e-actions .ant-btn` **保留**（当前亦零匹配——面板空态已是各页原生 `gr-empty`/`.empty5` 图标+标题形态；DOM 注入探针实测该规则仍产出 30px/12px 400/浅底描边，非遗留可删但建议另批评估）。
+
+**保留**：`useClusterResource.ts`（`useClusterListCore` 仍被 `useClusterNodes` 消费）、`useClusterResourceCore.ts` / `useClusterPluginEntity.ts`（#24 架构单点，`globalRuleDeleteWarning` 仍在用）。

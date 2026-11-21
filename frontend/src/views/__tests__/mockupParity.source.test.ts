@@ -1130,16 +1130,14 @@ describe('central-management-parity 批 A：最大化面板 Tab 解剖单点（s
     return css.slice(i)
   }
 
-  it('工具条按钮 = 设计 .tool-btn（30 高 / 12px / 400 / 浅底描边；「添加 X」不再实心 accent）', () => {
+  it('工具条按钮 = 原生 .btn 族（2026-11-22 A 推广清理：antd 工具条改版规则已删除）', () => {
     const s = section()
-    expect(s).toContain('.max-panel .dbody .node-actions .ant-btn {')
-    expect(s).toMatch(/\.max-panel \.dbody \.node-actions \.ant-btn \{[\s\S]*?height: 30px !important;/)
-    expect(s).toMatch(/\.max-panel \.dbody \.node-actions \.ant-btn \{[\s\S]*?background: var\(--surface\) !important;/)
-    // primary 显式回浅底（否则 CentralList 的 .ant-btn-primary 实心 accent 生效）
-    expect(s).toContain('.max-panel .dbody .node-actions .ant-btn-primary {')
-    expect(s).toMatch(
-      /\.max-panel \.dbody \.node-actions \.ant-btn-primary \{[\s\S]*?background: var\(--surface\) !important;/,
-    )
+    // 面板内已无专属 `.node-actions` 工具条（改版 9 条 antd 规则随面板 scoped 化删除，
+    // 选择器在全仓 .vue 模板零匹配；工具条按钮唯一形态 = 各 scoped 页的原生 `.btn` 族）
+    expect(s).not.toContain('.max-panel .dbody .node-actions')
+    for (const f of ['NodeList.vue', 'UpstreamList.vue', 'RouteList.vue']) {
+      expect(page(f), f).toContain('class="btn btn-primary')
+    }
   })
 
   it('表头 = 设计 .l5-table thead th（--bg 灰底 / 去大写 / 9px 12px / 11px 600）', () => {
@@ -1210,11 +1208,12 @@ describe('最大化面板：Tab 内容封闭容器（tab-content card，2026-11-
     expect(block()).not.toContain('box-shadow')
   })
 
-  it('工具条 = 带内距的下边线带（12px 16px，不再靠自己 margin 与表格拉开）', () => {
+  it('工具条区隔线归共享 .l5-toolbar（面板内不再有专属工具条带规则）', () => {
     const s = css.slice(css.indexOf('统一管理 · 最大化面板 Tab 内容解剖'))
-    expect(s).toMatch(
-      /\.max-panel \.dbody \.node-actions \{[\s\S]*?margin-bottom: 0;[\s\S]*?padding: 12px 16px;[\s\S]*?border-bottom: 1px solid var\(--border\);/,
-    )
+    // 2026-11-22（A 推广清理）：面板内工具条 = scoped 页的共享 TableToolbar（.l5-toolbar），
+    // 其 border-bottom 是单点实现；面板专属 `.node-actions` 带规则已删除。
+    expect(s).not.toMatch(/\.max-panel \.dbody \.node-actions \{/)
+    expect(css).toMatch(/\.l5-toolbar \{[^}]*border-bottom: 1px solid var\(--border\)/)
   })
 
   it('卡片 Tab 网格内距四向 16px（不再贴容器左右边框）', () => {

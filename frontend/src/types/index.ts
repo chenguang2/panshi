@@ -23,18 +23,6 @@ export interface ChangePasswordResponse {
   permissions?: string[]
 }
 
-export interface RoutePagination {
-  total: number
-  page: number
-  pageSize: number
-}
-
-export interface UpstreamPagination {
-  total: number
-  page: number
-  pageSize: number
-}
-
 export interface NodePagination {
   total: number
   page: number
@@ -64,6 +52,7 @@ export interface Cluster {
   static_resource_count: number
   plugin_metadata_count: number
   activeTab?: string
+  /** 面板壳加载的节点子表数据（ClusterCard 节点预览区消费；由 useClusterNodes.loadNodes 写入） */
   nodes?: Node[]
   nodesLoading?: boolean
   nodesPagination?: NodePagination
@@ -71,37 +60,16 @@ export interface Cluster {
   nodesSearchField?: string
   nodesSortBy?: string
   nodesSortOrder?: 'asc' | 'desc'
-  upstreams?: Upstream[]
-  upstreamsLoading?: boolean
-  upstreamsPagination?: UpstreamPagination
-  upstreamsSearch?: string
-  upstreamsSearchField?: string
-  upstreamsSortBy?: string
-  upstreamsSortOrder?: 'asc' | 'desc'
-  routes?: Route[]
-  routesLoading?: boolean
-  routesPagination?: RoutePagination
-  routesSearch?: string
-  routesSearchField?: string
-  routesSortBy?: string
-  routesSortOrder?: 'asc' | 'desc'
-  selectedNode?: Node | null
-  selectedNodeKeys?: number[]
-  selectedUpstream?: Upstream | null
-  selectedUpstreamKeys?: number[]
-  selectedRoute?: Route | null
-  selectedRouteKeys?: number[]
   plugin_configs?: PluginConfig[]
-  /** A3 失败态契约：plugin_configs 子表加载失败原因（undefined/null = 无失败；由 useClusterPluginEntity.loadItems 写入，父页面 loadXxx 与子页 Tab 共享同一状态载体） */
+  /** A3 失败态契约：plugin_configs 子表加载失败原因（undefined/null = 无失败；由 useClusterPluginEntity.loadItems 写入） */
   pluginConfigsLoadError?: string | null
+  /** useClusterPluginEntity 的单选载体（插件组/全局规则共用同一键） */
   selectedPluginConfig?: PluginConfig | null
   global_rules?: GlobalRule[]
   /** A3 失败态契约：global_rules 子表加载失败原因（同 pluginConfigsLoadError） */
   globalRulesLoadError?: string | null
-  selectedGlobalRule?: GlobalRule | null
+  /** 静态资源页上传流按 id 反查所属集群（useClusterStaticResources.uploadStaticResource） */
   static_resources?: StaticResource[]
-  staticResourcesLoading?: boolean
-  selectedStaticResource?: StaticResource | null
 }
 
 export interface Node {

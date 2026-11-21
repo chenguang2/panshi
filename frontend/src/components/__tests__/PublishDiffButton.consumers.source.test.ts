@@ -8,7 +8,9 @@ import { resolve } from 'node:path'
 //
 // 列宽防裁切（发布状态列宽方案 A 2026-11-13；批 7 胶囊 2026-11-19 用户裁决 C）：
 // partial 态标签「⚠ v15 · 发布未完全生效」约 170px + gap 6 + 「差异」胶囊 ~42px，
-// 四入口统一 width: 220 + 状态单元格 status-cell-flex（nowrap 防标签与按钮分离）。
+// 入口统一 width: 220 + 状态单元格 status-cell-flex（nowrap 防标签与按钮分离）。
+// 2026-11-22（A 推广清理）：面板侧的两个薄封装（useClusterUpstreams / useClusterRoutes）已删除，
+// 列宽锚点只剩独立页 RouteList.vue（上游页列定义在其页面内，见 ENTRY_FILES）。
 
 const ROOT = resolve(__dirname, '../../..')
 
@@ -28,11 +30,7 @@ const CARD_FILES = ['src/components/SslCertCard.vue']
 // SSL 服务器证书页：按钮在 SslCertCard 内（见 CARD_FILES），页面只挂弹窗并监听卡片上抛
 const SSL_PAGE = 'src/views/ServerCertList.vue'
 
-const WIDTH_FILES = [
-  'src/composables/useClusterUpstreams.ts',
-  'src/composables/useClusterRoutes.ts',
-  'src/views/RouteList.vue',
-]
+const WIDTH_FILES = ['src/views/RouteList.vue']
 
 function read(rel: string): string {
   return readFileSync(resolve(ROOT, rel), 'utf-8')

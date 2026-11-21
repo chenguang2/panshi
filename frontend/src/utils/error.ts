@@ -1,8 +1,8 @@
 /**
  * Axios 错误信息统一提取（M5）。
  *
- * 替代散落在 useClusterUtils / useClusterRoutes / useClusterPluginEntity /
- * useClusterStaticResources 中的 4+ 处手写 detail 分支解析。
+ * 替代散落在各页面/composable（useClusterUtils、useClusterStaticResources 等）中的
+ * 4+ 处手写 detail 分支解析。
  * 统一处理：detail 字符串 / detail 数组（Pydantic 校验错误，含 loc 字段定位）/
  * 响应级 message / error.message / 兜底文案。
  */

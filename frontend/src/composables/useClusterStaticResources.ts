@@ -1,20 +1,9 @@
-import { ref, reactive, computed, type Ref } from 'vue'
+import { ref, type Ref } from 'vue'
 import { message } from 'ant-design-vue'
 import api from '@/api'
-import type { Cluster, Route, RoutePlugin, StaticResource } from '@/types'
-import type { VersionModalState } from './useClusterPluginConfigs'
-import type { PublishModalOptions } from './useClusterResourceCore'
-import {
-  showDeleteConfirm,
-  executePublish,
-  executeDeleteWithProgress,
-  buildDeleteProgressContent,
-  routeLabel,
-  resultStatusLabel,
-} from './useClusterUtils'
-import { showDangerConfirm } from './useOverlayModal'
+import type { Cluster, StaticResource } from '@/types'
+import { buildDeleteProgressContent } from './useClusterUtils'
 import { formatFileSize, formatDateTime } from '@/utils/format'
-import { staticResourceState } from '@/utils/staticResourceRoute'
 import { getApiErrorMessage } from '@/utils/error'
 import { showOverlayModal } from './useOverlayModal'
 
@@ -23,228 +12,23 @@ export const STATIC_ZIP_MAX_BYTES = 32 * 1024 * 1024
 
 interface StaticResourceDeps {
   clusters: Ref<Cluster[]>
-  versionModal: VersionModalState
-  openPublishModal: (title: string, clusterId: number, opts?: PublishModalOptions) => Promise<number[]>
-  loadRoutes: (cluster: Cluster) => Promise<void>
   /** 上传成功后的附加刷新（全局页刷新自身 /static_resources 列表；Tab 不传，可选） */
   afterUpload?: () => void | Promise<void>
 }
 
+/**
+ * 静态资源上传流（ZIP 预检 + 进度弹窗 + 结果行）。
+ *
+ * 2026-11-22（A 推广清理）：本工厂原承载的表单态 / 资格校验 / 编辑提交 / 删除 / 发布 /
+ * 版本管理已随面板 Tab 改渲染 `views/StaticResourceList.vue` 的 scoped 形态而全部失去消费方
+ * （发布链路唯一存活实现 = StaticResourceList 的逐节点 HTTP 腿循环），本批已删除；
+ * 现仅保留静态资源页仍在用的上传流（两入口同款：预检 32MB + 进度弹窗 + 结果行）。
+ */
 export function useClusterStaticResources(deps: StaticResourceDeps) {
-  const { clusters, versionModal, openPublishModal, loadRoutes, afterUpload } = deps
+  const { clusters, afterUpload } = deps
 
-  // ── 以下表单态 / 资格校验 / 打开 / 提交（至 handleStaticResourceSubmit 结束）已迁至共享
-  //    StaticResourceFormModal（B2a），两入口（面板 Tab / 静态资源页）均不再消费；
-  //    本批按计划保留原实现，B1.5 式清理留到后续批次（届时连同本注释一并删除）。 ──
-  const staticResourceFormData = reactive({
-    route_id: null as number | null,
-    name: '',
-    url_path: '',
-    description: '',
-  })
-  const staticResourceRouteInfo = ref<{ valid: boolean; msg: string } | null>(null)
-  const staticResourceModalVisible = ref(false)
-  const staticResourceFormMode = ref<'add' | 'edit'>('add')
-  const staticResourceEditingId = ref<number | null>(null)
-  const staticResourceEditingCluster = ref<Cluster | null>(null)
-  /** static-resources-ux-close-loop 8.3：编辑打开时的原路由绑定（换绑检测基准） */
-  const staticResourceOriginalRouteId = ref<number | null>(null)
-  /** 8.3：编辑态选择的路由与原绑定是否不同（换绑提示/提交 route_id 的依据） */
-  const staticResourceRouteChanged = computed(
-    () =>
-      staticResourceFormMode.value === 'edit' &&
-      staticResourceFormData.route_id !== staticResourceOriginalRouteId.value,
-  )
-  /** 上传进行中（1.2：两入口据此禁用上传按钮） */
+  /** 上传进行中（1.2：据此禁用上传按钮） */
   const uploading = ref(false)
-
-  const selectedRoute = computed(() => {
-    if (!staticResourceFormData.route_id || !staticResourceEditingCluster.value) return null
-    return staticResourceEditingCluster.value.routes?.find((r) => r.id === staticResourceFormData.route_id) || null
-  })
-  const uriValid = computed(() => {
-    const r = selectedRoute.value
-    return r ? (r.uri || '').trim().endsWith('/*') : false
-  })
-  const publishedValid = computed(() => {
-    const r = selectedRoute.value
-    return r ? !!(r.current_version || r.published_at) : false
-  })
-  const pluginValid = computed(() => {
-    const r = selectedRoute.value
-    if (!r) return false
-    return (r.plugins || []).some((p) => p.plugin_name === 'static_resource')
-  })
-  const staticResourceFormValid = computed(() => {
-    return staticResourceFormData.route_id && uriValid.value && publishedValid.value && pluginValid.value
-  })
-
-  const loadStaticResources = async (cluster: Cluster) => {
-    try {
-      cluster.staticResourcesLoading = true
-      const res = await api.get(`/clusters/${cluster.id}/static-resources`)
-      cluster.static_resources = res.data.items || []
-    } catch {
-      cluster.static_resources = []
-    } finally {
-      cluster.staticResourcesLoading = false
-    }
-  }
-
-  const onStaticResourceRouteChange = (routeId: number) => {
-    const cluster = staticResourceEditingCluster.value
-    if (!cluster) return
-    const route = cluster.routes?.find((r) => r.id === routeId)
-    if (!route) {
-      staticResourceRouteInfo.value = null
-      return
-    }
-    const uri = (route.uri || '').trim()
-    if (!uri.endsWith('/*')) {
-      staticResourceRouteInfo.value = { valid: false, msg: '路由路径必须以 /* 结尾' }
-      return
-    }
-    if (!route.current_version && !route.published_at) {
-      staticResourceRouteInfo.value = { valid: false, msg: '路由必须先发布到 Edge 节点' }
-      return
-    }
-    staticResourceRouteInfo.value = { valid: true, msg: `路由 "${route.name}" (${uri}) 验证通过` }
-  }
-
-  const showAddStaticResource = async (cluster: Cluster) => {
-    staticResourceFormMode.value = 'add'
-    staticResourceEditingCluster.value = cluster
-    staticResourceEditingId.value = null
-    staticResourceFormData.route_id = null
-    staticResourceFormData.name = ''
-    staticResourceFormData.url_path = ''
-    staticResourceFormData.description = ''
-    staticResourceRouteInfo.value = null
-    if (!cluster.routes || cluster.routes.length === 0) {
-      await loadRoutes(cluster)
-    }
-    staticResourceModalVisible.value = true
-  }
-
-  const editStaticResource = (cluster: Cluster, sr: StaticResource) => {
-    staticResourceFormMode.value = 'edit'
-    staticResourceEditingCluster.value = cluster
-    staticResourceEditingId.value = sr.id
-    // static-resources-ux-close-loop 8.3：编辑态启用换绑——预选当前路由并记录原绑定
-    staticResourceFormData.route_id = sr.route_id ?? null
-    staticResourceOriginalRouteId.value = sr.route_id ?? null
-    staticResourceFormData.name = sr.name
-    staticResourceFormData.url_path = sr.url_path || ''
-    staticResourceFormData.description = sr.description || ''
-    staticResourceRouteInfo.value = null
-    if (!cluster.routes || cluster.routes.length === 0) {
-      void loadRoutes(cluster)
-    }
-    staticResourceModalVisible.value = true
-  }
-
-  const handleStaticResourceSubmit = async () => {
-    const cluster = staticResourceEditingCluster.value
-    if (!cluster) return
-
-    if (staticResourceFormMode.value === 'add') {
-      if (!staticResourceFormData.route_id) {
-        message.warning('请选择路由')
-        return
-      }
-      if (!staticResourceRouteInfo.value?.valid) {
-        message.warning('请选择符合条件（已发布到 Edge 节点且路径以 /* 结尾）的路由')
-        return
-      }
-    }
-
-    try {
-      if (staticResourceFormMode.value === 'add') {
-        const payload = {
-          route_id: staticResourceFormData.route_id,
-          description: staticResourceFormData.description || undefined,
-        }
-        await api.post(`/clusters/${cluster.id}/static-resources`, payload)
-        message.success('静态资源已创建')
-        staticResourceModalVisible.value = false
-        await loadStaticResources(cluster)
-      } else {
-        // static-resources-ux-close-loop 8.3：编辑换绑——变更时校验资格并二次确认
-        const routeChanged =
-          staticResourceFormData.route_id !== staticResourceOriginalRouteId.value &&
-          staticResourceOriginalRouteId.value !== null
-        if (routeChanged) {
-          if (!staticResourceFormData.route_id) {
-            message.warning('请选择路由')
-            return
-          }
-          if (!staticResourceRouteInfo.value?.valid) {
-            message.warning('请选择符合条件（已发布到 Edge 节点且路径以 /* 结尾）的路由')
-            return
-          }
-        }
-        const payload: Record<string, unknown> = {}
-        if (staticResourceFormData.description !== undefined) {
-          payload.description = staticResourceFormData.description || undefined
-        }
-        if (routeChanged) {
-          payload.route_id = staticResourceFormData.route_id
-        }
-
-        const doUpdate = async () => {
-          await api.put(`/clusters/${cluster.id}/static-resources/${staticResourceEditingId.value}`, payload)
-          message.success(routeChanged ? '静态资源已换绑，请重新上传并发布' : '静态资源已更新')
-          staticResourceModalVisible.value = false
-          await loadStaticResources(cluster)
-        }
-
-        if (routeChanged) {
-          // 8.3：换绑提交前确认（取消即中止，不触发改动）
-          showDangerConfirm('换绑路由', '换绑路由后需重新上传并发布到 Edge 节点。确定换绑？', '确认换绑', async () => {
-            try {
-              await doUpdate()
-            } catch (error: unknown) {
-              message.error(getApiErrorMessage(error))
-            }
-          })
-          return
-        }
-        await doUpdate()
-      }
-    } catch (error: unknown) {
-      message.error(getApiErrorMessage(error))
-    }
-  }
-
-  // 表单已迁至 StaticResourceFormModal（B2a）：以下 open/submit 仅供历史调用与既有测试，
-  // 生产两入口不再触发（清理见文件头注释）。
-  // 2026-11-22（A 推广最后一块）：本 composable 的 `publishStaticResource` / `deleteStaticResource` /
-  // `openStaticResourceVersionManagement` 与 `staticResourceForm*` 表单态**已无面板消费方**
-  // （面板 Tab 改渲染 StaticResourceList 的 scoped 形态，发布/删除/版本/表单全部由页面那一份实现承担）。
-  // 静态资源页仍消费 `uploadStaticResource`（ZIP 上传流：预检 + 进度弹窗 + 结果行）。
-  // 本批按计划**只标注不删**，清理留后批（需同步 `useClusterStaticResources.test.ts` 与
-  // `Cluster.static_resources` 等类型字段）。
-  const deleteStaticResource = async (cluster: Cluster, sr: StaticResource) => {
-    showDeleteConfirm({
-      title: `确定要删除静态资源 "${sr.name}" 吗？`,
-      apiEndpoint: `/clusters/${cluster.id}/static-resources/${sr.id}`,
-      nodes: cluster.nodes,
-      onOk: async (deleteDb, deleteEdge, nodeIds) => {
-        await executeDeleteWithProgress({
-          title: `删除静态资源: ${sr.name}`,
-          apiEndpoint: `/clusters/${cluster.id}/static-resources/${sr.id}`,
-          cluster,
-          deleteDb,
-          deleteEdge,
-          nodeIds,
-          refreshFn: () => loadStaticResources(cluster),
-          clearSelectedFn: () => {
-            cluster.selectedStaticResource = null
-          },
-        })
-      },
-    })
-  }
 
   const uploadStaticResource = (sr: StaticResource) => {
     const input = document.createElement('input')
@@ -265,7 +49,7 @@ export function useClusterStaticResources(deps: StaticResourceDeps) {
         (sr.cluster_id ? clusters.value.find((c) => c.id === sr.cluster_id) : undefined)
       if (!cluster) return
 
-      // static-resources-ux-close-loop 1.2：上传中标记（两入口据此禁用上传按钮）
+      // static-resources-ux-close-loop 1.2：上传中标记（据此禁用上传按钮）
       uploading.value = true
       try {
         const logs: string[] = []
@@ -329,8 +113,7 @@ export function useClusterStaticResources(deps: StaticResourceDeps) {
           updateContent()
           modal.update({ okDisabled: false })
 
-          await loadStaticResources(cluster)
-          // static-resources-ux-close-loop 1.2：全局页复用共享流时同步刷新自身列表
+          // static-resources-ux-close-loop 1.2：页面复用共享流后同步刷新自身列表（面板徽标随之更新）
           if (afterUpload) await afterUpload()
         } catch (error: unknown) {
           const errMsg = getApiErrorMessage(error)
@@ -348,90 +131,8 @@ export function useClusterStaticResources(deps: StaticResourceDeps) {
     input.click()
   }
 
-  /** 面板 Tab 已无消费方（见 deleteStaticResource 上方注释）：发布链路唯一存活实现 = StaticResourceList.vue */
-  const publishStaticResource = async (cluster: Cluster, sr: StaticResource) => {
-    // static-resources-ux-close-loop 9.1/9.2：发布确认弹窗资源摘要 + 覆盖预警
-    // （静态资源发布不产生新版本，不复用 currentVersion 版本提示行）
-    const resourceSummary = `将把「${sr.name}」v${sr.current_version ?? '-'}（${formatFileSize(
-      sr.file_size || 0,
-    )}，${sr.url_path || ''}）分发到所选节点`
-    // static-resources-ux-close-loop 7.3：失败态「重发失败节点」——以持久化 failed_nodes 预选
-    const preselectFailed =
-      staticResourceState(sr) === 'failed'
-        ? (sr.last_publish_detail?.failed_nodes || [])
-            .map((n) => n.node_id)
-            .filter((id): id is number => typeof id === 'number')
-        : []
-    const nodeIds = await openPublishModal(`发布静态资源「${sr.name}」`, cluster.id, {
-      resourceSummary,
-      overwriteWarning: '发布将覆盖所选节点上的现有静态资源文件',
-      preselectedNodeIds: preselectFailed,
-    })
-    if (!nodeIds.length) return
-
-    await executePublish({
-      title: `发布静态资源「${sr.name}」`,
-      apiEndpoint: `/clusters/${cluster.id}/static-resources/${sr.id}/publish`,
-      nodeIds,
-      refreshFn: () => loadStaticResources(cluster),
-      handleResult: (data, addLog, progress) => {
-        if (data.current_version !== undefined) addLog(`当前版本: v${data.current_version}`)
-        if (data.results && data.results.length > 0) {
-          addLog('')
-          addLog('节点同步结果:')
-          for (const r of data.results) {
-            const rl = routeLabel(r.route, r)
-            // static-resources-ux-close-loop 2.2：状态经 resultStatusLabel 出中文
-            addLog(
-              `  ${r.node}: ${resultStatusLabel(r.status)}${r.error ? ' - ' + r.error : ''}${rl ? `（${rl}）` : ''}`,
-            )
-          }
-        }
-        progress.percent = 100
-        addLog('')
-        if (data.success) {
-          progress.status = 'success'
-          addLog('✅ 发布成功!')
-        } else {
-          progress.status = 'exception'
-          addLog('⚠️ 发布完成，部分节点失败')
-        }
-      },
-    })
-  }
-
-  const openStaticResourceVersionManagement = (cluster: Cluster, sr: StaticResource) => {
-    versionModal.type.value = 'static_resource'
-    versionModal.resourceId.value = sr.id
-    versionModal.clusterId.value = cluster.id
-    versionModal.resourceName.value = sr.name
-    versionModal.edgeUuid.value = ''
-    versionModal.visible.value = true
-  }
-
   return {
-    staticResourceFormData,
-    staticResourceRouteInfo,
-    staticResourceModalVisible,
-    staticResourceFormMode,
-    staticResourceEditingId,
-    staticResourceEditingCluster,
-    staticResourceFormValid,
-    staticResourceRouteChanged,
-    selectedRoute,
-    uriValid,
-    publishedValid,
-    pluginValid,
-
-    loadStaticResources,
-    onStaticResourceRouteChange,
-    showAddStaticResource,
-    editStaticResource,
-    handleStaticResourceSubmit,
-    deleteStaticResource,
     uploadStaticResource,
     uploading,
-    publishStaticResource,
-    openStaticResourceVersionManagement,
   }
 }

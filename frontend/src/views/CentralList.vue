@@ -413,8 +413,6 @@
       @saved="onClusterSaved"
     />
 
-    <ConfigDiff v-model:visible="diffDrawerVisible" :cluster-id="diffClusterId" :initial-node-id="diffNodeId" />
-
     <!-- Cluster Detail Modal -->
     <!-- 集群详情弹窗：共享组件唯一实现（cluster-ux-close-loop 3.6） -->
     <ClusterDetailModal :cluster="detailCluster" :visible="detailVisible" @close="detailVisible = false" />
@@ -502,7 +500,6 @@ import ClusterFormModal from '@/components/ClusterFormModal.vue'
 import ClusterCard from '@/components/ClusterCard.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import ClusterBackupDialog from '@/components/ClusterBackupDialog.vue'
-import ConfigDiff from '@/views/ConfigDiff.vue'
 import { useClusterNodes } from '@/composables/useClusterNodes'
 import { PAGE_SIZE_CARD_GRID } from '@/constants'
 import NodeList from '@/views/NodeList.vue'
@@ -676,10 +673,9 @@ function openStatTab(cluster: Cluster, key: string) {
   handleTabClick(cluster, cluster.activeTab)
 }
 
-// 上游 / 路由 / 插件组 / 全局规则 / 插件元数据 / 静态资源 Tab = 对应独立页组件的 scoped 形态（同一做法），
-// 列表由组件自身按作用域集群加载，故此处不再预拉任何资源（与节点不同：节点仍预拉，因为集群卡片节点区要渲染节点数据）。
-// 2026-11-22（A 推广最后一块）：静态资源 Tab 改用 StaticResourceList scoped 形态后，`loadStaticResources`
-// 预拉与 `useClusterStaticResources` / `useClusterRoutes`（仅为静态资源表单提供 cluster.routes）双双失去消费方。
+// 七个 Tab 全部是对应独立页组件的 scoped 形态（同一做法），列表由组件自身按作用域集群加载，
+// 故此处不预拉任何 Tab 资源；唯一例外是节点：集群卡片节点预览区（ClusterCard）渲染 `cluster.nodes`，
+// 需要面板壳加载（挂载时 + 切 Tab 时按需重载）。
 const handleTabClick = async (cluster: Cluster, key: string) => {
   if (key === 'nodes') {
     await loadNodes(cluster)
@@ -791,30 +787,22 @@ const groupOptions = computed(() => {
   return Array.from(groups).sort()
 })
 
-// Forward-ref pattern: loadClusters is defined after composable calls,
-// but useClusterNodes needs an onRefresh callback that calls it.
-let loadClustersFn: (() => Promise<void>) | null = null
-const onRefresh = () => {
-  loadClustersFn?.()
-}
-
 // ── Composables ──
-// 单条节点表单已迁至共享 NodeFormModal（B2b-1）：本页只保留与列表/面板相关的绑定，
-// 原内联表单及其表单模型/校验/提交一并退场（唯一实现在组件内）。
-// 2026-11-21（shared-core-plan A 试点）：节点 Tab 改渲染 NodeList 的 scoped 形态，
-// 原面板表格的列/动作/批量绑定已无消费方（表格机制归 NodeList 独占），此处只留卡片预览与
-// 外部触发的节点刷新（loadNodes）+ 数据库对比抽屉。
-const { diffDrawerVisible, diffClusterId, diffNodeId, loadNodes } = useClusterNodes({
-  clusters,
-  onRefresh,
-})
+// 单条节点表单已迁至共享 NodeFormModal（B2b-1）。
+// 2026-11-21（shared-core-plan A 试点）：节点 Tab 改渲染 NodeList 的 scoped 形态；
+// 2026-11-22（A 推广清理）：面板壳仅剩「集群卡片节点预览区需要的节点数据加载」（loadNodes）——
+// 原面板专属的数据库对比抽屉状态（diff*）在删掉 useClusterNodes 面板表格态后已无任何置位点
+// （数据库对比唯一入口 = NodeList 自身的 ConfigDiff 抽屉），故一并删除。
+const { loadNodes } = useClusterNodes()
 
-// 2026-11-22（A 推广最后一块）：`useClusterPluginConfigs` / `useClusterRoutes` / `useClusterStaticResources`
+// 2026-11-22：`useClusterPluginConfigs` / `useClusterRoutes` / `useClusterStaticResources`
 // 在本页已无消费方（七个 Tab 的列表/发布/版本全部由各 scoped 组件自持），连同 `versionModal` 状态包、
 // `availablePlugins` 清单、`currentClusterId` 与本页发布弹窗一并移除——面板壳不再预拉任何集群域资源。
 
 // 列表刷新时按 id 保留的面板运行态字段（central-management-ux-review-fixes 批 3 P2-5：
-// 刷新不重置 Tab/子表数据/选择态——#203 陷阱的全局版兜底；服务端字段以新响应为准）
+// 刷新不重置 Tab/节点预览数据/选择态——#203 陷阱的全局版兜底；服务端字段以新响应为准）。
+// 2026-11-22（A 推广清理）：上游/路由/插件组/全局规则/静态资源的面板运行态字段已无消费方
+// （各 Tab 由 scoped 组件自持列表状态），仅保留 activeTab 与节点子表字段。
 const CLUSTER_RUNTIME_KEYS = [
   'activeTab',
   'nodes',
@@ -824,29 +812,6 @@ const CLUSTER_RUNTIME_KEYS = [
   'nodesSearchField',
   'nodesSortBy',
   'nodesSortOrder',
-  'upstreams',
-  'upstreamsLoading',
-  'upstreamsPagination',
-  'upstreamsSearch',
-  'upstreamsSearchField',
-  'upstreamsSortBy',
-  'upstreamsSortOrder',
-  'routes',
-  'routesLoading',
-  'routesPagination',
-  'routesSearch',
-  'routesSearchField',
-  'routesSortBy',
-  'routesSortOrder',
-  'selectedNode',
-  'selectedNodeKeys',
-  'selectedUpstream',
-  'selectedRoute',
-  'selectedRouteKeys',
-  'plugin_configs',
-  'selectedPluginConfig',
-  'global_rules',
-  'selectedGlobalRule',
 ] as const
 
 function freshClusterRuntime(): Record<string, unknown> {
@@ -859,29 +824,6 @@ function freshClusterRuntime(): Record<string, unknown> {
     nodesSearchField: '',
     nodesSortBy: '',
     nodesSortOrder: 'asc' as 'asc' | 'desc',
-    upstreams: null,
-    upstreamsLoading: false,
-    upstreamsPagination: { total: 0, page: 1, pageSize: 20 },
-    upstreamsSearch: '',
-    upstreamsSearchField: '',
-    upstreamsSortBy: '',
-    upstreamsSortOrder: 'asc' as 'asc' | 'desc',
-    routes: null,
-    routesLoading: false,
-    routesPagination: { total: 0, page: 1, pageSize: 20 },
-    routesSearch: '',
-    routesSearchField: '',
-    routesSortBy: '',
-    routesSortOrder: 'asc' as 'asc' | 'desc',
-    selectedNode: null,
-    selectedNodeKeys: [],
-    selectedUpstream: null,
-    selectedRoute: null,
-    selectedRouteKeys: [],
-    plugin_configs: [],
-    selectedPluginConfig: null,
-    global_rules: [],
-    selectedGlobalRule: null,
   }
 }
 
@@ -902,8 +844,7 @@ const loadClusters = async () => {
       return { ...c, ...runtime } as Cluster
     })
     pagination.total = res.data.total
-    // 卡片节点区渲染需要节点数据（保持挂载加载）；上游延迟到首次切上游 Tab
-    // （handleTabClick 按需加载）——挂载请求数从 1+N(节点)+N(上游) 降为 1+N(节点)
+    // 卡片节点区渲染需要节点数据（挂载即加载）；其余 Tab 由各 scoped 组件自持加载
     for (const cluster of clusters.value) {
       void loadNodes(cluster)
     }
@@ -913,9 +854,6 @@ const loadClusters = async () => {
     loading.value = false
   }
 }
-
-// Wire loadClusters for onRefresh callback (used by useClusterNodes)
-loadClustersFn = loadClusters
 
 const showAddModal = () => {
   editingCluster.value = null

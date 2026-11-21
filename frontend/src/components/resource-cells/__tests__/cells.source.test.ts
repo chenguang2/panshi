@@ -1,10 +1,10 @@
 // B0 单元格原语源码守卫（shared-core-plan 3.2 层 1）：
 // 这些组件是「面板 Tab ↔ 独立列表页」共用的纯展示原语，必须两边都能用，故：
-//   ① 不得 import 任何 useCluster*（会把面板的 cluster 语义带进页面侧）——
-//      方案 shared-core-plan 3.2「强制走 ResourceListState，组件内禁止 import useCluster*」；
+//   ① 不得 import 任何 useCluster*（会把面板的 cluster 语义带进页面侧）；
 //   ② 不得 import @/views/* 的具体页面（否则页面壳被拖进面板）；
-//   ③ 不得出现 as any / @ts-ignore / @ts-expect-error（#5）；
-//   ④ 适配层同样不得 import @/types 的业务类型（泛型接口，不钉资源形状）。
+//   ③ 不得出现 as any / @ts-ignore / @ts-expect-error（#5）。
+// 注：B0 的 `ResourceListState` 适配层（useResourceListState.ts）已随面板 scoped 化删除
+// （A 推广清理，2026-11-22：零生产引用），原「适配层不得 import @/types」断言随之退场。
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
@@ -47,12 +47,5 @@ describe('resource-cells 源码守卫', () => {
       return !/<script setup lang="ts">/.test(source) || !/withDefaults\(/.test(source)
     })
     expect(offenders, `以下组件未按约定声明：${offenders.join(', ')}`).toEqual([])
-  })
-
-  it('适配层不 import @/types 的业务类型（纯泛型）', () => {
-    const source = read(join(SRC, 'composables', 'useResourceListState.ts'))
-    expect(/from\s+['"]@\/types/.test(source)).toBe(false)
-    expect(/from\s+['"]@\/views\//.test(source)).toBe(false)
-    expect(/\bas any\b/.test(source)).toBe(false)
   })
 })

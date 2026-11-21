@@ -1,7 +1,6 @@
 import { h, render, type VNode } from 'vue'
 import { message } from 'ant-design-vue'
 import api from '@/api'
-import PublishStatusTag from '@/components/PublishStatusTag.vue'
 import AppModal from '@/components/AppModal.vue'
 import { getApiErrorMessage } from '@/utils/error'
 import { PAGE_SIZE_DROPDOWN } from '@/constants'
@@ -715,58 +714,6 @@ export interface BatchResultItem {
   error?: string
 }
 
-export function showBatchResultModal(title: string, items: BatchResultItem[]) {
-  const container = document.createElement('div')
-  document.body.appendChild(container)
-
-  const renderModal = () => {
-    const rows = items.map((item) => {
-      const ok = item.status === 'success'
-      return h(
-        'div',
-        { style: 'display:flex;gap:8px;padding:3px 0;font-size:12px;font-family:var(--font-mono);line-height:1.6;' },
-        [
-          h('span', { style: `flex-shrink:0;color:${ok ? 'var(--success)' : 'var(--danger)'};` }, ok ? '✅' : '❌'),
-          h('span', { style: 'flex-shrink:0;color:var(--fg);min-width:110px;' }, item.ip),
-          h(
-            'span',
-            { style: `flex-shrink:0;${ok ? 'color:var(--success);' : 'color:var(--danger);'}` },
-            ok ? '成功' : '失败',
-          ),
-          h('span', { style: 'color:var(--muted);word-break:break-all;' }, item.error || ''),
-        ],
-      )
-    })
-    const vnode = h(
-      AppModal,
-      {
-        open: true,
-        title,
-        width: 600,
-        okText: '确定',
-        onOk: () => {
-          render(null, container)
-          container.remove()
-        },
-      },
-      {
-        default: () =>
-          h(
-            'div',
-            {
-              style:
-                'max-height:300px;overflow-y:auto;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);padding:10px;font-size:12px;',
-            },
-            rows,
-          ),
-      },
-    )
-    render(vnode, container)
-  }
-
-  renderModal()
-}
-
 interface BatchStatusItem {
   ip: string
   status: string
@@ -1340,10 +1287,6 @@ function logSingleDeleteResults(
     addLog('✅ 已完成')
   }
   return { failedLabels, dbSuccess }
-}
-
-export function publishStatusRender(version: number | null, publishedAt: string | null) {
-  return h(PublishStatusTag, { version, publishedAt })
 }
 
 export function showNameConfirm(opts: {

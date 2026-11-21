@@ -424,7 +424,7 @@ function validateForm(): boolean {
   return true
 }
 
-// 校验失败的全局反馈文案映射（与统一管理 useClusterRoutes.getFieldName 同款口径）
+// 校验失败的全局反馈文案映射（字段中文名，与后端字段名一一对应）
 const FIELD_LABELS: Record<string, string> = {
   name: '名称',
   uri: 'URI',
@@ -498,7 +498,7 @@ async function handleSubmit() {
     }
     // 关闭时也必须显式带 vars=[]：后端 update_route 是 model_dump(exclude_unset=True)
     // 部分更新语义，缺字段=保留旧值，旧条件会在下次进入编辑时经「vars 存在即视为
-    // 开启」的回填逻辑复活开关（统一管理侧 useClusterRoutes.ts 同款模式已显式清空）
+    // 开启」的回填逻辑复活开关（关闭态必须显式清空，不能依赖缺字段）
     data.vars = form.advancedEnabled ? form.advancedMatch.vars : []
     data.plugin_config_ids = pluginConfigIds.value
     data.enable_websocket = form.enableWebsocket

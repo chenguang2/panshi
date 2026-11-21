@@ -1,13 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ref } from 'vue'
 import type { Cluster, StaticResource } from '@/types'
-import type { VersionModalState } from '@/composables/useClusterPluginConfigs'
 
 const mockApiPost = vi.fn()
 vi.mock('@/api', () => ({
   default: {
     get: vi.fn().mockResolvedValue({ data: { items: [] } }),
-    post: (...args: any[]) => mockApiPost(...args),
+    post: (...args: unknown[]) => mockApiPost(...args),
     put: vi.fn(),
     delete: vi.fn(),
   },
@@ -26,98 +25,25 @@ vi.mock('ant-design-vue', async (importOriginal) => {
   }
 })
 
+// 2026-11-22（A 推广清理）：本文件原覆盖发布路径标注 / 编辑换绑（组件表单）/ 面板表单态，
+// 那些成员已随面板 Tab 改 scoped 形态而删除（发布链路唯一实现 = StaticResourceList 逐节点循环，
+// 其路径标注由 StaticResourceList 的用例覆盖）。此处只保留仍在生产消费的上传流。
+
 function makeDeps() {
   const clusters = ref<Cluster[]>([])
-  const versionModal: VersionModalState = {
-    type: ref('static_resource'),
-    visible: ref(false),
-    resourceId: ref<number | null>(null),
-    clusterId: ref<number | null>(null),
-    resourceName: ref(''),
-    edgeUuid: ref(''),
-  }
-  const openPublishModal = vi.fn().mockResolvedValue([1, 2])
-  const loadRoutes = vi.fn().mockResolvedValue(undefined)
-  return { clusters, versionModal, openPublishModal, loadRoutes }
+  const afterUpload = vi.fn().mockResolvedValue(undefined)
+  return { clusters, afterUpload }
 }
 
-const cluster = { id: 7, name: 'c7' } as Cluster
-const sr = { id: 3, name: 'site.zip', cluster_id: 7 } as StaticResource
-
-async function runPublish(results: unknown[]) {
-  mockApiPost.mockResolvedValue({ data: { success: true, current_version: 4, results } })
-  const { useClusterStaticResources } = await import('../useClusterStaticResources')
-  const { publishStaticResource } = useClusterStaticResources(makeDeps())
-  await publishStaticResource(cluster, sr)
-  return document.body.textContent || ''
-}
-
-describe('静态资源发布 · 经中继 / 直连 路径标注', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    document.body.innerHTML = ''
-  })
-
-  it('route=relay → 节点行尾标注（经中继），状态出中文（2.2 resultStatusLabel）', async () => {
-    const text = await runPublish([
-      { node: '10.0.0.1:9180', status: 'success', route: 'relay', relay_via: 'http://10.10.1.1:8443' },
-    ])
-    expect(text).toContain('10.0.0.1:9180: 成功（经中继）')
-  })
-
-  it('route=direct → 节点行尾标注（直连）', async () => {
-    const text = await runPublish([{ node: '10.0.0.2:9180', status: 'success', route: 'direct' }])
-    expect(text).toContain('10.0.0.2:9180: 成功（直连）')
-  })
-
-  it('无 route 字段 → 不显示任何路径标注（向后兼容）', async () => {
-    const text = await runPublish([{ node: '10.0.0.9:9180', status: 'success' }])
-    expect(text).toContain('10.0.0.9:9180: 成功')
-    expect(text).not.toContain('（经中继）')
-    expect(text).not.toContain('（直连）')
-  })
-
-  it('失败节点同样带路径标注（error 前部保留，状态出中文）', async () => {
-    const text = await runPublish([{ node: '10.0.0.5:9180', status: 'failed', error: 'timeout', route: 'relay' }])
-    expect(text).toContain('10.0.0.5:9180: 失败 - timeout（经中继）')
-  })
-})
-
-// ── 发布确认弹窗摘要 / 覆盖预警（static-resources-ux-close-loop 9.1/9.2）──────
-
-describe('静态资源发布 · openPublishModal 第三参透传', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    document.body.innerHTML = ''
-  })
-
-  it('携带资源摘要（名称/版本/大小/路径）与覆盖预警，不复用 currentVersion 版本提示', async () => {
-    mockApiPost.mockResolvedValue({ data: { success: true, current_version: 4, results: [] } })
-    const { useClusterStaticResources } = await import('../useClusterStaticResources')
-    const deps = makeDeps()
-    const { publishStaticResource } = useClusterStaticResources(deps)
-    const full = {
-      ...sr,
-      current_version: 3,
-      file_size: 204800,
-      url_path: '/docs/*',
-    } as StaticResource
-    await publishStaticResource(cluster, full)
-
-    expect(deps.openPublishModal).toHaveBeenCalledWith('发布静态资源「site.zip」', 7, {
-      resourceSummary: '将把「site.zip」v3（200.0 KB，/docs/*）分发到所选节点',
-      overwriteWarning: '发布将覆盖所选节点上的现有静态资源文件',
-      preselectedNodeIds: [],
-    })
-  })
-})
-
-// ── 上传（static-resources-ux-close-loop 1.1 / 1.3）─────────────────────────
+const sr = { id: 3, name: 'site.zip', url_path: '/docs/*' } as StaticResource
 
 describe('静态资源上传 · 预检与结果行', () => {
   const textContent = () => document.body.textContent || ''
 
-  async function runUpload(size: number, postResponse?: { data: Record<string, unknown> }) {
+  async function runUpload(
+    size: number,
+    postResponse?: { data: Record<string, unknown> },
+  ): Promise<{ text: string; afterUpload: ReturnType<typeof vi.fn> }> {
     if (postResponse) mockApiPost.mockResolvedValue(postResponse)
     else mockApiPost.mockRejectedValue(new Error('oversize 预检不应发出请求'))
     const { useClusterStaticResources } = await import('../useClusterStaticResources')
@@ -126,7 +52,7 @@ describe('静态资源上传 · 预检与结果行', () => {
     const { uploadStaticResource } = useClusterStaticResources(deps)
 
     const createSpy = vi.spyOn(document, 'createElement')
-    uploadStaticResource({ id: 3, name: 'site.zip', url_path: '/docs/*' } as StaticResource)
+    uploadStaticResource(sr)
     const input = createSpy.mock.results.map((r) => r.value).find((el) => el instanceof HTMLInputElement)
     expect(input).toBeTruthy()
 
@@ -141,7 +67,7 @@ describe('静态资源上传 · 预检与结果行', () => {
       await vi.waitFor(() => expect(mockMessageError).toHaveBeenCalled())
     }
     createSpy.mockRestore()
-    return textContent()
+    return { text: textContent(), afterUpload: deps.afterUpload }
   }
 
   beforeEach(() => {
@@ -150,13 +76,14 @@ describe('静态资源上传 · 预检与结果行', () => {
   })
 
   it('1.1 超 32MB：即时拒绝（message.error），不发上传请求', async () => {
-    await runUpload(33 * 1024 * 1024)
+    const { afterUpload } = await runUpload(33 * 1024 * 1024)
     expect(mockMessageError).toHaveBeenCalledWith('zip 文件过大：上限 32MB')
     expect(mockApiPost).not.toHaveBeenCalled()
+    expect(afterUpload).not.toHaveBeenCalled()
   })
 
   it('1.3 上传成功：结果行为「已保存到管理端（版本 vN，大小）」+ 发布时机说明，不暴露 storage_path', async () => {
-    const text = await runUpload(204800, {
+    const { text, afterUpload } = await runUpload(204800, {
       data: { current_version: 3, file_size: 204800, storage_path: '/data/secret/path/site.zip' },
     })
     expect(text).toContain('已保存到管理端（版本 v3，200.0 KB）')
@@ -169,72 +96,7 @@ describe('静态资源上传 · 预检与结果行', () => {
       expect.any(FormData),
       expect.objectContaining({ headers: expect.any(Object) }),
     )
-  })
-})
-
-describe('静态资源编辑换绑（static-resources-ux-close-loop 8.3）', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    document.body.innerHTML = ''
-  })
-
-  it('editStaticResource 预选当前路由并记录原绑定；提交换绑先弹确认，确认后 PUT 带 route_id', async () => {
-    mockApiPost.mockResolvedValue({ data: { success: true, results: [] } })
-    const { useClusterStaticResources } = await import('../useClusterStaticResources')
-    const c = {
-      ...cluster,
-      routes: [
-        { id: 11, name: 'a', uri: '/a/*', current_version: 1, plugins: [{ plugin_name: 'static_resource' }] },
-        { id: 12, name: 'b', uri: '/b/*', current_version: 1, plugins: [{ plugin_name: 'static_resource' }] },
-      ],
-    } as unknown as Cluster
-    const deps = makeDeps()
-    const {
-      editStaticResource,
-      handleStaticResourceSubmit,
-      staticResourceFormData,
-      staticResourceModalVisible,
-      onStaticResourceRouteChange,
-    } = useClusterStaticResources(deps)
-
-    const resource = { ...sr, route_id: 11 } as StaticResource
-    editStaticResource(c, resource)
-    expect(staticResourceFormData.route_id).toBe(11)
-
-    // 换到路由 12 → routeChanged（先触发资格校验，routeInfo.valid 就绪）
-    staticResourceFormData.route_id = 12
-    onStaticResourceRouteChange(12)
-    const putSpy = (await import('@/api')).default.put as ReturnType<typeof vi.fn>
-    putSpy.mockResolvedValue({ data: {} })
-    await handleStaticResourceSubmit()
-
-    // 确认弹窗出现，PUT 尚未发生
-    expect(putSpy).not.toHaveBeenCalled()
-    const okBtn = [...document.querySelectorAll('button')].find((b) => b.textContent?.includes('确认换绑'))
-    expect(okBtn).toBeTruthy()
-
-    ;(okBtn as HTMLButtonElement).click()
-    await new Promise((r) => setTimeout(r, 0))
-    await new Promise((r) => setTimeout(r, 0))
-
-    expect(putSpy).toHaveBeenCalledWith('/clusters/7/static-resources/3', expect.objectContaining({ route_id: 12 }))
-    expect(staticResourceModalVisible.value).toBe(false)
-  })
-
-  it('仅改描述（未换绑）：PUT 不带 route_id，无确认弹窗', async () => {
-    const { useClusterStaticResources } = await import('../useClusterStaticResources')
-    const c = { ...cluster } as Cluster
-    const deps = makeDeps()
-    const { editStaticResource, handleStaticResourceSubmit, staticResourceFormData } = useClusterStaticResources(deps)
-
-    editStaticResource(c, { ...sr, route_id: 11 } as StaticResource)
-    expect(staticResourceFormData.route_id).toBe(11)
-    staticResourceFormData.description = '仅描述'
-    const putSpy = (await import('@/api')).default.put as ReturnType<typeof vi.fn>
-    putSpy.mockResolvedValue({ data: {} })
-    await handleStaticResourceSubmit()
-
-    expect(putSpy).toHaveBeenCalledWith('/clusters/7/static-resources/3', { description: '仅描述' })
-    expect([...document.querySelectorAll('button')].some((b) => b.textContent?.includes('确认换绑'))).toBe(false)
+    // afterUpload：上传成功后同步刷新页面列表（面板徽标随之更新）
+    expect(afterUpload).toHaveBeenCalledTimes(1)
   })
 })
