@@ -1342,7 +1342,7 @@ describe('RouteList.vue 行内发布拍平（列表操作统一·方案 A）', (
     expect((modal.props('title') as string) || '').toContain('普通路由')
   })
 
-  it('菜单收敛为 编辑/版本管理/复制路由/删除（与上游页同序，发布移出行内）', async () => {
+  it('菜单为三栏结构：复制路由/编辑 → 删除 → 版本管理（#81，与面板 Tab 同序；发布移出行内）', async () => {
     const RouteList = (await import('../RouteList.vue')).default
     const wrapper = mount(RouteList, { global: { stubs: flatStubs } })
     await flushPromises()
@@ -1355,7 +1355,7 @@ describe('RouteList.vue 行内发布拍平（列表操作统一·方案 A）', (
       const span = i.find('.menu-item-stack span')
       return (span.exists() ? span.text() : i.text()).trim()
     })
-    expect(menuItems).toEqual(['编辑', '版本管理', '复制路由', '删除'])
+    expect(menuItems).toEqual(['复制路由', '编辑', '删除', '版本管理'])
     expect(menuItems).not.toContain('发布')
     // 分级解释落地：版本管理/删除带常驻解释，编辑/复制保持单行
     expect(rows[1].text()).toContain('历史版本查看与回滚')

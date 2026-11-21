@@ -334,7 +334,7 @@ describe('UpstreamList.vue', () => {
     expect((wrapper.vm as any).publishClusterId).toBe(1)
   })
 
-  it('⋯ 菜单收敛为 编辑/版本管理/复制/删除，「发布」不在菜单中', async () => {
+  it('⋯ 菜单为三栏结构：复制/编辑 → 删除 → 版本管理（#81），「发布」不在菜单中', async () => {
     const UpstreamList = (await import('../UpstreamList.vue')).default
     const wrapper = mount(UpstreamList, { global: { stubs } })
     await flushPromises()
@@ -343,7 +343,8 @@ describe('UpstreamList.vue', () => {
       const span = m.find('.menu-item-stack span')
       return (span.exists() ? span.text() : m.text()).trim()
     })
-    expect([...new Set(items)]).toEqual(['编辑', '版本管理', '复制', '删除'])
+    // 两行上游各一份菜单 → Set 去重并保留首次出现顺序（即三栏顺序）
+    expect([...new Set(items)]).toEqual(['复制', '编辑', '删除', '版本管理'])
     expect(items).not.toContain('发布')
     expect(items).not.toContain('回滚')
     // 分级解释落地：版本管理/删除带常驻解释

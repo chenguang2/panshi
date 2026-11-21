@@ -222,6 +222,25 @@ describe('mockup-parity r5（parity-audit-nodes-r5 逐项批准后的锚点）',
     for (const f of ['RouteList.vue', 'UpstreamList.vue']) {
       expect(page(f), f).toMatch(/<a-menu-divider \/>\s*<a-menu-item danger/)
     }
+    // #81 三栏顺序：CRUD（复制/编辑）→ 分隔线 → 危险（删除）→ 分隔线 → 动作（版本管理）
+    for (const f of ['RouteList.vue', 'UpstreamList.vue']) {
+      const menu = page(f).match(/<a-menu class="l5-action-menu">[\s\S]*?<\/a-menu>/)
+      expect(menu, f).toBeTruthy()
+      const body = menu![0]
+      const at = (s: string) => body.indexOf(s)
+      expect(at('复制'), f).toBeGreaterThan(-1)
+      expect(at('编辑'), f).toBeGreaterThan(at('复制'))
+      const deleteAt = body.search(/<a-menu-item danger/)
+      const versionAt = at('版本管理')
+      expect(deleteAt, f).toBeGreaterThan(at('编辑'))
+      expect(versionAt, f).toBeGreaterThan(deleteAt)
+      const dividers = [...body.matchAll(/<a-menu-divider \/>/g)].map((m) => m.index ?? -1)
+      expect(dividers, f).toHaveLength(2)
+      expect(dividers[0], f).toBeGreaterThan(at('编辑'))
+      expect(dividers[0], f).toBeLessThan(deleteAt)
+      expect(dividers[1], f).toBeGreaterThan(deleteAt)
+      expect(dividers[1], f).toBeLessThan(versionAt)
+    }
   })
   it('r5-② 分隔线形态单点 = 1px 边线 + 4px 6px 边距（非底色块）', () => {
     expect(css).toMatch(

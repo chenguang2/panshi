@@ -274,19 +274,21 @@
                   <a-button type="text" size="small" class="action-trigger-btn"><StrokeIcon name="dots" /></a-button>
                   <template #overlay>
                     <a-menu class="l5-action-menu">
-                      <a-menu-item @click="editRoute(record)">编辑</a-menu-item>
-                      <a-menu-item @click="openVersionManagement(record)">
-                        <div class="menu-item-stack">
-                          <span>版本管理</span>
-                          <small>历史版本查看与回滚</small>
-                        </div>
-                      </a-menu-item>
+                      <!-- 三栏结构（#81）：CRUD → 危险 → 动作 -->
                       <a-menu-item @click="copyRoute(record)">复制路由</a-menu-item>
+                      <a-menu-item @click="editRoute(record)">编辑</a-menu-item>
                       <a-menu-divider />
                       <a-menu-item danger @click="deleteRoute(record)">
                         <div class="menu-item-stack">
                           <span>删除</span>
                           <small>删平台配置，可同步删 Edge 已发布配置（弹窗可选）</small>
+                        </div>
+                      </a-menu-item>
+                      <a-menu-divider />
+                      <a-menu-item @click="openVersionManagement(record)">
+                        <div class="menu-item-stack">
+                          <span>版本管理</span>
+                          <small>历史版本查看与回滚</small>
                         </div>
                       </a-menu-item>
                     </a-menu>

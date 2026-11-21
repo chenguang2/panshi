@@ -49,3 +49,15 @@
 - [x] 6.8 D 项：设计页 `central.html` 补「刷新」与「最大化」chip、删「直连」徽章（最大化徽章改按数据动态显示）
 - [x] 6.9 回归：`ClusterCard/CentralList/CentralList.statTab/CentralList.source/mockupParity` 159 例绿；全量 `vitest --maxWorkers=4` 3096 passed / 1 flake（NodeList 列拖拽，隔离复跑 72/72 绿，判定 #58 波动）；`vue-tsc -b` 干净；同一审计脚本复测，18 项全 ✓（剩余 7 项判定非缺陷，见审计文档「六、修复与复测」）
 
+
+## 7. 最大化面板 Tab 外观对齐（parity 审计 max-r2，2026-11-21）
+
+> 清单与逐页对照：`parity-audit-max-r2.md`。用户裁决：先做批次 A（外观）+ 行内动作收敛 + 工具栏补图标 + 恢复「删除 N」+ 首列「勾选 + 序号」并存；菜单与勾选关系按现状；菜单顺序统一到 #81；1280 上游表内横滚接受。
+
+- [x] 7.1 面板 CSS 单点（`style.css` 的 `.max-panel .dbody` 段）：工具条 `.tool-btn` 30px 浅底、表头灰底去大写 9×12、单元格 10×12、行 hover 4%、选择列 40、`.op-pub.op-ghost`、`.action-trigger-btn` 26×24、`.l5-pager` 无上边框
+- [x] 7.2 表格三 Tab：`scroll.x` 数值最小宽（节点 1076 / 上游 1054 / 路由 1036，去 `max-content`）、`#` 序号列（勾选列之后、跨页连续）、`ListPager` 外置分页（个节点/个上游/条路由）、列配置移右端
+- [x] 7.3 行内动作收敛：节点「重载 + 状态 + ⋯」、上游/路由「发布 + ⋯」；菜单三栏（CRUD → 删除(红) → 版本管理）；节点保留动作勾选配置（编辑/复制/删除/数据库对比 恒驻，启动/停止 跟勾选）；列宽 actions 340→120（上游）/110（路由）
+- [x] 7.4 工具栏：补 StrokeIcon（plus / play / pause / rotate / chevronDown），routes/upstreams 恢复「删除 X(N)」（未选禁用），其余重复动作保持移除
+- [x] 7.5 卡片四 Tab：卡脚改文字按钮（查看/编辑/删除/发布/版本管理），发布 `.op-pub`、删除红字、上缘分隔线；静态资源卡脚折行成组；`PluginMetadata` 卡内「添加」去 antd 自动空格
+- [x] 7.6 独立列表页 `RouteList` / `UpstreamList` 菜单顺序统一到 #81（复制/编辑 → 删除(红+解释) → 版本管理），加源码守卫防回退
+- [x] 7.7 验证：面板内计算值逐项对齐（td 10×12、卡脚 30/发布 24、上游无溢出）；`clusters` 套 + CentralList + mockupParity + pageHeaderActions 426 例绿；`vue-tsc -b` 干净；全量 vitest 仅未改动文件波动（隔离复绿）
