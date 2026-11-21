@@ -59,8 +59,8 @@ async function runDelete(results: unknown[]) {
   const wrapper = mount(PluginMetadata, { props: { clusterId: 1, nodes: [] }, global: { stubs } })
   await flushPromises()
 
-  // AntDV 在单测中未全局注册，<a-button> 渲染为同名自定义元素（图标组件则在组件内导入、正常渲染）
-  const delBtn = wrapper.find('a-button[title="删除"]')
+  // 卡脚动作为原生文字按钮（mockup-parity-standard / central.html 状态二：.tool-btn + .op-pub 原语）
+  const delBtn = wrapper.find('button[title="删除"]')
   expect(delBtn.exists()).toBe(true)
   await delBtn.trigger('click')
 

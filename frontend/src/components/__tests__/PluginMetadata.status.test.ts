@@ -158,7 +158,7 @@ describe('PluginMetadata.vue 状态四态单一表达（与独立页同参数，
       return Promise.reject(new Error('unexpected GET: ' + url))
     })
     const wrapper = await mountTab()
-    const viewBtn = wrapper.findAll('a-button').find((b) => b.attributes('title') === '查看')
+    const viewBtn = wrapper.findAll('button').find((b) => b.attributes('title') === '查看')
     expect(viewBtn).toBeTruthy()
     await viewBtn!.trigger('click')
     await wrapper.vm.$nextTick()
@@ -177,7 +177,7 @@ describe('PluginMetadata.vue 版本恢复出口条接线（4.1/4.2）', () => {
 
   it('版本管理弹窗传 can-publish=true；出口条 publish-requested → 打开该元数据的发布确认弹窗（弹窗上下文资源）', async () => {
     const wrapper = await mountTab()
-    const vmBtn = wrapper.findAll('a-button').find((b) => b.text() === '版本管理')
+    const vmBtn = wrapper.findAll('button').find((b) => b.text() === '版本管理')
     expect(vmBtn).toBeTruthy()
     await vmBtn!.trigger('click')
     await wrapper.vm.$nextTick()
@@ -201,7 +201,7 @@ describe('PluginMetadata.vue 版本恢复出口条接线（4.1/4.2）', () => {
       await opts.refreshFn()
     })
     const wrapper = await mountTab()
-    const vmBtn = wrapper.findAll('a-button').find((b) => b.text() === '版本管理')
+    const vmBtn = wrapper.findAll('button').find((b) => b.text() === '版本管理')
     await vmBtn!.trigger('click')
     await wrapper.vm.$nextTick()
     wrapper.findComponent({ name: 'MockVersionManagementModal' }).vm.$emit('publish-requested')

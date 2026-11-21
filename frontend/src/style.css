@@ -3864,3 +3864,59 @@ th.resizable {
   height: 19px;
   line-height: 0;
 }
+
+/* ── 卡片 Tab（插件组 / 插件元数据 / 全局规则 / 静态资源）卡脚动作 = 设计 .pcc-actions ── */
+/* 设计实测（central.html 状态二）：查看 / 编辑 / 删除 / 版本管理 = .tool-btn（h30、12px·400、pad 0 10、radius 6），
+   发布 = .op-pub（h24、12px·500、radius 4、accent 描边淡底 + accent 字），删除 = 红字。
+   两个原语均已在 style.css 定义，组件侧改用原生 button 复用（antd Button 会把两字中文渲染成「查 看」）。
+   本段只补面板内排列：设计 gap 6 + 折行兜底（静态资源 6 颗动作在 290px 卡宽内必然超出，设计页亦溢出）。 */
+.max-panel .dbody .pcc-actions,
+.max-panel .dbody .plugin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 折行时右簇仍贴右（静态资源卡 7 颗动作在 320 卡宽内必然折行）：发布 auto 左边距只在
+   它所在的那一行生效；与模板内的 flex:1 spacer 并存——同行的 spacer 先吸收余量，本规则不改变单行表现。 */
+.max-panel .dbody .pcc-actions > .op-pub,
+.max-panel .dbody .plugin-actions > .op-pub {
+  margin-left: auto;
+}
+
+/* 卡脚与卡体的分隔线（设计 .pcc-actions：上缘 1px + 上内距 10）。pluginMetadata 的 .plugin-actions
+   不接此线——它是自带边框的插件项（非设计 .pcc-card），加线会与项边框叠成双线。 */
+.max-panel .dbody .pcc-actions {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+/* 发布族成组（静态资源卡：重发/发布/版本管理）：折行时整组落到第二行并右对齐，不被拆散 */
+.max-panel .dbody .pcc-actions .act-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+/* 可用插件卡的「添加」：面板内压成 .tool-btn 同款浅底描边（组件内仍是 a-button type=primary，
+   不改组件 class）。作用域限面板——该组件亦被 ClusterRoutes 使用，面板外保持原实心主按钮。 */
+.max-panel .dbody .plugin-card .add-btn {
+  height: 24px !important;
+  padding: 0 8px !important;
+  font-size: 12px !important;
+  font-weight: 400 !important;
+  line-height: 1 !important;
+  border-radius: var(--radius-sm) !important;
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--fg) !important;
+  box-shadow: none !important;
+  opacity: 1 !important;
+}
+.max-panel .dbody .plugin-card .add-btn:hover {
+  background: var(--accent-bg) !important;
+  border-color: var(--accent) !important;
+  color: var(--accent) !important;
+}

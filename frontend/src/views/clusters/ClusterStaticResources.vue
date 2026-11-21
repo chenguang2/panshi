@@ -1,7 +1,9 @@
 <template>
   <div class="tab-content">
     <div class="node-actions">
-      <button class="btn btn-primary" @click="showAddStaticResource(cluster)">添加静态资源</button>
+      <a-button size="small" type="primary" @click="showAddStaticResource(cluster)">
+        <StrokeIcon name="plus" :size="13" /> 添加静态资源
+      </a-button>
     </div>
     <div v-if="loading" class="loading-state">加载中...</div>
     <div v-if="!loading" style="display: flex; flex-wrap: wrap; gap: 16px; padding: 16px 0">
@@ -36,68 +38,82 @@
         </div>
         <div v-if="sr.description" class="pcc-desc">{{ sr.description }}</div>
         <div v-if="sr.file_size" class="sr-size">大小: {{ formatFileSize(sr.file_size) }}</div>
+        <!-- 卡脚动作 = 设计 .pcc-actions（central.html 状态二）：左簇文字 .tool-btn（查看 ZIP/编辑/上传 ZIP/删除）
+             + 右簇「发布」.op-pub + 版本管理；broken 态除删除外全部禁用并带指路 tooltip（7.3 语义原样保留） -->
         <div class="pcc-actions">
-          <!-- 批 8：图标 + tooltip 范式（与同面板全局规则 Tab 一致）；broken 态除删除外全部禁用带指路（7.3） -->
           <template v-if="staticResourceState(sr) === 'broken'">
-            <a-button size="small" disabled :title="BROKEN_ROUTE_TIP"><EditOutlined /></a-button>
-            <a-button size="small" disabled :title="BROKEN_ROUTE_TIP"><UploadOutlined /></a-button>
-            <a-button size="small" disabled :title="BROKEN_ROUTE_TIP"><FolderOpenOutlined /></a-button>
+            <button class="tool-btn" disabled :title="BROKEN_ROUTE_TIP">查看 ZIP</button>
+            <button class="tool-btn" disabled :title="BROKEN_ROUTE_TIP">编辑</button>
+            <button class="tool-btn" disabled :title="BROKEN_ROUTE_TIP">上传 ZIP</button>
+            <button
+              class="tool-btn"
+              title="删除"
+              style="color: var(--danger)"
+              @click.stop="deleteStaticResource(cluster, sr)"
+            >
+              删除
+            </button>
             <span style="flex: 1"></span>
-            <a-button size="small" disabled :title="BROKEN_ROUTE_TIP"><SendOutlined /></a-button>
-            <button class="btn btn-secondary btn-sm" disabled :title="BROKEN_ROUTE_TIP">发布</button>
-            <button class="btn btn-ghost btn-sm" disabled :title="BROKEN_ROUTE_TIP">版本管理</button>
-            <span style="flex: 1"></span>
-            <a-button size="small" danger title="删除" @click.stop="deleteStaticResource(cluster, sr)"
-              ><DeleteOutlined
-            /></a-button>
+            <!-- 发布族（重发/发布/版本管理）成组：卡宽不足折行时整组落到第二行并右对齐，不被拆散 -->
+            <span class="act-group">
+              <button class="tool-btn" disabled :title="BROKEN_ROUTE_TIP">重发</button>
+              <button class="op-pub" disabled :title="BROKEN_ROUTE_TIP">发布</button>
+              <button class="tool-btn" disabled :title="BROKEN_ROUTE_TIP">版本管理</button>
+            </span>
           </template>
           <template v-else>
-            <a-button size="small" title="编辑" @click.stop="editStaticResource(cluster, sr)"
-              ><EditOutlined
-            /></a-button>
-            <a-button
-              size="small"
-              :title="!sr.id ? '请先保存资源后再上传' : '上传 ZIP 包'"
-              :disabled="srUploading || !sr.id"
-              @click.stop="uploadStaticResourceZip(sr)"
-              ><UploadOutlined
-            /></a-button>
-            <a-button
-              size="small"
+            <button
+              class="tool-btn"
               :title="!sr.file_size ? '暂未上传 ZIP 文件' : '查看 ZIP 内容'"
               :disabled="!sr.file_size"
               @click.stop="viewZipContents(sr)"
-              ><FolderOpenOutlined
-            /></a-button>
-            <span style="flex: 1"></span>
-            <a-button
-              v-if="staticResourceState(sr) === 'failed'"
-              size="small"
-              class="sr-resend-btn"
-              title="上次发布存在失败节点：仅重发失败节点"
-              @click.stop="publishStaticResource(cluster, sr)"
-              ><SendOutlined
-            /></a-button>
-            <button
-              class="btn btn-secondary btn-sm"
-              @click.stop="publishStaticResource(cluster, sr)"
-              :disabled="!sr.file_size"
-              :title="!sr.file_size ? '暂未上传 ZIP 文件' : ''"
             >
-              发布
+              查看 ZIP
+            </button>
+            <button class="tool-btn" title="编辑" @click.stop="editStaticResource(cluster, sr)">编辑</button>
+            <button
+              class="tool-btn"
+              :title="!sr.id ? '请先保存资源后再上传' : '上传 ZIP 包'"
+              :disabled="srUploading || !sr.id"
+              @click.stop="uploadStaticResourceZip(sr)"
+            >
+              上传 ZIP
             </button>
             <button
-              class="btn btn-ghost btn-sm"
-              @click.stop="openStaticResourceVersionManagement(cluster, sr)"
-              :disabled="!sr.current_version"
-              :title="!sr.current_version ? '暂无版本，请先上传 ZIP' : '版本管理'"
+              class="tool-btn"
+              title="删除"
+              style="color: var(--danger)"
+              @click.stop="deleteStaticResource(cluster, sr)"
             >
-              版本管理
+              删除
             </button>
             <span style="flex: 1"></span>
-            <a-button size="small" danger title="删除" @click.stop="deleteStaticResource(cluster, sr)"
-              ><DeleteOutlined
-            /></a-button>
+            <span class="act-group">
+              <button
+                v-if="staticResourceState(sr) === 'failed'"
+                class="tool-btn sr-resend-btn"
+                title="上次发布存在失败节点：仅重发失败节点"
+                @click.stop="publishStaticResource(cluster, sr)"
+              >
+                重发
+              </button>
+              <button
+                class="op-pub"
+                @click.stop="publishStaticResource(cluster, sr)"
+                :disabled="!sr.file_size"
+                :title="!sr.file_size ? '暂未上传 ZIP 文件' : ''"
+              >
+                发布
+              </button>
+              <button
+                class="tool-btn"
+                @click.stop="openStaticResourceVersionManagement(cluster, sr)"
+                :disabled="!sr.current_version"
+                :title="!sr.current_version ? '暂无版本，请先上传 ZIP' : '版本管理'"
+              >
+                版本管理
+              </button>
+            </span>
           </template>
         </div>
       </div>
@@ -242,9 +258,9 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { DeleteOutlined, EditOutlined, FolderOpenOutlined, SendOutlined, UploadOutlined } from '@ant-design/icons-vue'
 import api from '@/api'
 import type { Cluster } from '@/types'
+import StrokeIcon from '@/components/StrokeIcon.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import { useClusterStaticResources } from '@/composables/useClusterStaticResources'
 import type { VersionModalState } from '@/composables/useClusterPluginConfigs'

@@ -1,7 +1,9 @@
 <template>
   <div class="tab-content">
     <div class="node-actions">
-      <a-button size="small" type="primary" @click="openCreateModal">添加全局规则</a-button>
+      <a-button size="small" type="primary" @click="openCreateModal">
+        <StrokeIcon name="plus" :size="13" /> 添加全局规则
+      </a-button>
     </div>
     <!-- A3 失败态：接口失败显式可重试，MUST NOT 吞成「暂无全局规则」空态（与插件组集群子页同款） -->
     <div v-if="loadError" class="load-error-state">
@@ -50,15 +52,23 @@
             未选择插件
           </span>
         </div>
+        <!-- 卡脚动作 = 设计 .pcc-actions（central.html 状态二）：文字 .tool-btn 三颗 + 右簇「发布」.op-pub + 版本管理 -->
         <div class="pcc-actions">
-          <a-button size="small" @click.stop="viewGlobalRule(gr)" title="查看"><EyeOutlined /></a-button>
-          <a-button size="small" @click.stop="editRule(gr)" title="编辑"><EditOutlined /></a-button>
-          <a-button size="small" @click.stop="deleteGlobalRule(cluster, gr)" danger title="删除"
-            ><DeleteOutlined
-          /></a-button>
+          <button class="tool-btn" title="查看" @click.stop="viewGlobalRule(gr)">查看</button>
+          <button class="tool-btn" title="编辑" @click.stop="editRule(gr)">编辑</button>
+          <button
+            class="tool-btn"
+            title="删除"
+            style="color: var(--danger)"
+            @click.stop="deleteGlobalRule(cluster, gr)"
+          >
+            删除
+          </button>
           <span style="flex: 1"></span>
-          <a-button size="small" @click.stop="publishGlobalRule(cluster, gr)">发布</a-button>
-          <a-button size="small" @click.stop="openGlobalRuleVersionManagement(cluster, gr)">版本管理</a-button>
+          <button class="op-pub" title="发布" @click.stop="publishGlobalRule(cluster, gr)">发布</button>
+          <button class="tool-btn" title="版本管理" @click.stop="openGlobalRuleVersionManagement(cluster, gr)">
+            版本管理
+          </button>
         </div>
       </div>
       <!-- 6.3 空态行动引导（集群子页无筛选器，仅「无数据」分支，清空筛选分支属主页面） -->
@@ -136,8 +146,8 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { EyeOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons-vue'
 import type { Cluster, GlobalRule, Plugin } from '@/types'
+import StrokeIcon from '@/components/StrokeIcon.vue'
 import PluginEntityFormModal from '@/components/PluginEntityFormModal.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import { useClusterGlobalRules } from '@/composables/useClusterGlobalRules'

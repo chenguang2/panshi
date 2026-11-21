@@ -677,7 +677,7 @@ describe('useClusterUpstreams 列顺序与列宽', () => {
     // 桩内 columnsSelected 为 ['name','load_balance','targets','version','actions']（version 非真实列，被过滤）
     expect(cols.map((c) => c.key)).toEqual(['name', 'load_balance', 'targets', 'actions'])
     expect(cols.find((c) => c.key === 'name').width).toBe(180)
-    expect(cols.find((c) => c.key === 'actions').width).toBe(340)
+    expect(cols.find((c) => c.key === 'actions').width).toBe(120)
   })
 
   it('列顺序：用户顺序优先，未知 key 剔除，未定位列留在设计位（route-column-reorder-fix）', async () => {

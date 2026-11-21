@@ -1,7 +1,9 @@
 <template>
   <div class="tab-content">
     <div class="node-actions">
-      <a-button size="small" type="primary" @click="showAddPluginConfig(cluster)">添加插件组</a-button>
+      <a-button size="small" type="primary" @click="showAddPluginConfig(cluster)">
+        <StrokeIcon name="plus" :size="13" /> 添加插件组
+      </a-button>
     </div>
     <!-- A3 失败态（global-rule-ux-close-loop 连带修复）：接口失败显式可重试，MUST NOT 吞成空态 -->
     <div v-if="loadError" class="load-error-state">
@@ -50,15 +52,23 @@
           </a-tag>
           <span v-if="!pc.plugins || Object.keys(pc.plugins).length === 0" class="pcc-no-plugins">无插件</span>
         </div>
+        <!-- 卡脚动作 = 设计 .pcc-actions（central.html 状态二）：文字 .tool-btn 三颗 + 右簇「发布」.op-pub + 版本管理 -->
         <div class="pcc-actions">
-          <a-button size="small" @click.stop="viewPluginConfig(pc)" title="查看"><EyeOutlined /></a-button>
-          <a-button size="small" @click.stop="editPluginConfig(cluster, pc)" title="编辑"><EditOutlined /></a-button>
-          <a-button size="small" @click.stop="deletePluginConfig(cluster, pc)" danger title="删除"
-            ><DeleteOutlined
-          /></a-button>
+          <button class="tool-btn" title="查看" @click.stop="viewPluginConfig(pc)">查看</button>
+          <button class="tool-btn" title="编辑" @click.stop="editPluginConfig(cluster, pc)">编辑</button>
+          <button
+            class="tool-btn"
+            title="删除"
+            style="color: var(--danger)"
+            @click.stop="deletePluginConfig(cluster, pc)"
+          >
+            删除
+          </button>
           <span style="flex: 1"></span>
-          <a-button size="small" @click.stop="publishPluginConfig(cluster, pc)">发布</a-button>
-          <a-button size="small" @click.stop="openPluginConfigVersionManagement(cluster, pc)">版本管理</a-button>
+          <button class="op-pub" title="发布" @click.stop="publishPluginConfig(cluster, pc)">发布</button>
+          <button class="tool-btn" title="版本管理" @click.stop="openPluginConfigVersionManagement(cluster, pc)">
+            版本管理
+          </button>
         </div>
       </div>
       <div
@@ -138,11 +148,11 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { EyeOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons-vue'
 import api from '@/api'
 import { PAGE_SIZE_DROPDOWN } from '@/constants'
 import { toUpstreamSelectOptions } from '@/utils/upstreamOptions'
 import type { Cluster, Plugin } from '@/types'
+import StrokeIcon from '@/components/StrokeIcon.vue'
 import PluginSelector from '@/components/PluginSelector.vue'
 import PluginConfigViewDrawer from '@/components/PluginConfigViewDrawer.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'

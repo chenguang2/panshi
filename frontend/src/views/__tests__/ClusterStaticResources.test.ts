@@ -255,21 +255,25 @@ describe('ClusterStaticResources.vue（Tab）· static-resources-ux-close-loop �
     expect(publishBtns[3].attributes('disabled')).toBeDefined()
   })
 
-  it('操作按钮体系（批 8）：图标动作走 a-button 且必带 title；发布/版本管理保持原生文字按钮', async () => {
+  it('操作按钮体系（mockup-parity-standard）：卡脚为文字 .tool-btn + .op-pub 发布，删除红字且全带 title', async () => {
     const w = await mountTab()
     const actions = w.find('.pcc-actions')
-    const iconBtns = actions.findAll('.ant-btn')
-    expect(iconBtns.length).toBeGreaterThanOrEqual(4)
-    // 图标按钮无文字（长度 0），且每个都带 title（禁用必须永远有原因）
-    for (const b of iconBtns) {
-      expect(b.text().trim()).toBe('')
-      expect(b.attributes('title'), '图标按钮必须带 tooltip').toBeTruthy()
+    // 查看 ZIP / 编辑 / 上传 ZIP / 删除 / 版本管理 均为设计原语文字按钮（不再渲染图标）
+    const textBtns = actions.findAll('button.tool-btn')
+    expect(textBtns.length).toBeGreaterThanOrEqual(5)
+    for (const b of textBtns) {
+      expect(b.text().trim(), '卡脚按钮必须是文字按钮').not.toBe('')
+      expect(b.attributes('title'), '每个动作必须带 tooltip（禁用永远有原因）').toBeTruthy()
     }
-    // 发布/版本管理保持原生 btn 体系（非 a-button）
-    const native = actions.findAll('button.btn-secondary')
-    expect(native.length).toBeGreaterThanOrEqual(1)
-    expect(native[0].text().trim()).toBe('发布')
-    expect(actions.findAll('button.btn-ghost').some((b) => b.text().trim() === '版本管理')).toBe(true)
+    // 发布 = .op-pub 胶囊（accent 描边淡底），不走 antd 按钮（antd 会把「发布」拆成「发 布」）
+    const pubs = actions.findAll('button.op-pub')
+    expect(pubs.length).toBe(1)
+    expect(pubs[0].text().trim()).toBe('发布')
+    // 删除红字（设计 .pcc-actions 删除态用内联 danger 色）
+    const del = actions.findAll('button').find((b) => b.attributes('title') === '删除')!
+    expect(del.attributes('style')).toContain('var(--danger)')
+    // 图标按钮体系已退场
+    expect(actions.findAll('.ant-btn').length).toBe(0)
   })
 })
 

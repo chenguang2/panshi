@@ -22,7 +22,9 @@
                     <div class="plugin-card-name">{{ plugin.name }}</div>
                     <div class="plugin-card-desc">{{ plugin.description }}</div>
                   </div>
-                  <a-button size="small" type="primary" class="add-btn" @click.stop="addPlugin(plugin)">添加</a-button>
+                  <a-button size="small" type="primary" class="add-btn" @click.stop="addPlugin(plugin)"
+                    ><span>添加</span></a-button
+                  >
                 </div>
               </div>
             </div>
@@ -56,13 +58,16 @@
                 </span>
               </div>
             </div>
+            <!-- 卡脚动作 = 设计 .pcc-actions（central.html 状态二）：文字 .tool-btn 三颗 + 右簇「发布」.op-pub + 版本管理 -->
             <div class="plugin-actions">
-              <a-button size="small" @click="viewPlugin(item)" title="查看"><EyeOutlined /></a-button>
-              <a-button size="small" @click="editPlugin(item)" title="编辑"><EditOutlined /></a-button>
-              <a-button size="small" danger @click="deletePlugin(item)" title="删除"><DeleteOutlined /></a-button>
-              <a-divider type="vertical" />
-              <a-button size="small" @click="publishPlugin(item)">发布</a-button>
-              <a-button size="small" @click="openVersionManagement(item)">版本管理</a-button>
+              <button class="tool-btn" title="查看" @click="viewPlugin(item)">查看</button>
+              <button class="tool-btn" title="编辑" @click="editPlugin(item)">编辑</button>
+              <button class="tool-btn" title="删除" style="color: var(--danger)" @click="deletePlugin(item)">
+                删除
+              </button>
+              <span style="flex: 1"></span>
+              <button class="op-pub" title="发布" @click="publishPlugin(item)">发布</button>
+              <button class="tool-btn" title="版本管理" @click="openVersionManagement(item)">版本管理</button>
             </div>
           </div>
           <div v-if="configuredPlugins.length === 0" class="empty-hint">点击左侧"添加"按钮配置插件</div>
@@ -141,7 +146,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch } from 'vue'
 import { message } from 'ant-design-vue'
-import { EyeOutlined, EditOutlined, DeleteOutlined, CaretDownOutlined, CaretRightOutlined } from '@ant-design/icons-vue'
+import { CaretDownOutlined, CaretRightOutlined } from '@ant-design/icons-vue'
 import api from '@/api'
 import PluginEditorDrawer from './PluginEditorDrawer.vue'
 import VersionManagementModal from './VersionManagementModal.vue'
@@ -782,10 +787,6 @@ watch(
   gap: 4px;
   margin-top: 8px;
   align-items: center;
-}
-
-.plugin-actions .ant-divider {
-  margin-left: auto;
 }
 
 .empty-hint {
