@@ -2877,13 +2877,16 @@ th.resizable {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid transparent !important;
-  background: transparent !important;
+  /* 2026-11-21 用户实测：⋯ 触发器需有可见描边（此前为透明边，读成“无按钮外框”） */
+  border: 1px solid var(--border) !important;
+  background: var(--surface) !important;
   box-shadow: none !important;
   color: var(--muted) !important;
   border-radius: var(--radius-sm) !important;
 }
 .table-container.l5-card .action-cell .ant-btn:hover,
+.table-container.l5-card .action-cell .action-trigger-btn:hover,
+.table-container.l5-card .node-actions-wrap .action-trigger-btn:hover,
 .table-container.l5-card .node-actions-wrap .btn-ghost:hover {
   background: var(--accent-bg) !important;
   color: var(--accent) !important;
@@ -3911,8 +3914,9 @@ th.resizable {
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
-  border: 1px solid transparent !important;
-  background: transparent !important;
+  /* 2026-11-21：与独立页同款——可见描边 + 白底（用户要求），hover 转 accent */
+  border: 1px solid var(--border) !important;
+  background: var(--surface) !important;
   box-shadow: none !important;
   color: var(--muted) !important;
   border-radius: var(--radius-sm) !important;

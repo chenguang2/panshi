@@ -196,13 +196,14 @@ describe('mockup-parity r5（parity-audit-nodes-r5 逐项批准后的锚点）',
     expect(icon).toContain('<circle cx="19" cy="12" r="1.7" />')
     expect(icon).toContain("FILLED_ICONS = new Set<string>(['dots'])")
   })
-  it('r5-① 触发器无边框白底（style.css 压掉 antd text 按钮的 1px 边与白底）', () => {
+  it('r5-① 触发器可见描边 + 白底（2026-11-21 用户裁决，原为透明无边）', () => {
     const triggerRule = css.match(
       /\.table-container\.l5-card \.node-actions-wrap \.action-trigger-btn,[\s\S]*?\{[^}]*\}/,
     )
     expect(triggerRule, '需存在触发器合并规则').toBeTruthy()
-    expect(triggerRule![0]).toContain('border: 1px solid transparent !important')
-    expect(triggerRule![0]).toContain('background: transparent !important')
+    // 2026-11-21 用户裁决：⋯ 触发器改可见描边 + 白底（此前透明被读成“没有按钮外框”）
+    expect(triggerRule![0]).toContain('border: 1px solid var(--border) !important')
+    expect(triggerRule![0]).toContain('background: var(--surface) !important')
     expect(triggerRule![0]).toContain('.action-cell .action-trigger-btn')
   })
   it('r5-② 三页动作菜单挂 l5-action-menu（215 固定宽 + 条目行高 1.4 的作用域）', () => {
@@ -578,9 +579,10 @@ describe('mockup-parity r12（平铺视图集群标识 / 优先级 mono）', () 
     for (const f of ['NodeList.vue', 'UpstreamList.vue', 'RouteList.vue']) {
       const s = page(f)
       expect(s, f).toContain("key: 'cluster'")
-      // 分组态过滤：isVisible 里按 viewMode 判定；NodeList 另有 isScoped（A 试点：面板恒无集群列）
+      // 分组态过滤：isVisible 里按 viewMode 判定；节点/上游页另有 isScoped
+      // （A 试点：面板 Tab 恒无集群列，NodeList/UpstreamList 各一处）
       const expected =
-        f === 'NodeList.vue'
+        f === 'NodeList.vue' || f === 'UpstreamList.vue'
           ? /if \(k === 'cluster'\) return !isScoped\.value && viewMode\.value === 'flat'/
           : /if \(k === 'cluster'\) return viewMode\.value === 'flat'/
       expect(s, f).toMatch(expected)
@@ -1170,7 +1172,7 @@ describe('central-management-parity 批 A：最大化面板 Tab 解剖单点（s
     // 行内动作容器 + ⋯ 锚点（parity 批 B：与列表页 .action-cell / .action-trigger-btn 同构）
     expect(s).toContain('.max-panel .dbody .node-table .action-cell {')
     expect(s).toMatch(
-      /\.max-panel \.dbody \.node-table \.ant-table-tbody \.action-trigger-btn \{[\s\S]*?width: 26px !important;[\s\S]*?background: transparent !important;/,
+      /\.max-panel \.dbody \.node-table \.ant-table-tbody \.action-trigger-btn \{[\s\S]*?width: 26px !important;[\s\S]*?border: 1px solid var\(--border\) !important;[\s\S]*?background: var\(--surface\) !important;/,
     )
     expect(s).toContain('.max-panel .dbody .l5-pager {')
     // 用户 2026-11-21 反馈：分页条须与独立列表页同形态（上边框分隔 + 10px 16px 内距），

@@ -2307,6 +2307,8 @@ tr.row-disabled {
 .ops { display: inline-flex; align-items: center; gap: 2px; }
 .op-btn { display: inline-flex; align-items: center; gap: 3px; height: 24px; padding: 0 6px; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--muted); font-size: 12px; cursor: pointer; transition: all .12s; white-space: nowrap; }
 .op-btn:hover { background: var(--accent-bg); color: var(--accent); border-color: oklch(56% 0.16 210 / 30%); }
+/* 2026-11-21 用户裁决：⋯（更多操作）触发器需可见描边 + 白底（其余行内操作仍为无边框 ghost） */
+.menu-anchor .op-btn[title="更多操作"] { border-color: var(--border); background: var(--surface); }
 .op-btn svg { width: 12px; height: 12px; }
 .op-btn:disabled { opacity: .4; cursor: not-allowed; }
 .op-btn:disabled:hover { background: transparent; color: var(--muted); border-color: transparent; }

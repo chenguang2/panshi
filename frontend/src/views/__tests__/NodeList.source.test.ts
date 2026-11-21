@@ -195,7 +195,10 @@ describe('批量条：批量删除入口（节点）', () => {
     expect(bar, '需存在批量条').toBeTruthy()
     expect(bar![0]).toContain('data-test="batch-delete"')
     expect(bar![0]).toContain('handleBatchDelete')
-    expect(bar![0]).toMatch(/批量删除<span v-if="selectedNodeKeys\.length">\(\{\{ selectedNodeKeys\.length \}\}\)/)
+    // prettier 会在 <span v-if> 后换行：断言用 \s* 容忍折行（源码守卫不得依赖格式）
+    expect(bar![0]).toMatch(
+      /批量删除\s*<span v-if="selectedNodeKeys\.length"\s*>\s*\(\{\{\s*selectedNodeKeys\.length\s*\}\}\)/,
+    )
     expect(bar![0]).toContain(':disabled="!selectedNodeKeys.length"')
     expect(bar![0]).toContain('btn btn-danger btn-sm need-sel')
     // 危险动作与动作组之间保留分隔线（b-sep），且位于「清除选择」之前（删除类靠右）
