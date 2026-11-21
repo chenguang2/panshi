@@ -87,7 +87,8 @@ describe('ClusterUpstreams 最大化面板 Tab 解剖守卫（parity 批 A）', 
   it('行内动作收敛为「发布 + ⋯」（批次 B / 设计 .ops）', () => {
     const s = src()
     expect(s).toContain('class="op-pub"')
-    expect(s).toContain("handleUpstreamAction(cluster, record, 'publish')")
+    // B1 表单共用后行内入口改为面板包装（编辑/复制本地开表单，其余转发 composable）
+    expect(s).toContain("handleUpstreamRowAction(cluster, record, 'publish')")
     expect(s).toContain('class="action-trigger-btn"')
     expect(s).toContain('<StrokeIcon name="dots" />')
     expect(s).toContain('class="l5-action-menu"')

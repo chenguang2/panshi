@@ -44,7 +44,7 @@
               <ClusterSelect
                 v-model="form.cluster_id"
                 :clusters="clusters"
-                :disabled="!!editingRoute && !copyingRoute"
+                :disabled="(!!editingRoute && !copyingRoute) || !!lockCluster"
                 :class="{ 'has-error': formErrors.cluster_id }"
               />
               <div v-if="formErrors.cluster_id" class="form-error">{{ formErrors.cluster_id }}</div>
@@ -219,6 +219,8 @@ const props = defineProps<{
   clusters: { id: number; name: string; display_name?: string }[]
   /** 7.6：深链进入时新建表单预选的集群 id；不传/为空不预选 */
   defaultClusterId?: number | null
+  /** 锁定集群选择（面板场景：集群由上下文决定，不可改） */
+  lockCluster?: boolean
 }>()
 
 const emit = defineEmits<{

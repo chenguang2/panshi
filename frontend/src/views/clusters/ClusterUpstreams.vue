@@ -1,7 +1,7 @@
 <template>
   <div class="tab-content">
     <div class="node-actions">
-      <a-button size="small" type="primary" @click="showAddUpstreamModal(cluster)">
+      <a-button size="small" type="primary" @click="openUpstreamForm(null)">
         <StrokeIcon name="plus" :size="13" /> 添加上游
       </a-button>
       <!-- 批量删除：行内动作收敛到 ⋯ 菜单后，多选删除的唯一入口（与节点 Tab 同款形态） -->
@@ -77,7 +77,7 @@
     >
       <template #emptyText>
         <EmptyState title="暂无上游" description="添加上游后，路由才能把流量转发到后端">
-          <a-button size="small" type="primary" @click="showAddUpstreamModal(cluster)">添加上游</a-button>
+          <a-button size="small" type="primary" @click="openUpstreamForm(null)">添加上游</a-button>
         </EmptyState>
       </template>
       <template #headerCell="{ column, title }">
@@ -129,7 +129,7 @@
               v-if="upstreamActionsSelected.includes('publish')"
               type="button"
               class="op-pub"
-              @click="handleUpstreamAction(cluster, record, 'publish')"
+              @click="handleUpstreamRowAction(cluster, record, 'publish')"
             >
               发布
             </button>
@@ -142,7 +142,7 @@
                   <a-menu-item
                     v-for="btn in upstreamMenuGroups.crud"
                     :key="btn.key"
-                    @click="handleUpstreamAction(cluster, record, btn.key)"
+                    @click="handleUpstreamRowAction(cluster, record, btn.key)"
                     >{{ btn.title }}</a-menu-item
                   >
                   <a-menu-divider v-if="upstreamMenuGroups.danger.length" />
@@ -150,7 +150,7 @@
                     v-for="btn in upstreamMenuGroups.danger"
                     :key="btn.key"
                     danger
-                    @click="handleUpstreamAction(cluster, record, btn.key)"
+                    @click="handleUpstreamRowAction(cluster, record, btn.key)"
                   >
                     <div class="menu-item-stack">
                       <span>{{ btn.title }}</span>
@@ -161,7 +161,7 @@
                   <a-menu-item
                     v-for="btn in upstreamMenuGroups.action"
                     :key="btn.key"
-                    @click="handleUpstreamAction(cluster, record, btn.key)"
+                    @click="handleUpstreamRowAction(cluster, record, btn.key)"
                   >
                     <div class="menu-item-stack">
                       <span>{{ btn.title }}</span>
@@ -185,342 +185,20 @@
       @change="onUpstreamPageChange"
     />
 
-    <Teleport to="body">
-      <div class="modal-overlay" :style="{ display: upstreamModalVisible ? 'flex' : 'none' }">
-        <div class="modal" style="max-width: 750px">
-          <div class="modal-header">
-            <h2>{{ copyingUpstream ? '复制上游' : editingUpstream ? '编辑上游' : '添加上游' }}</h2>
-            <button class="modal-close" @click="closeUpstreamModal">&times;</button>
-          </div>
-          <div class="modal-body">
-            <a-tabs v-model:activeKey="upstreamModalActiveTab">
-              <a-tab-pane key="basic" tab="基础配置">
-                <a-form
-                  ref="upstreamFormRef"
-                  :model="upstreamForm"
-                  :label-col="{ span: 6 }"
-                  :wrapper-col="{ span: 16 }"
-                >
-                  <a-form-item label="名称" name="name" :rules="[{ required: true, message: '请输入上游名称' }]">
-                    <a-input v-model:value="upstreamForm.name" placeholder="请输入上游名称" />
-                  </a-form-item>
-                  <a-form-item
-                    label="负载均衡"
-                    name="load_balance"
-                    :rules="[{ required: true, message: '请选择负载均衡' }]"
-                  >
-                    <a-select v-model:value="upstreamForm.load_balance">
-                      <a-select-option value="weighted_roundrobin">加权轮询</a-select-option>
-                      <a-select-option value="chash">一致性哈希</a-select-option>
-                      <a-select-option value="ewma">延迟最小</a-select-option>
-                      <a-select-option value="least_conn">最少连接</a-select-option>
-                    </a-select>
-                  </a-form-item>
-                  <a-form-item
-                    v-if="upstreamForm.load_balance === 'chash'"
-                    label="哈希位置"
-                    name="hash_on"
-                    :rules="[{ required: true, message: '请选择哈希位置' }]"
-                  >
-                    <a-select v-model:value="upstreamForm.hash_on">
-                      <a-select-option value="header">HTTP请求头</a-select-option>
-                      <a-select-option value="cookie">Cookie</a-select-option>
-                      <a-select-option value="vars">内置变量</a-select-option>
-                      <a-select-option value="vars_combinations">自定义变量</a-select-option>
-                    </a-select>
-                  </a-form-item>
-                  <a-form-item
-                    v-if="upstreamForm.load_balance === 'chash'"
-                    label="Key"
-                    name="key"
-                    :rules="[{ required: true, message: '请输入哈希 Key' }]"
-                    extra="按哈希位置填写：header 填请求头名（如 X-User-Id），cookie 填 Cookie 名"
-                  >
-                    <a-input v-model:value="upstreamForm.key" placeholder="请输入哈希 Key" />
-                  </a-form-item>
-                  <a-form-item label="描述" name="description">
-                    <a-textarea v-model:value="upstreamForm.description" :rows="2" />
-                  </a-form-item>
-                  <a-form-item label="节点列表" :rules="[{ required: true, message: '请至少添加一个节点' }]">
-                    <a-table
-                      :columns="targetColumns"
-                      :data-source="upstreamForm.targets"
-                      :pagination="false"
-                      size="small"
-                      row-key="key"
-                    >
-                      <template #bodyCell="{ column, record, index }">
-                        <template v-if="column.key === 'host'">
-                          <a-input v-model:value="record.host" placeholder="主机地址（IP 或域名）" />
-                          <div v-if="targetValidation[index]?.host" class="ant-form-item-explain-error">
-                            {{ targetValidation[index].host }}
-                          </div>
-                        </template>
-                        <template v-else-if="column.key === 'port'">
-                          <a-input-number
-                            v-model:value="record.port"
-                            :min="1"
-                            :max="65535"
-                            style="width: 100%"
-                            placeholder="端口"
-                          />
-                          <div v-if="targetValidation[index]?.port" class="ant-form-item-explain-error">
-                            {{ targetValidation[index].port }}
-                          </div>
-                        </template>
-                        <template v-else-if="column.key === 'weight'">
-                          <a-input-number
-                            v-model:value="record.weight"
-                            :min="1"
-                            :max="100"
-                            style="width: 100%"
-                            placeholder="权重"
-                          />
-                          <div v-if="targetValidation[index]?.weight" class="ant-form-item-explain-error">
-                            {{ targetValidation[index].weight }}
-                          </div>
-                        </template>
-                        <template v-else-if="column.key === 'action'">
-                          <a-button size="small" danger @click="removeUpstreamTarget(index)">删除</a-button>
-                        </template>
-                      </template>
-                    </a-table>
-                    <a-button
-                      type="dashed"
-                      size="small"
-                      style="width: 100%; margin-top: 8px"
-                      @click="addUpstreamTarget"
-                    >
-                      <PlusOutlined /> 添加节点
-                    </a-button>
-                  </a-form-item>
-                </a-form>
-              </a-tab-pane>
-
-              <a-tab-pane key="advanced" tab="高级配置">
-                <div class="advanced-sections">
-                  <!-- 健康检查 -->
-                  <div class="advanced-section">
-                    <label class="checkbox-label section-toggle">
-                      <input type="checkbox" v-model="toggleChecks" />
-                      <span>健康检查</span>
-                    </label>
-                    <HealthCheckForm
-                      v-model:checks="upstreamForm.checks"
-                      v-model:enabled="toggleChecks"
-                      v-model:modelMode="checksMode"
-                    />
-                    <div v-if="formErrors.checks" style="color: var(--danger); font-size: 12px; margin-top: 6px">
-                      {{ formErrors.checks }}
-                    </div>
-                  </div>
-
-                  <!-- 超时配置 -->
-                  <div class="advanced-section" @input.capture="onSectionInput">
-                    <label class="checkbox-label section-toggle">
-                      <input type="checkbox" v-model="toggleTimeout" />
-                      <span>超时配置（秒）</span>
-                    </label>
-                    <div style="display: flex; gap: 8px">
-                      <div style="flex: 1">
-                        <div style="margin-bottom: 2px; color: #666; font-size: 12px">连接</div>
-                        <a-input-number
-                          v-model:value="upstreamForm.timeout.connect"
-                          :min="0"
-                          placeholder="如 6"
-                          style="width: 100%"
-                          :disabled="!toggleTimeout"
-                        />
-                      </div>
-                      <div style="flex: 1">
-                        <div style="margin-bottom: 2px; color: #666; font-size: 12px">发送</div>
-                        <a-input-number
-                          v-model:value="upstreamForm.timeout.send"
-                          :min="0"
-                          placeholder="如 6"
-                          style="width: 100%"
-                          :disabled="!toggleTimeout"
-                        />
-                      </div>
-                      <div style="flex: 1">
-                        <div style="margin-bottom: 2px; color: #666; font-size: 12px">读取</div>
-                        <a-input-number
-                          v-model:value="upstreamForm.timeout.read"
-                          :min="0"
-                          placeholder="如 6"
-                          style="width: 100%"
-                          :disabled="!toggleTimeout"
-                        />
-                      </div>
-                    </div>
-                    <div style="color: #999; font-size: 11px; margin-top: 2px">
-                      建立连接 / 发送请求 / 等待响应的最长等待时间
-                    </div>
-                    <div v-if="formErrors.timeout" style="color: var(--danger); font-size: 12px; margin-top: 6px">
-                      {{ formErrors.timeout }}
-                    </div>
-                  </div>
-
-                  <!-- 连接池 -->
-                  <div class="advanced-section" @input.capture="onSectionInput">
-                    <label class="checkbox-label section-toggle">
-                      <input type="checkbox" v-model="togglePool" />
-                      <span>连接池</span>
-                    </label>
-                    <div style="display: flex; gap: 8px">
-                      <div style="flex: 1">
-                        <div style="margin-bottom: 2px; color: #666; font-size: 12px">大小</div>
-                        <a-input-number
-                          v-model:value="upstreamForm.keepalive_pool.size"
-                          :min="1"
-                          placeholder="size"
-                          style="width: 100%"
-                          :disabled="!togglePool"
-                        />
-                      </div>
-                      <div style="flex: 1">
-                        <div style="margin-bottom: 2px; color: #666; font-size: 12px">空闲超时(秒)</div>
-                        <a-input-number
-                          v-model:value="upstreamForm.keepalive_pool.idle_timeout"
-                          :min="0"
-                          placeholder="idle_timeout"
-                          style="width: 100%"
-                          :disabled="!togglePool"
-                        />
-                      </div>
-                      <div style="flex: 1">
-                        <div style="margin-bottom: 2px; color: #666; font-size: 12px">最大请求数</div>
-                        <a-input-number
-                          v-model:value="upstreamForm.keepalive_pool.requests"
-                          :min="1"
-                          placeholder="requests"
-                          style="width: 100%"
-                          :disabled="!togglePool"
-                        />
-                      </div>
-                    </div>
-                    <div
-                      v-if="formErrors.keepalive_pool"
-                      style="color: var(--danger); font-size: 12px; margin-top: 6px"
-                    >
-                      {{ formErrors.keepalive_pool }}
-                    </div>
-                  </div>
-
-                  <!-- 重试次数 -->
-                  <div class="advanced-section">
-                    <label class="checkbox-label section-toggle">
-                      <input type="checkbox" v-model="toggleRetries" />
-                      <span>重试次数</span>
-                    </label>
-                    <div :style="{ opacity: toggleRetries ? 1 : 0.45 }">
-                      <div class="radio-group">
-                        <label class="radio-label"
-                          ><input type="radio" value="auto" v-model="retriesRadio" :disabled="!toggleRetries" /><span
-                            >自动（使用可用节点数）</span
-                          ></label
-                        >
-                        <label class="radio-label"
-                          ><input type="radio" value="custom" v-model="retriesRadio" :disabled="!toggleRetries" /><span
-                            >指定重试次数</span
-                          ></label
-                        >
-                        <template v-if="retriesRadio === 'custom'">
-                          <a-input-number
-                            v-model:value="upstreamForm.retriesInput"
-                            :min="0"
-                            placeholder="次数"
-                            style="width: 120px; margin-left: 24px"
-                            :disabled="!toggleRetries"
-                          />
-                        </template>
-                        <label class="radio-label"
-                          ><input
-                            type="radio"
-                            value="disabled"
-                            v-model="retriesRadio"
-                            :disabled="!toggleRetries"
-                          /><span>禁用重试</span></label
-                        >
-                      </div>
-                      <div v-if="formErrors.retries" style="color: var(--danger); font-size: 12px; margin-top: 4px">
-                        {{ formErrors.retries }}
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- 重试超时 -->
-                  <div class="advanced-section" @input.capture="onSectionInput">
-                    <label class="checkbox-label section-toggle">
-                      <input type="checkbox" v-model="toggleRetryTimeout" />
-                      <span>重试超时（秒）</span>
-                    </label>
-                    <a-input-number
-                      v-model:value="upstreamForm.retry_timeout"
-                      :min="0"
-                      placeholder="秒"
-                      style="width: 200px"
-                      :disabled="!toggleRetryTimeout"
-                    />
-                    <div v-if="formErrors.retry_timeout" style="color: var(--danger); font-size: 12px; margin-top: 4px">
-                      {{ formErrors.retry_timeout }}
-                    </div>
-                    <div style="color: #999; font-size: 11px; margin-top: 2px">0 = 不限制重试时间</div>
-                  </div>
-
-                  <!-- Host 策略 -->
-                  <div class="advanced-section">
-                    <label class="checkbox-label section-toggle">
-                      <input type="checkbox" v-model="toggleHost" />
-                      <span>Host 策略</span>
-                    </label>
-                    <div style="display: flex; gap: 8px">
-                      <div style="flex: 1; max-width: 260px">
-                        <div style="margin-bottom: 2px; color: #666; font-size: 12px">Host 策略</div>
-                        <a-select v-model:value="upstreamForm.pass_host" :disabled="!toggleHost">
-                          <a-select-option value="pass">pass（透传客户端Host）</a-select-option>
-                          <a-select-option value="node">node（使用节点Host）</a-select-option>
-                          <a-select-option value="rewrite">rewrite（自定义Host）</a-select-option>
-                        </a-select>
-                      </div>
-                      <div v-if="upstreamForm.pass_host === 'rewrite'" style="flex: 1">
-                        <div style="margin-bottom: 2px; color: #666; font-size: 12px">上游 Host</div>
-                        <a-input
-                          v-model:value="upstreamForm.upstream_host"
-                          placeholder="指定上游请求的Host"
-                          :disabled="!toggleHost"
-                        />
-                      </div>
-                    </div>
-                    <div v-if="formErrors.pass_host" style="color: var(--danger); font-size: 12px; margin-top: 6px">
-                      {{ formErrors.pass_host }}
-                    </div>
-                  </div>
-
-                  <!-- 通信协议 -->
-                  <div class="advanced-section">
-                    <label class="checkbox-label section-toggle">
-                      <input type="checkbox" v-model="toggleScheme" />
-                      <span>通信协议</span>
-                    </label>
-                    <a-select v-model:value="upstreamForm.scheme" style="width: 200px" :disabled="!toggleScheme">
-                      <a-select-option value="http">http</a-select-option>
-                      <a-select-option value="https">https</a-select-option>
-                      <a-select-option value="tcp">tcp</a-select-option>
-                      <a-select-option value="udp">udp</a-select-option>
-                    </a-select>
-                  </div>
-                </div>
-              </a-tab-pane>
-            </a-tabs>
-          </div>
-          <div class="modal-footer">
-            <button class="btn btn-secondary" @click="closeUpstreamModal">取消</button>
-            <button class="btn btn-primary" @click="handleUpstreamSubmit">保存</button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
+    <!-- B1 表单共用（cluster-shared-core-plan 3.1）：上游表单统一走共享 UpstreamFormModal，
+         提交/校验/误关保护/保存后发布引导全在组件内；面板只负责关闭 + 列表刷新 + 发布链路对接。
+         面板只有一个集群：传单元素清单，集群选择在编辑态由组件既有逻辑禁用（add 态仅一个可选项）。 -->
+    <UpstreamFormModal
+      :visible="formVisible"
+      :editing-upstream="editingUpstream"
+      :copying-upstream="copyingUpstream"
+      :clusters="formClusters"
+      :default-cluster-id="props.cluster.id"
+      lock-cluster
+      @close="closeForm"
+      @saved="onFormSaved"
+      @publish-requested="onFormPublishRequested"
+    />
 
     <VersionManagementModal
       v-model:open="versionModalVisible"
@@ -549,12 +227,11 @@
 <script setup lang="ts">
 import { ref, computed, toValue } from 'vue'
 import type { Cluster, Upstream } from '@/types'
-import { PlusOutlined, WarningOutlined } from '@ant-design/icons-vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishStatusTag from '@/components/PublishStatusTag.vue'
 import PublishDiffButton from '@/components/PublishDiffButton.vue'
 import PublishPreviewModal from '@/components/PublishPreviewModal.vue'
-import HealthCheckForm from '@/components/HealthCheckForm.vue'
+import UpstreamFormModal from '@/components/UpstreamFormModal.vue'
 import { useClusterUpstreams } from '@/composables/useClusterUpstreams'
 import { useColumnDragColumns } from '@/composables/useColumnDragColumns'
 import { message } from 'ant-design-vue'
@@ -578,16 +255,54 @@ const versionModalClusterId = ref<number | null>(null)
 const versionModalResourceName = ref('')
 const versionModalEdgeUuid = ref('')
 
+// ── B1 表单共用（cluster-shared-core-plan 3.1）：表单状态由面板自持（与集群子页 ClusterGlobalRules 同构），
+//    提交/校验/误关保护全在共享 UpstreamFormModal 内；composable 的表单态不再驱动面板表单。 ──
+const formVisible = ref(false)
+const editingUpstream = ref<Upstream | null>(null)
+const copyingUpstream = ref(false)
+/** 面板只有当前集群：单元素清单（组件内 ClusterSelect 编辑态禁用，add 态仅一个可选项） */
+const formClusters = computed(() => [
+  { id: props.cluster.id, name: props.cluster.name, display_name: props.cluster.display_name },
+])
+
+/** 表单以「编辑源记录」为唯一入参：复制 = editingUpstream 有值 + copyingUpstream 置位（组件内改名「复制_xxx」） */
+function openUpstreamForm(record: Upstream | null, copy = false) {
+  editingUpstream.value = record
+  copyingUpstream.value = copy && record != null
+  formVisible.value = true
+}
+
+function closeForm() {
+  formVisible.value = false
+  editingUpstream.value = null
+  copyingUpstream.value = false
+}
+
+/** 保存成功（组件已 emit saved + close）：刷新该集群上游列表，使「待发布」标签立即可见 */
+async function onFormSaved() {
+  closeForm()
+  await loadUpstreams(props.cluster)
+}
+
+/** 保存后发布引导「立即发布」→ 复用既有发布链路（publishByRecord：发布确认选节点，不自动发布） */
+function onFormPublishRequested(payload: { clusterId: number | string; upstreamId: number | null; name: string }) {
+  if (payload.upstreamId == null) return
+  void publishUpstreamByRecord(props.cluster, {
+    id: payload.upstreamId,
+    name: payload.name,
+  } as Upstream)
+}
+
+/** 行内 ⋯ 菜单入口：编辑/复制由面板本地表单承接，其余（发布/版本/删除）仍走 composable 单一实现 */
+function handleUpstreamRowAction(cluster: Cluster, record: Upstream, action: string) {
+  if (action === 'edit' || action === 'copy') {
+    openUpstreamForm(record, action === 'copy')
+    return
+  }
+  handleUpstreamAction(cluster, record, action)
+}
+
 const {
-  upstreamModalVisible,
-  upstreamModalActiveTab,
-  editingUpstream,
-  copyingUpstream,
-  upstreamForm,
-  upstreamFormRef,
-  targetValidation,
-  formErrors,
-  checksMode,
   allUpstreamColumns,
   upstreamColumnPopoverVisible,
   upstreamColumnsSelected,
@@ -602,25 +317,11 @@ const {
   orderedUpstreamColumns,
   loadUpstreams,
   handleUpstreamTableChange,
-  selectUpstream,
   selectUpstreams,
-  showAddUpstreamModal,
-  handleUpstreamSubmit,
-  closeUpstreamModal,
   deleteUpstream,
   deleteUpstreams,
   publishUpstreamByRecord,
-  addUpstreamTarget,
-  removeUpstreamTarget,
   handleUpstreamAction,
-  toggleChecks,
-  toggleTimeout,
-  togglePool,
-  toggleRetries,
-  toggleRetryTimeout,
-  toggleHost,
-  toggleScheme,
-  retriesRadio,
 } = useClusterUpstreams({
   clusters: computed(() => props.clusters),
   versionModalVisible,
@@ -747,51 +448,6 @@ const publishRestoredUpstream = async () => {
   versionModalVisible.value = true
 }
 
-// Catch native input events from antdv InputNumber to force model update on clear.
-// 超时三项占位统一为「如 6」（4.5），无法再用 placeholder 区分——带标签的 flex 字段
-// 经 .ant-input-number 外层找到标签 div 按标签文案识别；「秒」「次数」仍按 placeholder。
-const onSectionInput = (e: Event) => {
-  const el = e.target as HTMLInputElement
-  if (el.tagName !== 'INPUT' || el.value !== '') return
-  const wrapper = el.closest('.ant-input-number') ?? el
-  const fieldLabel = wrapper.parentElement?.querySelector(':scope > div')?.textContent?.trim()
-  switch (fieldLabel) {
-    case '连接':
-      upstreamForm.timeout.connect = undefined
-      return
-    case '发送':
-      upstreamForm.timeout.send = undefined
-      return
-    case '读取':
-      upstreamForm.timeout.read = undefined
-      return
-    case '大小':
-      upstreamForm.keepalive_pool.size = undefined
-      return
-    case '空闲超时(秒)':
-      upstreamForm.keepalive_pool.idle_timeout = undefined
-      return
-    case '最大请求数':
-      upstreamForm.keepalive_pool.requests = undefined
-      return
-  }
-  switch (el.placeholder) {
-    case '秒':
-      upstreamForm.retry_timeout = undefined
-      break
-    case '次数':
-      upstreamForm.retriesInput = undefined
-      break
-  }
-}
-
-const targetColumns = [
-  { title: '主机/域名', key: 'host', width: 200 },
-  { title: '端口', key: 'port', width: 120 },
-  { title: '权重', key: 'weight', width: 100 },
-  { title: '操作', key: 'action', width: 80 },
-]
-
 const versionModalOnPublished = async () => {
   if (versionModalType.value === 'upstream') {
     await loadUpstreams(props.cluster)
@@ -862,50 +518,5 @@ const versionModalOnPublished = async () => {
 .target-empty {
   color: var(--muted);
   font-size: 12px;
-}
-
-/* ── Advanced sections ── */
-.advanced-sections {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-.advanced-section {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 12px 14px;
-  background: var(--surface);
-}
-.checkbox-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  cursor: pointer;
-}
-.checkbox-label input[type='checkbox'] {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--accent);
-}
-.section-toggle {
-  margin-bottom: 10px;
-  font-weight: 600;
-}
-.radio-group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 4px 0;
-}
-.radio-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  cursor: pointer;
-}
-.radio-label input[type='radio'] {
-  accent-color: var(--accent);
 }
 </style>

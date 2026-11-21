@@ -89,7 +89,8 @@ describe('ClusterRoutes 最大化面板 Tab 解剖守卫（parity 批 A）', () 
     const s = src()
     // 主行动：原生 .op-pub（antd 主按钮会带白底灰边 + 中文两字插空格）
     expect(s).toContain('class="op-pub"')
-    expect(s).toContain("handleRouteAction(cluster, record, 'publish')")
+    // B1 表单共用后行内入口改为面板包装（编辑/复制本地开表单，其余转发 composable）
+    expect(s).toContain("handleRouteRowAction(cluster, record, 'publish')")
     // ⋯ 触发器：三圆横排 + 无边框 26×24 锚点（禁用「更多 ▾」文字形态回潮）
     expect(s).toContain('class="action-trigger-btn"')
     expect(s).toContain('<StrokeIcon name="dots" />')

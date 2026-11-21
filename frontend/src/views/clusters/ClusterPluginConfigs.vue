@@ -1,7 +1,7 @@
 <template>
   <div class="tab-content">
     <div class="node-actions">
-      <a-button size="small" type="primary" @click="showAddPluginConfig(cluster)">
+      <a-button size="small" type="primary" @click="openCreateForm()">
         <StrokeIcon name="plus" :size="13" /> 添加插件组
       </a-button>
     </div>
@@ -55,7 +55,7 @@
         <!-- 卡脚动作 = 设计 .pcc-actions（central.html 状态二）：文字 .tool-btn 三颗 + 右簇「发布」.op-pub + 版本管理 -->
         <div class="pcc-actions">
           <button class="tool-btn" title="查看" @click.stop="viewPluginConfig(pc)">查看</button>
-          <button class="tool-btn" title="编辑" @click.stop="editPluginConfig(cluster, pc)">编辑</button>
+          <button class="tool-btn" title="编辑" @click.stop="openEditForm(pc)">编辑</button>
           <button
             class="tool-btn"
             title="删除"
@@ -73,49 +73,26 @@
       </div>
       <div v-if="!cluster.plugin_configs || cluster.plugin_configs.length === 0" style="width: 100%">
         <EmptyState title="暂无插件组" description="插件组把一组插件打包，供路由/全局规则复用">
-          <a-button size="small" type="primary" @click="showAddPluginConfig(cluster)">添加插件组</a-button>
+          <a-button size="small" type="primary" @click="openCreateForm()">添加插件组</a-button>
         </EmptyState>
       </div>
     </div>
 
-    <!-- Plugin Config Modal -->
-    <Teleport to="body">
-      <div class="modal-overlay" :style="{ display: pluginConfigModalVisible ? 'flex' : 'none' }">
-        <div class="modal" style="max-width: 800px">
-          <div class="modal-header">
-            <h2>{{ pluginConfigFormMode === 'add' ? '添加插件组' : '编辑插件组' }}</h2>
-            <button class="modal-close" @click="pluginConfigModalVisible = false">&times;</button>
-          </div>
-          <div class="modal-body">
-            <a-tabs v-model:activeKey="pluginConfigActiveTab">
-              <a-tab-pane key="basic" tab="基础配置">
-                <a-form :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-                  <a-form-item label="名称" name="name" :rules="[{ required: true, message: '请输入插件组名称' }]">
-                    <a-input v-model:value="pluginConfigFormData.name" placeholder="请输入插件组名称" />
-                  </a-form-item>
-                  <a-form-item label="描述" name="description">
-                    <a-textarea v-model:value="pluginConfigFormData.description" :rows="2" placeholder="可选描述" />
-                  </a-form-item>
-                </a-form>
-              </a-tab-pane>
-              <a-tab-pane key="plugins" tab="插件配置">
-                <PluginSelector
-                  v-model="pluginConfigFormData.selectedPlugins"
-                  :plugins="availablePlugins"
-                  :upstreams="pluginUpstreamOptions"
-                />
-              </a-tab-pane>
-            </a-tabs>
-          </div>
-          <div class="modal-footer">
-            <button class="btn btn-secondary" @click="pluginConfigModalVisible = false">取消</button>
-            <button class="btn btn-primary" @click="handlePluginConfigSubmit">
-              {{ pluginConfigFormMode === 'add' ? '创建' : '保存' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
+    <!-- B1 表单共用（cluster-shared-core-plan 3.1）：表单统一走共享 PluginEntityFormModal，
+         提交/校验/误关保护/保存后发布引导全在组件内；面板只负责关闭 + 列表刷新 + 发布链路对接。
+         面板只有一个集群：传单元素清单，集群选择在编辑态由组件既有逻辑禁用（add 态仅一个可选项）。 -->
+    <PluginEntityFormModal
+      :visible="formVisible"
+      :editing-config="editingPc"
+      :clusters="formClusters"
+      :default-cluster-id="props.cluster.id"
+      lock-cluster
+      resource-type="plugin_config"
+      with-publish-guide
+      @close="closeForm"
+      @saved="onFormSaved"
+      @publish-requested="onFormPublishRequested"
+    />
 
     <!-- View Plugin Config Drawer -->
     <PluginConfigViewDrawer v-model:visible="viewPcDrawerVisible" :config="viewingPc" />
@@ -146,14 +123,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import api from '@/api'
-import { PAGE_SIZE_DROPDOWN } from '@/constants'
-import { toUpstreamSelectOptions } from '@/utils/upstreamOptions'
-import type { Cluster, Plugin } from '@/types'
+import { computed, ref } from 'vue'
+import type { Cluster, Plugin, PluginConfig } from '@/types'
 import StrokeIcon from '@/components/StrokeIcon.vue'
 import EmptyState from '@/components/EmptyState.vue'
-import PluginSelector from '@/components/PluginSelector.vue'
+import PluginEntityFormModal from '@/components/PluginEntityFormModal.vue'
 import PluginConfigViewDrawer from '@/components/PluginConfigViewDrawer.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import { useClusterPluginConfigs } from '@/composables/useClusterPluginConfigs'
@@ -176,24 +150,49 @@ const emit = defineEmits<{
   refresh: []
 }>()
 
-// ── traffic_split 上游分发目标选项：按所属集群拉取上游（value 优先 edge_uuid） ──
-const pluginUpstreams = ref<any[]>([])
-const pluginUpstreamOptions = computed(() => toUpstreamSelectOptions(pluginUpstreams.value))
-async function loadPluginUpstreams(cid: number) {
-  try {
-    const res = await api.get(`/clusters/${cid}/upstreams`, { params: { page_size: PAGE_SIZE_DROPDOWN } })
-    pluginUpstreams.value = res.data.items || []
-  } catch {
-    pluginUpstreams.value = []
-  }
+// ── B1 表单共用：表单状态由面板自持（与集群子页 ClusterGlobalRules 同构），提交在共享组件内 ──
+const formVisible = ref(false)
+const editingPc = ref<PluginConfig | null>(null)
+/** 面板只有当前集群：单元素清单（组件内 ClusterSelect 编辑态禁用，add 态仅一个可选项） */
+const formClusters = computed(() => [
+  { id: props.cluster.id, name: props.cluster.name, display_name: props.cluster.display_name },
+])
+
+function openCreateForm() {
+  editingPc.value = null
+  formVisible.value = true
 }
-watch(
-  () => props.cluster.id,
-  (cid) => {
-    if (cid) void loadPluginUpstreams(Number(cid))
-  },
-  { immediate: true },
-)
+
+function openEditForm(pc: PluginConfig) {
+  editingPc.value = pc
+  formVisible.value = true
+}
+
+function closeForm() {
+  formVisible.value = false
+  editingPc.value = null
+}
+
+/** 保存成功（组件已 emit saved + close）：刷新列表使「待发布」标签立即可见 */
+async function onFormSaved() {
+  closeForm()
+  await loadPluginConfigs(props.cluster)
+}
+
+/** 保存后发布引导「立即发布」→ 复用既有发布链路（publishByRecord：发布确认选节点，不自动发布） */
+function onFormPublishRequested(payload: {
+  clusterId: number | string
+  entityId: number | null
+  name: string
+  currentVersion: number | null
+}) {
+  if (payload.entityId == null) return
+  void publishPluginConfig(props.cluster, {
+    id: payload.entityId,
+    name: payload.name,
+    current_version: payload.currentVersion,
+  } as PluginConfig)
+}
 
 // Version modal state
 const versionModalVisible = ref(false)
@@ -213,16 +212,9 @@ const versionModal: VersionModalState = {
 }
 
 const {
-  pluginConfigModalVisible,
-  pluginConfigActiveTab,
-  pluginConfigFormMode,
-  pluginConfigFormData,
   viewPcDrawerVisible,
   viewingPc,
-  showAddPluginConfig,
   viewPluginConfig,
-  editPluginConfig,
-  handlePluginConfigSubmit,
   deletePluginConfig,
   publishPluginConfig,
   openPluginConfigVersionManagement,

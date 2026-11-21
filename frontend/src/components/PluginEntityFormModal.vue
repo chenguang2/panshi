@@ -34,7 +34,7 @@
             <ClusterSelect
               v-model="form.cluster_id"
               :clusters="clusters"
-              :disabled="!!editingConfig"
+              :disabled="!!editingConfig || !!lockCluster"
               :class="{ 'has-error': formErrors.cluster_id }"
             />
             <div v-if="formErrors.cluster_id" class="form-error">{{ formErrors.cluster_id }}</div>
@@ -76,6 +76,10 @@ const props = defineProps<{
   visible: boolean
   editingConfig: any | null
   clusters: { id: number; name: string; display_name?: string }[]
+  /** 新增态预选集群（面板场景：当前集群） */
+  defaultClusterId?: number | null
+  /** 锁定集群选择（面板场景：集群由上下文决定，不可改） */
+  lockCluster?: boolean
   resourceType: 'plugin_config' | 'global_rule'
   /** 保存后发布引导（publish-guide 批 1 插件组 / 批 2 全局规则）：开启后保存成功弹「立即发布/稍后」
    * 引导弹窗并停发 toast（save-guide-single-channel 单通道）；默认关闭保持 toast（无引导入口的唯一反馈） */
@@ -191,7 +195,7 @@ async function populateForm() {
     }))
   } else {
     form.name = ''
-    form.cluster_id = ''
+    form.cluster_id = props.defaultClusterId ?? ''
     form.description = ''
     form.selectedPlugins = []
   }

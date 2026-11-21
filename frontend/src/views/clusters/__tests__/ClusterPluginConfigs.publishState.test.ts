@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { reactive } from 'vue'
+import { setActivePinia, createPinia } from 'pinia'
 
 const mockApiGet = vi.fn()
 
@@ -120,6 +121,12 @@ const stubs = {
   DeleteOutlined: { template: '<i class="i-delete" />', props: [] },
 }
 
+// B1 表单共用后面板引用了共享 PluginEntityFormModal（其 setup 里读 features store），
+// 故全部用例需活动 Pinia 实例。
+beforeEach(() => {
+  setActivePinia(createPinia())
+})
+
 describe('ClusterPluginConfigs.vue — 发布状态四态接线（2.3，与主页面共用 PublishStatusTag）', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -171,6 +178,102 @@ describe('ClusterPluginConfigs.vue — 发布状态四态接线（2.3，与主�
     const card = cardByName(w, 'pg-published')!
     expect(card.text()).toContain('v7')
     expect(card.text()).toContain('2026/01/15')
+  })
+})
+
+// ── B1 表单共用（docs/refactoring/shared-core-plan-2026-11-21.md 3.1）──
+// #217 断言反转：面板手写 modal（a-tabs + a-form + PluginSelector）整段删除，改由共享
+// PluginEntityFormModal 承接；标题、校验、误关保护、提交与发布引导的断言由
+// components/__tests__/PluginEntityFormModal.test.ts 覆盖，面板侧只钉入参与事件接线。
+describe('ClusterPluginConfigs.vue — 共享表单接线（B1 表单共用）', () => {
+  const formStubs = {
+    ...stubs,
+    PluginEntityFormModal: {
+      name: 'PluginEntityFormModal',
+      template: '<div class="mock-plugin-entity-form" />',
+      props: {
+        visible: Boolean,
+        editingConfig: { type: Object, default: null },
+        clusters: { type: Array, default: () => [] },
+        resourceType: String,
+        withPublishGuide: Boolean,
+      },
+      emits: ['close', 'saved', 'publish-requested'],
+    },
+  }
+
+  async function mountTab(items: unknown[] = [], nodeIds: number[] = []) {
+    const cluster = makeCluster(items)
+    const wrapper = mount(ClusterPluginConfigs, {
+      props: {
+        cluster,
+        clusters: [cluster],
+        openPublishModal: vi.fn().mockResolvedValue(nodeIds),
+        availablePlugins: [],
+        loadAvailablePlugins: vi.fn().mockResolvedValue(undefined),
+      },
+      global: { stubs: formStubs },
+    })
+    await flushPromises()
+    return { wrapper, cluster }
+  }
+
+  const formModal = (wrapper: any) => wrapper.findComponent({ name: 'PluginEntityFormModal' })
+
+  it('引用共享 PluginEntityFormModal（plugin_config + with-publish-guide），clusters 传单元素', async () => {
+    const { wrapper, cluster } = await mountTab([FOUR_STATE_ITEMS[3]])
+    const modal = formModal(wrapper)
+    expect(modal.exists()).toBe(true)
+    expect(modal.props('visible')).toBe(false)
+    expect(modal.props('resourceType')).toBe('plugin_config')
+    expect(modal.props('withPublishGuide')).toBe(true)
+    const clusters = modal.props('clusters') as { id: number; name: string }[]
+    expect(clusters).toHaveLength(1)
+    expect(clusters[0]).toMatchObject({ id: cluster.id, name: cluster.name })
+  })
+
+  it('「添加插件组」→ visible=true、无编辑源', async () => {
+    const { wrapper } = await mountTab()
+    await wrapper.find('.node-actions').findAll('button.mock-btn')[0].trigger('click')
+    expect(formModal(wrapper).props('visible')).toBe(true)
+    expect(formModal(wrapper).props('editingConfig')).toBeNull()
+  })
+
+  it('卡片「编辑」→ 以该插件组为编辑源打开共享表单', async () => {
+    const { wrapper } = await mountTab([FOUR_STATE_ITEMS[3]])
+    const card = wrapper.findAll('.plugin-config-card')[0]
+    const editBtn = card.findAll('button').find((b: any) => b.text() === '编辑')
+    expect(editBtn).toBeTruthy()
+    await editBtn!.trigger('click')
+    expect(formModal(wrapper).props('visible')).toBe(true)
+    expect(formModal(wrapper).props('editingConfig')).toMatchObject({ id: 4, name: 'pg-published' })
+  })
+
+  it('@saved → 关闭表单并刷新插件组列表（GET /clusters/1/plugin_configs）', async () => {
+    mockApiGet.mockResolvedValue({ data: { items: [] } })
+    const { wrapper } = await mountTab()
+    wrapper.vm.openCreateForm()
+    await wrapper.vm.$nextTick()
+    const before = mockApiGet.mock.calls.filter((c) => String(c[0]).includes('/plugin_configs')).length
+    formModal(wrapper).vm.$emit('saved')
+    await flushPromises()
+    expect(formModal(wrapper).props('visible')).toBe(false)
+    const after = mockApiGet.mock.calls.filter((c) => String(c[0]).includes('/plugin_configs')).length
+    expect(after, 'saved 后重新拉取列表').toBe(before + 1)
+  })
+
+  it('@publish-requested → 复用既有发布链路（openPublishModal 选节点 → executePublish）', async () => {
+    const { wrapper } = await mountTab([FOUR_STATE_ITEMS[3]], [7])
+    formModal(wrapper).vm.$emit('publish-requested', {
+      clusterId: 1,
+      entityId: 4,
+      name: 'pg-published',
+      currentVersion: 4,
+    })
+    await flushPromises()
+    expect(executePublish).toHaveBeenCalledWith(
+      expect.objectContaining({ apiEndpoint: '/clusters/1/plugin_configs/4/publish', nodeIds: [7] }),
+    )
   })
 })
 

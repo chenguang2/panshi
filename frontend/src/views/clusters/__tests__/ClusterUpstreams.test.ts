@@ -7,21 +7,15 @@ import type { Cluster, Upstream } from '@/types'
 const mockDeleteUpstream = vi.fn()
 const mockDeleteUpstreams = vi.fn()
 const mockSelectUpstreams = vi.fn()
-const mockCloseUpstreamModal = vi.fn()
 const mockPublishUpstreamByRecord = vi.fn()
+const mockLoadUpstreams = vi.fn()
 // 列配置「行动作按钮集」可变持有者 + 行内动作统一入口（parity 批 B：行内收敛为「发布 + ⋯」）
 const mockUpstreamState = vi.hoisted(() => ({ actions: [] as string[], handleAction: vi.fn() }))
-
-// 共享 ref，测试可导入修改以驱动模板标题
-export const mockCopyingUpstream = ref(false)
-export const mockEditingUpstream = ref(null)
 
 vi.mock('@/composables/useClusterUpstreams', () => ({
   useClusterUpstreams: () => ({
     upstreamModalVisible: ref(false),
     upstreamModalActiveTab: ref('basic'),
-    editingUpstream: mockEditingUpstream,
-    copyingUpstream: mockCopyingUpstream,
     upstreamForm: ref({
       name: '',
       load_balance: 'weighted_roundrobin',
@@ -52,7 +46,7 @@ vi.mock('@/composables/useClusterUpstreams', () => ({
       { title: '名称', dataIndex: 'name', key: 'name' },
       { title: '目标节点', key: 'targets' },
     ],
-    loadUpstreams: vi.fn(),
+    loadUpstreams: (cluster: any) => mockLoadUpstreams(cluster),
     handleUpstreamTableChange: vi.fn(),
     selectUpstream: vi.fn(),
     selectUpstreams: (cluster: any, keys: any, rows: any) => mockSelectUpstreams(cluster, keys, rows),
@@ -64,7 +58,6 @@ vi.mock('@/composables/useClusterUpstreams', () => ({
     deleteUpstreams: (cluster: any) => mockDeleteUpstreams(cluster),
     publishUpstream: vi.fn(),
     publishUpstreamByRecord: (cluster: any, record: any) => mockPublishUpstreamByRecord(cluster, record),
-    closeUpstreamModal: () => mockCloseUpstreamModal(),
     openUpstreamVersionManagement: vi.fn(),
     addUpstreamTarget: vi.fn(),
     removeUpstreamTarget: vi.fn(),
@@ -123,6 +116,13 @@ const stubs = {
     name: 'VersionManagementModal',
     template: '<div class="mock-version-modal" />',
     props: ['open', 'resourceType', 'resourceId', 'clusterId', 'resourceName', 'edgeUuid', 'canPublish'],
+  },
+  // B1 表单共用：内联 modal 已下线，改由共享 UpstreamFormModal 承接（这里只钉 props/事件接线）
+  UpstreamFormModal: {
+    name: 'UpstreamFormModal',
+    template: '<div class="mock-upstream-form" />',
+    props: ['visible', 'editingUpstream', 'copyingUpstream', 'clusters'],
+    emits: ['close', 'saved', 'publish-requested'],
   },
   HealthCheckForm: { template: '<div class="mock-health-form" />' },
   WarningOutlined: { template: '<span />' },
@@ -229,42 +229,86 @@ describe('ClusterUpstreams.vue batch delete', () => {
   })
 })
 
-describe('ClusterUpstreams.vue 表单标题', () => {
+// ── B1 表单共用（docs/refactoring/shared-core-plan-2026-11-21.md 3.1）──
+// #217 断言反转：原「表单标题（添加/复制/编辑）」「× 与取消走误关保护入口」「提交按钮统一显示保存」
+// 三组用例的被测对象是面板自写的内联 modal，已整段删除；标题文案、dirty 确认、提交按钮文案
+// 均为共享组件行为，由 components/__tests__/UpstreamFormModal.test.ts 覆盖。
+// 面板侧改为钉住「引用共享组件 + 传入入参 / 事件接线」——即面板仅剩的职责（关闭 + 刷新 + 发布引导）。
+describe('ClusterUpstreams.vue 共享表单接线（B1 表单共用）', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
   })
 
-  const openModal = async (wrapper: any) => {
-    wrapper.vm.upstreamModalVisible = true
+  const formModal = (wrapper: any) => wrapper.findComponent({ name: 'UpstreamFormModal' })
+
+  it('渲染共享 UpstreamFormModal（面板不再自渲染内联 a-form 表单）', async () => {
+    const cluster = makeCluster()
+    const wrapper = await mountClusterUpstreams(cluster)
+    expect(formModal(wrapper).exists()).toBe(true)
+    expect(formModal(wrapper).props('visible')).toBe(false)
+  })
+
+  it('「添加上游」→ visible=true、无编辑源、非复制态', async () => {
+    const cluster = makeCluster()
+    const wrapper = await mountClusterUpstreams(cluster)
+    await wrapper.find('.node-actions').findAll('button.mock-btn')[0].trigger('click')
+    expect(formModal(wrapper).props('visible')).toBe(true)
+    expect(formModal(wrapper).props('editingUpstream')).toBeNull()
+    expect(formModal(wrapper).props('copyingUpstream')).toBe(false)
+  })
+
+  it('行内「编辑 / 复制」→ 编辑源与复制标记正确（复制 = 有源记录 + copying=true）', async () => {
+    const record = makeUpstream({ id: 5, name: 'u5' })
+    const cluster = makeCluster({ upstreams: [record] })
+    const wrapper = await mountClusterUpstreams(cluster)
+
+    wrapper.vm.openUpstreamForm(record, false)
     await wrapper.vm.$nextTick()
-  }
+    expect(formModal(wrapper).props('editingUpstream')).toStrictEqual(record)
+    expect(formModal(wrapper).props('copyingUpstream')).toBe(false)
 
-  // modal-overlay 在 Teleport to body 中，h2 需从 document 查询
-  const modalTitle = () => document.querySelector('.modal-overlay h2')?.textContent || ''
-
-  it('默认显示「添加上游」', async () => {
-    const cluster = makeCluster()
-    const wrapper = await mountClusterUpstreams(cluster)
-    await openModal(wrapper)
-    expect(modalTitle()).toContain('添加上游')
+    wrapper.vm.closeForm()
+    await wrapper.vm.$nextTick()
+    wrapper.vm.openUpstreamForm(record, true)
+    await wrapper.vm.$nextTick()
+    expect(formModal(wrapper).props('editingUpstream')).toStrictEqual(record)
+    expect(formModal(wrapper).props('copyingUpstream')).toBe(true)
   })
 
-  it('copyingUpstream 时显示「复制上游」', async () => {
+  it('clusters 传单元素（当前集群）：面板不开放跨集群选择', async () => {
     const cluster = makeCluster()
     const wrapper = await mountClusterUpstreams(cluster)
-    mockCopyingUpstream.value = true
-    await openModal(wrapper)
-    expect(modalTitle()).toContain('复制上游')
+    const clusters = formModal(wrapper).props('clusters') as { id: number; name: string }[]
+    expect(clusters).toHaveLength(1)
+    expect(clusters[0]).toMatchObject({ id: cluster.id, name: cluster.name })
   })
 
-  it('editingUpstream 时显示「编辑上游」', async () => {
+  it('@saved → 关闭表单并刷新该集群上游列表（「待发布」立即可见）', async () => {
     const cluster = makeCluster()
     const wrapper = await mountClusterUpstreams(cluster)
-    mockEditingUpstream.value = { id: 1, name: 'svc' }
-    mockCopyingUpstream.value = false
-    await openModal(wrapper)
-    expect(modalTitle()).toContain('编辑上游')
+    wrapper.vm.openUpstreamForm(null)
+    await wrapper.vm.$nextTick()
+    formModal(wrapper).vm.$emit('saved')
+    await flushPromises()
+    expect(formModal(wrapper).props('visible')).toBe(false)
+    expect(mockLoadUpstreams).toHaveBeenCalledWith(cluster)
+  })
+
+  it('@publish-requested → 走既有「发布确认选节点」链路（publishUpstreamByRecord）', async () => {
+    const cluster = makeCluster()
+    const wrapper = await mountClusterUpstreams(cluster)
+    formModal(wrapper).vm.$emit('publish-requested', { clusterId: 1, upstreamId: 42, name: 'u42' })
+    await flushPromises()
+    expect(mockPublishUpstreamByRecord).toHaveBeenCalledWith(cluster, { id: 42, name: 'u42' })
+  })
+
+  it('@publish-requested 无 id 时不触发发布（新增保存后 id 缺失的边角）', async () => {
+    const cluster = makeCluster()
+    const wrapper = await mountClusterUpstreams(cluster)
+    formModal(wrapper).vm.$emit('publish-requested', { clusterId: 1, upstreamId: null, name: 'u' })
+    await flushPromises()
+    expect(mockPublishUpstreamByRecord).not.toHaveBeenCalled()
   })
 })
 
@@ -414,43 +458,16 @@ describe('ClusterUpstreams.vue 版本管理发布接线 (1.3)', () => {
   })
 })
 
-describe('ClusterUpstreams.vue 表单误关保护与保存按钮 (4.4/4.8)', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    vi.clearAllMocks()
-  })
-
-  const openModal = async (wrapper: any) => {
-    wrapper.vm.upstreamModalVisible = true
-    await wrapper.vm.$nextTick()
-  }
-
-  it('× 与「取消」都走误关保护入口 closeUpstreamModal', async () => {
+// #217 断言反转（B1 表单共用）：原「× 与取消走 closeUpstreamModal」「提交按钮统一显示保存」
+// 两例的被测对象是面板内联 modal 的 footer/close——面板不再渲染它们。
+// 误关保护（dirty 确认）与提交按钮文案现由 shared core 的 UpstreamFormModal 提供，
+// 覆盖见 components/__tests__/UpstreamFormModal.test.ts；此处不重复断言组件内部行为。
+describe('ClusterUpstreams.vue 内联表单下线（B1）', () => {
+  it('表单唯一入口 = 共享组件（源码层硬守卫见 __tests__/ClusterTabSharedForms.source.test.ts）', async () => {
     const cluster = makeCluster()
     const wrapper = await mountClusterUpstreams(cluster)
-    await openModal(wrapper)
-    const closeBtn = document.querySelector('.modal-overlay .modal-close') as HTMLButtonElement
-    closeBtn?.click()
-    expect(mockCloseUpstreamModal).toHaveBeenCalledTimes(1)
-    const cancelBtn = Array.from(document.querySelectorAll('.modal-footer button')).find(
-      (b) => b.textContent === '取消',
-    ) as HTMLButtonElement
-    cancelBtn?.click()
-    expect(mockCloseUpstreamModal).toHaveBeenCalledTimes(2)
-  })
-
-  it('提交按钮统一显示「保存」', async () => {
-    const cluster = makeCluster()
-    const wrapper = await mountClusterUpstreams(cluster)
-    await openModal(wrapper)
-    const submitBtn = Array.from(document.querySelectorAll('.modal-footer button')).find(
-      (b) => b.textContent === '保存',
-    )
-    expect(submitBtn).toBeTruthy()
-    const createBtn = Array.from(document.querySelectorAll('.modal-footer button')).find(
-      (b) => b.textContent === '创建',
-    )
-    expect(createBtn).toBeUndefined()
+    expect(wrapper.findAllComponents({ name: 'UpstreamFormModal' })).toHaveLength(1)
+    expect(wrapper.findComponent({ name: 'UpstreamFormModal' }).props('visible')).toBe(false)
   })
 })
 
@@ -505,16 +522,30 @@ describe('ClusterUpstreams.vue 行内动作收敛（parity 批 B）', () => {
     expect(items[3].text()).toContain('历史版本查看与回滚')
   })
 
-  it('点击动作走既有 handleUpstreamAction（record 级入口）', async () => {
+  // B1 表单共用：编辑/复制改由面板本地状态驱动共享表单组件（不再进 composable 的
+  // editUpstreamByRecord/copyUpstreamByRecord），其余动作仍走 handleUpstreamAction 单一实现。
+  it('点击动作：复制开表单（不走 composable），发布/删除走既有 handleUpstreamAction', async () => {
     const cluster = makeCluster({ upstreams: [record] })
     const wrapper = await mountClusterUpstreams(cluster, rowStubs)
     const row = wrapper.find('.mock-tr')
 
     await row.find('button.op-pub').trigger('click')
     expect(mockUpstreamState.handleAction).toHaveBeenCalledWith(cluster, record, 'publish')
+
     const items = row.findAll('.mock-menu-item')
-    await items[0].trigger('click')
-    expect(mockUpstreamState.handleAction).toHaveBeenLastCalledWith(cluster, record, 'copy')
+    await items[0].trigger('click') // 复制
+    expect(mockUpstreamState.handleAction, '复制不再经 composable 表单态').toHaveBeenLastCalledWith(
+      cluster,
+      record,
+      'publish',
+    )
+    const form = wrapper.findComponent({ name: 'UpstreamFormModal' })
+    expect(form.props('visible')).toBe(true)
+    expect(form.props('editingUpstream')).toStrictEqual(record)
+    expect(form.props('copyingUpstream')).toBe(true)
+
+    await items[2].trigger('click') // 删除
+    expect(mockUpstreamState.handleAction).toHaveBeenLastCalledWith(cluster, record, 'delete')
   })
 
   it('列配置未勾选的动作不进菜单（配置语义保留）', async () => {

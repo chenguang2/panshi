@@ -30,7 +30,7 @@
               <ClusterSelect
                 v-model="form.cluster_id"
                 :clusters="clusters"
-                :disabled="!!editingUpstream"
+                :disabled="!!editingUpstream || !!lockCluster"
                 :class="{ 'has-error': formErrors.cluster_id }"
               />
               <div v-if="formErrors.cluster_id" class="form-error">{{ formErrors.cluster_id }}</div>
@@ -426,6 +426,10 @@ const props = defineProps<{
   editingUpstream: any | null
   copyingUpstream?: boolean
   clusters: { id: number; name: string; display_name?: string }[]
+  /** 新增态预选集群（面板场景：当前集群）；不传保持旧行为（不预选） */
+  defaultClusterId?: number | null
+  /** 锁定集群选择（面板场景：集群由上下文决定，不可改；编辑态本来已禁用） */
+  lockCluster?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -682,7 +686,7 @@ function populateForm() {
       return { key: ++targetKey, host: parsed.host, port: parsed.port, weight: t.weight }
     })
   } else {
-    form.cluster_id = ''
+    form.cluster_id = props.defaultClusterId ?? ''
     form.name = ''
     form.load_balance = 'weighted_roundrobin'
     form.hash_on = 'vars'

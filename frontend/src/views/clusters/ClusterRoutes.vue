@@ -3,7 +3,7 @@
     <!-- Toolbar：设计工具栏只留「添加路由」+ 右端「列配置」；批量删除在行内动作收敛到 ⋯ 菜单后
          仍需要工具条入口（多选场景），单条复制/编辑/发布/版本管理只在行内 -->
     <div class="node-actions">
-      <a-button size="small" type="primary" @click="showAddRouteModal(cluster)">
+      <a-button size="small" type="primary" @click="openRouteForm(null)">
         <StrokeIcon name="plus" :size="13" /> 添加路由
       </a-button>
       <a-tooltip :title="dnsInSelection ? DNS_ROUTE_HINT : undefined" placement="top">
@@ -84,7 +84,7 @@
     >
       <template #emptyText>
         <EmptyState title="暂无路由" description="添加第一条路由，将流量按规则转发到上游">
-          <a-button size="small" type="primary" @click="showAddRouteModal(cluster)">添加路由</a-button>
+          <a-button size="small" type="primary" @click="openRouteForm(null)">添加路由</a-button>
         </EmptyState>
       </template>
       <template #headerCell="{ column, title }">
@@ -159,7 +159,7 @@
                 v-if="routeActionsSelected.includes('publish')"
                 type="button"
                 class="op-pub"
-                @click="handleRouteAction(cluster, record, 'publish')"
+                @click="handleRouteRowAction(cluster, record, 'publish')"
               >
                 发布
               </button>
@@ -172,7 +172,7 @@
                     <a-menu-item
                       v-for="btn in routeMenuGroups.crud"
                       :key="btn.key"
-                      @click="handleRouteAction(cluster, record, btn.key)"
+                      @click="handleRouteRowAction(cluster, record, btn.key)"
                       >{{ btn.title }}</a-menu-item
                     >
                     <a-menu-divider v-if="routeMenuGroups.danger.length" />
@@ -180,7 +180,7 @@
                       v-for="btn in routeMenuGroups.danger"
                       :key="btn.key"
                       danger
-                      @click="handleRouteAction(cluster, record, btn.key)"
+                      @click="handleRouteRowAction(cluster, record, btn.key)"
                     >
                       <div class="menu-item-stack">
                         <span>{{ btn.title }}</span>
@@ -191,7 +191,7 @@
                     <a-menu-item
                       v-for="btn in routeMenuGroups.action"
                       :key="btn.key"
-                      @click="handleRouteAction(cluster, record, btn.key)"
+                      @click="handleRouteRowAction(cluster, record, btn.key)"
                     >
                       <div class="menu-item-stack">
                         <span>{{ btn.title }}</span>
@@ -216,162 +216,21 @@
       @change="onRoutePageChange"
     />
 
-    <!-- Route add/edit modal -->
-    <Teleport to="body">
-      <div class="modal-overlay" :style="{ display: routeModalVisible ? 'flex' : 'none' }">
-        <div class="modal" style="max-width: 800px">
-          <div class="modal-header">
-            <h2>{{ copyingRoute ? '复制路由' : editingRoute ? '编辑路由' : '添加路由' }}</h2>
-            <button class="modal-close" @click="routeModalVisible = false">&times;</button>
-          </div>
-          <div class="modal-body">
-            <a-tabs v-model:activeKey="routeModalActiveTab" :lazy="true">
-              <!-- Basic config tab -->
-              <a-tab-pane key="basic" tab="基础配置">
-                <a-form ref="routeFormRef" :model="routeForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-                  <a-form-item label="名称" name="name" :rules="[{ required: true, message: '请输入路由名称' }]">
-                    <a-input v-model:value="routeForm.name" placeholder="请输入路由名称" />
-                  </a-form-item>
-                  <a-form-item label="URI" name="uri" :rules="[{ required: true, message: '请输入URI' }]">
-                    <a-input v-model:value="routeForm.uri" placeholder="如: /api/*" />
-                  </a-form-item>
-                  <a-form-item label="请求方法" name="methods" :rules="[{ required: true, message: '请选择请求方法' }]">
-                    <a-select
-                      v-model:value="routeForm.methods"
-                      mode="multiple"
-                      placeholder="可选多个方法"
-                      style="width: 300px"
-                    >
-                      <a-select-option value="GET">GET</a-select-option>
-                      <a-select-option value="POST">POST</a-select-option>
-                      <a-select-option value="PUT">PUT</a-select-option>
-                      <a-select-option value="DELETE">DELETE</a-select-option>
-                      <a-select-option value="PATCH">PATCH</a-select-option>
-                      <a-select-option value="HEAD">HEAD</a-select-option>
-                      <a-select-option value="OPTIONS">OPTIONS</a-select-option>
-                      <a-select-option value="CONNECT">CONNECT</a-select-option>
-                      <a-select-option value="TRACE">TRACE</a-select-option>
-                    </a-select>
-                    <a
-                      style="margin-left: 8px; font-size: 12px; cursor: pointer; white-space: nowrap"
-                      @click="toggleAllMethods"
-                    >
-                      {{ allMethodsSelected ? '取消全选' : '全选' }}
-                    </a>
-                  </a-form-item>
-                  <a-form-item label="上游" name="upstream_id" :rules="[{ required: true, message: '请选择上游' }]">
-                    <a-select v-model:value="routeForm.upstream_id" placeholder="请选择上游" allow-clear>
-                      <a-select-option v-for="u in getClusterUpstreams()" :key="u.id" :value="u.id">{{
-                        u.name
-                      }}</a-select-option>
-                    </a-select>
-                  </a-form-item>
-                  <a-form-item label="优先级" name="priority" :rules="[{ required: true, message: '请输入优先级' }]">
-                    <a-input-number v-model:value="routeForm.priority" :min="0" style="width: 100%" />
-                  </a-form-item>
-                  <a-form-item label="状态" name="status" :rules="[{ required: true, message: '请选择状态' }]">
-                    <a-select v-model:value="routeForm.status">
-                      <a-select-option :value="1">正常</a-select-option>
-                      <a-select-option :value="0">禁用</a-select-option>
-                    </a-select>
-                  </a-form-item>
-                  <a-form-item label="描述" name="description">
-                    <a-textarea v-model:value="routeForm.description" :rows="2" />
-                  </a-form-item>
-                  <a-form-item label="功能开关">
-                    <div style="display: flex; gap: 24px; flex-wrap: wrap">
-                      <label class="checkbox-label" style="display: flex; align-items: center; gap: 6px">
-                        <input
-                          type="checkbox"
-                          :checked="routeForm.advancedMatchEnabled"
-                          @change="routeForm.advancedMatchEnabled = !routeForm.advancedMatchEnabled"
-                        />
-                        <span>开启高级匹配</span>
-                      </label>
-                      <label class="checkbox-label" style="display: flex; align-items: center; gap: 6px">
-                        <input type="checkbox" v-model="routeForm.enableWebsocket" />
-                        <span>启用 WebSocket</span>
-                      </label>
-                    </div>
-                  </a-form-item>
-                </a-form>
-              </a-tab-pane>
-
-              <!-- Advanced match tab -->
-              <a-tab-pane key="advanced" tab="高级匹配">
-                <div v-if="routeForm.advancedMatchEnabled" class="advanced-tab">
-                  <RouteAdvancedMatch
-                    :enabled="routeForm.advancedMatchEnabled"
-                    :model-value="{ vars: routeForm.advancedMatch.vars }"
-                    @update:model-value="
-                      (val: { vars?: (string | string[])[][] }) => {
-                        routeForm.advancedMatch.vars = val.vars || []
-                      }
-                    "
-                  />
-                </div>
-                <div v-else class="advanced-disabled-hint">
-                  <WarningOutlined style="color: #faad14; margin-right: 8px" />
-                  高级匹配未启用，请在"基础配置"中开启
-                </div>
-              </a-tab-pane>
-
-              <!-- Plugin management tab -->
-              <a-tab-pane key="plugins" tab="插件管理">
-                <PluginSelector v-model="routeForm.plugins" :plugins="availablePlugins" :upstreams="upstreamOptions" />
-              </a-tab-pane>
-
-              <!-- Plugin groups tab (permission gated) -->
-              <a-tab-pane v-if="hasPluginGroupsPermission()" key="pluginGroups" tab="插件组">
-                <div v-if="clusterPluginGroups.length === 0" class="pg-empty">
-                  暂无插件组，请先在左侧菜单「插件组」页面创建
-                </div>
-                <div v-else>
-                  <div class="pg-desc">勾选要关联到此路由的插件组，插件配置将合并到路由中</div>
-                  <div class="pg-list">
-                    <div
-                      v-for="pg in clusterPluginGroups"
-                      :key="pg.id"
-                      class="plugin-config-card"
-                      :class="{ selected: isPluginGroupSelected(pg.edge_uuid || '') }"
-                      @click="togglePluginGroup(pg)"
-                    >
-                      <div class="pg-item-header">
-                        <a-checkbox
-                          :checked="isPluginGroupSelected(pg.edge_uuid || '')"
-                          @click.stop="togglePluginGroup(pg)"
-                        />
-                        <strong class="pg-item-name">{{ pg.name }}</strong>
-                        <span v-if="pg.current_version" class="pg-item-version">v{{ pg.current_version }}</span>
-                        <span v-else class="pg-item-version pg-item-unpublished">未发布</span>
-                      </div>
-                      <div class="pg-item-plugins">
-                        <a-tag
-                          v-for="(pcfg, pname) in pg.plugins"
-                          :key="pname"
-                          color="var(--accent)"
-                          style="font-size: 11px; cursor: pointer"
-                          @click.stop="viewPluginConfigDetail(pg, pname as string, pcfg)"
-                        >
-                          {{ pname }}
-                        </a-tag>
-                      </div>
-                      <div v-if="pg.description" class="pg-item-desc">{{ pg.description }}</div>
-                    </div>
-                  </div>
-                </div>
-              </a-tab-pane>
-            </a-tabs>
-          </div>
-          <div class="modal-footer">
-            <button class="btn btn-secondary" @click="routeModalVisible = false">取消</button>
-            <button class="btn btn-primary" @click="handleRouteSubmit">
-              {{ copyingRoute ? '复制' : editingRoute ? '保存' : '创建' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
+    <!-- B1 表单共用（cluster-shared-core-plan 3.1）：路由表单统一走共享 RouteFormModal，
+         提交/校验/误关保护/保存后发布引导全在组件内；面板只负责关闭 + 列表刷新 + 发布链路对接。
+         面板只有一个集群：传单元素清单 + defaultClusterId 预选，集群选择在编辑态由组件既有逻辑禁用；
+         请求方法为组件现形态（胶囊 chips，不再是下拉多选）。 -->
+    <RouteFormModal
+      :visible="formVisible"
+      :editing-route="editingRoute"
+      :copying-route="copyingRoute"
+      :clusters="formClusters"
+      :default-cluster-id="props.cluster.id"
+      lock-cluster
+      @close="closeForm"
+      @saved="onFormSaved"
+      @publish-requested="onFormPublishRequested"
+    />
 
     <!-- Version management modal -->
     <VersionManagementModal
@@ -399,8 +258,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, h, toValue, type Ref } from 'vue'
-import { WarningOutlined } from '@ant-design/icons-vue'
+import { ref, computed, toValue, type Ref } from 'vue'
 import type { Cluster, Route } from '@/types'
 import { useClusterRoutes } from '@/composables/useClusterRoutes'
 import { useColumnDragColumns } from '@/composables/useColumnDragColumns'
@@ -409,10 +267,8 @@ import BadgeStatus from '@/components/BadgeStatus.vue'
 import PublishStatusTag from '@/components/PublishStatusTag.vue'
 import PublishDiffButton from '@/components/PublishDiffButton.vue'
 import PublishPreviewModal from '@/components/PublishPreviewModal.vue'
-import RouteAdvancedMatch from '@/components/RouteAdvancedMatch.vue'
+import RouteFormModal from '@/components/RouteFormModal.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
-import PluginSelector from '@/components/PluginSelector.vue'
-import { toUpstreamSelectOptions } from '@/utils/upstreamOptions'
 import ColumnConfigPopover from '@/components/ColumnConfigPopover.vue'
 import ListPager from '@/components/ListPager.vue'
 import SearchInput from '@/components/SearchInput.vue'
@@ -459,14 +315,61 @@ const versionModalClusterId = ref<number | null>(null)
 const versionModalResourceName = ref('')
 const versionModalEdgeUuid = ref('')
 
+// ── B1 表单共用（cluster-shared-core-plan 3.1）：表单状态由面板自持（与集群子页 ClusterGlobalRules 同构），
+//    提交/校验/误关保护全在共享 RouteFormModal 内；composable 的表单态不再驱动面板表单。 ──
+const formVisible = ref(false)
+const editingRoute = ref<Route | null>(null)
+const copyingRoute = ref(false)
+/** 面板只有当前集群：单元素清单（组件内 ClusterSelect 编辑态禁用，add 态仅一个可选项） */
+const formClusters = computed(() => [
+  { id: props.cluster.id, name: props.cluster.name, display_name: props.cluster.display_name },
+])
+
+/** 表单以「编辑源记录」为唯一入参：复制 = editingRoute 有值 + copyingRoute 置位（组件内改名「复制_xxx」） */
+function openRouteForm(record: Route | null, copy = false) {
+  editingRoute.value = record
+  copyingRoute.value = copy && record != null
+  formVisible.value = true
+}
+
+function closeForm() {
+  formVisible.value = false
+  editingRoute.value = null
+  copyingRoute.value = false
+}
+
+/** 保存成功（组件已 emit saved + close）：刷新该集群路由列表，使「待发布」标签立即可见 */
+async function onFormSaved() {
+  closeForm()
+  await loadRoutes(props.cluster)
+}
+
+/** 保存后发布引导「立即发布」→ 复用既有发布链路（publishByRecord：发布确认选节点，不自动发布） */
+function onFormPublishRequested(payload: {
+  clusterId: number
+  routeId: number | null
+  name: string
+  currentVersion: number | null
+}) {
+  if (payload.routeId == null) return
+  void publishRouteByRecord(props.cluster, {
+    id: payload.routeId,
+    name: payload.name,
+    current_version: payload.currentVersion ?? undefined,
+  } as Route)
+}
+
+/** 行内 ⋯ 菜单入口：编辑/复制由面板本地表单承接，其余（发布/版本/删除）仍走 composable 单一实现 */
+function handleRouteRowAction(cluster: Cluster, record: Route, action: string) {
+  if (action === 'edit' || action === 'copy') {
+    openRouteForm(record, action === 'copy')
+    return
+  }
+  handleRouteAction(cluster, record, action)
+}
+
 // ── Composable ──────────────────────────────────────────────────────
 const {
-  routeModalVisible,
-  routeModalActiveTab,
-  editingRoute,
-  copyingRoute,
-  routeForm,
-  routeFormRef,
   allRouteColumns,
   routeColumnPopoverVisible,
   routeColumnsSelected,
@@ -479,27 +382,15 @@ const {
   routeActionsSelected,
   visibleRouteColumns,
   allActionButtons,
-  availablePlugins,
-  clusterPluginGroups,
-  allMethodsSelected,
-  toggleAllMethods,
-  isPluginGroupSelected,
-  togglePluginGroup,
-  viewPluginConfigDetail,
-  getClusterUpstreams,
   getUpstreamName,
   handleRouteAction,
-  selectRoute,
   selectRoutes,
   isDnsRoute,
   loadRoutes,
   handleRouteTableChange,
-  showAddRouteModal,
-  handleRouteSubmit,
   deleteRoute,
   deleteRoutes,
   publishRouteByRecord,
-  hasPluginGroupsPermission,
 } = useClusterRoutes({
   clusters: computed(() => props.clusters),
   currentClusterId,
@@ -535,9 +426,6 @@ function handleResetRouteColumnWidths(): void {
   routeColumnPopoverVisible.value = false
   message.success('已恢复默认列宽')
 }
-
-// ── Upstream options for traffic_split plugin dropdown ────────────
-const upstreamOptions = computed(() => toUpstreamSelectOptions(getClusterUpstreams()))
 
 // ── 表格序号列 + 表外分页（central-management-parity 批次 A）─────────────
 // 序号列恒展示、不进列配置勾选项（antd CheckboxGroup 会剔除选项外的已选值），
@@ -695,86 +583,5 @@ function methodTitle(methods?: string | null): string {
 /* ── 选中行高亮（batch1 组5 5.3）：selectedRoute 来源为行点选或勾选均生效，与 ClusterUpstreams 行选中风格一致 ── */
 .node-table :deep(tr.row-selected > td) {
   background: oklch(56% 0.16 210 / 10%) !important;
-}
-
-.advanced-tab {
-  min-height: 100px;
-}
-
-.advanced-disabled-hint {
-  padding: 40px 0;
-  text-align: center;
-  color: rgba(255, 255, 255, 0.35);
-}
-
-.plugin-config-card {
-  transition: all 0.2s;
-}
-
-.plugin-config-card:hover {
-  border-color: var(--accent) !important;
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 20%, transparent);
-}
-
-.plugin-config-card.selected {
-  border-color: var(--accent) !important;
-  background: oklch(56% 0.16 210 / 10%) !important;
-}
-
-/* Plugin group tab inside route modal */
-.pg-empty {
-  padding: 40px 0;
-  text-align: center;
-  color: var(--muted);
-}
-.pg-desc {
-  margin-bottom: 12px;
-  font-size: 12px;
-  color: var(--muted);
-}
-.pg-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-.plugin-config-card {
-  width: 280px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 12px;
-  cursor: pointer;
-  transition: all 0.2s;
-  background: var(--bg);
-}
-.plugin-config-card:hover {
-  border-color: var(--accent);
-  box-shadow: var(--shadow-sm);
-}
-.pg-item-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 6px;
-}
-.pg-item-name {
-  font-size: 13px;
-  color: var(--fg);
-}
-.pg-item-version {
-  font-size: 11px;
-  color: var(--muted);
-}
-.pg-item-unpublished {
-  color: #fa8c16;
-}
-.pg-item-plugins {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-bottom: 8px;
-}
-.pg-item-desc {
-  font-size: 11px;
-  color: var(--muted);
 }
 </style>

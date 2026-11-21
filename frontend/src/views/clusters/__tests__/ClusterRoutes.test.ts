@@ -89,6 +89,13 @@ const stubs = {
   },
   BadgeStatus: { template: '<span />' },
   VersionManagementModal: { template: '<div class="mock-version-modal" />' },
+  // B1 表单共用：内联 modal 已下线，改由共享 RouteFormModal 承接（这里只钉 props/事件接线）
+  RouteFormModal: {
+    name: 'RouteFormModal',
+    template: '<div class="mock-route-form" />',
+    props: ['visible', 'editingRoute', 'copyingRoute', 'clusters', 'defaultClusterId'],
+    emits: ['close', 'saved', 'publish-requested'],
+  },
   PluginSelector: { template: '<div class="mock-plugin-selector" />' },
   RouteAdvancedMatch: { template: '<div class="mock-route-advanced" />' },
   WarningOutlined: { template: '<span />' },
@@ -513,6 +520,92 @@ describe('ClusterRoutes.vue DNS 行操作禁用与指路（batch1 7.9 Tab 对齐
 })
 
 // ── central-management-parity 批 B：行内动作收敛为「主行动 + ⋯」三栏菜单 ──
+// ── B1 表单共用（docs/refactoring/shared-core-plan-2026-11-21.md 3.1）──
+// #217 断言反转：面板内联 4-tab 表单（方法下拉多选 / 插件组卡片）已删除，
+// 方法选择改为共享 RouteFormModal 的胶囊 chips（页面同形态）；
+// 标题、校验、误关保护、提交口径的断言由 components/__tests__/RouteFormModal.test.ts 覆盖，
+// 面板侧只钉「引用共享组件 + 入参 / 事件接线」。
+describe('ClusterRoutes.vue 共享表单接线（B1 表单共用）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockIsDnsRoute.mockImplementation(
+      (r: any) => Array.isArray(r?.plugins) && r.plugins.some((p: any) => p.plugin_name === 'dns_upstream'),
+    )
+  })
+
+  const formModal = (wrapper: any) => wrapper.findComponent({ name: 'RouteFormModal' })
+
+  it('渲染共享 RouteFormModal，并传 defaultClusterId = 面板集群（编辑态集群禁用）', async () => {
+    const cluster = makeCluster()
+    const wrapper = await mountClusterRoutes(cluster)
+    const modal = formModal(wrapper)
+    expect(modal.exists()).toBe(true)
+    expect(modal.props('visible')).toBe(false)
+    expect(modal.props('defaultClusterId')).toBe(cluster.id)
+    const clusters = modal.props('clusters') as { id: number; name: string }[]
+    expect(clusters).toHaveLength(1)
+    expect(clusters[0]).toMatchObject({ id: cluster.id, name: cluster.name })
+  })
+
+  it('「添加路由」→ visible=true、无编辑源、非复制态', async () => {
+    const cluster = makeCluster()
+    const wrapper = await mountClusterRoutes(cluster)
+    await wrapper.find('.node-actions').findAll('button.mock-btn')[0].trigger('click')
+    expect(formModal(wrapper).props('visible')).toBe(true)
+    expect(formModal(wrapper).props('editingRoute')).toBeNull()
+    expect(formModal(wrapper).props('copyingRoute')).toBe(false)
+  })
+
+  it('本地表单入口：编辑 / 复制传给组件的源记录与复制标记正确', async () => {
+    const record = { id: 7, edge_uuid: 'e7', cluster_id: 1, name: 'r7', uri: '/a', priority: 0, status: 1 }
+    const cluster = makeCluster({ routes: [record] })
+    const wrapper = await mountClusterRoutes(cluster)
+
+    wrapper.vm.openRouteForm(record, false)
+    await wrapper.vm.$nextTick()
+    expect(formModal(wrapper).props('editingRoute')).toStrictEqual(record)
+    expect(formModal(wrapper).props('copyingRoute')).toBe(false)
+
+    wrapper.vm.closeForm()
+    await wrapper.vm.$nextTick()
+    wrapper.vm.openRouteForm(record, true)
+    await wrapper.vm.$nextTick()
+    expect(formModal(wrapper).props('editingRoute')).toStrictEqual(record)
+    expect(formModal(wrapper).props('copyingRoute')).toBe(true)
+  })
+
+  it('@saved → 关闭表单并刷新该集群路由列表', async () => {
+    const cluster = makeCluster()
+    const wrapper = await mountClusterRoutes(cluster)
+    wrapper.vm.openRouteForm(null)
+    await wrapper.vm.$nextTick()
+    formModal(wrapper).vm.$emit('saved')
+    await flushPromises()
+    expect(formModal(wrapper).props('visible')).toBe(false)
+    expect(mockLoadRoutes).toHaveBeenCalled()
+  })
+
+  it('@publish-requested → 走既有「发布确认选节点」链路（publishRouteByRecord）', async () => {
+    const cluster = makeCluster()
+    const wrapper = await mountClusterRoutes(cluster)
+    formModal(wrapper).vm.$emit('publish-requested', { clusterId: 1, routeId: 11, name: 'r11', currentVersion: 3 })
+    await flushPromises()
+    expect(mockPublishRouteByRecord).toHaveBeenCalledWith(
+      cluster,
+      expect.objectContaining({ id: 11, name: 'r11', current_version: 3 }),
+    )
+  })
+
+  it('@publish-requested 无 id 时不触发发布', async () => {
+    const cluster = makeCluster()
+    const wrapper = await mountClusterRoutes(cluster)
+    formModal(wrapper).vm.$emit('publish-requested', { clusterId: 1, routeId: null, name: 'r', currentVersion: null })
+    await flushPromises()
+    expect(mockPublishRouteByRecord).not.toHaveBeenCalled()
+  })
+})
+
 describe('ClusterRoutes.vue 行内动作收敛（parity 批 B）', () => {
   const rowStubs = {
     ...stubs,
@@ -564,7 +657,9 @@ describe('ClusterRoutes.vue 行内动作收敛（parity 批 B）', () => {
     expect(items[3].text()).toContain('历史版本查看与回滚')
   })
 
-  it('点击动作走既有 handleRouteAction（record 级入口，未改业务语义）', async () => {
+  // B1 表单共用：编辑/复制改由面板本地状态驱动共享表单组件（不再进 composable 的
+  // editRouteByRecord/copyRouteByRecord），其余动作仍走 handleRouteAction 单一实现。
+  it('点击动作：复制开表单（不走 composable），发布/删除/版本走既有 handleRouteAction', async () => {
     const cluster = makeCluster({ routes: [record] })
     const wrapper = await mountClusterRoutes(cluster, rowStubs)
     const row = wrapper.find('.mock-tr')
@@ -573,11 +668,20 @@ describe('ClusterRoutes.vue 行内动作收敛（parity 批 B）', () => {
     expect(mockState.handleRouteAction).toHaveBeenCalledWith(cluster, record, 'publish')
 
     const items = row.findAll('.mock-menu-item')
-    await items[0].trigger('click')
-    expect(mockState.handleRouteAction).toHaveBeenLastCalledWith(cluster, record, 'copy')
-    await items[2].trigger('click')
+    await items[0].trigger('click') // 复制路由
+    expect(mockState.handleRouteAction, '复制不再经 composable 表单态').toHaveBeenLastCalledWith(
+      cluster,
+      record,
+      'publish',
+    )
+    const form = wrapper.findComponent({ name: 'RouteFormModal' })
+    expect(form.props('visible')).toBe(true)
+    expect(form.props('editingRoute')).toStrictEqual(record)
+    expect(form.props('copyingRoute')).toBe(true)
+
+    await items[2].trigger('click') // 删除
     expect(mockState.handleRouteAction).toHaveBeenLastCalledWith(cluster, record, 'delete')
-    await items[3].trigger('click')
+    await items[3].trigger('click') // 版本管理
     expect(mockState.handleRouteAction).toHaveBeenLastCalledWith(cluster, record, 'version')
   })
 
