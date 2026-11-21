@@ -1116,6 +1116,15 @@ describe('central-management-parity 批 A：最大化面板 Tab 解剖单点（s
     expect(s).toContain('.max-panel .dbody .node-table.grid-table .ant-table-cell {')
   })
 
+  it('antd 列宽测量行复位为 0 高（否则表头下出现 21px 空白窄带）', () => {
+    const s = section()
+    // 特异性必须 ≥ 单元格内距规则（4 类），否则 padding 复位被压过
+    expect(s).toMatch(
+      /\.max-panel \.dbody \.node-table \.ant-table-tbody > tr\.ant-table-measure-row > td[\s\S]*?padding: 0 !important;/,
+    )
+    expect(s).toMatch(/\.max-panel \.dbody \.ant-table-measure-row \{[\s\S]*?height: 0 !important;/)
+  })
+
   it('单元格与行内按钮尺寸 + 分页条独立成带（上边框 + 10px 内距）', () => {
     const s = section()
     // 设计 .l5-table tbody td 实测 10px 12px（表头保持 9px 12px）

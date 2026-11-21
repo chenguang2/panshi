@@ -3747,6 +3747,22 @@ th.resizable {
   background: var(--bg) !important;
 }
 
+/* antd 列宽测量行（.ant-table-measure-row）：面板内 td 内距规则会把它撑成 21px，
+   表现为「表头下一条空白窄带」；复位为 0 高（独立页同项为 1px 边框） */
+.max-panel .dbody .ant-table-measure-row {
+  height: 0 !important;
+}
+/* 特异性必须 >= 单元格内距规则（.max-panel .dbody .node-table .ant-table-tbody > tr > td，4 类），
+   否则 padding 复位被压过（实测首次 3 类选择器无效） */
+.max-panel .dbody .node-table .ant-table-tbody > tr.ant-table-measure-row > td,
+.max-panel .dbody .ant-table-tbody > tr.ant-table-measure-row > td {
+  padding: 0 !important;
+  border: none !important;
+  height: 0 !important;
+  line-height: 0 !important;
+  font-size: 0 !important;
+}
+
 /* ── Tab 内容封闭容器（用户 2026-11-21 裁决）──
    面板内 7 个 Tab 与左侧菜单对应模块同构：一张 1px 边框卡片包住「工具条 + 表格/卡片网格 + 分页条」，
    不再敞在面板里。**内层不加 box-shadow**（面板本身已是卡片，叠加会出现双层阴影，用户明确排除）。
