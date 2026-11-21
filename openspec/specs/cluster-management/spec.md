@@ -27,32 +27,32 @@ The following publish operations SHALL use the unified node-select confirm dialo
 - 插件元数据发布 (`publishPlugin`)
 
 #### Scenario: Upstream publish uses node select
-- **WHEN** the user clicks "发布" on an upstream in ClusterList.vue
+- **WHEN** the user clicks "发布" on an upstream row/card in the upstream resource list (standalone `/upstreams` page or the 统一管理 panel Tab, which renders the same `UpstreamList.vue` in `scopedClusterId` mode)
 - **THEN** the node-select confirm dialog SHALL appear
 - **THEN** after selection, calling `POST /clusters/{id}/upstreams/{upstream_id}/publish` with selected `node_ids`
 
 #### Scenario: Route publish uses node select
-- **WHEN** the user clicks "发布" on a route in ClusterList.vue
+- **WHEN** the user clicks "发布" on a route row in the route resource list (standalone `/routes` page or the 统一管理 panel Tab, same `RouteList.vue` in `scopedClusterId` mode)
 - **THEN** same node-select confirm dialog SHALL appear
 - **THEN** after selection, calling `POST /clusters/{id}/routes/{route_id}/publish` with selected `node_ids`
 
 #### Scenario: Plugin config publish uses node select
-- **WHEN** the user clicks "发布" on a plugin config in ClusterList.vue
+- **WHEN** the user clicks "发布" on a plugin config card in the plugin config resource list (standalone `/plugin-configs` page or the 统一管理 panel Tab, same `PluginConfigList.vue` in `scopedClusterId` mode)
 - **THEN** same node-select confirm dialog SHALL appear
 - **THEN** after selection, calling `POST /clusters/{id}/plugin_configs/{config_id}/publish` with selected `node_ids`
 
 #### Scenario: Global rule publish uses node select
-- **WHEN** the user clicks "发布" on a global rule in ClusterList.vue
+- **WHEN** the user clicks "发布" on a global rule card in the global rule resource list (standalone `/global-rules` page or the 统一管理 panel Tab, same `GlobalRuleList.vue` in `scopedClusterId` mode)
 - **THEN** same node-select confirm dialog SHALL appear
 - **THEN** after selection, calling `POST /clusters/{id}/global_rules/{rule_id}/publish` with selected `node_ids`
 
 #### Scenario: Static resource publish uses node select
-- **WHEN** the user clicks "发布" on a static resource in ClusterList.vue
+- **WHEN** the user clicks "发布" on a static resource card in the static resource list (standalone `/static-resources` page or the 统一管理 panel Tab, same `StaticResourceList.vue` in `scopedClusterId` mode)
 - **THEN** same node-select confirm dialog SHALL appear
 - **THEN** after selection, calling `POST /clusters/{id}/static_resources/{sr_id}/publish` with selected `node_ids`
 
 #### Scenario: Plugin metadata publish uses node select
-- **WHEN** the user clicks "发布" on a configured plugin in PluginMetadata.vue (formerly GlobalPluginSelector.vue)
+- **WHEN** the user clicks "发布" on a configured plugin card in the plugin metadata list (standalone `/plugin-metadata` page or the 统一管理 panel Tab, same `PluginMetadataList.vue` in `scopedClusterId` mode)
 - **THEN** same node-select confirm dialog SHALL appear
 - **THEN** after selection, calling `POST /clusters/{id}/plugin-metadata/{plugin_name}/publish` with selected `node_ids`
 
@@ -77,20 +77,6 @@ The following publish operations SHALL use the unified node-select confirm dialo
 #### Scenario: DB 侧删除
 - **WHEN** 用户选择「从数据库删除」后确认删除集群
 - **THEN** 系统 SHALL 删除该集群下所有四层代理和 SSL 证书的数据库记录
-
-### Requirement: GlobalPluginSelector SHALL be renamed to PluginMetadata
-
-The component file, CSS class, import, and template tag SHALL be updated to reflect the new name.
-
-#### Scenario: Component file renamed
-- **WHEN** inspecting the file system
-- **THEN** `GlobalPluginSelector.vue` SHALL be renamed to `PluginMetadata.vue`
-- **THEN** the internal CSS class `.global-plugin-selector` SHALL be renamed to `.plugin-metadata`
-
-#### Scenario: All references updated
-- **WHEN** inspecting `ClusterList.vue`
-- **THEN** `import GlobalPluginSelector from '@/components/GlobalPluginSelector.vue'` SHALL be updated to `import PluginMetadata from '@/components/PluginMetadata.vue'`
-- **THEN** `<GlobalPluginSelector :cluster-id="cluster.id" />` SHALL be updated to `<PluginMetadata :cluster-id="cluster.id" />`
 
 ### Requirement: 前端删除资源标签
 

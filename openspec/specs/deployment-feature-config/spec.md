@@ -177,12 +177,12 @@ FastAPI 应用 SHALL 在启动时根据 `features.yaml` 条件性注册 API 路�
 
 #### Scenario: 安装功能启用
 - **WHEN** `featuresStore.has('install_openresty')` 返回 `true`
-- **THEN** NodeList.vue 行下拉菜单中的"安装 OpenResty"和"安装 Edge"按钮 SHALL 显示
-- **AND** ClusterNodes.vue 中的"安装"下拉按钮 SHALL 显示
+- **THEN** `NodeList.vue` 行内动作菜单（`⋯`）中的"安装 OpenResty"和"安装 Edge"项 SHALL 显示
+- **AND** 统一管理面板「集群节点」Tab（同一 `NodeList.vue` 的 `scopedClusterId` 形态）SHALL 显示同一组安装项
 
 #### Scenario: 安装功能禁用
 - **WHEN** `featuresStore.has('install_openresty')` 返回 `false`
-- **THEN** 上述安装按钮 SHALL NOT 渲染
+- **THEN** 上述安装项 SHALL NOT 渲染
 - **AND** 节点的启动/停止/状态/对比等核心操作按钮 SHALL 不受影响
 
 ### Requirement: 插件白名单硬过滤
