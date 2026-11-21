@@ -1,5 +1,12 @@
 <template>
   <div class="plugin-metadata">
+    <!-- 工具条（设计 central.html Tab5 .tab-toolbar）：创建入口由共享弹窗承载；
+         面板内由 style.css 的 .max-panel .dbody .node-actions 压成 30px 浅底描边 -->
+    <div class="node-actions">
+      <a-button size="small" type="primary" class="add-metadata-btn" @click="createVisible = true">
+        <StrokeIcon name="plus" :size="13" /> 添加插件元数据
+      </a-button>
+    </div>
     <div class="plugin-panels">
       <div class="panel available-panel">
         <div class="panel-header">
@@ -17,14 +24,11 @@
             <div v-if="expandedCategories[group.key]" class="plugin-tree">
               <div v-for="plugin in group.plugins" :key="plugin.name" class="tree-item">
                 <div class="tree-connector"></div>
-                <div class="plugin-card" :class="'border-' + group.key" @click="addPlugin(plugin)">
+                <div class="plugin-card" :class="'border-' + group.key">
                   <div class="plugin-card-body">
                     <div class="plugin-card-name">{{ plugin.name }}</div>
                     <div class="plugin-card-desc">{{ plugin.description }}</div>
                   </div>
-                  <a-button size="small" type="primary" class="add-btn" @click.stop="addPlugin(plugin)"
-                    ><span>添加</span></a-button
-                  >
                 </div>
               </div>
             </div>
@@ -75,7 +79,7 @@
             </div>
           </div>
           <div v-if="configuredPlugins.length === 0" style="width: 100%">
-            <EmptyState title="暂无插件元数据" description='点击左侧可用插件卡片上的"添加"按钮开始配置' />
+            <EmptyState title="暂无插件元数据" description='点击上方"添加插件元数据"按钮开始配置' />
           </div>
         </div>
       </div>
@@ -137,6 +141,16 @@
       @cancel="handlePublishCancel"
     />
 
+    <!-- 添加插件元数据（B2c：两入口共享创建弹窗，集群锁定为当前 Tab 的集群） -->
+    <PluginMetadataCreateModal
+      :visible="createVisible"
+      :clusters="createClusterOptions"
+      :default-cluster-id="clusterId"
+      lock-cluster
+      @close="createVisible = false"
+      @saved="handleCreateSaved"
+    />
+
     <!-- 发布差异预览（publish-diff-preview-batch1）：自持拉取；「去发布」接既有发布流程 -->
     <PublishPreviewModal
       v-model:open="previewVisible"
@@ -161,7 +175,10 @@ import PublishStatusTag from '@/components/PublishStatusTag.vue'
 import PublishDiffButton from '@/components/PublishDiffButton.vue'
 import PublishPreviewModal from '@/components/PublishPreviewModal.vue'
 import EmptyState from '@/components/EmptyState.vue'
+import StrokeIcon from '@/components/StrokeIcon.vue'
+import PluginMetadataCreateModal from '@/components/PluginMetadataCreateModal.vue'
 import { formatDate } from '@/utils/format'
+import { filterMetadataPlugins } from '@/utils/pluginMetadataCatalog'
 import type { PluginMetadata } from '@/types'
 import { showDeleteConfirm, executePublish, executeDeleteWithProgress } from '@/composables/useClusterUtils'
 import { showOverlayModal } from '@/composables/useOverlayModal'
@@ -183,6 +200,8 @@ interface ConfiguredPlugin extends PluginMetadata {
 const props = defineProps<{
   clusterId: number
   nodes?: { id: number; ip: string; management_port: number }[]
+  /** 集群显示名（创建弹窗的所属集群标签；缺省回落「集群 <id>」） */
+  clusterName?: string
 }>()
 
 const searchText = ref('')
@@ -269,17 +288,22 @@ const versionModalPluginName = ref('')
 
 const featuresStore = useFeaturesStore()
 
-const availablePlugins = computed(() => {
-  const configuredNames = new Set(configuredPlugins.value.map((p) => p.plugin_name))
+// ── 添加插件元数据（B2c）：共享创建弹窗，集群由 Tab 上下文决定（锁定）──
+const createVisible = ref(false)
+const createClusterOptions = computed(() => [
+  { id: props.clusterId, name: props.clusterName || `集群 ${props.clusterId}` },
+])
+
+const availablePlugins = computed(() =>
   // plugin-metadata-plugins-config：可选 = 目录 ∩ features.yaml 专用清单
   // plugin_metadata_plugins（空/未配置 = 不限制），再做「未配置去重」；
-  // 与独立页 PluginMetadataList 同一份清单（旧 Python 写死开关已退役，
-  // 见 openspec plugin-metadata-plugins-config）。
-  const allowed = featuresStore.metadataPlugins
-  return allPlugins.value.filter(
-    (p) => (allowed.length === 0 || allowed.includes(p.name)) && !configuredNames.has(p.name),
-  )
-})
+  // 与独立页同一份清单与同一条过滤实现（utils/pluginMetadataCatalog 单点）。
+  filterMetadataPlugins(
+    allPlugins.value,
+    featuresStore.metadataPlugins,
+    configuredPlugins.value.map((p) => p.plugin_name),
+  ),
+)
 
 const loadPlugins = async () => {
   // features 清单兜底加载（main.ts 启动已预载；失败静默 = 不限制）
@@ -306,27 +330,18 @@ const loadConfiguredPlugins = async () => {
   }
 }
 
-const addPlugin = async (plugin: Plugin) => {
-  try {
-    await api.post(`/clusters/${props.clusterId}/plugin-metadata?plugin_name=${plugin.name}`)
-    await loadConfiguredPlugins()
-    // publish-guide 批 3：添加即保存——单通道引导替代 toast（立即发布复用既有发布链路，不自动发布）
-    showOverlayModal({
-      title: '保存成功',
-      content: '配置尚未发布，发布后才会推送到 Edge 节点生效。',
-      okText: '立即发布',
-      cancelText: '稍后',
-      onOk: () => {
-        void publishPlugin({ plugin_name: plugin.name } as ConfiguredPlugin)
-      },
-    })
-  } catch (error: any) {
-    if (error.response?.status === 400) {
-      message.warning('该插件已配置')
-    } else {
-      message.error('添加插件失败')
-    }
-  }
+/** 共享创建弹窗保存成功：刷新已配置列表 + publish-guide 单通道引导（复用既有发布链路，不自动发布） */
+const handleCreateSaved = async (payload: { clusterId: number; pluginName: string }) => {
+  await loadConfiguredPlugins()
+  showOverlayModal({
+    title: '保存成功',
+    content: '配置尚未发布，发布后才会推送到 Edge 节点生效。',
+    okText: '立即发布',
+    cancelText: '稍后',
+    onOk: () => {
+      void publishPlugin({ plugin_name: payload.pluginName } as ConfiguredPlugin)
+    },
+  })
 }
 
 const viewPlugin = (item: ConfiguredPlugin) => {
@@ -498,10 +513,22 @@ watch(
 
 <style scoped>
 .plugin-metadata {
-  padding: 16px;
+  /* 工具条自成一条通栏带（.max-panel .dbody .node-actions 提供内外距与下分隔线），
+     故外层不再留内距，内距交给 .plugin-panels —— 否则工具条会被缩进 32px。 */
+  padding: 0;
   display: flex;
   flex-direction: column;
   height: 100%;
+}
+
+/* 工具条兜底形态（面板内由 style.css 的 .max-panel .dbody .node-actions 覆盖为 30px 浅底描边） */
+.node-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
 }
 
 .plugin-panels {
@@ -509,6 +536,7 @@ watch(
   gap: 16px;
   flex: 1;
   min-height: 0;
+  padding: 16px;
 }
 
 .panel {
@@ -695,14 +723,8 @@ watch(
   padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: 6px;
-  cursor: pointer;
   background: var(--bg);
-  transition: all 0.2s;
   min-width: 0;
-}
-.plugin-card:hover {
-  border-color: var(--accent);
-  box-shadow: 0 1px 4px var(--shadow-sm);
 }
 
 .plugin-card-body {
@@ -724,17 +746,6 @@ watch(
   color: var(--muted);
   line-height: 1.4;
   overflow-wrap: break-word;
-}
-.plugin-card .add-btn {
-  flex-shrink: 0;
-  opacity: 0.85;
-  transition:
-    opacity 0.2s,
-    transform 0.15s;
-}
-.plugin-card:hover .add-btn {
-  opacity: 1;
-  transform: scale(1.05);
 }
 
 .border-flow {

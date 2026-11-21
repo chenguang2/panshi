@@ -267,47 +267,13 @@
       </div>
     </div>
 
-    <!-- Create Modal -->
-    <div class="modal-overlay" :style="{ display: createVisible ? 'flex' : 'none' }">
-      <div class="modal">
-        <div class="modal-header">
-          <h2>添加插件元数据</h2>
-          <button class="modal-close" @click="createVisible = false">&times;</button>
-        </div>
-        <div class="modal-body">
-          <div class="form-group">
-            <label class="form-label">所属集群 <span class="required">*</span></label>
-            <ClusterSelect v-model="createClusterId" :clusters="clusters" @change="onCreateClusterChange" />
-          </div>
-          <div class="form-group">
-            <label class="form-label">插件名称 <span class="required">*</span></label>
-            <select v-model="createPluginName" class="form-input" :disabled="!createClusterId">
-              <option value="" disabled>请选择插件</option>
-              <option v-for="p in availablePlugins" :key="p.name" :value="p.name">
-                {{ p.name }} — {{ p.description }}
-              </option>
-            </select>
-          </div>
-          <div class="create-info-box">
-            <svg
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.5"
-              style="width: 14px; height: 14px; flex-shrink: 0"
-            >
-              <path d="M8 4v4M8 12h0" />
-              <circle cx="8" cy="8" r="7" />
-            </svg>
-            <span>创建后可在列表页编辑配置</span>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" @click="createVisible = false">取消</button>
-          <button class="btn btn-primary" :disabled="!canCreate" @click="handleCreateDirect">保存</button>
-        </div>
-      </div>
-    </div>
+    <!-- 添加插件元数据（B2c：与统一管理面板共用创建弹窗；本页集群可改） -->
+    <PluginMetadataCreateModal
+      :visible="createVisible"
+      :clusters="clusters"
+      @close="createVisible = false"
+      @saved="handleCreateSaved"
+    />
 
     <!-- View Drawer -->
     <a-drawer
@@ -387,17 +353,12 @@ import ClusterSelect from '@/components/ClusterSelect.vue'
 const route = useRoute()
 import { message } from 'ant-design-vue'
 import { PAGE_SIZE_CARD_GRID } from '@/constants'
-import {
-  listGlobalPluginMetadata,
-  listBuiltinPlugins,
-  listClusterPluginMetadata,
-  addClusterPluginMetadata,
-  updateClusterPluginMetadata,
-} from '@/api/pluginMetadata'
+import { listGlobalPluginMetadata, listBuiltinPlugins, updateClusterPluginMetadata } from '@/api/pluginMetadata'
 import { listClusters, getClusterNodes } from '@/api/clusters'
 import PageHeader from '@/components/PageHeader.vue'
 import PageStatBadges from '@/components/PageStatBadges.vue'
 import PluginEditorDrawer from '@/components/PluginEditorDrawer.vue'
+import PluginMetadataCreateModal from '@/components/PluginMetadataCreateModal.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import PublishDiffButton from '@/components/PublishDiffButton.vue'
@@ -415,6 +376,7 @@ import StrokeIcon from '@/components/StrokeIcon.vue'
 import ClusterBand from '@/components/ClusterBand.vue'
 import TableToolbar from '@/components/TableToolbar.vue'
 import { useFeaturesStore } from '@/stores/features'
+import { filterMetadataPlugins, metadataPluginLabel } from '@/utils/pluginMetadataCatalog'
 
 // ——— List view state ———
 const items = ref<any[]>([])
@@ -455,12 +417,9 @@ function onGroupChange() {
 
 // ——— Create modal state ———
 const createVisible = ref(false)
-const createClusterId = ref<number | string>('')
-const createPluginName = ref<string>('')
-const configuredNamesInCluster = ref<Set<string>>(new Set())
-const builtinPlugins = ref<any[]>([])
 
 // ——— Edit drawer state ———
+const builtinPlugins = ref<any[]>([])
 const editorDrawerVisible = ref(false)
 const editingPlugin = ref<any>(null)
 const editingPluginInfo = ref<any>(null)
@@ -517,23 +476,7 @@ const vmId = ref<number | null>(null)
 const vmClusterId = ref<number | null>(null)
 const vmName = ref('')
 
-const canCreate = computed(() => createClusterId.value && createPluginName.value)
-
 const featuresStore = useFeaturesStore()
-
-/**
- * plugin-metadata-plugins-config：可选插件 = 目录（enabled_plugins 平台层已滤）
- * ∩ features.yaml 专用清单 plugin_metadata_plugins（空/未配置 = 不限制），
- * 再做「未配置去重」。清单是唯一事实源（旧 Python 写死开关已退役，
- * 见 openspec plugin-metadata-plugins-config）。
- */
-const availablePlugins = computed(() => {
-  if (!createClusterId.value) return []
-  const allowed = featuresStore.metadataPlugins
-  return builtinPlugins.value.filter(
-    (p: any) => (allowed.length === 0 || allowed.includes(p.name)) && !configuredNamesInCluster.value.has(p.name),
-  )
-})
 
 function onSearch() {
   onDebouncedSearch(() => {
@@ -550,15 +493,14 @@ function onPluginFilterChange(): void {
 }
 
 /** 「全部插件」下拉选项 = 该功能可用的插件清单（目录 ∩ features.plugin_metadata_plugins，**不**排除已配置项——
- *  筛选要能选到「暂无记录」的插件，与新建弹窗的 availablePlugins（排除已配置）语义不同）。
+ *  筛选要能选到「暂无记录」的插件，与创建弹窗的下拉（排除已配置）语义不同；两者共用
+ *  `utils/pluginMetadataCatalog` 的同一过滤实现，此处不传排除集合即可）。
  *  文案用**中文名**（`display_name || name`，与路由/上游的 PluginSelector 一致），值仍是插件名。 */
-const pluginFilterOptions = computed(() => {
-  const allowed = featuresStore.metadataPlugins
-  return builtinPlugins.value
-    .filter((p: any) => allowed.length === 0 || allowed.includes(p.name))
-    .map((p: any) => ({ name: p.name, label: p.display_name || p.name }))
-    .sort((a: { label: string }, b: { label: string }) => a.label.localeCompare(b.label, 'zh-CN'))
-})
+const pluginFilterOptions = computed(() =>
+  filterMetadataPlugins(builtinPlugins.value, featuresStore.metadataPlugins)
+    .map((p: any) => ({ name: p.name, label: metadataPluginLabel(p) }))
+    .sort((a: { label: string }, b: { label: string }) => a.label.localeCompare(b.label, 'zh-CN')),
+)
 
 async function loadItems() {
   loading.value = true
@@ -587,6 +529,9 @@ async function loadClusters() {
 }
 
 async function loadBuiltinPlugins() {
+  // features 清单兜底加载（插件元数据可选插件的过滤依赖 features.yaml 的
+  // plugin_metadata_plugins；main.ts 启动已预载，此处仅覆盖未加载的边角，失败静默 = 不限制）
+  featuresStore.load().catch(() => {})
   try {
     const res = await listBuiltinPlugins()
     builtinPlugins.value = res.data.plugins || []
@@ -597,45 +542,21 @@ async function loadBuiltinPlugins() {
 
 // ——— Create ———
 function openCreateModal() {
-  createClusterId.value = ''
-  createPluginName.value = ''
-  configuredNamesInCluster.value = new Set()
   createVisible.value = true
-  // features 清单兜底加载（main.ts 启动已预载；此处覆盖未加载的边角，失败静默 = 不限制）
-  featuresStore.load().catch(() => {})
 }
 
-async function onCreateClusterChange() {
-  createPluginName.value = ''
-  if (createClusterId.value) {
-    try {
-      const res = await listClusterPluginMetadata(Number(createClusterId.value))
-      configuredNamesInCluster.value = new Set((res.data.items || []).map((i: any) => i.plugin_name))
-    } catch {
-      configuredNamesInCluster.value = new Set()
-    }
-  }
-}
-
-async function handleCreateDirect() {
-  if (!canCreate.value || !createPluginName.value) return
-  try {
-    await addClusterPluginMetadata(Number(createClusterId.value), createPluginName.value)
-    createVisible.value = false
-    await loadItems()
-    // publish-guide 批 3：添加即保存——单通道引导替代 toast
-    showOverlayModal({
-      title: '保存成功',
-      content: '配置尚未发布，发布后才会推送到 Edge 节点生效。',
-      okText: '立即发布',
-      cancelText: '稍后',
-      onOk: () => {
-        publishItem({ cluster_id: Number(createClusterId.value), plugin_name: createPluginName.value })
-      },
-    })
-  } catch (e: any) {
-    message.error(e?.response?.data?.detail || '添加失败')
-  }
+/** 共享创建弹窗保存成功：刷新列表 + publish-guide 单通道引导（「立即发布」复用既有发布链路） */
+async function handleCreateSaved(payload: { clusterId: number; pluginName: string }) {
+  await loadItems()
+  showOverlayModal({
+    title: '保存成功',
+    content: '配置尚未发布，发布后才会推送到 Edge 节点生效。',
+    okText: '立即发布',
+    cancelText: '稍后',
+    onOk: () => {
+      publishItem({ cluster_id: payload.clusterId, plugin_name: payload.pluginName })
+    },
+  })
 }
 
 // ——— View ———
@@ -1129,55 +1050,6 @@ const headerStatItems = computed(() => [
   overflow-y: auto;
 }
 
-/* ── Modal ── */
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: oklch(0% 0 0 / 40%);
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.modal {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  width: 100%;
-  max-width: 600px;
-  max-height: 80vh;
-  display: flex;
-  flex-direction: column;
-}
-
-.form-group {
-  margin-bottom: 16px;
-}
-
-.form-label {
-  display: block;
-  margin-bottom: 6px;
-  font-size: 13px;
-  color: var(--muted);
-  font-weight: 500;
-}
-
-.required {
-  color: var(--danger);
-}
-
-.create-info-box {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  background: oklch(56% 0.16 210 / 8%);
-  border-radius: var(--radius-sm);
-  color: var(--accent);
-  font-size: 12px;
-  font-weight: 500;
-}
+/* ── 添加弹窗已抽共享组件 PluginMetadataCreateModal（B2c，样式随组件） ── */
 /* 网格/卡片容器断点已上移共享 .card-grid（style.css） */
 </style>

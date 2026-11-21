@@ -11,10 +11,15 @@ function src(...parts: string[]): string {
   return readFileSync(resolve(process.cwd(), 'src', ...parts), 'utf-8')
 }
 
-const ENTRY_FILES = ['views/PluginMetadataList.vue', 'components/PluginMetadata.vue']
+const ENTRY_FILES = [
+  'views/PluginMetadataList.vue',
+  'components/PluginMetadata.vue',
+  // B2c：创建入口收敛进共享弹窗后，弹窗成为第三个消费方（同一份清单、同一条过滤实现）
+  'components/PluginMetadataCreateModal.vue',
+]
 
 describe('插件元数据可用插件单源守卫（features.yaml 清单，写死开关退役）', () => {
-  it('两添加入口经 featuresStore.metadataPlugins 清单过滤', () => {
+  it('各添加入口经 featuresStore.metadataPlugins 清单过滤', () => {
     for (const f of ENTRY_FILES) {
       expect(src(f), `${f} 必须消费 featuresStore.metadataPlugins`).toMatch(/featuresStore\.metadataPlugins/)
       expect(src(f), `${f} 必须有 features 清单兜底加载`).toMatch(/featuresStore\.load\(\)/)

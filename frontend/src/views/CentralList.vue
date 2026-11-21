@@ -398,7 +398,11 @@
             @refresh="loadClusters"
           />
           <div v-else-if="maximizedCluster.activeTab === 'globalPlugins'" class="tab-content">
-            <PluginMetadata :cluster-id="maximizedCluster.id" :nodes="maximizedCluster.nodes" />
+            <PluginMetadata
+              :cluster-id="maximizedCluster.id"
+              :cluster-name="maximizedCluster.display_name || maximizedCluster.name"
+              :nodes="maximizedCluster.nodes"
+            />
           </div>
           <ClusterNodes v-else :cluster="maximizedCluster" @refresh="loadClusters" />
         </div>

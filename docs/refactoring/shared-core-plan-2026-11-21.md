@@ -149,4 +149,5 @@
   - [已完成 2026-11-21] **B2a** 静态资源：抽 `StaticResourceFormModal` + `ZipContentsModal`，面板与页面共用；资格判定收敛到 `utils/staticResourceRoute.staticResourceRouteChecks()` 单一入口；两侧字段集 = 所属集群 + 路由 + 描述（`name`/`url_path` 经核实为死字段，见 3.1 勘误）。
   - [已完成 2026-11-21] **B2b-1** 节点单条表单：抽 `NodeFormModal`，面板/节点页共用；校验取两侧更严格者（路径 `max:255`、SSH 端口 1–65535）；另发现并删除 `CentralList.vue` 第三处无入口的死内联表单；面板工具条补「批量导入」独立入口（设计页同步）。
   - [已完成 2026-11-21] **B2b-2** 批量导入合并为 `NodeBatchImportModal`：默认值可编辑 + 预览列并集（含 Nginx 安装目录/状态/原因/移除）+ 弹窗内逐条结果；载荷构造收敛 `useClusterNodes.requestNodeBatchCreate()`；两侧宿主只剩开关 + 刷新；顺手修复已失效的 e2e 导航。
-  - [待开始] B2c 插件元数据创建弹窗；B3 / B4 / B5
+  - [已完成 2026-11-21] **B2c** 插件元数据：抽 `PluginMetadataCreateModal`；可选插件过滤收敛 `utils/pluginMetadataCatalog.filterMetadataPlugins()`（面板树/页面筛选/弹窗三处共用）；**面板移除卡片快捷添加**（按用户裁决），改为工具条「添加插件元数据」；设计页按钮文案同步。
+  - [待开始] B3 动作菜单构建器 / B4 单元格接线 / B5 卡片动作条

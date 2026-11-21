@@ -3986,27 +3986,6 @@ th.resizable {
   margin-left: auto;
 }
 
-/* 可用插件卡的「添加」：面板内压成 .tool-btn 同款浅底描边（组件内仍是 a-button type=primary，
-   不改组件 class）。作用域限面板——该组件亦被 ClusterRoutes 使用，面板外保持原实心主按钮。 */
-.max-panel .dbody .plugin-card .add-btn {
-  height: 24px !important;
-  padding: 0 8px !important;
-  font-size: 12px !important;
-  font-weight: 400 !important;
-  line-height: 1 !important;
-  border-radius: var(--radius-sm) !important;
-  background: var(--surface) !important;
-  border: 1px solid var(--border) !important;
-  color: var(--fg) !important;
-  box-shadow: none !important;
-  opacity: 1 !important;
-}
-.max-panel .dbody .plugin-card .add-btn:hover {
-  background: var(--accent-bg) !important;
-  border-color: var(--accent) !important;
-  color: var(--accent) !important;
-}
-
 /* 方法列（批次 B 补列）：固定列宽下单行展示（前 2 枚 + `+N`），不折行、不溢出 */
 .max-panel .dbody .method-cell {
   display: flex;

@@ -5,7 +5,6 @@ import { itGroupFilterSuite } from './helpers/groupFilterSuite'
 import PublishStatusTag from '@/components/PublishStatusTag.vue'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import ClusterSelect from '@/components/ClusterSelect.vue'
 
 const mockApiGet = vi.fn()
 const mockApiPost = vi.fn()
@@ -63,6 +62,14 @@ const stubs = {
     emits: ['ok', 'update:open'],
   },
   'a-drawer': { template: '<div v-if="open"><slot /></div>', props: ['open', 'title', 'width'], emits: ['close'] },
+  // B2c：创建弹窗已抽共享组件——页面测试只验证「打开/传参/保存后刷新」，字段与提交归
+  // PluginMetadataCreateModal.test.ts
+  PluginMetadataCreateModal: {
+    name: 'MockPluginMetadataCreateModal',
+    template: '<div class="mock-create-modal" v-if="visible" :data-lock="String(lockCluster)" />',
+    props: ['visible', 'clusters', 'defaultClusterId', 'lockCluster'],
+    emits: ['close', 'saved'],
+  },
 }
 
 const MOCK_DATA = {
@@ -152,25 +159,39 @@ describe('PluginMetadataList.vue', () => {
     expect(wrapper.text()).toContain('jwt-auth')
   })
 
-  // 添加弹窗打开时插件下拉必须显示占位「请选择插件」：v-model 初值须为 ''（匹配 value="" 占位
-  // option），初值 null 会被 select 渲染器判为无匹配 option → selectedIndex=-1 → 下拉框空白
-  it('create modal shows plugin select placeholder (selectedIndex=0, not blank)', async () => {
+  // B2c：创建弹窗已抽共享组件（PluginMetadataCreateModal），页面只负责打开并传全量集群（不锁）
+  it('页头「添加插件元数据」打开共享创建弹窗，集群可改（不锁）', async () => {
     const PluginMetadataList = (await import('../PluginMetadataList.vue')).default
     const wrapper = mount(PluginMetadataList, { global: { stubs } })
     await flushPromises()
+    expect(wrapper.find('.mock-create-modal').exists()).toBe(false)
     await wrapper
       .findAll('button')
       .find((b) => b.text().includes('添加插件元数据'))!
       .trigger('click')
     await wrapper.vm.$nextTick()
-    const overlay = wrapper.findAll('.modal-overlay').find((o) => o.text().includes('添加插件元数据'))!
-    const selects = overlay.findAll('select')
-    // 集群字段已换装 ClusterSelect（a-select 族，非原生 select）——原生 select 仅剩插件下拉
-    expect(selects.length).toBe(1)
-    const pluginSelect = selects[0]
-    expect(pluginSelect.element.selectedIndex).toBe(0)
-    expect((pluginSelect.element.selectedOptions[0]?.textContent || '').trim()).toBe('请选择插件')
-    expect(overlay.find('.cluster-select').exists()).toBe(true)
+    const modal = wrapper.find('.mock-create-modal')
+    expect(modal.exists()).toBe(true)
+    // 整页创建：全量集群、不锁集群（面板形态才传 lockCluster）
+    const modalCmp = wrapper.findComponent({ name: 'MockPluginMetadataCreateModal' })
+    expect(modalCmp.props('lockCluster')).toBeFalsy()
+    expect((modalCmp.props('clusters') as unknown[]).length).toBe(2)
+    wrapper.unmount()
+  })
+
+  it('创建弹窗 saved → 重新拉取列表（页面刷新链路不变）', async () => {
+    const PluginMetadataList = (await import('../PluginMetadataList.vue')).default
+    const wrapper = mount(PluginMetadataList, { global: { stubs } })
+    await flushPromises()
+    const before = mockApiGet.mock.calls.filter((c) => c[0] === '/plugin_metadata').length
+    wrapper
+      .findComponent({ name: 'MockPluginMetadataCreateModal' })
+      .vm.$emit('saved', { clusterId: 1, pluginName: 'jwt-auth' })
+    await vi.waitFor(() => {
+      const after = mockApiGet.mock.calls.filter((c) => c[0] === '/plugin_metadata').length
+      expect(after).toBeGreaterThan(before)
+    })
+    wrapper.unmount()
   })
 
   // ── Group Filter Tests ──
@@ -504,111 +525,6 @@ describe('PluginMetadataList.vue 卡片操作 → composable 接线', () => {
     expect(listLoads).toBeGreaterThanOrEqual(2)
     // 版本弹窗已重开（重设 open 触发既有 watch → loadHistory 重载版本列表）
     expect(wrapper.find('.mock-version-modal').exists()).toBe(true)
-    wrapper.unmount()
-  })
-})
-
-// ── plugin-metadata-plugins-config：添加弹窗下拉按 features.yaml 专用清单过滤 ──
-// 可选集 = 目录（/plugins/builtin，enabled_plugins 平台层已滤）∩ plugin_metadata_plugins
-// 清单（空/未配置 = 不限制）；「未配置去重」继续排除该集群已配置插件。
-describe('PluginMetadataList.vue 插件元数据可用插件清单过滤', () => {
-  beforeEach(() => {
-    // 新 pinia 每用例：features store 有 loaded 缓存短路，复用旧 pinia 会跨用例串台
-    setActivePinia(createPinia())
-    vi.clearAllMocks()
-  })
-
-  const CATALOG = [
-    { name: 'jwt-auth', description: 'JWT 认证' },
-    { name: 'redirect', description: '重定向' },
-    { name: 'data_center', description: '数据中心' },
-  ]
-  /** cluster 1 已配置 jwt-auth（与 MOCK_DATA 卡片一致） */
-  const CLUSTER_CONFIGURED = {
-    total: 1,
-    items: [{ id: 1, cluster_id: 1, plugin_name: 'jwt-auth', metadata: {}, current_version: null }],
-  }
-
-  function setupApi(list: string[] | undefined) {
-    mockApiGet.mockImplementation((url: string) => {
-      if (url === '/plugin_metadata') return Promise.resolve({ data: MOCK_DATA })
-      if (url === '/clusters')
-        return Promise.resolve({
-          data: { items: [{ id: 1, display_name: '生产集群', group_name: '线上' }] },
-        })
-      if (url === '/plugins/builtin') return Promise.resolve({ data: { plugins: CATALOG } })
-      if (url === '/clusters/1/plugin-metadata') return Promise.resolve({ data: CLUSTER_CONFIGURED })
-      if (url === '/system/features')
-        return Promise.resolve({
-          data: {
-            features: {},
-            enabled_plugins: [],
-            ...(list === undefined ? {} : { plugin_metadata_plugins: list }),
-          },
-        })
-      return Promise.reject(new Error('unknown url'))
-    })
-  }
-
-  async function openCreateModalWithCluster1() {
-    const PluginMetadataList = (await import('../PluginMetadataList.vue')).default
-    const wrapper = mount(PluginMetadataList, { global: { stubs } })
-    await flushPromises()
-    await wrapper
-      .findAll('button')
-      .find((b) => b.text().includes('添加插件元数据'))!
-      .trigger('click')
-    await wrapper.vm.$nextTick()
-    // 经 ClusterSelect 组件事件驱动选集群（jsdom 不点 a-select DOM；值先于 change 契约见 AGENTS #76）
-    const createSelect = wrapper.findAllComponents(ClusterSelect)[1]
-    expect(createSelect, '创建弹窗内应有 ClusterSelect').toBeTruthy()
-    createSelect.vm.$emit('update:modelValue', 1)
-    createSelect.vm.$emit('change', 1)
-    await flushPromises()
-    await wrapper.vm.$nextTick()
-    return wrapper
-  }
-
-  function createOptionNames(wrapper: Awaited<ReturnType<typeof openCreateModalWithCluster1>>) {
-    const overlay = wrapper.findAll('.modal-overlay').find((o) => o.text().includes('添加插件元数据'))!
-    return overlay
-      .findAll('select')[0]
-      .findAll('option')
-      .map((o) => o.attributes('value'))
-  }
-
-  it('清单内插件可选、清单外被滤（占位 option 恒在）', async () => {
-    setupApi(['jwt-auth', 'data_center'])
-    const wrapper = await openCreateModalWithCluster1()
-    // jwt-auth 清单内但已配置（cluster 1）→ 去重排除；redirect 清单外 → 滤掉；data_center 清单内未配置 → 可选
-    expect(createOptionNames(wrapper)).toEqual(['', 'data_center'])
-    wrapper.unmount()
-  })
-
-  it('清单为空列表 = 不限制（目录全量可选，仅已配置去重）', async () => {
-    setupApi([])
-    const wrapper = await openCreateModalWithCluster1()
-    expect(createOptionNames(wrapper)).toEqual(['', 'redirect', 'data_center'])
-    wrapper.unmount()
-  })
-
-  it('清单 key 缺失 = 不限制（向后兼容）', async () => {
-    setupApi(undefined)
-    const wrapper = await openCreateModalWithCluster1()
-    expect(createOptionNames(wrapper)).toEqual(['', 'redirect', 'data_center'])
-    wrapper.unmount()
-  })
-
-  it('已配置条目不受清单影响：jwt-auth 被移出清单 → 卡片仍显示，下拉只提供清单内插件', async () => {
-    setupApi(['data_center'])
-    const wrapper = await openCreateModalWithCluster1()
-    // 已配置卡片来自 /plugin_metadata，与清单无关——移出清单后仍可见可编辑
-    expect(wrapper.text()).toContain('jwt-auth')
-    expect(wrapper.findAll('.pml-card').length).toBe(2)
-    // 下拉：data_center 清单内可选；jwt-auth 既不在清单也已配置；redirect 清单外
-    const options = createOptionNames(wrapper)
-    expect(options).toEqual(['', 'data_center'])
-    expect(options).not.toContain('jwt-auth')
     wrapper.unmount()
   })
 })
