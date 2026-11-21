@@ -219,11 +219,11 @@
             <span class="text-muted">{{ (page - 1) * pageSize + sequenceOf(record) }}</span>
           </template>
           <template v-else-if="column.key === 'name'">
-            <div class="cell-primary">
+            <div class="cell-primary" :title="record.name">
               {{ record.name }}
               <span v-if="hasDnsPlugin(record)" class="dns-route-badge">DNS</span>
             </div>
-            <div class="cell-secondary">{{ record.description || '-' }}</div>
+            <div class="cell-secondary" :title="record.description || ''">{{ record.description || '-' }}</div>
           </template>
 
           <!-- 请求匹配合并列（contract 10.1：列键=uri；「方法」勾选控制方法 chips 段、URI 段恒随 uri 键） -->
@@ -1341,6 +1341,11 @@ defineExpose({ viewMode })
 .cell-primary {
   font-weight: 600;
   color: var(--fg);
+  /* 长路由名（路径形态）必须省略，否则压进「请求匹配」列（2026-11-21 真机实测） */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
 }
 .cell-secondary {
   font-size: 12px;

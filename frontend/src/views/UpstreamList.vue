@@ -194,8 +194,8 @@
             <span class="text-muted">{{ (page - 1) * pageSize + sequenceOf(record) }}</span>
           </template>
           <template v-else-if="column.key === 'name'">
-            <div class="cell-primary">{{ record.name }}</div>
-            <div class="cell-secondary">{{ record.description || '-' }}</div>
+            <div class="cell-primary" :title="record.name">{{ record.name }}</div>
+            <div class="cell-secondary" :title="record.description || ''">{{ record.description || '-' }}</div>
           </template>
 
           <template v-else-if="column.key === 'cluster'">
@@ -1095,6 +1095,10 @@ import type { TableColumnsType } from 'ant-design-vue'
 .cell-primary {
   font-weight: 600;
   color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
 }
 .cell-secondary {
   font-size: 11px;
