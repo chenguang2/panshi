@@ -21,6 +21,8 @@ const routePage = () => readFileSync(resolve(process.cwd(), 'src/views/RouteList
 const globalRulePage = () => readFileSync(resolve(process.cwd(), 'src/views/GlobalRuleList.vue'), 'utf-8')
 // 2026-11-22（A 推广第 2 个卡片类资源）：插件组 Tab 同上改为渲染 PluginConfigList 的 scoped 形态。
 const pluginConfigPage = () => readFileSync(resolve(process.cwd(), 'src/views/PluginConfigList.vue'), 'utf-8')
+// 2026-11-22（A 推广第 3 个卡片类资源）：插件元数据 Tab 同上改为渲染 PluginMetadataList 的 scoped 形态。
+const pluginMetadataPage = () => readFileSync(resolve(process.cwd(), 'src/views/PluginMetadataList.vue'), 'utf-8')
 
 describe('面板 Tab 表单共用守卫（B1）', () => {
   it('上游 Tab：引用共享 UpstreamFormModal；scoped 下集群预选并锁定', () => {
@@ -75,6 +77,23 @@ describe('面板 Tab 表单共用守卫（B1）', () => {
     for (const marker of INLINE_FORM_MARKERS) {
       expect(s, `PluginConfigList.vue 不应再出现 ${marker}`).not.toContain(marker)
     }
+  })
+
+  it('插件元数据 Tab：引用共享 PluginMetadataCreateModal + 预选并锁定当前集群（创建入口唯一）', () => {
+    // 2026-11-22（A 推广·第 3 个卡片类资源批）：面板插件元数据 Tab 不再有自写卡片/表单宿主，
+    // 直接渲染 PluginMetadataList 的 scoped 形态 → 断言对象由 components/PluginMetadata.vue
+    // 迁移到 views/PluginMetadataList.vue（旧组件已删除，不得回流）。
+    const s = pluginMetadataPage()
+    expect(s).toContain('<PluginMetadataCreateModal')
+    expect(s).toContain("import PluginMetadataCreateModal from '@/components/PluginMetadataCreateModal.vue'")
+    expect(s).toContain(':clusters="formClusterOptions"')
+    expect(s).toContain(':default-cluster-id="isScoped ? scopedClusterId : null"')
+    expect(s).toContain(':lock-cluster="isScoped"')
+    // 唯一宿主同样不自持内联表单块
+    for (const marker of INLINE_FORM_MARKERS) {
+      expect(s, `PluginMetadataList.vue 不应再出现 ${marker}`).not.toContain(marker)
+    }
+    expect(() => readFileSync(resolve(process.cwd(), 'src/components/PluginMetadata.vue'), 'utf-8')).toThrow()
   })
 
   it('RouteList.vue（路由 Tab 唯一宿主）同样不自持内联表单块', () => {

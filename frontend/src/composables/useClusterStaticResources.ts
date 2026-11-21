@@ -218,6 +218,12 @@ export function useClusterStaticResources(deps: StaticResourceDeps) {
 
   // 表单已迁至 StaticResourceFormModal（B2a）：以下 open/submit 仅供历史调用与既有测试，
   // 生产两入口不再触发（清理见文件头注释）。
+  // 2026-11-22（A 推广最后一块）：本 composable 的 `publishStaticResource` / `deleteStaticResource` /
+  // `openStaticResourceVersionManagement` 与 `staticResourceForm*` 表单态**已无面板消费方**
+  // （面板 Tab 改渲染 StaticResourceList 的 scoped 形态，发布/删除/版本/表单全部由页面那一份实现承担）。
+  // 静态资源页仍消费 `uploadStaticResource`（ZIP 上传流：预检 + 进度弹窗 + 结果行）。
+  // 本批按计划**只标注不删**，清理留后批（需同步 `useClusterStaticResources.test.ts` 与
+  // `Cluster.static_resources` 等类型字段）。
   const deleteStaticResource = async (cluster: Cluster, sr: StaticResource) => {
     showDeleteConfirm({
       title: `确定要删除静态资源 "${sr.name}" 吗？`,
@@ -342,6 +348,7 @@ export function useClusterStaticResources(deps: StaticResourceDeps) {
     input.click()
   }
 
+  /** 面板 Tab 已无消费方（见 deleteStaticResource 上方注释）：发布链路唯一存活实现 = StaticResourceList.vue */
   const publishStaticResource = async (cluster: Cluster, sr: StaticResource) => {
     // static-resources-ux-close-loop 9.1/9.2：发布确认弹窗资源摘要 + 覆盖预警
     // （静态资源发布不产生新版本，不复用 currentVersion 版本提示行）

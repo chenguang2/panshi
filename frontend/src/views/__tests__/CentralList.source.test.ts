@@ -89,15 +89,17 @@ describe('统一管理·最大化面板切换动效（方案 A）', () => {
       'RouteList',
       'PluginConfigList',
       'GlobalRuleList',
-      'ClusterStaticResources',
+      'StaticResourceList',
       'PluginMetadataList',
       'NodeList',
     ]) {
       expect(tabBody(), `缺少 <${comp}>`).toContain(`<${comp}`)
     }
-    // 旧面板专属组件（components/PluginMetadata.vue）不得回流
+    // 旧面板专属组件（components/PluginMetadata.vue / views/clusters/ClusterStaticResources.vue）不得回流
     expect(text).not.toContain('components/PluginMetadata.vue')
     expect(text).not.toMatch(/<PluginMetadata\s/)
+    expect(text).not.toContain('views/clusters/ClusterStaticResources.vue')
+    expect(text).not.toMatch(/<ClusterStaticResources\s/)
   })
 
   it('Tab 分支一律显式 v-if（不得裸 v-else，也不得混入 v-else-if 串联）', () => {
@@ -125,6 +127,11 @@ describe('统一管理·最大化面板切换动效（方案 A）', () => {
     // 插件元数据 Tab = PluginMetadataList 的 scoped 形态（面板不传 nodes/cluster-name 等旧 props）
     expect(body).toContain('<PluginMetadataList :scoped-cluster-id="maximizedCluster.id" @refresh="loadClusters" />')
     expect(body).not.toContain(':nodes="maximizedCluster.nodes"')
+    // 静态资源 Tab = StaticResourceList 的 scoped 形态（2026-11-22 A 推广最后一块；
+    // 旧面板 props cluster/clusters/open-publish-modal/load-routes 随之退场）
+    expect(body).toContain('<StaticResourceList :scoped-cluster-id="maximizedCluster.id" @refresh="loadClusters" />')
+    expect(body).not.toContain(':load-routes="loadRoutes"')
+    expect(body).not.toContain(':open-publish-modal="openPublishModal"')
   })
 
   it('三个关键帧齐备：方向滑入两条 + 切 Tab 淡入', () => {

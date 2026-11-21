@@ -409,9 +409,11 @@ describe('StaticResourceList.vue 表单/ZIP 弹窗共用接线（B2a）', () => 
     const form = wrapper.findComponent({ name: 'StaticResourceFormModal' })
     expect(form.exists()).toBe(true)
     expect(form.props('visible')).toBe(false)
-    // 页面形态不锁集群（面板传 lock-cluster）；新增态无预选集群
-    expect(form.props('lockCluster')).toBeUndefined()
-    expect(form.props('defaultClusterId')).toBeUndefined()
+    // 页面形态不锁集群（scoped 面板形态传 :lock-cluster="isScoped" / :default-cluster-id="scopedClusterId"；
+    // #217 断言反转：属性由「缺省 undefined」改为显式 false/null，语义等价——组件内 `!!lockCluster` 与
+    // `defaultClusterId ?? ''` 两种取值均得到「不锁 + 不预选」）
+    expect(form.props('lockCluster')).toBe(false)
+    expect(form.props('defaultClusterId')).toBeNull()
     await wrapper
       .findAll('button')
       .find((b) => b.text().includes('添加静态资源'))!

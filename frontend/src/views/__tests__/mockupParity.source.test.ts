@@ -1216,11 +1216,15 @@ describe('最大化面板：Tab 内容封闭容器（tab-content card，2026-11-
   })
 
   it('卡片 Tab 网格内距四向 16px（不再贴容器左右边框）', () => {
-    for (const f of ['views/clusters/ClusterStaticResources.vue']) {
-      const src = readFileSync(resolve(process.cwd(), 'src', f), 'utf-8')
-      expect(src, `${f} 网格内距`).toContain('gap: 16px; padding: 16px"')
-      expect(src, `${f} 不得留 16px 0`).not.toContain('gap: 16px; padding: 16px 0"')
-    }
+    // 静态资源 Tab（2026-11-22，A 推广最后一块）已改为 StaticResourceList 的 scoped 形态：面板里不再有
+    // 专属「gap/padding 内联样式」网格——卡片网格走共享 .card-grid（单一来源 src/style.css），
+    // scoped 只压掉外层卡片自身的边框/底色（scope-card）。面板专属组件不得回流。
+    const sr = readFileSync(resolve(process.cwd(), 'src/views/StaticResourceList.vue'), 'utf-8')
+    expect(sr).toContain(':class="{ \'scope-card\': isScoped }"')
+    expect(sr).toContain('class="sr-grid card-grid l5-card sr-cards"')
+    expect(() =>
+      readFileSync(resolve(process.cwd(), 'src/views/clusters/ClusterStaticResources.vue'), 'utf-8'),
+    ).toThrow()
     // 插件元数据 Tab（2026-11-22）已改为 PluginMetadataList 的 scoped 形态：面板里不再有专属的
     // 「工具条 + .plugin-panels 内距」双层结构——工具条/卡片网格全部走共享类（.l5-toolbar / .card-grid，
     // 单一来源 src/style.css），scoped 只压掉外层卡片自身的边框/底色（scope-card）。

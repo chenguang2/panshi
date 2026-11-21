@@ -1,52 +1,43 @@
 // B2a 静态资源表单/ZIP 弹窗共用源码守卫（docs/refactoring/shared-core-plan-2026-11-21.md 3.1）
-// 两入口（集群统一管理「静态资源」Tab / 左侧「静态资源」页）必须引用共享 StaticResourceFormModal +
-// ZipContentsModal，不得再出现内联表单 / 内联 ZIP 表格（违反即回到「两套表单两套校验」的分叉）。
+// 2026-11-22（A 推广最后一块）：统一管理最大化面板的「静态资源」Tab 不再有面板专属组件，
+// 面板直接渲染 StaticResourceList 的 scoped 形态 → 宿主只剩这一处，本守卫由「两入口」收敛为「唯一宿主」，
+// 并钉住面板专属组件不得回流（唯一实现 = views/StaticResourceList.vue）。
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-function panel(): string {
-  return readFileSync(resolve(process.cwd(), 'src/views/clusters/ClusterStaticResources.vue'), 'utf-8')
-}
+const PAGE = 'src/views/StaticResourceList.vue'
+
 function page(): string {
-  return readFileSync(resolve(process.cwd(), 'src/views/StaticResourceList.vue'), 'utf-8')
+  return readFileSync(resolve(process.cwd(), PAGE), 'utf-8')
 }
 
-describe('静态资源表单共用守卫（B2a）', () => {
-  it('面板 Tab：引用共享表单（单元素集群清单 + 锁定集群 + 新增态预选）', () => {
-    const s = panel()
-    expect(s).toContain('<StaticResourceFormModal')
-    expect(s).toContain(':clusters="formClusters"')
-    expect(s).toContain(':default-cluster-id="props.cluster.id"')
-    expect(s).toContain('lock-cluster')
-    expect(s).toContain("import StaticResourceFormModal from '@/components/StaticResourceFormModal.vue'")
-    // 面板只有一个集群 → 单元素清单（组件内 ClusterSelect 编辑/锁定态禁用）
-    expect(s).toContain('{ id: props.cluster.id, name: props.cluster.name, display_name: props.cluster.display_name }')
-  })
-
-  it('静态资源页：引用共享表单（全量集群、不锁集群）', () => {
+describe('静态资源表单共用守卫（B2a，唯一宿主 = StaticResourceList.vue）', () => {
+  it('唯一宿主：引用共享表单（集群清单参数化，scoped 传单元素清单 + 锁定）', () => {
     const s = page()
     expect(s).toContain('<StaticResourceFormModal')
-    expect(s).toContain(':clusters="clusters"')
-    expect(s).not.toContain('lock-cluster')
+    expect(s).toContain(':clusters="formClusterOptions"')
     expect(s).toContain("import StaticResourceFormModal from '@/components/StaticResourceFormModal.vue'")
+    // scoped（面板 Tab）只有一个集群 → 单元素清单 + 锁定；页面形态不锁（集群全量可选）
+    expect(s).toContain(':lock-cluster="isScoped"')
+    expect(s).toContain(':default-cluster-id="isScoped ? scopedClusterId : null"')
+    expect(s).toMatch(
+      /const formClusterOptions = computed\(\(\) => \{[\s\S]*?return \[\{ id, name: c\?\.name \?\? '', display_name: c\?\.display_name \}\]/,
+    )
     // 页头/空态创建入口仍叫 openAddModal（uxReviewM 守卫 + 既有交互锚点）
     expect(s).toContain('openAddModal')
   })
 
-  it.each([
-    ['面板', panel],
-    ['页面', page],
-  ])('%s：ZIP 内容弹窗改用共享 ZipContentsModal，内容拉取不再各写一份', (_label, read) => {
-    const s = read()
+  it('ZIP 内容弹窗改用共享 ZipContentsModal，内容拉取不再自写一份', () => {
+    const s = page()
     expect(s).toContain('<ZipContentsModal')
     expect(s).toContain("import ZipContentsModal from '@/components/ZipContentsModal.vue'")
     // 拉取请求只在组件内（消费方不应再拼 zip-contents 路径）
     expect(s).not.toContain('/zip-contents')
   })
 
-  it('面板不再包含内联表单块与内联 ZIP 表格（a-form / a-form-item / modal-overlay / Teleport / zip-table）', () => {
-    const s = panel()
+  it('唯一宿主不含内联表单块与内联 ZIP 表格', () => {
+    const s = page()
     for (const marker of [
       '<a-form',
       'a-form-item',
@@ -54,37 +45,29 @@ describe('静态资源表单共用守卫（B2a）', () => {
       '<Teleport',
       'zip-table',
       'route-validation-item',
-    ]) {
-      expect(s, `面板不应再出现 ${marker}`).not.toContain(marker)
-    }
-  })
-
-  it('页面不再包含内联表单/内联 ZIP 弹窗（#srFormModal / #zipContentsModal / zip-table / 三条件重复清单）', () => {
-    const s = page()
-    for (const marker of [
       'id="srFormModal"',
       'id="zipContentsModal"',
-      'class="zip-table"',
-      'route-validation-item',
       '路由路径必须以 /* 结尾',
     ]) {
-      expect(s, `页面不应再出现 ${marker}`).not.toContain(marker)
+      expect(s, `StaticResourceList.vue 不应再出现 ${marker}`).not.toContain(marker)
     }
   })
 
-  it('提交/校验逻辑只在共享组件内：两处均无自写提交函数与表单数据模型', () => {
-    const p = panel()
-    const g = page()
-    expect(p).not.toContain('handleStaticResourceSubmit')
-    expect(p).not.toContain('staticResourceFormData')
-    expect(g).not.toContain('handleSubmit')
-    expect(g).not.toContain('formData')
-    expect(g).not.toContain('availableRoutes')
-    // 两处都只做「开关 + 刷新」接线
-    for (const s of [p, g]) {
-      expect(s).toContain('@saved=')
-      expect(s).toContain('@close=')
-    }
+  it('面板专属组件不得回流（唯一实现 = views/StaticResourceList.vue）', () => {
+    expect(() =>
+      readFileSync(resolve(process.cwd(), 'src/views/clusters/ClusterStaticResources.vue'), 'utf-8'),
+    ).toThrow()
+  })
+
+  it('提交/校验逻辑只在共享组件内：宿主只做「开关 + 刷新」接线', () => {
+    const s = page()
+    expect(s).not.toContain('handleStaticResourceSubmit')
+    expect(s).not.toContain('staticResourceFormData')
+    expect(s).not.toContain('handleSubmit')
+    expect(s).not.toContain('formData')
+    expect(s).not.toContain('availableRoutes')
+    expect(s).toContain('@saved=')
+    expect(s).toContain('@close=')
   })
 
   it('资格判定单点：三条勾叉与下拉后缀同源（utils/staticResourceRoute 的 staticResourceRouteChecks）', () => {

@@ -377,14 +377,11 @@
             <GlobalRuleList :scoped-cluster-id="maximizedCluster.id" @refresh="loadClusters" />
           </div>
           <div v-if="maximizedCluster.activeTab === 'staticResources'" class="tab-content">
-            <ClusterStaticResources
-              :cluster="maximizedCluster"
-              :clusters="clusters"
-              :open-publish-modal="openPublishModal"
-              :load-routes="loadRoutes"
-              :loading="loading"
-              @refresh="loadClusters"
-            />
+            <!-- 静态资源 Tab = 静态资源页组件的「单集群作用域」形态（A 推广第 7 个（最后一个）资源，同插件组/全局规则做法）：
+                 隐藏页头/分组与集群筛选/分组切换/集群带，页面级动作「添加静态资源 / 批量管理」改由工具条左侧紧凑钮；
+                 chips / 批量条（含批量删除）/ 卡片网格（含绑定 strip、四档提示）/ 卡脚「发布 + ⋯」三栏菜单 /
+                 ZIP 弹窗 / 表单弹窗（集群锁定）与页面同一份实现；发布进度日志只保留页面这一份（AGENTS #51）。 -->
+            <StaticResourceList :scoped-cluster-id="maximizedCluster.id" @refresh="loadClusters" />
           </div>
           <div v-if="maximizedCluster.activeTab === 'globalPlugins'" class="tab-content">
             <!-- 插件元数据 Tab = 插件元数据页组件的「单集群作用域」形态（A 推广第 3 个卡片类资源，同插件组/全局规则做法）：
@@ -416,18 +413,6 @@
     />
 
     <ConfigDiff v-model:visible="diffDrawerVisible" :cluster-id="diffClusterId" :initial-node-id="diffNodeId" />
-
-    <PublishConfirmModal
-      v-model:visible="publishModalVisible"
-      :title="publishModalTitle"
-      :cluster-id="publishModalClusterId"
-      :current-version="publishModalCurrentVersion"
-      :resource-summary="publishModalResourceSummary"
-      :overwrite-warning="publishModalOverwriteWarning"
-      :preselected-node-ids="publishModalPreselectedNodeIds"
-      @confirm="handlePublishConfirm"
-      @cancel="handlePublishCancel"
-    />
 
     <!-- Cluster Detail Modal -->
     <!-- 集群详情弹窗：共享组件唯一实现（cluster-ux-close-loop 3.6） -->
@@ -498,7 +483,6 @@ import { ref, reactive, computed, watch, watchEffect, onMounted, onUnmounted, h,
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import {
-  showDeleteConfirm,
   executeDeleteWithProgress,
   routeLabel,
   deleteClusterWithConfirm,
@@ -510,28 +494,23 @@ import ClusterDetailModal from '@/components/ClusterDetailModal.vue'
 import ClusterDriftDrawer from '@/components/ClusterDriftDrawer.vue'
 import { useClusterRouteBadge } from '@/composables/useClusterRouteBadge'
 import { formatDateTime } from '@/utils/format'
-import type { Cluster, Upstream, Plugin } from '@/types'
+import type { Cluster } from '@/types'
 import { useAuthStore } from '@/stores/auth'
 import { useFeaturesStore } from '@/stores/features'
-import PluginMetadataList from '@/views/PluginMetadataList.vue'
 import ClusterFormModal from '@/components/ClusterFormModal.vue'
 import ClusterCard from '@/components/ClusterCard.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import ClusterBackupDialog from '@/components/ClusterBackupDialog.vue'
-import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
-import type { PublishModalOptions } from '@/composables/useClusterResourceCore'
 import ConfigDiff from '@/views/ConfigDiff.vue'
 import { useClusterNodes } from '@/composables/useClusterNodes'
-import { useClusterRoutes } from '@/composables/useClusterRoutes'
-import { useClusterPluginConfigs } from '@/composables/useClusterPluginConfigs'
-import { useClusterStaticResources } from '@/composables/useClusterStaticResources'
 import { PAGE_SIZE_CARD_GRID } from '@/constants'
 import NodeList from '@/views/NodeList.vue'
 import UpstreamList from '@/views/UpstreamList.vue'
 import RouteList from '@/views/RouteList.vue'
 import GlobalRuleList from '@/views/GlobalRuleList.vue'
 import PluginConfigList from '@/views/PluginConfigList.vue'
-import ClusterStaticResources from '@/views/clusters/ClusterStaticResources.vue'
+import PluginMetadataList from '@/views/PluginMetadataList.vue'
+import StaticResourceList from '@/views/StaticResourceList.vue'
 import SearchInput from '@/components/SearchInput.vue'
 import TableToolbar from '@/components/TableToolbar.vue'
 import ClusterBand from '@/components/ClusterBand.vue'
@@ -564,42 +543,9 @@ function clearFilters() {
 // 中继关闭 / 区域数据缺失 / 未绑区域 → null（不渲染徽章，直连是缺省态）。
 const { routeBadge } = useClusterRouteBadge(clusters)
 
-// PublishConfirmModal state
-const publishModalVisible = ref(false)
-const publishModalTitle = ref('')
-const publishModalClusterId = ref(0)
-// M5：发布确认弹窗「将创建新版本 v(N+1)」说明（opt-in 资源经第三参传入；其余资源 undefined 不显示）
-const publishModalCurrentVersion = ref<number | null>(null)
-// static-resources-ux-close-loop 9.1/9.2：资源摘要行 + 覆盖预警（静态资源域传入；其余域为空不显示）
-const publishModalResourceSummary = ref('')
-const publishModalOverwriteWarning = ref('')
-const publishModalPreselectedNodeIds = ref<number[]>([])
-let publishModalResolve: ((nodeIds: number[]) => void) | null = null
-
-function openPublishModal(title: string, clusterId: number, opts?: PublishModalOptions): Promise<number[]> {
-  publishModalTitle.value = title
-  publishModalClusterId.value = clusterId
-  publishModalCurrentVersion.value = opts?.currentVersion ?? null
-  publishModalResourceSummary.value = opts?.resourceSummary ?? ''
-  publishModalOverwriteWarning.value = opts?.overwriteWarning ?? ''
-  publishModalPreselectedNodeIds.value = opts?.preselectedNodeIds ?? []
-  publishModalVisible.value = true
-  return new Promise((resolve) => {
-    publishModalResolve = resolve
-  })
-}
-
-function handlePublishConfirm(nodeIds: number[]) {
-  publishModalVisible.value = false
-  publishModalResolve?.(nodeIds)
-  publishModalResolve = null
-}
-
-function handlePublishCancel() {
-  publishModalVisible.value = false
-  publishModalResolve?.([])
-  publishModalResolve = null
-}
+// 2026-11-22（A 推广最后一块）：本面板不再承载发布确认弹窗——七个 Tab 全部是独立页组件的 scoped 形态，
+// 各自持有 PublishConfirmModal（静态资源 Tab 的最后消费方 ClusterStaticResources 已退场）。原
+// `openPublishModal` / `PublishConfirmModal` 状态与模板块一并删除（无任何调用方，保留会误导为共享发布弹窗）。
 
 const maximizedClusterId = ref<number | null>(null)
 
@@ -729,15 +675,13 @@ function openStatTab(cluster: Cluster, key: string) {
   handleTabClick(cluster, cluster.activeTab)
 }
 
-// 上游 / 路由 / 插件组 / 全局规则 Tab = UpstreamList / RouteList / PluginConfigList / GlobalRuleList 的
-// scoped 形态（同一做法），列表由组件自身按作用域集群加载，故此处不再预拉上游/路由/插件组/全局规则
-// （与节点不同：节点仍预拉，因为集群卡片节点区要渲染节点数据）。
-// 注：useClusterRoutes 仍保留——静态资源 Tab 的路由选择清单（loadRoutes 填充 cluster.routes）仍消费它。
+// 上游 / 路由 / 插件组 / 全局规则 / 插件元数据 / 静态资源 Tab = 对应独立页组件的 scoped 形态（同一做法），
+// 列表由组件自身按作用域集群加载，故此处不再预拉任何资源（与节点不同：节点仍预拉，因为集群卡片节点区要渲染节点数据）。
+// 2026-11-22（A 推广最后一块）：静态资源 Tab 改用 StaticResourceList scoped 形态后，`loadStaticResources`
+// 预拉与 `useClusterStaticResources` / `useClusterRoutes`（仅为静态资源表单提供 cluster.routes）双双失去消费方。
 const handleTabClick = async (cluster: Cluster, key: string) => {
   if (key === 'nodes') {
     await loadNodes(cluster)
-  } else if (key === 'staticResources') {
-    await loadStaticResources(cluster)
   }
 }
 
@@ -835,12 +779,6 @@ const headerStatItems = computed(() => [
 const modalVisible = ref(false)
 const editingCluster = ref<Cluster | null>(null)
 const pagination = reactive({ current: 1, pageSize: PAGE_SIZE_CARD_GRID, total: 0 })
-const versionModalVisible = ref(false)
-const versionModalType = ref<'upstream' | 'route' | 'plugin_config' | 'global_rule' | 'static_resource'>('upstream')
-const versionModalResourceId = ref<number | null>(null)
-const versionModalClusterId = ref<number | null>(null)
-const versionModalResourceName = ref('')
-const versionModalEdgeUuid = ref('')
 
 const isAdmin = () => authStore.user?.role === 'admin'
 
@@ -851,28 +789,6 @@ const groupOptions = computed(() => {
   }
   return Array.from(groups).sort()
 })
-
-// ── Shared state for composables ──
-const availablePlugins = ref<Plugin[]>([])
-
-const loadAvailablePlugins = async () => {
-  try {
-    const res = await api.get('/plugins/builtin')
-    availablePlugins.value = res.data.plugins || []
-  } catch (error) {
-    console.error('加载插件列表失败', error)
-  }
-}
-
-// Version modal state bag for composables using VersionModalState interface
-const versionModal = {
-  type: versionModalType,
-  visible: versionModalVisible,
-  resourceId: versionModalResourceId,
-  clusterId: versionModalClusterId,
-  resourceName: versionModalResourceName,
-  edgeUuid: versionModalEdgeUuid,
-}
 
 // Forward-ref pattern: loadClusters is defined after composable calls,
 // but useClusterNodes needs an onRefresh callback that calls it.
@@ -892,47 +808,9 @@ const { diffDrawerVisible, diffClusterId, diffNodeId, loadNodes } = useClusterNo
   onRefresh,
 })
 
-const { loadPluginConfigs } = useClusterPluginConfigs({
-  clusters,
-  versionModal,
-  availablePlugins,
-  loadAvailablePlugins,
-  openPublishModal,
-})
-
-// Shared currentClusterId for route composable + inline helpers
-const currentClusterId = ref<number | null>(null)
-
-// showDeleteConfirm 引用（route composable 懒读取，直接绑定导入的共享函数）
-let _showDeleteConfirmRoute: (opts: {
-  title: string
-  apiEndpoint: string
-  onOk: (deleteDb: boolean, deleteEdge: boolean, nodeIds: number[]) => void
-  showResourceStats?: boolean
-  stats?: Record<string, number>
-  nodes?: { id: number; ip: string; management_port: number }[]
-}) => void = showDeleteConfirm
-
-const { loadRoutes } = useClusterRoutes({
-  clusters,
-  currentClusterId,
-  openPublishModal,
-  showDeleteConfirm: _showDeleteConfirmRoute,
-  loadPluginConfigs,
-  versionModalVisible,
-  versionModalType,
-  versionModalResourceId,
-  versionModalClusterId,
-  versionModalResourceName,
-  versionModalEdgeUuid,
-})
-
-const { loadStaticResources } = useClusterStaticResources({
-  clusters,
-  versionModal,
-  openPublishModal,
-  loadRoutes,
-})
+// 2026-11-22（A 推广最后一块）：`useClusterPluginConfigs` / `useClusterRoutes` / `useClusterStaticResources`
+// 在本页已无消费方（七个 Tab 的列表/发布/版本全部由各 scoped 组件自持），连同 `versionModal` 状态包、
+// `availablePlugins` 清单、`currentClusterId` 与本页发布弹窗一并移除——面板壳不再预拉任何集群域资源。
 
 // 列表刷新时按 id 保留的面板运行态字段（central-management-ux-review-fixes 批 3 P2-5：
 // 刷新不重置 Tab/子表数据/选择态——#203 陷阱的全局版兜底；服务端字段以新响应为准）
@@ -1261,7 +1139,6 @@ async function exportCluster(cluster: Cluster) {
   }
 }
 
-// Wire showDeleteConfirm for route composable (must be after showDeleteConfirm definition)
 const centralRoute = useRoute()
 
 onMounted(async () => {

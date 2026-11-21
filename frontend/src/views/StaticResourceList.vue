@@ -1,6 +1,10 @@
 <template>
+  <!-- 单实现双形态（AGENTS #93 / shared-core-plan 2026-11-21，A 推广第 7 个（最后一个）资源）：
+       缺省 = 独立列表页（PageHeader + 分组/集群筛选 + 分组|平铺）；
+       传 scopedClusterId = 统一管理最大化面板的「静态资源」Tab（隐藏页头/分组与集群筛选/分组切换与集群带，
+       页面级动作改由工具条左侧紧凑钮承载，其余（chips/批量条/卡片网格/卡脚动作/ZIP 弹窗）与页面同一份实现）。 -->
   <div class="sr-page">
-    <PageHeader title="静态资源" description="管理 ZIP 格式的静态资源文件，上传后通过路由分发">
+    <PageHeader v-if="!isScoped" title="静态资源" description="管理 ZIP 格式的静态资源文件，上传后通过路由分发">
       <template #stats>
         <PageStatBadges :items="headerStatItems" />
       </template>
@@ -16,18 +20,35 @@
     </PageHeader>
 
     <!-- 工具条 + 状态行（AGENTS #88：与列表页同构）：第一行共享 TableToolbar，第二行 .l5-chiprow -->
-    <div class="l5-card sr-card-page">
+    <div class="l5-card sr-card-page" :class="{ 'scope-card': isScoped }">
       <TableToolbar
         v-model:mode="cardMode"
         :count="totalCount"
         count-unit="个静态资源"
         :show-count="false"
+        :show-mode="!isScoped"
         :refreshing="loading"
         @refresh="refreshList"
       >
         <template #filters>
+          <!-- scoped：页面级动作（原本在 PageHeader）收敛为工具条左侧紧凑钮（#90 页头动作区规范的 scoped 替代） -->
+          <template v-if="isScoped">
+            <button class="btn btn-primary btn-sm" data-test="scope-add-static-resource" @click="openAddModal">
+              <StrokeIcon name="plus" :size="13" /> 添加静态资源
+            </button>
+            <button
+              class="btn btn-secondary btn-sm"
+              data-test="scope-batch-toggle"
+              :aria-pressed="batchMode"
+              @click="toggleBatchMode"
+            >
+              {{ batchMode ? '退出批量管理' : '批量管理' }}
+            </button>
+          </template>
           <SearchInput v-model="searchText" placeholder="搜索名称..." :width="150" @input="onSearch" />
+          <!-- 分组/集群筛选仅页面形态（面板恒单集群、恒平铺） -->
           <select
+            v-if="!isScoped"
             v-model="groupFilter"
             :title="groupFilter.startsWith('__') ? '' : groupFilter"
             class="l5-select"
@@ -39,6 +60,7 @@
             <option value="__ung__">未分组</option>
           </select>
           <ClusterSelect
+            v-if="!isScoped"
             v-model="clusterFilter"
             :clusters="filteredClusters"
             allow-all
@@ -48,7 +70,7 @@
         </template>
         <template #mode-extra>
           <button
-            v-if="cardMode === 'group'"
+            v-if="!isScoped && cardMode === 'group'"
             type="button"
             class="tool-btn fold-all-btn"
             data-test="card-fold-all"
@@ -141,8 +163,12 @@
           >
             <span class="lp-check" aria-hidden="true"></span>
             <div class="lp-strip">
-              <span class="lp-tag lp-cluster">{{ sr.cluster_name || '-' }}</span>
-              <span v-if="sr.cluster_group_name" class="lp-tag group lp-group">{{ sr.cluster_group_name }}</span>
+              <!-- scoped（面板单集群）：集群标识与分组徽标对每张卡恒同值 → 冗余，仅页面形态渲染；
+                   右端「绑定 · 路由名」在面板内仍有意义（同集群内各资源绑定的路由仍不同），保留。 -->
+              <span v-if="!isScoped" class="lp-tag lp-cluster">{{ sr.cluster_name || '-' }}</span>
+              <span v-if="!isScoped && sr.cluster_group_name" class="lp-tag group lp-group">{{
+                sr.cluster_group_name
+              }}</span>
               <span class="st-algo"
                 >绑定 ·
                 <b :class="{ 'c-danger': sr.route_exists === false }">{{
@@ -276,11 +302,14 @@
       </div>
     </div>
 
-    <!-- Add/Edit Modal（B2a：与集群统一管理「静态资源」Tab 共用同一表单组件；集群不锁、全量可选） -->
+    <!-- Add/Edit Modal（B2a：与集群统一管理「静态资源」Tab 共用同一表单组件；页面形态集群不锁、全量可选，
+         scoped 形态（面板 Tab）只给作用域集群并锁定） -->
     <StaticResourceFormModal
       :visible="formVisible"
       :editing-resource="editingResource"
-      :clusters="clusters"
+      :clusters="formClusterOptions"
+      :default-cluster-id="isScoped ? scopedClusterId : null"
+      :lock-cluster="isScoped"
       @close="closeForm"
       @saved="onFormSaved"
     />
@@ -366,6 +395,35 @@ const { searchText, onSearch: onDebouncedSearch, cancelSearch } = useDebouncedSe
 const clusterFilter = ref<string | number>('')
 const groupFilter = ref('__all__')
 
+/**
+ * 单实现双形态（AGENTS #93 / docs/refactoring/shared-core-plan-2026-11-21.md，A 推广第 7 个（最后一个）资源）：
+ * - 不传 `scopedClusterId`：独立卡片页（跨集群、分组/平铺、集群标识与分组徽标、深链 cluster_id）。
+ * - 传 `scopedClusterId`：统一管理最大化面板的「静态资源」Tab——只承载该集群：
+ *   隐藏 PageHeader / 分组与集群筛选 / `分组|平铺` 切换器 / 分组带（恒平铺）/ 卡片上的集群与分组徽标 / 深链参数；
+ *   页面级动作（添加静态资源 / 批量管理）改由工具条左侧紧凑钮承载；
+ *   卡片解剖（绑定 strip / 四档提示 / 卡脚「发布 + ⋯」三栏菜单）、ZIP 弹窗、表单弹窗与页面同一份实现；
+ *   发布仍走本页的**逐节点 HTTP 腿**发布链路（与 useClusterStaticResources.publishStaticResource 同文案，
+ *   但进度日志只此一份——面板专属组件已退场，见 AGENTS #51）。
+ */
+const props = withDefaults(defineProps<{ scopedClusterId?: number | null }>(), { scopedClusterId: null })
+const isScoped = computed(() => props.scopedClusterId != null)
+/** 列表请求的集群过滤：scoped 恒取作用域集群，页面形态取筛选下拉 */
+function effectiveClusterId(): number | undefined {
+  if (props.scopedClusterId != null) return props.scopedClusterId
+  return clusterFilter.value ? Number(clusterFilter.value) : undefined
+}
+/** 分组过滤仅页面形态生效（面板单集群下恒「全部分组」） */
+function effectiveGroupName(): string {
+  return isScoped.value ? '__all__' : groupFilter.value
+}
+/** 表单弹窗的集群清单：scoped 下只给当前集群（并锁定选择） */
+const formClusterOptions = computed(() => {
+  const id = props.scopedClusterId
+  if (id == null) return clusters.value
+  const c = clusters.value.find((x: any) => x.id === id)
+  return [{ id, name: c?.name ?? '', display_name: c?.display_name }]
+})
+
 const groupOptions = computed(() => {
   const names = new Set(clusters.value.map((c) => c.group_name || ''))
   return Array.from(names).filter(Boolean).sort()
@@ -400,8 +458,9 @@ function onSearch() {
 async function loadResources() {
   loading.value = true
   try {
-    const params: any = { page_size: PAGE_SIZE_CARD_GRID, group_name: groupFilter.value }
-    if (clusterFilter.value) params.cluster_id = clusterFilter.value
+    const params: any = { page_size: PAGE_SIZE_CARD_GRID, group_name: effectiveGroupName() }
+    const clusterId = effectiveClusterId()
+    if (clusterId != null) params.cluster_id = clusterId
     if (searchText.value) params.search = searchText.value
     const res = await api.get('/static_resources', { params })
     resources.value = res.data.items || []
@@ -475,6 +534,9 @@ const {
     return total > 0 ? `大小 · ${formatFileSize(total)}` : '大小 · —'
   },
 })
+
+// scoped（面板 Tab）= 单集群，分组带无意义 → 恒平铺（切换器同时隐藏，见 template 的 :show-mode）
+if (isScoped.value) cardMode.value = 'flat'
 
 const renderGroups = computed(() =>
   cardMode.value === 'group'
@@ -562,19 +624,42 @@ const batchDelete = useBatchDelete<any>({
   clearSelection: () => clearSelection(),
   exitBatch: () => toggleBatchMode(),
   subsetConsequence: '未选中的 {n} 个节点将保留已分发的静态资源文件',
+  // 连带删除语义显式化：勾选 Edge 节点后提示「会连带删掉目录」（与单条删除同一文案）
+  edgeConsequenceHint: '将连带删除所选节点上的静态资源文件目录，该路径下的文件随之不可访问',
 })
 
 // ── 卡片 ⋯ 菜单（flip-up + 文档级关闭，AGENTS #81 三栏结构）──
 const openMenuId = ref<number | null>(null)
 const menuFlipUp = ref(false)
+
+/**
+ * 菜单可用空间的底边：菜单是**卡内绝对定位弹层**，会被最近的 `overflow != visible` 祖先裁剪。
+ * 面板里 `.max-panel` 与 Tab 的 `.tab-content` 都是 `overflow: hidden`（圆角收口），只按视口判断
+ * 会让「点 ⋯ 只看到一条白边」。故按最近裁剪祖先的底边判定（页面形态无裁剪祖先 → 等价视口，行为不变）。
+ */
+const MENU_HEIGHT_ESTIMATE = 200
+function menuBottomLimit(el: HTMLElement | null): number {
+  let limit = window.innerHeight
+  let node: HTMLElement | null = el?.parentElement ?? null
+  while (node) {
+    const style = getComputedStyle(node)
+    if (style.overflowY !== 'visible' || style.overflowX !== 'visible') {
+      limit = Math.min(limit, node.getBoundingClientRect().bottom)
+    }
+    node = node.parentElement
+  }
+  return limit
+}
+
 function toggleCardMenu(id: number, event?: MouseEvent): void {
   if (openMenuId.value === id) {
     openMenuId.value = null
     return
   }
   openMenuId.value = id
-  const rect = (event?.currentTarget as HTMLElement | null)?.getBoundingClientRect()
-  menuFlipUp.value = rect ? rect.bottom + 200 > window.innerHeight : false
+  const el = (event?.currentTarget as HTMLElement | null) ?? null
+  const rect = el?.getBoundingClientRect()
+  menuFlipUp.value = rect ? rect.bottom + MENU_HEIGHT_ESTIMATE > menuBottomLimit(el) : false
 }
 function closeCardMenu(): void {
   openMenuId.value = null
@@ -787,6 +872,8 @@ async function deleteResource(sr: any) {
     title: `确定要删除静态资源 "${sr.name}" 吗？`,
     apiEndpoint: `/clusters/${sr.cluster_id}/static-resources/${sr.id}`,
     nodes,
+    // 连带删除语义显式化（AGENTS #88 ⑪ / ssl 域同款）：勾选 Edge 后提示会连带删掉节点上的目录
+    edgeConsequenceHint: '将连带删除所选节点上的静态资源文件目录，该路径下的文件随之不可访问',
     onOk: async (deleteDb, deleteEdge, nodeIds) => {
       await executeDeleteWithProgress({
         title: `删除静态资源: ${sr.name}`,
@@ -810,9 +897,12 @@ function openVersionManagement(sr: any) {
 }
 
 onMounted(() => {
-  const clusterId = route.query.cluster_id as string | undefined
-  const numeric = Number(clusterId)
-  if (Number.isFinite(numeric)) clusterFilter.value = numeric
+  // 深链参数仅页面形态生效（面板 Tab 的集群由 props 上下文决定）
+  if (!isScoped.value) {
+    const clusterId = route.query.cluster_id as string | undefined
+    const numeric = Number(clusterId)
+    if (Number.isFinite(numeric)) clusterFilter.value = numeric
+  }
   loadClusters()
   loadResources()
 })
@@ -828,6 +918,16 @@ const headerStatItems = computed(() => {
 </script>
 
 <style scoped>
+/* scoped 形态（统一管理最大化面板「静态资源」Tab）：外层沿用页面卡片类，保证工具条/chips/批量条/
+   卡片网格的全局解剖规则命中，只压掉外层卡片自身的边框/底色/阴影/圆角，使其融入面板 .dbody 的
+   `.tab-content` 封闭容器（不出现卡中卡）。 */
+.scope-card {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+  overflow: visible;
+}
 .loading-state {
   text-align: center;
   padding: 60px 0;

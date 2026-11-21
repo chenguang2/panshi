@@ -29,8 +29,11 @@ describe('路由表格单一实现（面板 Tab = RouteList scoped 形态）', (
   it('面板不再预拉路由（列表由 RouteList scoped 形态自持加载，避免双请求）', () => {
     const s = read('src/views/CentralList.vue')
     expect(s).not.toContain('await loadRoutes(')
-    // useClusterRoutes 仍被静态资源 Tab 的路由选择清单消费（loadRoutes 填充 cluster.routes）
-    expect(s).toContain(':load-routes="loadRoutes"')
+    // 2026-11-22（A 推广最后一块）：静态资源 Tab 改 scoped 形态后，面板壳不再有任何 `useClusterRoutes`
+    // 消费方（原注释「useClusterRoutes 仍被静态资源 Tab 的路由选择清单消费」已失效，调用与 :load-routes 一并移除）
+    expect(s).not.toContain(':load-routes="loadRoutes"')
+    expect(s).not.toContain("from '@/composables/useClusterRoutes'")
+    expect(s).not.toMatch(/useClusterRoutes\(/)
   })
 })
 

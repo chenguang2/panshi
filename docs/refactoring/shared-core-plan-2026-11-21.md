@@ -199,7 +199,35 @@
     - 面板 Tab 分支顺带收口：`ClusterStaticResources` 的 `v-else-if` 与插件元数据的 `v-else-if` 全改独立 `v-if`，七个 Tab 一律显式条件（守卫 `CentralList.source.test.ts` 现在断言「不得出现任何 v-else-if 串联」）；该守卫的 Tab 分支区切片锚点由已不存在的 `<!-- Node Form Modal -->` 改 `<ClusterFormModal`（旧锚点 indexOf 返回 -1 → 切片退化为整文件，断言被脚本段的合法 v-else-if 污染）。
     - 面板不再预拉插件元数据（旧面板组件自持 `/clusters/{id}/plugin-metadata`）；`CentralList` 的 `availablePlugins`/`loadAvailablePlugins` 仍被上游/路由/插件组 composable 消费，未动。
     - 设计页未同步（按约定先报告）：`proposal-c/central.html` Tab 5（插件元数据）仍是 `.tab-toolbar` + `.plugin-item.configured` 双列条目 + `.pcc-actions` 旧形态，尚无 `.l5-toolbar`（含 `config-toggle-all`）/ `.l5-chiprow` / `.l5-batchbar` / `card-grid` 卡片解剖与 `.lp-json` 折叠块。
+  - [已完成 2026-11-22] **A 推广 7/7（静态资源，最后一个资源——A 推广收口）**：面板「静态资源」Tab 改渲染 `views/StaticResourceList.vue` 的 scoped 形态，`views/clusters/ClusterStaticResources.vue` 及其测试（`ClusterStaticResources.test.ts`）删除（静态资源卡片只剩一份实现）。
+    - props/隐藏/新增项与前三批完全同构（`scopedClusterId` / `scope-add-static-resource` / `scope-batch-toggle`）；请求 `GET /static_resources?cluster_id={id}&group_name=__all__&page_size=500`（全局端点本就支持 `cluster_id`/`group_name`，后端零改动）。`useCardClusterGrouping` 在 scoped 下强制 `flat`，`TableToolbar :show-mode="!isScoped"`。
+    - **发布进度日志只剩一份（AGENTS #51）**：静态资源发布是**逐节点 HTTP 腿**（`EdgeClient.raw_put` 整个 zip，非 `edge_sync.publish_resource`），原页面内联实现与 `useClusterStaticResources.publishStaticResource` 各有一份（`routeLabel`/`resultStatusLabel` 出「成功（经中继）/成功（直连）」+ 失败节点预选 + 版本弹窗出口条）。本批保留**页面这一份**（面板 Tab 即该组件），composable 内发布/删除/版本/表单态标注「已无面板消费方」但**不删**（另批清理，需同步 `useClusterStaticResources.test.ts` 与 `Cluster.static_resources` 等类型字段）。
+    - ZIP 上传：scoped 下同一入口（`useClusterStaticResources.uploadStaticResource` → 预检 32MB + 进度弹窗 + 结果行；`afterUpload` 刷新列表使 chips 同步）。经中继时网关 `client_max_body_size`（32m）超限的 **413** 中文转译保持原样，未吞。
+    - 删除语义：单条与批量删除都补 `edgeConsequenceHint`（「将连带删除所选节点上的静态资源文件目录，该路径下的文件随之不可访问」，勾选「Edge 节点」后显示，红字）——此前两入口都只有 `subsetConsequence`，「连带删 Edge 目录」仅存在于 ⋯ 菜单说明里；本批把语义显式化到确认弹窗（ssl/服务器证书域同款 `edgeConsequenceHint`）。批量删除仍走页面既有 `useBatchDelete`（全局 `DELETE /static_resources`，`static_resource_ids`）。
+    - **面板壳（CentralList）死代码收敛**：静态资源 Tab 是最后一个消费方，改为 scoped 组件后下列代码全部失去消费方并一并删除——`useClusterStaticResources` / `useClusterRoutes`（仅为静态资源表单提供 `cluster.routes`）/ `useClusterPluginConfigs`（仅是 `useClusterRoutes` 的依赖占位）三个 composable 调用、`versionModal` 状态包与其 5 个 ref、`availablePlugins`/`loadAvailablePlugins`（`/plugins/builtin` 预取）、`currentClusterId`、`_showDeleteConfirmRoute`、`handleTabClick` 的 `staticResources` 预拉分支，以及**本页的共享发布弹窗**（`openPublishModal` + `PublishConfirmModal` 状态与模板块 + `PublishModalOptions` 导入）——七个 Tab 全是独立页组件的 scoped 形态，各自持有发布确认弹窗，面板壳不再发布任何资源。`composables/useClusterRoutes|useClusterPluginConfigs|useClusterStaticResources` 因此在本仓**已无生产引用**（清理另批）。
+    - ⋯ 菜单翻转按「最近 `overflow != visible` 祖先底边」判定（前三批同实现）；真机面板内菜单向上翻转且完全在 `.dbody` 裁剪框内（menu y 392→653 ⊂ clip 300→709）。
+    - 真机验收（2026-11-22，`/tmp/opencode/parity-max/`）：`a7-panel-static.png`（面板：紧凑钮 + 6 chips + 单卡平铺 + 无集群徽标）、`a7-page-static.png`（页面零变化：页头/分组与集群筛选/分组带/集群徽标齐全）、`a7-menu-panel.png`（菜单未被裁）+ `a7-menu-page.png`（两处菜单项逐字一致：查看 ZIP 内容/编辑/替换 ZIP/版本管理 → 分隔线 → 删除）、`a7-zip-panel.png` + `a7-zip-page.png`、`a7-upload-entry.png`（文件选择框可达）、`a7-batch-confirm.png`（批量确认含节点并集 + 子集后果 + 连带删目录红字，随后取消且数据未变）、`a7-empty-panel.png`（空态 CTA）、`a7-form-panel.png`（集群 `test` 锁定）/`a7-form-page.png`（「请选择集群」可改）；console 0 error。
+    - 设计页未同步（按约定先报告）：`proposal-c/central.html` Tab 7（静态资源）仍是 `.tab-toolbar` + `.pcc-card`/`.pcc-actions` 旧形态——待回填清单见本节末「设计页回填」。
   - [待开始] B4 单元格接线 / B5 卡片动作条
+
+### A 推广完成度（2026-11-22）
+
+| Tab | scoped 组件 | 面板专属组件（已删除） | 状态 |
+|---|---|---|---|
+| 集群节点 | `NodeList.vue` | `clusters/ClusterNodes.vue` | 已接管 |
+| 上游 | `UpstreamList.vue` | `clusters/ClusterUpstreams.vue` | 已接管 |
+| 路由 | `RouteList.vue` | `clusters/ClusterRoutes.vue` | 已接管 |
+| 插件组 | `PluginConfigList.vue` | `clusters/ClusterPluginConfigs.vue` | 已接管 |
+| 全局规则 | `GlobalRuleList.vue` | `clusters/ClusterGlobalRules.vue` | 已接管 |
+| 插件元数据 | `PluginMetadataList.vue` | `components/PluginMetadata.vue` | 已接管 |
+| 静态资源 | `StaticResourceList.vue` | `clusters/ClusterStaticResources.vue` | 已接管（本批） |
+
+**设计页回填（`proposal-c/central.html` Tab 7，待批）**：
+1. Tab 体由 `.tab-toolbar`（只有「＋ 添加静态资源」）改为 `.l5-toolbar`：左簇紧凑钮「＋ 添加静态资源」（primary）+「批量管理」（secondary）+ 搜索（150px）+ 右端刷新；再补 `.l5-chiprow` 六枚状态 chips（全部 / 待上传 / 待分发 / 已分发 / 分发失败 / 配置异常，带 `f-count`）。
+2. 批量态补 `.l5-batchbar`（已选 N 项 / 批量删除 danger / 全选当前筛选结果 / 清除选择；**无批量发布**）与卡内勾选框让位。
+3. 卡片由 `.pcc-card` + `.pcc-actions`（平铺文字按钮）改为共享卡片解剖：`card-grid` + `.std-card.l5-panel` → `.lp-strip`（绑定 · 路由名）/`.lp-head`（名称 + 文件大小 lp-tag + 状态徽章）/`.lp-body`（路径/描述/上传）/四档提示（配置异常、分发失败 + 重发）/`.lp-foot`（重发失败节点或「发布」`.op-pub` + ⋯ 三栏菜单）。
+4. 面板 Tab 恒平铺：无分组带、卡片无集群/分组徽标（设计页 Tab 7 现也无 band，保持一致即可，但 `.pcc-head` 的分发路径徽标要换成 `lp-strip` 的绑定信息）。
+5. 页底 `.table-note` 的「交互模型」需改口径：静态资源 Tab 已与独立页同构（含状态 chips / 批量删除 / ⋯ 三栏菜单），不再是「迷你卡片 + 平铺按钮」。
 
 ## 七、待收口：主 spec 与实现漂移（2026-11-21）
 
