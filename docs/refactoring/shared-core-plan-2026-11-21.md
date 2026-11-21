@@ -140,6 +140,10 @@
   3. 卡片四类动作统一为「发布 + ⋯ 菜单」（B5 落地）；
   4. 节点批量导入合并为单弹窗（B2 落地）。
 - 执行记录：
-  - [进行中] B1 面板三处表单改用共享组件（`UpstreamFormModal` / `RouteFormModal` / `PluginEntityFormModal`）
-  - [待开始] B0 `ResourceListState` 适配层 + 单元格渲染器骨架
-  - [待开始] B2/B3/B4/B5
+  - [已完成 2026-11-21] **B1** 面板上游/路由/插件组表单改用共享组件（commit `cfbfe3f5`）：生产代码净减约 600 行；三个共享表单组件新增可选 `defaultClusterId` / `lockCluster`（默认值不影响页面），新增态也能「预选当前集群 + 禁用」；路由方法改胶囊 chips。
+  - [已完成 2026-11-21] **B0** `ResourceListState` 契约 + 两个工厂（cluster / local）+ 4 个单元格原语（IndexCell / NodeStatusCell / RouteMethodsCell / UpstreamTargetsCell），**未接线**（全仓生产引用 0），42 例单测 + 6 条源码守卫。
+    - 裁决：`UpstreamTargetsCell` 的 detailed 仅 chip + 健康摘要，权重条/占比留到 B4 由页面算好经 props 传入（保持组件纯展示）；
+    - `execText` 传完整文案（含「检测」后缀由调用方拼）、`healthTitle` 保留、`clusterResourceState.loading` 可选；
+    - 泛型 `<Row, ClusterLike>`：B4 一律用推断，必要时显式写两个参数。
+  - [待办] B1.5 清理三个 composable 中约 400 行表单死代码（含专属测试）
+  - [待开始] B2 / B3 / B4 / B5

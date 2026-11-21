@@ -13,7 +13,7 @@ function vueFiles(dir: string, out: string[] = []): string[] {
     const full = join(dir, entry)
     if (statSync(full).isDirectory()) {
       if (entry === '__tests__') continue
-      out.push(...vueFiles(full, out))
+      out.push(...vueFiles(full))
     } else if (entry.endsWith('.vue')) {
       out.push(full)
     }
