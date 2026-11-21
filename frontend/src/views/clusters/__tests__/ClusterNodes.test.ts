@@ -199,29 +199,44 @@ describe('ClusterNodes.vue batch2 运行态三态徽章', () => {
     return wrapper
   }
 
-  it('三态互斥：运行中/已停止/未检测（未检测不假绿）', async () => {
+  it('状态格恒显两枚胶囊：管理开关「已启用」+ 运行态三态「在线/离线/未检测」', async () => {
     const wrapper = await mountTabWithNodes([
       nodeWith(1, '10.0.0.1', { nginx: { nginx_running: true } }),
       nodeWith(2, '10.0.0.2', { nginx: { nginx_running: false } }),
       nodeWith(3, '10.0.0.3', { statistic: { edge_version: '2.5.0' } }),
     ])
-    const badges = wrapper.findAll('.badge-status')
-    const texts = badges.map((b) => ({ text: b.text(), cls: b.classes() }))
-    expect(texts.some((t) => t.text === '运行中' && t.cls.includes('badge-online'))).toBe(true)
-    expect(texts.some((t) => t.text === '已停止' && t.cls.includes('badge-offline'))).toBe(true)
-    expect(texts.some((t) => t.text === '未检测' && t.cls.includes('badge-neutral'))).toBe(true)
+    const cells = wrapper
+      .findAll('.node-status-cell')
+      .map((c) => c.findAll('.ps-tag').map((t) => ({ text: t.text(), cls: t.classes() })))
+    // 每行恒两枚（central.html 状态格）：① 管理开关态 ② 运行态
+    expect(cells).toHaveLength(3)
+    cells.forEach((pills) => expect(pills).toHaveLength(2))
+    expect(cells[0][0].text).toBe('已启用')
+    expect(cells[0][0].cls).toContain('ps-pub')
+    expect(cells[0][1].text).toBe('在线')
+    expect(cells[0][1].cls).toContain('ps-pub')
+    expect(cells[1][1].text).toBe('离线')
+    expect(cells[1][1].cls).toContain('ps-partial')
+    // 未检测不假绿（既不是在线也不沿用管理开关的绿）
+    expect(cells[2][1].text).toBe('未检测')
+    expect(cells[2][1].cls).toContain('ps-unpub')
+    expect(cells[2][1].cls).not.toContain('ps-pub')
+    // 面板状态格已退出 BadgeStatus（改原生胶囊）
+    expect(wrapper.findAll('.badge-status')).toHaveLength(0)
     wrapper.unmount()
   })
 
-  it('禁用节点：「已禁用」为空心虚线管理开关徽章（badge-disabled，r5-③）与运行态徽章并排', async () => {
+  it('禁用节点：管理开关胶囊「已禁用」（ps-unpub）与运行态胶囊并排', async () => {
     const wrapper = await mountTabWithNodes([nodeWith(1, '10.0.0.1', { nginx: { nginx_running: false } }, 0)])
-    const badges = wrapper.findAll('.badge-status')
-    const disabled = badges.find((b) => b.text() === '已禁用')
+    const pills = wrapper.findAll('.node-status-cell .ps-tag')
+    expect(pills).toHaveLength(2)
+    const disabled = pills.find((p) => p.text() === '已禁用')
     expect(disabled).toBeDefined()
-    expect(disabled!.classes()).toContain('badge-disabled')
-    expect(disabled!.classes()).not.toContain('badge-neutral')
-    expect(disabled!.classes()).not.toContain('badge-danger')
+    expect(disabled!.classes()).toContain('ps-unpub')
+    expect(disabled!.classes()).not.toContain('ps-pub')
     expect(disabled!.attributes('title')).toContain('管理开关已禁用')
+    // 运行态独立判定：禁用节点仍如实显示运行态
+    expect(pills[1].text()).toBe('离线')
     wrapper.unmount()
   })
 

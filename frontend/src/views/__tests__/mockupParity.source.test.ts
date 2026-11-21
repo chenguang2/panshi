@@ -253,16 +253,23 @@ describe('mockup-parity r5（parity-audit-nodes-r5 逐项批准后的锚点）',
     expect(badge).toMatch(/\.badge-disabled \{[^}]*border: 1px dashed/)
     expect(badge).toMatch(/v-if="status !== 'disabled'"/)
     expect(badge).toContain("status: 'online' | 'offline' | 'warning' | 'info' | 'neutral' | 'disabled'")
-    // 三处消费点：节点行内、节点详情、统一管理 Tab
-    for (const [f, count] of [
-      ['NodeList.vue', 2],
-      ['clusters/ClusterNodes.vue', 1],
-    ]) {
+    // 消费点：节点独立页行内 + 节点详情 2 处（统一管理最大化面板状态格已改为
+    // 两枚原生 .ps-tag 胶囊 —— 见 parity-max-status-pills 段的断言反转）
+    const rowConsumers: Array<[string, number]> = [['NodeList.vue', 2]]
+    for (const [f, count] of rowConsumers) {
       const s = page(f)
       expect(s, f).toContain('status="disabled"')
       expect((s.match(/status="disabled"/g) || []).length, f).toBe(count)
       expect(s, f).not.toContain('text="已禁用" status="neutral"')
     }
+    // 最大化面板 Tab 状态格：BadgeStatus 退场，改 central.html 的两枚 .ps-tag
+    const tab = page('clusters/ClusterNodes.vue')
+    expect(tab).not.toContain('status="disabled"')
+    expect(tab).not.toContain('BadgeStatus')
+    expect(tab).toMatch(/class="ps-tag ps-unpub"[\s\S]{0,120}>已禁用</)
+    expect(tab).toMatch(/class="ps-tag ps-pub" title="管理开关：已启用">已启用</)
+    expect(tab).toMatch(/class="ps-tag ps-pub"[\s\S]{0,80}>在线</)
+    expect(tab).toMatch(/class="ps-tag ps-partial"[\s\S]{0,80}>离线</)
   })
   it('r5-④ 逐元素微差锚点：序号 mono 12px、路径值 muted、行内按钮 400、表头行盒 19px、页头 1.5 行高/2px 上距', () => {
     expect(css).toMatch(/\.table-container\.l5-card \.c-idx \{[^}]*font-family: var\(--font-mono\)/)

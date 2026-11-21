@@ -165,17 +165,27 @@
         </template>
         <template v-if="column.key === 'status'">
           <div class="node-status-cell">
-            <!-- 配置态徽章（管理开关，r5-③：空心虚线胶囊 + 无圆点，与节点独立页同形态） -->
-            <BadgeStatus
+            <!-- 状态格 = 两枚无圆点胶囊（central.html 第 323/333/343 行 .pub-cell > .ps-tag）：
+                 ① 管理开关态（已启用/已禁用）② 运行态（在线/离线/未检测）。
+                 与节点独立页 NodeList.vue 的单枚 .pill-run「运行中/已停止」刻意不同——
+                 独立页设计 nodes.html 只有运行态一列，最大化面板设计 central.html 两枚并列。 -->
+            <span
               v-if="record.status === 0"
-              text="已禁用"
-              status="disabled"
+              class="ps-tag ps-unpub"
               title="管理开关已禁用：不承载业务流量，仍可执行节点任务与状态查询"
-            />
-            <!-- 运行态三态徽章（batch2 1.2 / D1-D2）：运行中/已停止/未检测互斥，不假绿 -->
-            <BadgeStatus v-if="nginxState(record) === 'running'" text="运行中" status="online" />
-            <BadgeStatus v-else-if="nginxState(record) === 'stopped'" text="已停止" status="offline" />
-            <BadgeStatus v-else text="未检测" status="neutral" />
+              >已禁用</span
+            >
+            <span v-else class="ps-tag ps-pub" title="管理开关：已启用">已启用</span>
+            <span v-if="nginxState(record) === 'running'" class="ps-tag ps-pub" title="运行态：在线（Edge 进程运行中）"
+              >在线</span
+            >
+            <span
+              v-else-if="nginxState(record) === 'stopped'"
+              class="ps-tag ps-partial"
+              title="运行态：离线（Edge 进程已停止）"
+              >离线</span
+            >
+            <span v-else class="ps-tag ps-unpub" title="运行态：未检测">未检测</span>
             <!-- 检测时效（batch2 2.2 / D3）：无 last_execution 不渲染 -->
             <span v-if="record.status_detail?.last_execution" class="status-exec-time"
               >{{ formatRelativeTime(record.status_detail.last_execution) }}检测</span
@@ -572,7 +582,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref, onMounted, onUnmounted, toValue } from 'vue'
 import type { Cluster, Node } from '@/types'
-import BadgeStatus from '@/components/BadgeStatus.vue'
 import { formatRelativeTime } from '@/utils/format'
 import ConfigDiff from '@/views/ConfigDiff.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
@@ -1224,11 +1233,12 @@ onUnmounted(() => {
   min-height: 100px;
 }
 
-/* 状态单元格：运行态/配置态徽章并排 + 检测时效弱化文字（batch2 1.2/1.3/2.2） */
+/* 状态单元格：运行态/配置态徽章并排 + 检测时效弱化文字（batch2 1.2/1.3/2.2）
+   gap 6 = 设计 .pub-cell 值（parity max-r2 批次 C） */
 .node-status-cell {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 .status-exec-time {

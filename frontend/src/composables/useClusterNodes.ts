@@ -47,7 +47,10 @@ export const allNodeColumns = [
   { title: '管理端口', dataIndex: 'management_port', key: 'management_port', width: 100, sorter: true },
   // ellipsis：路径常长于列宽，无省略时溢出压到「状态」列（批次 B 实测）
   { title: 'Edge安装路径', dataIndex: 'edge_path', key: 'edge_path', width: 220, sorter: true, ellipsis: true },
-  { title: '状态', key: 'status', width: 160, sorter: true },
+  // 状态列 200（非设计 colgroup 的 160）：最大化面板状态格恒显两枚胶囊（管理开关 + 运行态）
+  // + 检测时效，160 下实测折行；设计 central.html 的单行紧凑文案按 160 排布，双枚胶囊需 200。
+  // 220：双枚胶囊 + 检测时效单行所需（nowrap 自然宽 196 + td 内距 24；200 会让时效折行）
+  { title: '状态', key: 'status', width: 220, sorter: true },
   { title: '操作', key: 'actions', width: 280 },
 ]
 
