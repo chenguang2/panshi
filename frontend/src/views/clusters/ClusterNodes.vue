@@ -1,10 +1,11 @@
 <template>
   <div class="tab-content node-tab">
     <div class="node-actions">
-      <a-button size="small" type="primary" @click="showAddNodeModal(cluster)">
+      <a-button size="small" type="primary" @click="openNodeForm(null)">
         <StrokeIcon name="plus" :size="13" /> 添加节点
       </a-button>
-      <a-button size="small" @click="editNode(cluster)" :disabled="!singleOpEnabled">编辑节点</a-button>
+      <a-button size="small" @click="openNodeImportModal"> <StrokeIcon name="upload" :size="13" /> 批量导入 </a-button>
+      <a-button size="small" @click="handleEditSelectedNode" :disabled="!singleOpEnabled">编辑节点</a-button>
       <a-button size="small" danger :disabled="!deleteEnabled" @click="handleDeleteClick"
         >删除节点{{ deleteCount > 0 ? `(${deleteCount})` : '' }}</a-button
       >
@@ -145,7 +146,7 @@
     >
       <template #emptyText>
         <EmptyState title="暂无节点" description="添加节点后可执行安装、启停与状态查询">
-          <a-button size="small" type="primary" @click="showAddNodeModal(cluster)">添加节点</a-button>
+          <a-button size="small" type="primary" @click="openNodeForm(null)">添加节点</a-button>
         </EmptyState>
       </template>
       <template #headerCell="{ column, title }">
@@ -287,254 +288,167 @@
       @change="onNodePageChange"
     />
 
+    <!-- 单条新增/编辑：共享表单（B2b-1，与 B1 的 UpstreamFormModal 同构）。
+         面板只有一个集群 → 传单元素清单并锁集群；提交/校验全在组件内，这里只管关闭 + 局部刷新。 -->
+    <NodeFormModal
+      :visible="nodeFormVisible"
+      :editing-node="nodeFormRecord"
+      :copying-node="nodeFormCopying"
+      :clusters="formClusters"
+      :default-cluster-id="props.cluster.id"
+      lock-cluster
+      @close="closeNodeForm"
+      @saved="onNodeFormSaved"
+    />
+
+    <!-- 批量导入弹窗（B2b-1 后只承载批量块；批量导入逻辑与模板未动，B2b-2 再收敛） -->
     <Teleport to="body">
-      <div class="modal-overlay" :style="{ display: nodeModalVisible ? 'flex' : 'none' }">
-        <div class="modal" :style="nodeImportMode === 'batch' ? 'max-width: 960px;' : 'max-width: 720px;'">
+      <div class="modal-overlay" :style="{ display: nodeModalVisible && nodeImportMode === 'batch' ? 'flex' : 'none' }">
+        <div class="modal" style="max-width: 960px">
           <div class="modal-header">
-            <h2>{{ editingNode ? '编辑节点' : nodeImportMode === 'batch' ? '批量导入节点' : '添加节点' }}</h2>
+            <h2>批量导入节点</h2>
             <button class="modal-close" @click="nodeModalVisible = false">&times;</button>
           </div>
           <div class="modal-body">
-            <div
-              v-if="!editingNode"
-              style="
-                display: flex;
-                gap: 8px;
-                margin-bottom: 14px;
-                border-bottom: 1px solid var(--border);
-                padding-bottom: 10px;
-              "
-            >
+            <div style="display: flex; gap: 8px; margin-bottom: 12px">
               <button
                 class="btn btn-sm"
-                :class="nodeImportMode === 'single' ? 'btn-primary' : 'btn-secondary'"
-                @click="nodeImportMode = 'single'"
+                :class="nodeImportTab === 'text' ? 'btn-primary' : 'btn-secondary'"
+                @click="nodeImportTab = 'text'"
               >
-                单个添加
+                文本粘贴
               </button>
               <button
                 class="btn btn-sm"
-                :class="nodeImportMode === 'batch' ? 'btn-primary' : 'btn-secondary'"
-                @click="nodeImportMode = 'batch'"
+                :class="nodeImportTab === 'csv' ? 'btn-primary' : 'btn-secondary'"
+                @click="nodeImportTab = 'csv'"
               >
-                批量导入
+                CSV 上传
               </button>
             </div>
 
-            <a-form
-              v-if="nodeImportMode === 'single'"
-              ref="nodeFormRef"
-              :model="nodeForm"
-              :label-col="{ span: 6 }"
-              :wrapper-col="{ span: 16 }"
-            >
-              <a-form-item label="IP" name="ip" :rules="[{ required: true, validator: validateIP, trigger: 'blur' }]">
-                <a-input v-model:value="nodeForm.ip" placeholder="请输入IP地址" />
-              </a-form-item>
-              <a-form-item
-                label="服务端口"
-                name="service_port"
-                :rules="[{ required: true, type: 'number', message: '请输入服务端口' }]"
-              >
-                <a-input-number v-model:value="nodeForm.service_port" :min="1" :max="65535" style="width: 100%" />
-              </a-form-item>
-              <a-form-item
-                label="管理端口"
-                name="management_port"
-                :rules="[{ required: true, type: 'number', message: '请输入管理端口' }]"
-              >
-                <a-input-number v-model:value="nodeForm.management_port" :min="1" :max="65535" style="width: 100%" />
-              </a-form-item>
-              <a-form-item label="SSH端口" name="ssh_port" :rules="[{ type: 'number', message: '请输入SSH端口' }]">
-                <a-input-number
-                  v-model:value="nodeForm.ssh_port"
-                  :min="1"
-                  :max="65535"
-                  style="width: 100%"
-                  placeholder="默认 22"
-                />
-              </a-form-item>
-              <a-form-item
-                label="OpenResty安装路径"
-                name="openresty_path"
-                :rules="[
-                  { required: true, message: '请输入OpenResty安装路径' },
-                  { pattern: /^\//, message: '必须以 / 开头' },
-                  { pattern: /^\/.*[^/]$/, message: '路径末尾不能为 /' },
-                  { max: 255, message: '最多255个字符' },
-                ]"
-              >
-                <a-input v-model:value="nodeForm.openresty_path" placeholder="/usr/local/nginx" />
-              </a-form-item>
-              <a-form-item
-                label="Edge安装路径"
-                name="edge_path"
-                :rules="[
-                  { required: true, message: '请输入Edge安装路径' },
-                  { pattern: /^\//, message: '必须以 / 开头' },
-                  { pattern: /^\/.*[^/]$/, message: '路径末尾不能为 /' },
-                  { max: 255, message: '最多255个字符' },
-                ]"
-              >
-                <a-input v-model:value="nodeForm.edge_path" placeholder="运行时路径，如 /edge/node1" />
-              </a-form-item>
-              <a-form-item label="状态" name="status" :rules="[{ required: true, message: '请选择状态' }]">
-                <a-select v-model:value="nodeForm.status">
-                  <a-select-option :value="1">启用</a-select-option>
-                  <a-select-option :value="0">禁用</a-select-option>
-                </a-select>
-              </a-form-item>
-            </a-form>
-
-            <template v-else>
-              <div style="display: flex; gap: 8px; margin-bottom: 12px">
-                <button
-                  class="btn btn-sm"
-                  :class="nodeImportTab === 'text' ? 'btn-primary' : 'btn-secondary'"
-                  @click="nodeImportTab = 'text'"
-                >
-                  文本粘贴
-                </button>
-                <button
-                  class="btn btn-sm"
-                  :class="nodeImportTab === 'csv' ? 'btn-primary' : 'btn-secondary'"
-                  @click="nodeImportTab = 'csv'"
-                >
-                  CSV 上传
-                </button>
-              </div>
-
-              <template v-if="nodeImportTab === 'text'">
-                <textarea
-                  v-model="nodeImportText"
-                  rows="6"
-                  style="
-                    width: 100%;
-                    padding: 8px;
-                    border: 1px solid var(--border);
-                    border-radius: var(--radius-md);
-                    font-family: var(--font-mono);
-                    font-size: 12px;
-                  "
-                  placeholder="每行一个 IP，支持范围 10.0.0.1-10.0.0.50、CIDR 10.0.0.0/24、注释行 # 开头"
-                ></textarea>
-                <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center">
-                  <button class="btn btn-primary btn-sm" @click="parseTextToRows">解析</button>
-                  <span style="font-size: 12px; color: var(--muted)"
-                    >已解析 {{ validImportCount }} / {{ nodeImportRows.length }} 个有效节点</span
-                  >
-                </div>
-              </template>
-
-              <template v-else>
-                <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 10px">
-                  <input type="file" accept=".csv" @change="onCsvFileChange" style="font-size: 12px" />
-                  <button class="btn btn-secondary btn-sm" @click="downloadNodeCsvTemplate">下载模板</button>
-                </div>
-                <div v-if="nodeImportRows.length > 0" style="font-size: 12px; color: var(--muted); margin-bottom: 8px">
-                  已解析 {{ validImportCount }} / {{ nodeImportRows.length }} 个有效节点
-                </div>
-              </template>
-
-              <div
+            <template v-if="nodeImportTab === 'text'">
+              <textarea
+                v-model="nodeImportText"
+                rows="6"
                 style="
-                  display: flex;
-                  gap: 10px;
-                  align-items: center;
-                  margin: 12px 0 8px;
+                  width: 100%;
+                  padding: 8px;
+                  border: 1px solid var(--border);
+                  border-radius: var(--radius-md);
+                  font-family: var(--font-mono);
                   font-size: 12px;
-                  flex-wrap: wrap;
-                  border-top: 1px solid var(--border);
-                  padding-top: 10px;
                 "
-              >
-                <span style="color: var(--muted); font-weight: 500">默认值（应用于所有行）</span>
-                <label style="display: flex; align-items: center; gap: 4px; color: var(--fg)">
-                  服务端口
-                  <input v-model.number="nodeImportDefaults.service_port" type="number" style="width: 70px" />
-                </label>
-                <label style="display: flex; align-items: center; gap: 4px; color: var(--fg)">
-                  管理端口
-                  <input v-model.number="nodeImportDefaults.management_port" type="number" style="width: 70px" />
-                </label>
-                <label style="display: flex; align-items: center; gap: 4px; color: var(--fg)">
-                  Edge路径
-                  <input v-model="nodeImportDefaults.edge_path" style="width: 130px" placeholder="/edge" />
-                </label>
-                <label style="display: flex; align-items: center; gap: 4px; color: var(--fg)">
-                  Nginx安装目录
-                  <input
-                    v-model="nodeImportDefaults.openresty_path"
-                    style="width: 150px"
-                    placeholder="/usr/local/nginx"
-                  />
-                </label>
-              </div>
-
-              <div v-if="nodeImportRows.length > 0" style="margin-top: 6px">
-                <div
-                  style="
-                    max-height: 260px;
-                    overflow-y: auto;
-                    border: 1px solid var(--border);
-                    border-radius: var(--radius-md);
-                  "
+                placeholder="每行一个 IP，支持范围 10.0.0.1-10.0.0.50、CIDR 10.0.0.0/24、注释行 # 开头"
+              ></textarea>
+              <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center">
+                <button class="btn btn-primary btn-sm" @click="parseTextToRows">解析</button>
+                <span style="font-size: 12px; color: var(--muted)"
+                  >已解析 {{ validImportCount }} / {{ nodeImportRows.length }} 个有效节点</span
                 >
-                  <table style="width: 100%; font-size: 12px; border-collapse: collapse">
-                    <thead>
-                      <tr style="background: var(--bg); color: var(--muted); text-align: left">
-                        <th style="padding: 6px 8px">IP</th>
-                        <th style="padding: 6px 8px">服务端口</th>
-                        <th style="padding: 6px 8px">管理端口</th>
-                        <th style="padding: 6px 8px">Edge路径</th>
-                        <th style="padding: 6px 8px">Nginx安装目录</th>
-                        <th style="padding: 6px 8px">状态</th>
-                        <th style="padding: 6px 8px">原因</th>
-                        <th style="padding: 6px 8px"></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr v-for="(row, idx) in nodeImportRows" :key="idx" :style="rowStyle(row, idx)">
-                        <td style="padding: 4px 8px"><input v-model="row.ip" style="width: 110px" /></td>
-                        <td style="padding: 4px 8px">
-                          <input v-model.number="row.service_port" type="number" style="width: 70px" />
-                        </td>
-                        <td style="padding: 4px 8px">
-                          <input v-model.number="row.management_port" type="number" style="width: 70px" />
-                        </td>
-                        <td style="padding: 4px 8px"><input v-model="row.edge_path" style="width: 130px" /></td>
-                        <td style="padding: 4px 8px"><input v-model="row.openresty_path" style="width: 150px" /></td>
-                        <td style="padding: 4px 8px">
-                          <select v-model.number="row.status" style="width: 70px">
-                            <option :value="1">启用</option>
-                            <option :value="0">禁用</option>
-                          </select>
-                        </td>
-                        <td style="padding: 4px 8px; color: var(--danger); font-size: 11px">
-                          {{ importRowError(row) || '' }}
-                        </td>
-                        <td style="padding: 4px 8px">
-                          <button class="btn btn-ghost btn-sm" @click="removeImportRow(idx)">×</button>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
               </div>
             </template>
+
+            <template v-else>
+              <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 10px">
+                <input type="file" accept=".csv" @change="onCsvFileChange" style="font-size: 12px" />
+                <button class="btn btn-secondary btn-sm" @click="downloadNodeCsvTemplate">下载模板</button>
+              </div>
+              <div v-if="nodeImportRows.length > 0" style="font-size: 12px; color: var(--muted); margin-bottom: 8px">
+                已解析 {{ validImportCount }} / {{ nodeImportRows.length }} 个有效节点
+              </div>
+            </template>
+
+            <div
+              style="
+                display: flex;
+                gap: 10px;
+                align-items: center;
+                margin: 12px 0 8px;
+                font-size: 12px;
+                flex-wrap: wrap;
+                border-top: 1px solid var(--border);
+                padding-top: 10px;
+              "
+            >
+              <span style="color: var(--muted); font-weight: 500">默认值（应用于所有行）</span>
+              <label style="display: flex; align-items: center; gap: 4px; color: var(--fg)">
+                服务端口
+                <input v-model.number="nodeImportDefaults.service_port" type="number" style="width: 70px" />
+              </label>
+              <label style="display: flex; align-items: center; gap: 4px; color: var(--fg)">
+                管理端口
+                <input v-model.number="nodeImportDefaults.management_port" type="number" style="width: 70px" />
+              </label>
+              <label style="display: flex; align-items: center; gap: 4px; color: var(--fg)">
+                Edge路径
+                <input v-model="nodeImportDefaults.edge_path" style="width: 130px" placeholder="/edge" />
+              </label>
+              <label style="display: flex; align-items: center; gap: 4px; color: var(--fg)">
+                Nginx安装目录
+                <input
+                  v-model="nodeImportDefaults.openresty_path"
+                  style="width: 150px"
+                  placeholder="/usr/local/nginx"
+                />
+              </label>
+            </div>
+
+            <div v-if="nodeImportRows.length > 0" style="margin-top: 6px">
+              <div
+                style="
+                  max-height: 260px;
+                  overflow-y: auto;
+                  border: 1px solid var(--border);
+                  border-radius: var(--radius-md);
+                "
+              >
+                <table style="width: 100%; font-size: 12px; border-collapse: collapse">
+                  <thead>
+                    <tr style="background: var(--bg); color: var(--muted); text-align: left">
+                      <th style="padding: 6px 8px">IP</th>
+                      <th style="padding: 6px 8px">服务端口</th>
+                      <th style="padding: 6px 8px">管理端口</th>
+                      <th style="padding: 6px 8px">Edge路径</th>
+                      <th style="padding: 6px 8px">Nginx安装目录</th>
+                      <th style="padding: 6px 8px">状态</th>
+                      <th style="padding: 6px 8px">原因</th>
+                      <th style="padding: 6px 8px"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(row, idx) in nodeImportRows" :key="idx" :style="rowStyle(row, idx)">
+                      <td style="padding: 4px 8px"><input v-model="row.ip" style="width: 110px" /></td>
+                      <td style="padding: 4px 8px">
+                        <input v-model.number="row.service_port" type="number" style="width: 70px" />
+                      </td>
+                      <td style="padding: 4px 8px">
+                        <input v-model.number="row.management_port" type="number" style="width: 70px" />
+                      </td>
+                      <td style="padding: 4px 8px"><input v-model="row.edge_path" style="width: 130px" /></td>
+                      <td style="padding: 4px 8px"><input v-model="row.openresty_path" style="width: 150px" /></td>
+                      <td style="padding: 4px 8px">
+                        <select v-model.number="row.status" style="width: 70px">
+                          <option :value="1">启用</option>
+                          <option :value="0">禁用</option>
+                        </select>
+                      </td>
+                      <td style="padding: 4px 8px; color: var(--danger); font-size: 11px">
+                        {{ importRowError(row) || '' }}
+                      </td>
+                      <td style="padding: 4px 8px">
+                        <button class="btn btn-ghost btn-sm" @click="removeImportRow(idx)">×</button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
           <div class="modal-footer">
             <button class="btn btn-secondary" @click="nodeModalVisible = false">取消</button>
-            <button
-              v-if="nodeImportMode === 'batch'"
-              class="btn btn-primary"
-              :disabled="validImportCount === 0"
-              @click="handleImportSubmit"
-            >
+            <button class="btn btn-primary" :disabled="validImportCount === 0" @click="handleImportSubmit">
               创建 {{ validImportCount }} 个节点
-            </button>
-            <button v-else class="btn btn-primary" @click="handleNodeSubmit">
-              {{ editingNode ? '保存' : '创建' }}
             </button>
           </div>
         </div>
@@ -593,6 +507,7 @@ import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import InstallOpenrestyDialog from '@/components/InstallOpenrestyDialog.vue'
 import EdgePackManagementDialog from '@/components/EdgePackManagementDialog.vue'
 import NodeExecutionResultDrawer from '@/components/NodeExecutionResultDrawer.vue'
+import NodeFormModal from '@/components/NodeFormModal.vue'
 import BatchActionProgressModal from '@/components/BatchActionProgressModal.vue'
 import api from '@/api'
 import { validateNodeImportRow } from '@/utils/nodeImport'
@@ -632,9 +547,6 @@ const clusters = computed<Cluster[]>(() => [props.cluster])
 
 const {
   nodeModalVisible,
-  editingNode,
-  nodeFormRef,
-  nodeForm,
   diffDrawerVisible,
   diffClusterId,
   diffNodeId,
@@ -649,16 +561,11 @@ const {
   nodeSearchVisible,
   nodeActionsSelected,
   visibleNodeColumns,
-  validateIP,
   handleNodeAction,
   handleNodeTableChange,
   loadNodes,
   selectNode,
   selectNodes,
-  showAddNodeModal,
-  editNode,
-  copyNode,
-  handleNodeSubmit,
   importNodes,
   nodeImportMode,
   nodeImportTab,
@@ -692,6 +599,52 @@ const {
 } = useClusterNodes({
   clusters,
 })
+
+// ── 单条表单（B2b-1：表单/校验/提交已迁至 components/NodeFormModal.vue）──
+// 面板只有当前集群：单元素清单（组件内 ClusterSelect 禁用，add 态仅一个可选项）。
+// 新增/编辑/复制均以「编辑源记录 + copyingNode」入参，与 B1 上游面板同构。
+const formClusters = computed(() => [
+  { id: props.cluster.id, name: props.cluster.name, display_name: props.cluster.display_name },
+])
+const nodeFormVisible = ref(false)
+const nodeFormRecord = ref<Node | null>(null)
+const nodeFormCopying = ref(false)
+
+function openNodeForm(record: Node | null, copy = false) {
+  // 与批量导入弹窗互斥（两者各自独立弹窗，同一时刻只显示一个）
+  nodeModalVisible.value = false
+  nodeFormRecord.value = record
+  nodeFormCopying.value = copy && record != null
+  nodeFormVisible.value = true
+}
+
+function handleEditSelectedNode() {
+  const node = props.cluster.selectedNode
+  if (!node) {
+    message.warning('请先选择一个节点')
+    return
+  }
+  openNodeForm(node)
+}
+
+function closeNodeForm() {
+  nodeFormVisible.value = false
+  nodeFormRecord.value = null
+  nodeFormCopying.value = false
+}
+
+/** 保存成功（组件已 emit saved + close）：刷新该集群节点列表（面板局部刷新，不重建 cluster 对象） */
+async function onNodeFormSaved() {
+  closeNodeForm()
+  await loadNodes(props.cluster)
+}
+
+/** 批量导入弹窗入口（单条表单独立后，批量导入需自己的入口；逻辑与模板本批未动） */
+function openNodeImportModal() {
+  nodeFormVisible.value = false
+  nodeImportMode.value = 'batch'
+  nodeModalVisible.value = true
+}
 
 // ── 列拖拽手势（调宽 + 移动）共享 composable（cluster-tab-column-personalization 2.2）──
 // 几何作用域由 composable 按拖拽起点所在的表解析：统一管理页同屏可展开多张卡片，
@@ -937,6 +890,11 @@ function handleNodeStatusQuery() {
 }
 
 function handleNodeActionWithConfirm(cluster: Cluster, record: Node, btnKey: string) {
+  // 编辑/复制由共享 NodeFormModal 承载（B2b-1），其余动作仍走 composable 单一实现
+  if (btnKey === 'edit' || btnKey === 'copy') {
+    openNodeForm(record, btnKey === 'copy')
+    return
+  }
   if (btnKey === 'start') {
     showDangerConfirm('确认启动节点', `即将对节点 ${record.ip} 执行"启动"操作，确认无误后继续。`, '确认启动', () =>
       executeNodeAction(record, 'start', '启动'),

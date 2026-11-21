@@ -147,4 +147,5 @@
     - 泛型 `<Row, ClusterLike>`：B4 一律用推断，必要时显式写两个参数。
   - [已完成 2026-11-21] **B1.5** 清理三个 composable 的表单死代码：生产 −1,197 / +31（`useClusterUpstreams` 939→288、`useClusterRoutes` 664→275、`useClusterPluginEntity` 293→181），测试 −809；新增 `panelFormDeadCode.source.test.ts` 防回填。保留项：列表加载 / 动作分发 / 发布 / 版本 / 列配置 / 选择态，以及 deps 里「调用方仍在传」的字段（不改公开签名）。
   - [已完成 2026-11-21] **B2a** 静态资源：抽 `StaticResourceFormModal` + `ZipContentsModal`，面板与页面共用；资格判定收敛到 `utils/staticResourceRoute.staticResourceRouteChecks()` 单一入口；两侧字段集 = 所属集群 + 路由 + 描述（`name`/`url_path` 经核实为死字段，见 3.1 勘误）。
-  - [待开始] B2b 节点（单条 + 批量导入合并）、B2c 插件元数据（创建弹窗）；B3 / B4 / B5
+  - [已完成 2026-11-21] **B2b-1** 节点单条表单：抽 `NodeFormModal`，面板/节点页共用；校验取两侧更严格者（路径 `max:255`、SSH 端口 1–65535）；另发现并删除 `CentralList.vue` 第三处无入口的死内联表单；面板工具条补「批量导入」独立入口（设计页同步）。
+  - [待开始] B2b-2 批量导入合并、B2c 插件元数据；B3 / B4 / B5

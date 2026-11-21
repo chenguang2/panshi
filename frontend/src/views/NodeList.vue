@@ -336,115 +336,15 @@
       <ListPager :page="page" :page-size="pageSize" :total="totalCount" unit="个节点" @change="handlePagerChange" />
     </div>
 
-    <!-- Add / Edit Node Modal -->
-    <div class="modal-overlay" :style="{ display: formModalVisible ? 'flex' : 'none' }">
-      <div class="modal modal-wide">
-        <div class="modal-header">
-          <h2>{{ editingNode ? '编辑节点' : '添加节点' }}</h2>
-          <button class="modal-close" @click="closeFormModal">&times;</button>
-        </div>
-        <div class="modal-body">
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">所属集群 <span class="required">*</span></label>
-              <ClusterSelect
-                v-model="formData.cluster_id"
-                :clusters="clusters"
-                :disabled="!!editingNode"
-                :class="{ 'has-error': formErrors.cluster_id }"
-              />
-              <span class="form-error" v-if="formErrors.cluster_id">{{ formErrors.cluster_id }}</span>
-            </div>
-            <div class="form-group">
-              <label class="form-label">IP 地址 <span class="required">*</span></label>
-              <input
-                v-model="formData.ip"
-                type="text"
-                class="form-input"
-                :class="{ 'has-error': formErrors.ip }"
-                placeholder="10.0.0.1"
-              />
-              <span class="form-error" v-if="formErrors.ip">{{ formErrors.ip }}</span>
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">服务端口 <span class="required">*</span></label>
-              <input
-                v-model.number="formData.service_port"
-                type="number"
-                class="form-input"
-                :class="{ 'has-error': formErrors.service_port }"
-                min="1"
-                max="65535"
-              />
-              <span class="form-error" v-if="formErrors.service_port">{{ formErrors.service_port }}</span>
-            </div>
-            <div class="form-group">
-              <label class="form-label">管理端口 <span class="required">*</span></label>
-              <input
-                v-model.number="formData.management_port"
-                type="number"
-                class="form-input"
-                :class="{ 'has-error': formErrors.management_port }"
-                min="1"
-                max="65535"
-              />
-              <span class="form-error" v-if="formErrors.management_port">{{ formErrors.management_port }}</span>
-            </div>
-            <div class="form-group">
-              <label class="form-label">SSH端口</label>
-              <input
-                v-model.number="formData.ssh_port"
-                type="number"
-                class="form-input"
-                min="1"
-                max="65535"
-                placeholder="默认 22"
-              />
-            </div>
-          </div>
-          <div class="form-group">
-            <label class="form-label">OpenResty 安装路径 <span class="required">*</span></label>
-            <input
-              v-model="formData.openresty_path"
-              type="text"
-              class="form-input"
-              :class="{ 'has-error': formErrors.openresty_path }"
-              placeholder="/usr/local/nginx"
-            />
-            <span class="form-error" v-if="formErrors.openresty_path">{{ formErrors.openresty_path }}</span>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Edge 安装路径 <span class="required">*</span></label>
-            <input
-              v-model="formData.edge_path"
-              type="text"
-              class="form-input"
-              :class="{ 'has-error': formErrors.edge_path }"
-              placeholder="/usr/local/edge"
-            />
-            <span class="form-error" v-if="formErrors.edge_path">{{ formErrors.edge_path }}</span>
-          </div>
-          <div class="form-group">
-            <label class="form-label">状态</label>
-            <select class="form-input" v-model="formData.statusCheck">
-              <option :value="true">启用</option>
-              <option :value="false">禁用</option>
-            </select>
-            <div class="form-hint">
-              禁用的节点不进入中继网关流量白名单（不承载业务流量），但仍可执行节点任务与状态查询
-            </div>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" @click="closeFormModal">取消</button>
-          <button class="btn btn-primary" @click="handleFormSubmit" :disabled="formSubmitting">
-            {{ formSubmitting ? '提交中...' : '保存' }}
-          </button>
-        </div>
-      </div>
-    </div>
+    <!-- 单条新增/编辑：共享表单（B2b-1，与面板 ClusterNodes 同一组件；提交/校验在组件内） -->
+    <NodeFormModal
+      :visible="formModalVisible"
+      :editing-node="editingNode"
+      :copying-node="copyingNode"
+      :clusters="clusters"
+      @close="closeFormModal"
+      @saved="onFormSaved"
+    />
 
     <!-- Detail Modal -->
     <div class="modal-overlay" :style="{ display: detailModalVisible ? 'flex' : 'none' }">
@@ -660,6 +560,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import type { Node } from '@/types'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
 import { formatDateTime as formatDate, formatRelativeTime } from '@/utils/format'
 import ClusterSelect from '@/components/ClusterSelect.vue'
@@ -672,6 +573,7 @@ import { PAGE_SIZE_TABLE, PAGE_SIZE_DROPDOWN } from '@/constants'
 import PageHeader from '@/components/PageHeader.vue'
 import BadgeStatus from '@/components/BadgeStatus.vue'
 import NodeExecutionResultDrawer from '@/components/NodeExecutionResultDrawer.vue'
+import NodeFormModal from '@/components/NodeFormModal.vue'
 import BatchActionProgressModal from '@/components/BatchActionProgressModal.vue'
 import ConfigDiff from '@/views/ConfigDiff.vue'
 import InstallOpenrestyDialog from '@/components/InstallOpenrestyDialog.vue'
@@ -693,7 +595,7 @@ import ClusterGroupRow from '@/components/ClusterGroupRow.vue'
 import ListPager from '@/components/ListPager.vue'
 import PageStatBadges from '@/components/PageStatBadges.vue'
 import { useFeaturesStore } from '@/stores/features'
-import { listNodes, createNode, updateNode } from '@/api/nodes'
+import { listNodes } from '@/api/nodes'
 import {
   nginxState,
   createCancelNodeInstallHandler,
@@ -752,22 +654,11 @@ function onGroupChange() {
 
 let _elapsedTimer: ReturnType<typeof setInterval> | null = null
 
-// Form modal
+// Form modal（B2b-1：表单字段/校验/提交已迁至共享 components/NodeFormModal.vue，本页只持有开关与源记录）
 const formModalVisible = ref(false)
-const editingNode = ref<any | null>(null)
-const formSubmitting = ref(false)
-const formData = reactive({
-  cluster_id: '' as number | string,
-  ip: '',
-  service_port: 80,
-  management_port: 9180,
-  ssh_port: 22,
-  edge_path: '',
-  openresty_path: '',
-  statusCheck: true,
-})
-const formErrors = reactive<Record<string, string>>({})
-const IP_PATTERN = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
+const editingNode = ref<Node | null>(null)
+/** 复制态：以 editingNode 为模板新建（组件内 IP 清空、标题「复制节点」、提交走 POST） */
+const copyingNode = ref(false)
 
 // Detail modal
 const detailModalVisible = ref(false)
@@ -885,18 +776,10 @@ async function handleBatchStatus() {
   await refreshList()
 }
 
-// ── 复制节点（batch3 3.1 / D6：预填行配置、IP 清空、清 formErrors）──
-function handleCopy(record: any) {
-  editingNode.value = null
-  formData.cluster_id = record.cluster_id
-  formData.ip = ''
-  formData.service_port = record.service_port
-  formData.management_port = record.management_port
-  formData.ssh_port = record.ssh_port ?? 22
-  formData.edge_path = record.edge_path || ''
-  formData.openresty_path = record.openresty_path || ''
-  formData.statusCheck = record.status === 1
-  resetFormErrors()
+// ── 复制节点（batch3 3.1 / D6：预填行配置、IP 清空；预填与清空在共享 NodeFormModal 内，B2b-1）──
+function handleCopy(record: Node) {
+  editingNode.value = record
+  copyingNode.value = true
   formModalVisible.value = true
 }
 
@@ -1419,116 +1302,30 @@ function onSearchInput() {
   })
 }
 
-// ── Form Modal ──
-
-/** 重置全部校验错误（遍历所有 key，避免逐字段列举遗漏——batch1 2.1） */
-function resetFormErrors() {
-  for (const key of Object.keys(formErrors)) delete formErrors[key]
-}
+// ── Form Modal（B2b-1：表单在共享 components/NodeFormModal.vue，本页只做开关 + 刷新）──
 
 function openAddModal() {
   editingNode.value = null
-  formData.cluster_id = ''
-  formData.ip = ''
-  formData.service_port = 80
-  formData.management_port = 9180
-  formData.ssh_port = 22
-  formData.edge_path = ''
-  formData.openresty_path = ''
-  formData.statusCheck = true
-  resetFormErrors()
+  copyingNode.value = false
   formModalVisible.value = true
 }
 
-function handleEdit(record: any) {
+function handleEdit(record: Node) {
   editingNode.value = record
-  formData.cluster_id = record.cluster_id
-  formData.ip = record.ip
-  formData.service_port = record.service_port
-  formData.management_port = record.management_port
-  formData.ssh_port = record.ssh_port ?? 22
-  formData.edge_path = record.edge_path || ''
-  formData.openresty_path = record.openresty_path || ''
-  formData.statusCheck = record.status === 1
-  resetFormErrors()
+  copyingNode.value = false
   formModalVisible.value = true
 }
 
 function closeFormModal() {
   formModalVisible.value = false
   editingNode.value = null
+  copyingNode.value = false
 }
 
-async function handleFormSubmit() {
-  resetFormErrors()
-  let valid = true
-  if (!formData.cluster_id) {
-    formErrors.cluster_id = '请选择所属集群'
-    valid = false
-  }
-  if (!formData.ip) {
-    formErrors.ip = '请输入 IP 地址'
-    valid = false
-  } else if (!IP_PATTERN.test(formData.ip)) {
-    formErrors.ip = 'IP 地址格式不正确'
-    valid = false
-  }
-  if (!formData.service_port || formData.service_port < 1 || formData.service_port > 65535) {
-    formErrors.service_port = '请输入有效的端口号 (1-65535)'
-    valid = false
-  }
-  if (!formData.management_port || formData.management_port < 1 || formData.management_port > 65535) {
-    formErrors.management_port = '请输入有效的端口号 (1-65535)'
-    valid = false
-  }
-  if (!formData.edge_path) {
-    formErrors.edge_path = '请输入 Edge 安装路径'
-    valid = false
-  } else if (!formData.edge_path.startsWith('/')) {
-    formErrors.edge_path = '路径必须以 / 开头'
-    valid = false
-  } else if (formData.edge_path.endsWith('/')) {
-    formErrors.edge_path = '路径末尾不能为 /'
-    valid = false
-  }
-  if (!formData.openresty_path) {
-    formErrors.openresty_path = '请输入 OpenResty 安装路径'
-    valid = false
-  } else if (!formData.openresty_path.startsWith('/')) {
-    formErrors.openresty_path = '路径必须以 / 开头'
-    valid = false
-  } else if (formData.openresty_path.endsWith('/')) {
-    formErrors.openresty_path = '路径末尾不能为 /'
-    valid = false
-  }
-  if (!valid) return
-
-  formSubmitting.value = true
-  try {
-    const payload = {
-      ip: formData.ip,
-      service_port: formData.service_port,
-      management_port: formData.management_port,
-      ssh_port: formData.ssh_port,
-      edge_path: formData.edge_path,
-      openresty_path: formData.openresty_path || undefined,
-      status: formData.statusCheck ? 1 : 0,
-    }
-
-    if (editingNode.value) {
-      await updateNode(editingNode.value.cluster_id, editingNode.value.id, payload)
-      message.success('节点已更新')
-    } else {
-      await createNode(Number(formData.cluster_id), payload)
-      message.success('节点已添加')
-    }
-    formModalVisible.value = false
-    refreshList()
-  } catch (error: unknown) {
-    message.error(getApiErrorMessage(error))
-  } finally {
-    formSubmitting.value = false
-  }
+/** 保存成功（组件已内部提交并 emit saved）：刷新列表并收起弹窗 */
+function onFormSaved() {
+  closeFormModal()
+  refreshList()
 }
 
 // ── Detail ──

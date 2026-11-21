@@ -9,16 +9,18 @@ function src(): string {
   return readFileSync(resolve(process.cwd(), 'src/views/NodeList.vue'), 'utf-8')
 }
 
-describe('节点表单状态控件', () => {
-  it('状态为下拉框（启用/禁用），不再是勾选框', () => {
-    const s = src()
-    expect(s).toMatch(/<select class="form-input" v-model="formData\.statusCheck">/)
-    expect(s).toContain(':value="true">启用<')
-    expect(s).toContain(':value="false">禁用<')
-    expect(s).not.toMatch(/type="checkbox" v-model="formData\.statusCheck"/)
+describe('节点表单状态控件（B2b-1：唯一实现在共享 NodeFormModal）', () => {
+  it('表单状态为下拉框（启用/禁用），不再是勾选框', () => {
+    const s = readFileSync(resolve(process.cwd(), 'src/components/NodeFormModal.vue'), 'utf-8')
+    expect(s).toContain('<a-select-option :value="1">启用</a-select-option>')
+    expect(s).toContain('<a-select-option :value="0">禁用</a-select-option>')
+    expect(s).not.toMatch(/type="checkbox"/)
+    // 页面不再自持表单模型（statusCheck 已退场）
+    expect(src()).not.toContain('statusCheck')
   })
   it('状态控件附带后果说明（禁用不入网关流量白名单）', () => {
-    expect(src()).toContain('禁用的节点不进入中继网关流量白名单（不承载业务流量），但仍可执行节点任务与状态查询')
+    const s = readFileSync(resolve(process.cwd(), 'src/components/NodeFormModal.vue'), 'utf-8')
+    expect(s).toContain('禁用的节点不进入中继网关流量白名单（不承载业务流量），但仍可执行节点任务与状态查询')
   })
   it('表格状态列可见节点禁用态（已禁用徽章，与 nginx 运行态并存）', () => {
     const s = src()
@@ -26,6 +28,25 @@ describe('节点表单状态控件', () => {
     const block = s.match(/column\.key === 'status'[\s\S]{0,1200}?<\/template>/)
     expect(block, '需存在 status 列模板').toBeTruthy()
     expect(block![0]).toMatch(/record\.status === 0[\s\S]{0,200}已禁用/)
+  })
+})
+
+describe('B2b-1：节点单条表单共用守卫', () => {
+  it('页面引用共享 NodeFormModal，不再自写表单模板与校验错误状态', () => {
+    const s = src()
+    expect(s).toContain('<NodeFormModal')
+    expect(s).toContain("import NodeFormModal from '@/components/NodeFormModal.vue'")
+    expect(s).not.toContain('formErrors')
+    expect(s).not.toContain('handleFormSubmit')
+    expect(s).not.toContain('formData.')
+    expect(s).not.toContain('formSubmitting')
+  })
+  it('提交逻辑不在页面重写：createNode/updateNode 调用已迁至组件', () => {
+    const s = src()
+    expect(s).not.toContain('createNode')
+    expect(s).not.toContain('updateNode')
+    expect(s).toContain('@saved="onFormSaved"')
+    expect(s).toContain('@close="closeFormModal"')
   })
 })
 

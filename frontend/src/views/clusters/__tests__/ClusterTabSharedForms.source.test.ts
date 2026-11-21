@@ -65,3 +65,37 @@ describe('面板 Tab 表单共用守卫（B1）', () => {
     }
   })
 })
+
+// ── 节点 Tab 表单共用守卫（B2b-1）：与 B1 三个 Tab 同口径 ──
+describe('节点 Tab 表单共用守卫（B2b-1）', () => {
+  it('引用共享 NodeFormModal，带单元素集群清单 + lock-cluster', () => {
+    const s = src('ClusterNodes.vue')
+    expect(s).toContain('<NodeFormModal')
+    expect(s).toContain(':clusters="formClusters"')
+    expect(s).toContain(':default-cluster-id="props.cluster.id"')
+    expect(s).toContain('lock-cluster')
+    expect(s).toContain("import NodeFormModal from '@/components/NodeFormModal.vue'")
+    expect(s).toContain('{ id: props.cluster.id, name: props.cluster.name, display_name: props.cluster.display_name }')
+  })
+
+  it('单条表单模板不得回流：无 a-form / a-form-item / nodeForm 模型 / handleNodeSubmit / validateIP', () => {
+    const s = src('ClusterNodes.vue')
+    expect(s).not.toContain('<a-form')
+    expect(s).not.toContain('a-form-item')
+    expect(s).not.toMatch(/\bnodeForm\b/)
+    expect(s).not.toContain('handleNodeSubmit')
+    expect(s).not.toContain('validateIP')
+    // 批量导入块保留（B2b-2 再处理）：既有 parse/importNodes 链路仍在
+    expect(s).toContain('handleImportSubmit')
+    expect(s).toContain('parseTextToRows')
+  })
+
+  it('保存/关闭只做列表刷新，提交逻辑不在宿主重写', () => {
+    const s = src('ClusterNodes.vue')
+    expect(s).toContain('@saved="onNodeFormSaved"')
+    expect(s).toContain('@close="closeNodeForm"')
+    // 单条提交的 POST/PUT 只剩在共享组件内（面板里没有 /nodes` 或 /nodes/${id} 的创建/更新调用）
+    expect(s).not.toContain('api.post(`/clusters/${clusterId}/nodes`')
+    expect(s).not.toContain('api.put(`/clusters/')
+  })
+})

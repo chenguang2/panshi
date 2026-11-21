@@ -72,6 +72,12 @@ const stubs = {
   ATabs: { template: '<div><slot /></div>', props: ['activeKey'] },
   ATabPane: { template: '<div v-if="activeKey === key"><slot /></div>', props: ['key', 'tab'] },
   ConfigDiff: { template: '<div class="mock-config-diff" />', props: ['visible', 'clusterId', 'initialNodeId'] },
+  // B2b-1：单条表单已迁至共享组件，页面测试只断言「传给组件的入参」
+  NodeFormModal: {
+    name: 'NodeFormModal',
+    template: '<div class="mock-node-form" :data-visible="visible" :data-copying="copyingNode" />',
+    props: ['visible', 'editingNode', 'copyingNode', 'clusters', 'defaultClusterId', 'lockCluster'],
+  },
   NodeExecutionResultDrawer: { template: '<div class="mock-exec-drawer" />', props: ['visible', 'title'] },
   InstallOpenrestyDialog: {
     name: 'InstallOpenrestyDialog',
@@ -504,15 +510,18 @@ describe('NodeList.vue batch1 快修', () => {
     wrapper.unmount()
   })
 
-  it('编辑打开时清空全部表单校验错误（2.1：openresty_path 错误不再残留）', async () => {
+  it('编辑打开时交给共享表单的是该记录且非复制态（2.1 反转：校验错误随组件重开清空）', async () => {
+    // B2b-1 反转（#217）：表单校验错误状态已迁至 NodeFormModal（组件内 a-form + clearValidate），
+    // 页面不再持有 formErrors。此用例守住「打开编辑 → 传对入参」这一接线事实；
+    // 「重开不残留校验错误」由 components/__tests__/NodeFormModal.test.ts 覆盖。
     const wrapper = await mountPage()
     const vm = wrapper.vm as any
     vm.openAddModal()
-    vm.handleFormSubmit()
     await wrapper.vm.$nextTick()
-    expect(Object.keys(vm.formErrors).length, '空表单提交应有校验错误').toBeGreaterThan(0)
+    expect(vm.formModalVisible).toBe(true)
+    expect(vm.editingNode).toBeNull()
 
-    vm.handleEdit({
+    const record = {
       id: 1,
       cluster_id: 1,
       ip: '10.0.0.1',
@@ -521,20 +530,12 @@ describe('NodeList.vue batch1 快修', () => {
       edge_path: '/usr/local/edge',
       openresty_path: '/usr/local/nginx',
       status: 1,
-    })
+    }
+    vm.handleEdit(record)
     await wrapper.vm.$nextTick()
-    const residual = Object.keys(vm.formErrors).filter((k: string) => vm.formErrors[k])
-    expect(residual, `编辑打开后不应残留校验错误: ${residual.join(', ')}`).toEqual([])
-    wrapper.unmount()
-  })
-
-  it('表单校验文案对齐模型术语：OpenResty 安装路径（2.3）', async () => {
-    const wrapper = await mountPage()
-    const vm = wrapper.vm as any
-    vm.openAddModal()
-    vm.handleFormSubmit()
-    await wrapper.vm.$nextTick()
-    expect(vm.formErrors.openresty_path).toBe('请输入 OpenResty 安装路径')
+    expect(vm.formModalVisible).toBe(true)
+    expect(vm.editingNode).toEqual(record)
+    expect(vm.copyingNode).toBe(false)
     wrapper.unmount()
   })
 
@@ -1252,14 +1253,12 @@ describe('NodeList.vue batch3 复制节点', () => {
     })
   })
 
-  it('handleCopy 预填行配置、IP 清空、清 formErrors、进入新建态', async () => {
+  it('handleCopy 交给共享表单的是源记录 + 复制态（预填/IP 清空在组件内，B2b-1）', async () => {
     const NodeList = (await import('../NodeList.vue')).default
     const wrapper = mount(NodeList, { global: { stubs } })
     await flushPromises()
     const vm = wrapper.vm as any
-    // 先制造脏 formErrors
-    vm.formErrors.ip = '请输入IP地址'
-    vm.handleCopy({
+    const record = {
       cluster_id: 2,
       ip: '10.0.0.9',
       service_port: 81,
@@ -1268,19 +1267,15 @@ describe('NodeList.vue batch3 复制节点', () => {
       edge_path: '/e/copy',
       openresty_path: '/or/copy',
       status: 0,
-    })
+    }
+    vm.handleCopy(record)
     await wrapper.vm.$nextTick()
     expect(vm.formModalVisible).toBe(true)
-    expect(vm.editingNode).toBeNull()
-    expect(vm.formData.ip).toBe('')
-    expect(vm.formData.cluster_id).toBe(2)
-    expect(vm.formData.service_port).toBe(81)
-    expect(vm.formData.management_port).toBe(9181)
-    expect(vm.formData.ssh_port).toBe(2222)
-    expect(vm.formData.edge_path).toBe('/e/copy')
-    expect(vm.formData.openresty_path).toBe('/or/copy')
-    expect(vm.formData.statusCheck).toBe(false)
-    expect(vm.formErrors.ip || '').toBe('')
+    expect(vm.copyingNode).toBe(true)
+    expect(vm.editingNode).toEqual(record)
+    const modal = wrapper.findComponent({ name: 'NodeFormModal' })
+    expect(modal.props('copyingNode')).toBe(true)
+    expect(modal.props('editingNode')).toEqual(record)
     wrapper.unmount()
   })
 

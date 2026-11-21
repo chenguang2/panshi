@@ -413,75 +413,6 @@
       @saved="onClusterSaved"
     />
 
-    <!-- Node Form Modal -->
-    <div class="modal-overlay" :style="{ display: nodeModalVisible ? 'flex' : 'none' }">
-      <div class="modal">
-        <div class="modal-header">
-          <h2>{{ editingNode ? '编辑节点' : '添加节点' }}</h2>
-          <button class="modal-close" @click="nodeModalVisible = false">&times;</button>
-        </div>
-        <div class="modal-body">
-          <a-form ref="nodeFormRef" :model="nodeForm" :label-col="{ span: 6 }" :wrapper-col="{ span: 16 }">
-            <a-form-item label="IP" name="ip" :rules="[{ required: true, validator: validateIP, trigger: 'blur' }]">
-              <a-input v-model:value="nodeForm.ip" placeholder="请输入IP地址" />
-            </a-form-item>
-            <a-form-item
-              label="服务端口"
-              name="service_port"
-              :rules="[{ required: true, type: 'number', message: '请输入服务端口' }]"
-            >
-              <a-input-number v-model:value="nodeForm.service_port" :min="1" :max="65535" style="width: 100%" />
-            </a-form-item>
-            <a-form-item
-              label="管理端口"
-              name="management_port"
-              :rules="[{ required: true, type: 'number', message: '请输入管理端口' }]"
-            >
-              <a-input-number v-model:value="nodeForm.management_port" :min="1" :max="65535" style="width: 100%" />
-            </a-form-item>
-            <a-form-item
-              label="Edge路径"
-              name="edge_path"
-              :rules="[
-                { required: true, message: '请输入Edge路径' },
-                { pattern: /^\//, message: '必须以 / 开头' },
-                { pattern: /^\/.*[^/]$/, message: '路径末尾不能为 /' },
-                { max: 255, message: '最多255个字符' },
-              ]"
-            >
-              <a-input v-model:value="nodeForm.edge_path" placeholder="运行时路径，如 /edge/node1" />
-            </a-form-item>
-            <a-form-item
-              label="安装路径"
-              name="openresty_path"
-              :rules="[
-                { pattern: /^\//, message: '必须以 / 开头' },
-                { pattern: /^\/.*[^/]$/, message: '路径末尾不能为 /' },
-                { max: 255, message: '最多255个字符' },
-              ]"
-            >
-              <a-input v-model:value="nodeForm.openresty_path" placeholder="留空则与Edge路径相同" />
-            </a-form-item>
-            <a-form-item
-              label="状态"
-              name="status"
-              :rules="[{ required: true, message: '请选择状态' }]"
-              extra="禁用的节点不进入中继网关流量白名单（不承载业务流量），但仍可执行节点任务与状态查询"
-            >
-              <a-select v-model:value="nodeForm.status">
-                <a-select-option :value="1">启用</a-select-option>
-                <a-select-option :value="0">禁用</a-select-option>
-              </a-select>
-            </a-form-item>
-          </a-form>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" @click="nodeModalVisible = false">取消</button>
-          <button class="btn btn-primary" @click="handleNodeSubmit">{{ editingNode ? '保存' : '创建' }}</button>
-        </div>
-      </div>
-    </div>
-
     <ConfigDiff v-model:visible="diffDrawerVisible" :cluster-id="diffClusterId" :initial-node-id="diffNodeId" />
 
     <PublishConfirmModal
@@ -955,11 +886,9 @@ const onRefresh = () => {
 }
 
 // ── Composables ──
+// 单条节点表单已迁至共享 NodeFormModal（B2b-1）：本页只保留与列表/面板相关的绑定，
+// 原内联表单及其表单模型/校验/提交一并退场（唯一实现在组件内）。
 const {
-  nodeModalVisible,
-  editingNode,
-  nodeFormRef,
-  nodeForm,
   diffDrawerVisible,
   diffClusterId,
   diffNodeId,
@@ -969,15 +898,11 @@ const {
   nodeActionsSelected,
   moreNodeActions,
   visibleNodeColumns,
-  validateIP,
   getNodeActionButtonTitle,
   handleNodeAction,
   handleNodeTableChange,
   loadNodes,
   selectNode,
-  showAddNodeModal,
-  editNode,
-  handleNodeSubmit,
   deleteNode,
   startNode,
   stopNode,

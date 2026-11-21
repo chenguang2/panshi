@@ -244,6 +244,9 @@ export function useClusterNodes(options: { clusters: Ref<Cluster[]>; onRefresh?:
   const nodeModalVisible = ref(false)
   const editingNode = ref<Node | null>(null)
   const currentClusterId = ref<number | null>(null)
+  // 表单已迁至 NodeFormModal（B2b-1）：nodeFormRef/nodeForm/validateIP/handleNodeSubmit 及
+  // showAddNodeModal/editNode/copyNode 的表单态回填仅为本 composable 的存量测试保留，
+  // 面板与独立页的真实表单由共享组件承接（清理另批）。
   const nodeFormRef = ref()
 
   const diffDrawerVisible = ref(false)

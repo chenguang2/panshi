@@ -8,14 +8,19 @@ function src(): string {
   return readFileSync(resolve(process.cwd(), 'src/views/CentralList.vue'), 'utf-8')
 }
 
-describe('统一管理·节点表单状态控件', () => {
-  it('状态选项为 启用/禁用（与节点管理一致）', () => {
+describe('统一管理·节点单条表单（B2b-1 反转）', () => {
+  it('面板不再内联节点表单：nodeFormRef / validateIP / handleNodeSubmit 绑定零残留', () => {
     const s = src()
-    expect(s).toContain(':value="1">启用<')
-    expect(s).toContain(':value="0">禁用<')
+    expect(s).not.toContain('nodeFormRef')
+    expect(s).not.toContain('validateIP')
+    expect(s).not.toContain('handleNodeSubmit')
+    expect(s).not.toContain('<a-form')
   })
-  it('附带与节点管理字面一致的白名单后果提示', () => {
-    expect(src()).toContain('禁用的节点不进入中继网关流量白名单（不承载业务流量），但仍可执行节点任务与状态查询')
+  it('状态选项「启用/禁用」+ 白名单后果提示迁至共享 NodeFormModal（唯一实现）', () => {
+    const s = readFileSync(resolve(process.cwd(), 'src/components/NodeFormModal.vue'), 'utf-8')
+    expect(s).toContain('<a-select-option :value="1">启用</a-select-option>')
+    expect(s).toContain('<a-select-option :value="0">禁用</a-select-option>')
+    expect(s).toContain('禁用的节点不进入中继网关流量白名单（不承载业务流量），但仍可执行节点任务与状态查询')
   })
 })
 

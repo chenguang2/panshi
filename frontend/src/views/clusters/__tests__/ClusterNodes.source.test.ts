@@ -23,14 +23,18 @@ describe('ClusterNodes 动作确认收敛守卫（batch3 5.1）', () => {
   })
 })
 
-// ── 措辞守卫（batch2 1.4 / design D9）：节点语境 = 启用/禁用（「正常」废弃）──
+// ── 措辞守卫（batch2 1.4 / design D9；B2b-1 反转：单条表单迁至共享 NodeFormModal）──
 describe('ClusterNodes 措辞守卫（batch2 1.4 / D9）', () => {
-  it('表单 a-select 与批量导入 select 状态选项为「启用/禁用」', () => {
-    const s = src()
-    expect(s).toContain('<a-select-option :value="1">启用</a-select-option>')
-    expect(s).toContain('<a-select-option :value="0">禁用</a-select-option>')
-    expect(s).toContain('<option :value="1">启用</option>')
-    expect(s).toContain('<option :value="0">禁用</option>')
+  it('单条表单状态选项（a-select 启用/禁用）在共享 NodeFormModal；本 Tab 只留批量导入 select', () => {
+    const tab = src()
+    const modal = readFileSync(resolve(process.cwd(), 'src/components/NodeFormModal.vue'), 'utf-8')
+    expect(modal).toContain('<a-select-option :value="1">启用</a-select-option>')
+    expect(modal).toContain('<a-select-option :value="0">禁用</a-select-option>')
+    expect(tab).toContain('<option :value="1">启用</option>')
+    expect(tab).toContain('<option :value="0">禁用</option>')
+    // 单条表单已不在 Tab 内联（无 a-form；状态下拉的 a-select-option 只在共享组件）
+    expect(tab).not.toContain('<a-form')
+    expect(tab).not.toContain('v-model:value="nodeForm.')
   })
 
   it('节点语境零「正常」措辞残留', () => {
