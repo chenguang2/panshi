@@ -2302,6 +2302,10 @@ tr.row-disabled {
 .tg-bar i { display: block; height: 100%; background: var(--accent); border-radius: 2px; }
 .tg-sum { font-size: 11px; color: var(--muted); margin-top: 1px; }
 .tg-sum b { color: var(--fg); font-weight: 600; }
+/* 2026-11-22：上游「负载均衡」与「协议」芯片此前只在 upstreams/nodes/routes 三份页面样式块里各定义一份，
+   统一管理最大化面板 Tab 回填时上移到共享层（值与原页面定义逐字一致，页面内同名定义无视觉变化）。 */
+.lb-chip { font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 999px; background: oklch(56% 0.16 210 / 8%); color: var(--accent); white-space: nowrap; }
+.scheme-chip { font-family: var(--font-mono); font-size: 11px; padding: 2px 8px; border-radius: var(--radius-sm); background: var(--bg); border: 1px solid var(--border); color: var(--muted); }
 
 /* ── 行内操作 ── */
 .ops { display: inline-flex; align-items: center; gap: 2px; }

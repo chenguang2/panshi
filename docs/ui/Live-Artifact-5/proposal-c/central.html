@@ -345,42 +345,75 @@
         </div>
       </div>
 
-      <!-- ── Tab 2 · 上游 ── -->
+      <!-- ── Tab 2 · 上游（scoped 形态：单集群 / 恒平铺 / 无页头，页面级动作收敛到工具条左侧；
+           解剖与上游管理独立页同构，差异仅在「无分组下拉 / 无集群筛选 / 无分组|平铺 / 无全部收起 / 无分组带 / 无集群列」） ── -->
       <div class="dbody tab-body" data-body="upstreams">
-        <div class="tab-toolbar">
-          <button class="tool-btn">＋ 添加上游</button>
-          <span class="spacer"></span>
+        <div class="l5-toolbar nowrap" style="gap:6px;">
+          <button class="btn btn-primary btn-sm" data-test="scope-add-upstream"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>添加上游</button>
+          <div class="l5-search"><input type="text" style="width:150px" placeholder="搜索名称或描述..."><svg class="s-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>
+          <select class="l5-select" style="width:120px"><option>全部算法</option><option>加权轮询</option><option>一致性哈希</option><option>延迟最小</option><option>最少连接</option></select>
+          <span class="t-spacer"></span>
+          <button class="tool-btn" title="重新拉取列表"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 11-2.64-6.36"/><path d="M21 3v6h-6"/></svg>刷新</button>
           <div class="pop-anchor">
-            <button class="tool-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>列配置</button>
+            <button class="btn btn-secondary btn-sm" data-pop="popColU"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>列配置 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button>
+            <div class="l5-popover" id="popColU">
+              <div class="pop-title">选择显示列 <span class="pop-note">序号列恒展示，不参与勾选</span></div>
+              <div class="l5-pop-label">显示字段</div>
+              <div class="l5-checks">
+                <label class="l5-check"><input type="checkbox" checked>名称</label>
+                <label class="l5-check"><input type="checkbox" checked>负载均衡</label>
+                <label class="l5-check"><input type="checkbox" checked>目标节点与健康</label>
+                <label class="l5-check"><input type="checkbox" checked>协议</label>
+                <label class="l5-check"><input type="checkbox" checked>发布状态</label>
+                <label class="l5-check"><input type="checkbox" checked>操作</label>
+              </div>
+              <hr class="pop-sep">
+              <div class="l5-pop-label">搜索</div>
+              <div class="l5-checks"><label class="l5-check"><input type="checkbox" checked>显示搜索框</label></div>
+              <div class="pop-hint"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="18 8 22 12 18 16"/><polyline points="6 8 2 12 6 16"/><line x1="2" y1="12" x2="22" y2="12"/></svg><span>拖动表头右缘可调整列宽，拖动表头整格可调整列序</span></div>
+              <div class="pop-foot"><button class="btn btn-primary btn-sm">重置列宽</button></div>
+            </div>
           </div>
         </div>
-        <table class="l5-table" style="min-width:1090px">
-          <colgroup><col style="width:40px"><col style="width:180px"><col style="width:110px"><col style="width:220px"><col style="width:200px"><col style="width:220px"><col style="width:120px"></colgroup>
-          <thead><tr><th class="c-c">#</th><th class="resizable sortable">名称</th><th class="resizable sortable">负载均衡</th><th class="resizable">目标节点</th><th class="resizable sortable">描述</th><th class="resizable">发布状态</th><th class="resizable">操作</th></tr></thead>
-          <tbody>
-            <tr>
-              <td class="c-c"><span class="c-idx">1</span></td>
-              <td><span class="c-strong" title="订单服务">订单服务</span></td>
-              <td class="nw"><span class="lb-chip">加权轮询</span></td>
-              <td><div class="tg-list"><span class="tg-chip"><span class="dot d-ok"></span>192.168.1.11:8100<span class="tg-w">100</span></span><span class="tg-sum"><b>1</b> 目标 · <b>全部健康</b></span></div></td>
-              <td><span class="c-dim">订单后端</span></td>
-              <td class="nw"><span class="pub-cell"><span class="ps-tag ps-pub">v2 · 11-14 20:05</span><button class="diff-btn" title="查看与 Edge 节点的差异" aria-label="查看与 Edge 节点的差异">差异</button></span></td>
-              <td><div class="ops"><button class="op-pub">发布</button><div class="menu-anchor"><button class="op-btn" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">编辑</span></button><button class="mi"><span class="mi-main">版本管理</span><span class="mi-sub">历史版本查看与回滚</span></button><button class="mi"><span class="mi-main">复制</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 已发布配置（弹窗可选）</span></button></div></div></div></td>
-            </tr>
-            <tr>
-              <td class="c-c"><span class="c-idx">2</span></td>
-              <td><span class="c-strong" title="用户服务">用户服务</span></td>
-              <td class="nw"><span class="lb-chip">最少连接</span></td>
-              <td><div class="tg-list"><span class="tg-chip"><span class="dot d-ok"></span>192.168.1.12:8200<span class="tg-w">60</span></span><span class="tg-chip"><span class="dot d-warn"></span>192.168.1.13:8200<span class="tg-w">40</span></span><span class="tg-sum"><b>2</b> 目标 · <span style="color:var(--warning);font-weight:600;">1 项待验证</span></span></div></td>
-              <td><span class="c-dim">用户中心</span></td>
-              <td class="nw"><span class="pub-cell"><span class="ps-tag ps-pending" title="配置已修改，发布后生效">待发布</span><button class="diff-btn" title="查看与 Edge 节点的差异" aria-label="查看与 Edge 节点的差异">差异</button></span></td>
-              <td><div class="ops"><button class="op-pub">发布</button><div class="menu-anchor"><button class="op-btn" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">编辑</span></button><button class="mi"><span class="mi-main">版本管理</span><span class="mi-sub">历史版本查看与回滚</span></button><button class="mi"><span class="mi-main">复制</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 已发布配置（弹窗可选）</span></button></div></div></div></td>
-            </tr>
-          </tbody>
-        </table>
-        <div class="l5-pager" >
-          <span class="p-info">共 <b>2</b> 个上游 · 每页 <select class="pager-select"><option selected>20 条</option></select></span>
-          <span class="p-nav"><button class="p-btn" disabled><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 6 9 12 15 18"/></svg></button><button class="p-btn active">1</button></span>
+        <div class="l5-chiprow"><span class="chiprow-label">状态</span><div class="f-chips"><span class="f-chip chip-status active">全部<span class="f-count">2</span></span><span class="f-chip chip-status empty">未发布<span class="f-count">0</span></span><span class="f-chip chip-status">待发布<span class="f-count">1</span></span><span class="f-chip chip-status">已发布<span class="f-count">1</span></span></div><span class="t-spacer"></span></div>
+        <div class="l5-batchbar">
+          <span class="b-count">已选 0 项</span>
+          <span class="b-sep"></span>
+          <button class="btn btn-danger btn-sm need-sel"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg> 批量删除</button>
+          <span class="b-spacer"></span>
+          <button class="btn btn-secondary btn-sm">清除选择</button>
+        </div>
+        <div class="l5-table-wrap">
+          <table class="l5-table" style="min-width:1150px">
+            <colgroup><col style="width:40px"><col style="width:40px"><col style="width:176px"><col style="width:120px"><col style="width:314px"><col style="width:90px"><col style="width:220px"><col style="width:150px"></colgroup>
+            <thead><tr><th class="cbx c-c"><input type="checkbox" id="selAllU"></th><th class="c-c">#</th><th class="resizable sortable">名称</th><th class="resizable sortable">负载均衡</th><th class="resizable">目标节点与健康</th><th class="resizable">协议</th><th class="resizable">发布状态</th><th class="resizable">操作</th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="cbx c-c"><input type="checkbox" class="row-cb"></td>
+                <td class="c-c"><span class="c-idx">1</span></td>
+                <td><div class="cell-stack"><span class="c-strong" title="订单服务">订单服务</span><span class="c-sub" title="订单创建 / 查询 / 取消">订单创建 / 查询 / 取消</span></div></td>
+                <td class="nw"><span class="lb-chip">加权轮询</span></td>
+                <td><div class="tg-list"><span class="tg-chip"><span class="dot d-warn" title="目标健康：待验证（上游未发布、有待发布变更或上次发布存在未生效节点）"></span>192.168.1.11:8100<span class="tg-bar"><i style="width:100%"></i></span><span class="tg-w">100 · 100%</span></span><span class="tg-sum" title="目标健康：待验证（上游未发布、有待发布变更或上次发布存在未生效节点）"><b>1</b> 目标 · <span style="color:var(--warning);font-weight:600;">1 项待验证</span></span></div></td>
+                <td class="nw"><span class="scheme-chip">http</span></td>
+                <td class="nw"><span class="pub-cell"><span class="ps-tag ps-pending" title="配置已修改，发布后生效">待发布</span><button class="diff-btn" title="查看与 Edge 节点的差异" aria-label="查看与 Edge 节点的差异">差异</button></span></td>
+                <td class="ops-cell"><div class="ops"><button class="op-pub">发布</button><div class="menu-anchor"><button class="op-btn" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">复制</span></button><button class="mi"><span class="mi-main">编辑</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 已发布配置（弹窗可选）</span></button><hr class="menu-sep"><button class="mi"><span class="mi-main">版本管理</span><span class="mi-sub">历史版本查看与回滚</span></button></div></div></div></td>
+              </tr>
+              <tr>
+                <td class="cbx c-c"><input type="checkbox" class="row-cb"></td>
+                <td class="c-c"><span class="c-idx">2</span></td>
+                <td><div class="cell-stack"><span class="c-strong" title="用户服务">用户服务</span><span class="c-sub" title="核心用户鉴权与资料查询">核心用户鉴权与资料查询</span></div></td>
+                <td class="nw"><span class="lb-chip">加权轮询</span></td>
+                <td><div class="tg-list"><span class="tg-chip"><span class="dot d-ok" title="目标健康：上游已发布且无发布异常（目标级健康未采集，按发布态近似）"></span>192.168.1.11:8000<span class="tg-bar"><i style="width:44%"></i></span><span class="tg-w">80 · 44%</span></span><span class="tg-chip"><span class="dot d-ok" title="目标健康：上游已发布且无发布异常（目标级健康未采集，按发布态近似）"></span>192.168.1.12:8000<span class="tg-bar"><i style="width:33%"></i></span><span class="tg-w">60 · 33%</span></span><span class="tg-chip"><span class="dot d-ok" title="目标健康：上游已发布且无发布异常（目标级健康未采集，按发布态近似）"></span>192.168.1.13:8000<span class="tg-bar"><i style="width:22%"></i></span><span class="tg-w">40 · 22%</span></span><span class="tg-sum" title="目标健康：上游已发布且无发布异常（目标级健康未采集，按发布态近似）"><b>3</b> 目标 · <b>全部健康</b></span></div></td>
+                <td class="nw"><span class="scheme-chip">http</span></td>
+                <td class="nw"><span class="pub-cell"><span class="ps-tag ps-pub">v6 · 11-12 14:32</span><button class="diff-btn" title="查看与 Edge 节点的差异" aria-label="查看与 Edge 节点的差异">差异</button></span></td>
+                <td class="ops-cell"><div class="ops"><button class="op-pub">发布</button><div class="menu-anchor"><button class="op-btn" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">复制</span></button><button class="mi"><span class="mi-main">编辑</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 已发布配置（弹窗可选）</span></button><hr class="menu-sep"><button class="mi"><span class="mi-main">版本管理</span><span class="mi-sub">历史版本查看与回滚</span></button></div></div></div></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="l5-pager">
+          <span class="p-info">共 <b>2</b> 个上游 · 每页 <select class="pager-select"><option>10 条</option><option selected>20 条</option><option>50 条</option><option>100 条</option></select></span>
+          <span class="p-nav"><button class="p-btn" disabled><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 6 9 12 15 18"/></svg></button><button class="p-btn active">1</button><button class="p-btn" disabled><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg></button><span class="p-jump">跳至 <input value="1"> 页</span></span>
         </div>
       </div>
 
