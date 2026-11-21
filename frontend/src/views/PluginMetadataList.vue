@@ -1,6 +1,14 @@
 <template>
-  <div class="pml-page">
-    <PageHeader title="插件元数据" description="管理集群级的插件元数据配置，定义插件的默认参数和 schema。">
+  <!-- 单实现双形态（AGENTS #93 / shared-core-plan 2026-11-21，A 推广第 3 个卡片类资源，照 PluginConfigList / GlobalRuleList 范本）：
+       缺省 = 独立列表页（PageHeader + 分组/集群筛选 + 分组|平铺）；
+       传 scopedClusterId = 统一管理最大化面板的「插件元数据」Tab（隐藏页头/分组与集群筛选/分组切换与集群带，
+       页面级动作改由工具条左侧紧凑钮承载，其余（chips/批量条/卡片网格/JSON 折叠块/卡脚动作）与页面同一份实现）。 -->
+  <div class="pml-page" :class="{ 'pml-page-scoped': isScoped }">
+    <PageHeader
+      v-if="!isScoped"
+      title="插件元数据"
+      description="管理集群级的插件元数据配置，定义插件的默认参数和 schema。"
+    >
       <template #stats>
         <PageStatBadges :items="headerStatItems" />
       </template>
@@ -16,18 +24,35 @@
     </PageHeader>
 
     <!-- 工具条 + 状态行 + 批量条（AGENTS #87/#88）-->
-    <div class="l5-card sp-card-page">
+    <div class="l5-card sp-card-page" :class="{ 'scope-card': isScoped }">
       <TableToolbar
         v-model:mode="cardMode"
         :count="totalCount"
         count-unit="个插件元数据"
         :show-count="false"
+        :show-mode="!isScoped"
         :refreshing="loading"
         @refresh="refreshList"
       >
         <template #filters>
+          <!-- scoped：页面级动作（原本在 PageHeader）收敛为工具条左侧紧凑钮（#90 页头动作区规范的 scoped 替代） -->
+          <template v-if="isScoped">
+            <button class="btn btn-primary btn-sm" data-test="scope-add-plugin-metadata" @click="openCreateModal">
+              <StrokeIcon name="plus" :size="13" /> 添加插件元数据
+            </button>
+            <button
+              class="btn btn-secondary btn-sm"
+              data-test="scope-batch-toggle"
+              :aria-pressed="batchMode"
+              @click="toggleBatchMode"
+            >
+              {{ batchMode ? '退出批量管理' : '批量管理' }}
+            </button>
+          </template>
           <SearchInput v-model="searchText" placeholder="搜索插件名称..." :width="150" @input="onSearch" />
+          <!-- 分组/集群筛选仅页面形态（面板恒单集群、恒平铺） -->
           <select
+            v-if="!isScoped"
             v-model="groupFilter"
             :title="groupFilter.startsWith('__') ? '' : groupFilter"
             class="l5-select"
@@ -39,6 +64,7 @@
             <option value="__ung__">未分组</option>
           </select>
           <ClusterSelect
+            v-if="!isScoped"
             v-model="clusterFilter"
             :clusters="filteredClusters"
             allow-all
@@ -74,7 +100,7 @@
             <span class="fold-all-label">{{ allConfigExpanded ? '收起配置' : '展开配置' }}</span>
           </button>
           <button
-            v-if="cardMode === 'group'"
+            v-if="!isScoped && cardMode === 'group'"
             type="button"
             class="tool-btn fold-all-btn"
             data-test="card-fold-all"
@@ -159,8 +185,12 @@
           >
             <span class="lp-check" aria-hidden="true"></span>
             <div class="lp-strip">
-              <span class="lp-tag lp-cluster">{{ item.cluster_name || '-' }}</span>
-              <span v-if="item.cluster_group_name" class="lp-tag group lp-group">{{ item.cluster_group_name }}</span>
+              <!-- scoped（面板单集群）：集群标识与分组徽标对每张卡恒同值 → 冗余，仅页面形态渲染；
+                   右侧「参数 · N 项」在面板内仍有意义（同集群内各插件参数数仍不同），保留。 -->
+              <span v-if="!isScoped" class="lp-tag lp-cluster">{{ item.cluster_name || '-' }}</span>
+              <span v-if="!isScoped && item.cluster_group_name" class="lp-tag group lp-group">{{
+                item.cluster_group_name
+              }}</span>
               <span class="st-algo"
                 >参数 · <b>{{ paramCount(item) }}</b> 项</span
               >
@@ -267,10 +297,12 @@
       </div>
     </div>
 
-    <!-- 添加插件元数据（B2c：与统一管理面板共用创建弹窗；本页集群可改） -->
+    <!-- 添加插件元数据（B2c：与统一管理面板共用创建弹窗；页面形态集群可改，scoped 由 Tab 上下文锁定） -->
     <PluginMetadataCreateModal
       :visible="createVisible"
-      :clusters="clusters"
+      :clusters="formClusterOptions"
+      :default-cluster-id="isScoped ? scopedClusterId : null"
+      :lock-cluster="isScoped"
       @close="createVisible = false"
       @saved="handleCreateSaved"
     />
@@ -377,6 +409,34 @@ import ClusterBand from '@/components/ClusterBand.vue'
 import TableToolbar from '@/components/TableToolbar.vue'
 import { useFeaturesStore } from '@/stores/features'
 import { filterMetadataPlugins, metadataPluginLabel } from '@/utils/pluginMetadataCatalog'
+
+/**
+ * 单实现双形态（AGENTS #93 / docs/refactoring/shared-core-plan-2026-11-21.md，A 推广第 3 个卡片类资源）：
+ * - 不传 `scopedClusterId`：独立卡片页（跨集群、分组/平铺、集群标识与分组徽标）。
+ * - 传 `scopedClusterId`：统一管理最大化面板的「插件元数据」Tab——只承载该集群：
+ *   隐藏 PageHeader / 分组与集群筛选 / `分组|平铺` 切换器 / 分组带（恒平铺）/ 卡片上的集群与分组徽标；
+ *   页面级动作（添加插件元数据 / 批量管理）改由工具条左侧紧凑钮承载；
+ *   卡片解剖（含「配置 JSON 折叠美化块」与工具条全局展开/收起开关）与页面同一份实现；
+ *   创建入口唯一（工具条紧凑钮 → 共享创建弹窗，集群预选并锁定），不恢复面板旧的「可用插件卡片快捷添加」。
+ */
+const props = withDefaults(defineProps<{ scopedClusterId?: number | null }>(), { scopedClusterId: null })
+const isScoped = computed(() => props.scopedClusterId != null)
+/** 列表请求的集群过滤：scoped 恒取作用域集群，页面形态取筛选下拉 */
+function effectiveClusterId(): number | undefined {
+  if (props.scopedClusterId != null) return props.scopedClusterId
+  return clusterFilter.value ? Number(clusterFilter.value) : undefined
+}
+/** 分组过滤仅页面形态生效（面板单集群下恒「全部分组」） */
+function effectiveGroupName(): string {
+  return isScoped.value ? '__all__' : groupFilter.value
+}
+/** 创建弹窗的集群清单：scoped 下只给当前集群（并锁定选择） */
+const formClusterOptions = computed(() => {
+  const id = props.scopedClusterId
+  if (id == null) return clusters.value
+  const c = clusters.value.find((x: any) => x.id === id)
+  return [{ id, name: c?.name ?? '', display_name: c?.display_name }]
+})
 
 // ——— List view state ———
 const items = ref<any[]>([])
@@ -505,8 +565,9 @@ const pluginFilterOptions = computed(() =>
 async function loadItems() {
   loading.value = true
   try {
-    const params: any = { page_size: PAGE_SIZE_CARD_GRID, group_name: groupFilter.value }
-    if (clusterFilter.value) params.cluster_id = clusterFilter.value
+    const params: any = { page_size: PAGE_SIZE_CARD_GRID, group_name: effectiveGroupName() }
+    const clusterId = effectiveClusterId()
+    if (clusterId != null) params.cluster_id = clusterId
     if (pluginFilter.value) params.plugin_name = pluginFilter.value
     if (searchText.value) params.search = searchText.value
     const res = await listGlobalPluginMetadata(params)
@@ -699,9 +760,12 @@ function onVmPublishRequested() {
 }
 
 onMounted(() => {
-  const clusterId = route.query.cluster_id as string | undefined
-  const numeric = Number(clusterId)
-  if (Number.isFinite(numeric)) clusterFilter.value = numeric
+  // 深链参数仅页面形态生效（面板 Tab 的集群由 props 上下文决定）
+  if (!isScoped.value) {
+    const clusterId = route.query.cluster_id as string | undefined
+    const numeric = Number(clusterId)
+    if (Number.isFinite(numeric)) clusterFilter.value = numeric
+  }
   loadClusters()
   loadItems()
   loadBuiltinPlugins()
@@ -763,10 +827,14 @@ function toggleAllConfig(): void {
     : configCollapsedIds.value.filter((id) => !ids.includes(id))
 }
 
-/** 插件名 → 中文显示名（目录 display_name；缺省回落插件名——与路由页 PluginSelector 同口径） */
+/** 插件名 → 中文显示名（目录 display_name；缺省回落 '' = 直接用插件名）。
+ *  口径与插件下拉共用 `metadataPluginLabel`（display_name || name）——目录无中文名时它返回插件名本身，
+ *  此处收敛为 ''，让卡头回落「插件名 + mono」单标识形态（有中文名才额外渲染弱化的裸插件名）。 */
 function pluginLabel(name: string): string {
   const p = builtinPlugins.value.find((x: any) => x.name === name)
-  return p?.display_name || ''
+  if (!p) return ''
+  const label = metadataPluginLabel(p)
+  return label === name ? '' : label
 }
 
 /** 集群 id → 显示名（批量删除节点清单标注归属集群） */
@@ -823,6 +891,9 @@ const {
   groupNameOf: (item) => item.cluster_group_name,
   secondary: (rows) => `参数 · ${rows.reduce((n, item) => n + paramCount(item), 0)} 项`,
 })
+
+// scoped（面板 Tab）= 单集群，分组带无意义 → 恒平铺（切换器同时隐藏，见 template 的 :show-mode）
+if (isScoped.value) cardMode.value = 'flat'
 
 const renderGroups = computed(() =>
   cardMode.value === 'group'
@@ -903,14 +974,35 @@ const batchDelete = useBatchDelete<any>({
 // ── ⋯ 菜单（同屏只开一个；空间不足向上翻转，AGENTS #88 ⑥）──
 const openMenuId = ref<number | null>(null)
 const menuFlipUp = ref(false)
+
+/**
+ * 菜单可用空间的底边：菜单是**卡内绝对定位弹层**，会被最近的 `overflow != visible` 祖先裁剪。
+ * 面板里 `.max-panel` 与 Tab 的 `.tab-content` 都是 `overflow: hidden`（圆角收口），只按视口判断
+ * 会让「点 ⋯ 只看到一条白边」。故按最近裁剪祖先的底边判定（与 GlobalRuleList / PluginConfigList 同一实现）。
+ */
+const MENU_HEIGHT_ESTIMATE = 200
+function menuBottomLimit(el: HTMLElement | null): number {
+  let limit = window.innerHeight
+  let node: HTMLElement | null = el?.parentElement ?? null
+  while (node) {
+    const style = getComputedStyle(node)
+    if (style.overflowY !== 'visible' || style.overflowX !== 'visible') {
+      limit = Math.min(limit, node.getBoundingClientRect().bottom)
+    }
+    node = node.parentElement
+  }
+  return limit
+}
+
 function toggleCardMenu(id: number, event?: MouseEvent): void {
   if (openMenuId.value === id) {
     openMenuId.value = null
     return
   }
   openMenuId.value = id
-  const rect = (event?.currentTarget as HTMLElement | null)?.getBoundingClientRect()
-  menuFlipUp.value = rect ? rect.bottom + 200 > window.innerHeight : false
+  const el = (event?.currentTarget as HTMLElement | null) ?? null
+  const rect = el?.getBoundingClientRect()
+  menuFlipUp.value = rect ? rect.bottom + MENU_HEIGHT_ESTIMATE > menuBottomLimit(el) : false
 }
 function closeCardMenu(): void {
   openMenuId.value = null
@@ -946,6 +1038,17 @@ const headerStatItems = computed(() => [
 </script>
 
 <style scoped>
+/* scoped 形态（统一管理最大化面板「插件元数据」Tab）：外层沿用页面卡片类，保证工具条/chips/批量条/
+   卡片网格的全局解剖规则命中，只压掉外层卡片自身的边框/底色/阴影/圆角，使其融入面板 .dbody 的
+   `.tab-content` 封闭容器（不出现卡中卡）。页面形态的「外层卡 + 卡片网格卡」两级结构在面板里
+   退化为「.tab-content 卡 + 卡片网格卡」，观感与独立页一致。 */
+.scope-card {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+  overflow: visible;
+}
 .pml-header-actions {
   display: flex;
   align-items: center;

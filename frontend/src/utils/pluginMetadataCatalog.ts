@@ -5,10 +5,13 @@
  * ∩ features.yaml 的 `plugin_metadata_plugins`（经 features store 解析；空/未配置 = 不限制），
  * 可选再排除某集群已配置的插件（同一集群内一个插件只允许一条元数据）。
  *
- * 三个消费方共用本函数，禁止各自复制第二套过滤规则：
- * - 面板 `components/PluginMetadata.vue` 的「可用插件」树（带已配置排除）
- * - 独立页 `views/PluginMetadataList.vue` 的「全部插件」筛选项（不带排除——筛选要能选到暂无记录的插件）
+ * 两个消费方共用本函数，禁止各自复制第二套过滤规则：
+ * - 插件元数据页 `views/PluginMetadataList.vue` 的「全部插件」筛选项（不带排除——筛选要能选到暂无记录的插件；
+ *   该页同时是统一管理面板「插件元数据」Tab 的 scoped 实现，面板不再有独立的可选插件树）
  * - 创建弹窗 `components/PluginMetadataCreateModal.vue` 的插件下拉（带已配置排除）
+ *
+ * 旧面板组件 `components/PluginMetadata.vue` 的「可用插件」树已随 scoped 单实现批次（2026-11-22）
+ * 与组件一并删除，勿按本注释历史版本恢复第二份清单实现。
  */
 
 export interface MetadataPluginLike {

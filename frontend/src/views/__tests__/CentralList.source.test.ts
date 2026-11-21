@@ -49,6 +49,20 @@ describe('统一管理·卡片动作单循环一致（central-management-parity 
 describe('统一管理·最大化面板切换动效（方案 A）', () => {
   const s = () => src()
 
+  /**
+   * Tab 分支区（`.max-swap` 起点 → 紧随其后的第一个 `<ClusterFormModal`）。
+   * 旧实现用 `<!-- Node Form Modal -->` 作结束标记，但该注释在模板中已不存在（indexOf 返回 -1 →
+   * slice 到文件末尾），断言会被脚本段与其它合法 v-else-if 污染；改用真实存在的锚点。
+   */
+  function tabBody(): string {
+    const text = s()
+    const start = text.indexOf('class="max-swap"')
+    expect(start, '缺少 .max-swap 包裹层').toBeGreaterThan(-1)
+    const end = text.indexOf('<ClusterFormModal', start)
+    expect(end, 'Tab 分支区未正确收口').toBeGreaterThan(start)
+    return text.slice(start, end)
+  }
+
   /** 动效段（.max-swap 规则起点 → .dtabs 之前的全部 CSS） */
   function animSection() {
     const text = src()
@@ -69,29 +83,48 @@ describe('统一管理·最大化面板切换动效（方案 A）', () => {
     expect(tag).toContain('ref="swapEl"')
     expect(tag).toContain(':class="swapClass"')
     expect(tag, '.max-swap 禁止 :key（会重挂载 Tab 子组件）').not.toContain(':key')
-    // 七个 Tab 分支原样搬入包裹层（结构未丢）；节点/上游 Tab = NodeList / UpstreamList 的 scoped 形态（A 试点）
+    // 七个 Tab 分支原样搬入包裹层（结构未丢）；七个 Tab 全部 = 对应独立页组件的 scoped 形态
     for (const comp of [
       'UpstreamList',
       'RouteList',
       'PluginConfigList',
       'GlobalRuleList',
       'ClusterStaticResources',
-      'PluginMetadata',
+      'PluginMetadataList',
       'NodeList',
     ]) {
-      expect(text.slice(tagStartAt, text.indexOf('<!-- Node Form Modal -->'))).toContain(`<${comp}`)
+      expect(tabBody(), `缺少 <${comp}>`).toContain(`<${comp}`)
     }
+    // 旧面板专属组件（components/PluginMetadata.vue）不得回流
+    expect(text).not.toContain('components/PluginMetadata.vue')
+    expect(text).not.toMatch(/<PluginMetadata\s/)
   })
 
-  it('Tab 分支不得用裸 v-else（独立 v-if 容器并存后，裸 v-else 会挂到末位 v-else-if 上叠渲染）', () => {
+  it('Tab 分支一律显式 v-if（不得裸 v-else，也不得混入 v-else-if 串联）', () => {
     // 2026-11-22（面板插件组 Tab 实测）：上游/路由/插件组/全局规则已改为独立 `v-if` 容器，
     // 节点 Tab 若仍写裸 `v-else`，它会挂到 globalPlugins 的 `v-else-if` 上 →
     // 除 globalRules/globalPlugins/staticResources 外的每个 Tab 下方都叠渲染一块节点表格。
-    const text = s()
-    const body = text.slice(text.indexOf('class="max-swap"'), text.indexOf('<!-- Node Form Modal -->'))
+    // 2026-11-22（插件元数据批）：七 Tab 全部收敛为独立 `v-if`，正文不得再出现任何 v-else / v-else-if 分支。
+    const body = tabBody()
     expect(body, 'Tab 分支禁止裸 v-else（须写 activeTab 显式条件）').not.toMatch(/<div\s+v-else\s+class="tab-content"/)
-    // 节点 Tab 分支存在且带显式条件
-    expect(body).toContain('<div v-if="maximizedCluster.activeTab === \'nodes\'" class="tab-content">')
+    expect(body, 'Tab 分支禁止 v-else-if 串联（条件须各自独立成 v-if）').not.toContain('v-else-if')
+    // 七个 Tab 分支均带显式条件
+    for (const key of [
+      'upstreams',
+      'routes',
+      'pluginConfigs',
+      'globalRules',
+      'staticResources',
+      'globalPlugins',
+      'nodes',
+    ]) {
+      expect(body, `缺少 activeTab === '${key}' 的显式 v-if 分支`).toContain(
+        `v-if="maximizedCluster.activeTab === '${key}'"`,
+      )
+    }
+    // 插件元数据 Tab = PluginMetadataList 的 scoped 形态（面板不传 nodes/cluster-name 等旧 props）
+    expect(body).toContain('<PluginMetadataList :scoped-cluster-id="maximizedCluster.id" @refresh="loadClusters" />')
+    expect(body).not.toContain(':nodes="maximizedCluster.nodes"')
   })
 
   it('三个关键帧齐备：方向滑入两条 + 切 Tab 淡入', () => {

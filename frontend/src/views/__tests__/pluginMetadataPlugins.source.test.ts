@@ -15,8 +15,8 @@ const ENTRY_FILES = [
   'views/PluginMetadataList.vue',
   // B2c：创建入口收敛进共享弹窗后，弹窗成为第二个消费方（同一份清单、同一条过滤实现）
   'components/PluginMetadataCreateModal.vue',
-  // 统一管理面板（components/PluginMetadata.vue）已按用户裁决 2026-11-21 移除「可用插件」分类树，
-  // 不再消费该清单——可选插件只在创建弹窗内呈现；面板只剩已配置列表。
+  // 统一管理面板（旧 components/PluginMetadata.vue，已随 scoped 单实现批次删除）曾按用户裁决 2026-11-21
+  // 移除「可用插件」分类树；面板现直接渲染本文件同款页面组件（scoped 形态），可选插件只在创建弹窗内呈现。
 ]
 
 describe('插件元数据可用插件单源守卫（features.yaml 清单，写死开关退役）', () => {
@@ -28,9 +28,11 @@ describe('插件元数据可用插件单源守卫（features.yaml 清单，写�
   })
 
   it('统一管理面板不再自行拉取/过滤可选插件（清单单源，防止第二份实现回流）', () => {
-    const s = src('components/PluginMetadata.vue')
-    expect(s).not.toMatch(/featuresStore/)
-    expect(s).not.toMatch(/filterMetadataPlugins/)
+    // A 推广第 3 个卡片类资源（2026-11-22）：面板插件元数据 Tab 直接渲染 PluginMetadataList 的
+    // scoped 形态，旧面板组件 components/PluginMetadata.vue 已删除 → 本守卫改为钉住「它不得回流」。
+    expect(() => src('components/PluginMetadata.vue')).toThrow()
+    const central = src('views/CentralList.vue')
+    expect(central).not.toMatch(/components\/PluginMetadata\.vue/)
   })
 
   it('两入口源码与类型声明不再出现写死开关字段', () => {

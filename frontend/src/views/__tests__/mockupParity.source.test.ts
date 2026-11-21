@@ -1221,10 +1221,13 @@ describe('最大化面板：Tab 内容封闭容器（tab-content card，2026-11-
       expect(src, `${f} 网格内距`).toContain('gap: 16px; padding: 16px"')
       expect(src, `${f} 不得留 16px 0`).not.toContain('gap: 16px; padding: 16px 0"')
     }
-    const pm = readFileSync(resolve(process.cwd(), 'src/components/PluginMetadata.vue'), 'utf-8')
-    // B2c：面板顶部新增「添加插件元数据」工具条（通栏带），根节点内距下移到 .plugin-panels——
-    // 否则工具条会被缩进 32px（根 16px + 工具条自身 16px 左内距）。
-    expect(pm).toMatch(/\.plugin-metadata \{\n[\s\S]*?padding: 0;/)
-    expect(pm).toMatch(/\.plugin-panels \{[\s\S]*?padding: 16px;/)
+    // 插件元数据 Tab（2026-11-22）已改为 PluginMetadataList 的 scoped 形态：面板里不再有专属的
+    // 「工具条 + .plugin-panels 内距」双层结构——工具条/卡片网格全部走共享类（.l5-toolbar / .card-grid，
+    // 单一来源 src/style.css），scoped 只压掉外层卡片自身的边框/底色（scope-card）。
+    const pm = readFileSync(resolve(process.cwd(), 'src/views/PluginMetadataList.vue'), 'utf-8')
+    expect(pm).toContain(':class="{ \'scope-card\': isScoped }"')
+    expect(pm).toContain('class="pml-grid card-grid l5-card sp-cards"')
+    // 面板专属组件不得回流（唯一实现 = views/PluginMetadataList.vue）
+    expect(() => readFileSync(resolve(process.cwd(), 'src/components/PluginMetadata.vue'), 'utf-8')).toThrow()
   })
 })

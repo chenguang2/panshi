@@ -376,29 +376,30 @@
                  chips / 批量条（含批量删除）/ 卡片网格 / 卡脚「发布 + ⋯」与页面同一份实现。 -->
             <GlobalRuleList :scoped-cluster-id="maximizedCluster.id" @refresh="loadClusters" />
           </div>
-          <ClusterStaticResources
-            v-else-if="maximizedCluster.activeTab === 'staticResources'"
-            :cluster="maximizedCluster"
-            :clusters="clusters"
-            :open-publish-modal="openPublishModal"
-            :load-routes="loadRoutes"
-            :loading="loading"
-            @refresh="loadClusters"
-          />
-          <div v-else-if="maximizedCluster.activeTab === 'globalPlugins'" class="tab-content">
-            <PluginMetadata
-              :cluster-id="maximizedCluster.id"
-              :cluster-name="maximizedCluster.display_name || maximizedCluster.name"
-              :nodes="maximizedCluster.nodes"
+          <div v-if="maximizedCluster.activeTab === 'staticResources'" class="tab-content">
+            <ClusterStaticResources
+              :cluster="maximizedCluster"
+              :clusters="clusters"
+              :open-publish-modal="openPublishModal"
+              :load-routes="loadRoutes"
+              :loading="loading"
+              @refresh="loadClusters"
             />
+          </div>
+          <div v-if="maximizedCluster.activeTab === 'globalPlugins'" class="tab-content">
+            <!-- 插件元数据 Tab = 插件元数据页组件的「单集群作用域」形态（A 推广第 3 个卡片类资源，同插件组/全局规则做法）：
+                 隐藏页头/集群与分组筛选/分组切换/集群带，页面级动作「添加插件元数据 / 批量管理」改由工具条左侧紧凑钮；
+                 chips / 批量条（含批量删除）/ 卡片网格（含配置 JSON 折叠块与工具条全局展开开关）/ 卡脚「发布 + ⋯」
+                 与页面同一份实现；创建入口唯一（工具条紧凑钮 → 共享创建弹窗，集群锁定）。 -->
+            <PluginMetadataList :scoped-cluster-id="maximizedCluster.id" @refresh="loadClusters" />
           </div>
           <!-- 集群节点 Tab = 节点管理页组件的「单集群作用域」形态（A 试点：一份实现两处挂载）：
                页面组件隐藏页头/集群与分组筛选/分组切换/集群列，页面级动作改由工具条左侧紧凑钮；
                chips / 批量条 / 表格 / 分页 / 列配置与页面同一份实现。
                @refresh 保留既有绑定（节点 Tab 自身不发 refresh——列表变更后由面板壳决定是否全量重载）。
-               分支必须写显式条件（不得用裸 v-else）：上游/路由/插件组/全局规则四个 Tab 已改为独立
-               `v-if` 容器，裸 `v-else` 会挂到末位 `v-else-if`（globalPlugins）上，导致这几个 Tab
-               下方叠渲染整块节点表格（2026-11-22 面板插件组 Tab 实测）。 -->
+               分支必须写显式条件（不得用裸 v-else，也不得与其它 Tab 串成条件链）：
+               七个 Tab 已全部改为独立 `v-if` 容器，混入条件链会随「前一个条件」串联，
+               导致其它 Tab 激活时下方叠渲染整块节点表格（2026-11-22 面板插件组 Tab 实测）。 -->
           <div v-if="maximizedCluster.activeTab === 'nodes'" class="tab-content">
             <NodeList :scoped-cluster-id="maximizedCluster.id" @refresh="loadClusters" />
           </div>
@@ -512,7 +513,7 @@ import { formatDateTime } from '@/utils/format'
 import type { Cluster, Upstream, Plugin } from '@/types'
 import { useAuthStore } from '@/stores/auth'
 import { useFeaturesStore } from '@/stores/features'
-import PluginMetadata from '@/components/PluginMetadata.vue'
+import PluginMetadataList from '@/views/PluginMetadataList.vue'
 import ClusterFormModal from '@/components/ClusterFormModal.vue'
 import ClusterCard from '@/components/ClusterCard.vue'
 import PageHeader from '@/components/PageHeader.vue'

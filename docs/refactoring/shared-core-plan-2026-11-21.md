@@ -189,6 +189,16 @@
     - **附带修复（面板壳存量缺陷，本批暴露）**：Tab 分支由 v-else-if 链改独立 `v-if` 容器后，节点 Tab 仍是裸 `v-else`，它挂到末位 `v-else-if`（globalPlugins）上 → 上游/路由/插件组/静态资源等 Tab 下方**叠渲染整块节点表格**（实测插件组 Tab 下出现 4 行节点表）。节点分支改为显式 `v-if="activeTab === 'nodes'"`，守卫 `CentralList.source.test.ts`「Tab 分支不得用裸 v-else」。
     - 面板不再预拉插件组（`handleTabClick` 的 `loadPluginConfigs` 移除）；`CentralList` 仍保留 `useClusterPluginConfigs` 的 `loadPluginConfigs` 作为 `useClusterRoutes` 依赖占位。`composables/useClusterPluginConfigs.ts` 的面板专用表单态已无生产消费方，仅加「已迁移」注释，清理另批（需同步 `panelFormDeadCode.source.test.ts` 与 `Cluster.plugin_configs`/`pluginConfigsLoadError` 类型字段）。
     - 设计页未同步（按约定先报告）：`proposal-c/central.html` Tab 4（插件组）仍是 `.tab-toolbar` + `.pcc-card`/`.pcc-actions` 旧形态，尚无 `.l5-toolbar` / `.l5-chiprow` / `.l5-batchbar` / `card-grid` 卡片解剖与「引用 · N 条路由」strip。
+  - [已完成 2026-11-22] **A 推广 4/6（插件元数据，第 3 个卡片类资源）**：面板「插件元数据」Tab 改渲染 `views/PluginMetadataList.vue` 的 scoped 形态，`components/PluginMetadata.vue` 及其三个测试（`PluginMetadata.{delete,publish,status}.test.ts`）删除（插件元数据卡片只剩一份实现）。
+    - props/隐藏/新增项与前两批完全同构（`scopedClusterId` / `scope-add-plugin-metadata` / `scope-batch-toggle`）；请求 `GET /plugin_metadata?cluster_id={id}&group_name=__all__&page_size=500`（全局端点本就支持 `cluster_id`/`group_name`/`plugin_name`，后端零改动）。
+    - 插件元数据特有（#87② 定稿口径全部保留，面板内与页面同一份实现）：**配置 JSON 折叠美化块**（`JSON.stringify(v,null,2)` → `.lp-json`，缩进 2 空格 / 等宽 / `max-height:220px` 滚动不裁剪）+ **默认全展开**（只记被收起的 id）+ 工具条全局开关 `config-toggle-all`（无配置卡时不显示）；空配置卡显示「无配置」且 `v-if` 同时判「有配置 && 展开」→ 绝不渲染 `{}`（真机实测 `app` 集群 3 条中 `functions_pre` 为空配置，页面上无空 JSON 块）。
+    - 插件名**中文优先**：卡头主标题 `display_name || name`，裸插件名保留为弱化标识 `.lp-key`（mono），目录无中文名时回落插件名并走 mono（`pluginLabel` 改为复用 `utils/pluginMetadataCatalog` 的 `metadataPluginLabel`，不再写第二套 `display_name` 回退）。
+    - 创建入口唯一：面板旧「点可用插件卡片直接添加」与「可用插件」清单**不得恢复**（源码守卫钉住 `available-panel`/`plugin-tree`/`configured-panel`），入口 = 工具条紧凑钮 → 共享 `PluginMetadataCreateModal`，scoped 下 `:lock-cluster="isScoped"` + 单元素集群清单（真机：面板弹窗集群下拉显示 `app` 且禁用；页面形态显示占位「请选择集群」可改）。
+    - 批量删除：`ids: () => selectedIds.value`（记录主键，后端 `BatchDeletePluginMetadataRequest.metadata_ids`）+ `nameOf: plugin_name`，**键类型已复核兼容**（`plugin_name` 仅作展示与 Edge 定位的 `edge_identifier`，批量端点收货键仍是整型主键，故「按 plugin_name 唯一」不构成字符串 id 问题）；批量条只有「批量删除」。
+    - ⋯ 菜单翻转沿用「最近 `overflow != visible` 祖先底边」判定（本批同实现搬运），真机面板内菜单向上翻转且未被 `.tab-content` 裁剪（实测 menu 559→755 < clip 底 795）。
+    - 面板 Tab 分支顺带收口：`ClusterStaticResources` 的 `v-else-if` 与插件元数据的 `v-else-if` 全改独立 `v-if`，七个 Tab 一律显式条件（守卫 `CentralList.source.test.ts` 现在断言「不得出现任何 v-else-if 串联」）；该守卫的 Tab 分支区切片锚点由已不存在的 `<!-- Node Form Modal -->` 改 `<ClusterFormModal`（旧锚点 indexOf 返回 -1 → 切片退化为整文件，断言被脚本段的合法 v-else-if 污染）。
+    - 面板不再预拉插件元数据（旧面板组件自持 `/clusters/{id}/plugin-metadata`）；`CentralList` 的 `availablePlugins`/`loadAvailablePlugins` 仍被上游/路由/插件组 composable 消费，未动。
+    - 设计页未同步（按约定先报告）：`proposal-c/central.html` Tab 5（插件元数据）仍是 `.tab-toolbar` + `.plugin-item.configured` 双列条目 + `.pcc-actions` 旧形态，尚无 `.l5-toolbar`（含 `config-toggle-all`）/ `.l5-chiprow` / `.l5-batchbar` / `card-grid` 卡片解剖与 `.lp-json` 折叠块。
   - [待开始] B4 单元格接线 / B5 卡片动作条
 
 ## 七、待收口：主 spec 与实现漂移（2026-11-21）
