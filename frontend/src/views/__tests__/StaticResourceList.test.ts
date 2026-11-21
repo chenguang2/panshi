@@ -617,3 +617,38 @@ describe('StaticResourceList.vue 批量管理（21.9b：useBatchDelete 统一入
     expect(wrapper.find('.l5-batchbar').exists()).toBe(false)
   })
 })
+
+// ── 写操作成功后 emit('refresh')：统一管理面板 Tab 借此重载左侧集群卡片/徽标（2026-11-22）──
+describe('StaticResourceList 写操作 emit refresh（面板 Tab）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/static_resources') return Promise.resolve({ data: MOCK_DATA })
+      if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, display_name: '生产集群' }] } })
+      return Promise.reject(new Error('unknown url'))
+    })
+  })
+
+  it('挂载/搜索/切集群不 emit；表单保存成功 emit 一次', async () => {
+    const StaticResourceList = (await import('../StaticResourceList.vue')).default
+    const wrapper = mount(StaticResourceList, { global: { stubs } })
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    expect(wrapper.emitted('refresh')).toBeUndefined()
+
+    // 只读交互：搜索 + 切换集群筛选
+    vm.onSearch()
+    await flushPromises()
+    vm.onClusterChange()
+    await flushPromises()
+    expect(wrapper.emitted('refresh')).toBeUndefined()
+
+    // 写操作：共享表单弹窗保存成功（新增/编辑静态资源）
+    vm.onFormSaved()
+    await flushPromises()
+    expect(wrapper.emitted('refresh')).toHaveLength(1)
+    wrapper.unmount()
+  })
+})

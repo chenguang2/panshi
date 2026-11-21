@@ -332,8 +332,8 @@
       :resource-name="vmName"
       :hide-config-keys="['file_path', 'route_id', 'edge_uuid']"
       :can-publish="true"
-      @version-change="loadResources"
-      @published="loadResources"
+      @version-change="onVersionWriteSuccess"
+      @published="onVersionWriteSuccess"
       @publish-requested="onVmPublishRequested"
     />
 
@@ -407,6 +407,13 @@ const groupFilter = ref('__all__')
  */
 const props = withDefaults(defineProps<{ scopedClusterId?: number | null }>(), { scopedClusterId: null })
 const isScoped = computed(() => props.scopedClusterId != null)
+/**
+ * 写操作成功后的面板通知：统一管理面板以 `@refresh="loadClusters"` 挂载本组件，
+ * 借此重载左侧集群卡片与 Tab 徽标计数（新增/编辑/删除/批量删/上传 ZIP/发布/版本回滚后立即生效）。
+ * **只在写操作成功后 emit**——挂载、搜索、筛选、切 chip 一律不调，
+ * 否则父级重载会经 prop/数据变化反馈回本组件，形成请求风暴。页面形态无监听者 = 零副作用。
+ */
+const emit = defineEmits<{ refresh: [] }>()
 /** 列表请求的集群过滤：scoped 恒取作用域集群，页面形态取筛选下拉 */
 function effectiveClusterId(): number | undefined {
   if (props.scopedClusterId != null) return props.scopedClusterId
@@ -446,6 +453,17 @@ function onClusterChange(): void {
 
 async function refreshList(): Promise<void> {
   await loadClusters()
+  await loadResources()
+}
+
+/**
+ * 「写操作成功后」的刷新：先通知面板重载集群卡片/徽标，再刷新本页列表。
+ * 共享流程（executePublish / executeDeleteWithProgress / useBatchDelete / 上传流 afterUpload）
+ * 的刷新回调只在请求成功后调用，故把它当作刷新回调传递即等价于「成功后 emit」，
+ * 不必改共享 composable 语义（AGENTS #217）。
+ */
+async function loadAfterWrite(): Promise<void> {
+  emit('refresh')
   await loadResources()
 }
 
@@ -620,7 +638,7 @@ const batchDelete = useBatchDelete<any>({
   nameOf: (sr: any) => sr.name,
   clusterIdOf: (sr: any) => sr.cluster_id,
   clusterNameOf: clusterNameById,
-  refresh: loadResources,
+  refresh: loadAfterWrite,
   clearSelection: () => clearSelection(),
   exitBatch: () => toggleBatchMode(),
   subsetConsequence: '未选中的 {n} 个节点将保留已分发的静态资源文件',
@@ -711,7 +729,7 @@ const publishVisible = ref(false)
 const publishClusterId = ref(0)
 const publishingRecord = ref<any | null>(null)
 // 版本弹窗出口链：发布完成后的刷新回调可注入「重开版本弹窗」（RouteList 同款范式）
-const publishRefreshFn = ref<() => Promise<void>>(loadResources)
+const publishRefreshFn = ref<() => Promise<void>>(loadAfterWrite)
 // static-resources-ux-close-loop 7.3：失败态预选（其余场景为空数组=默认全选在线）
 const publishPreselected = ref<number[]>([])
 // 7.3：配置异常态 tooltip 指路文案（两入口同文案）
@@ -732,7 +750,8 @@ const { uploadStaticResource, uploading: srUploading } = useClusterStaticResourc
   versionModal,
   openPublishModal: async () => [],
   loadRoutes: async () => {},
-  afterUpload: () => loadResources(),
+  // 上传成功后同步刷新本页列表并通知面板（ZIP 上传成功 → 资源总量/集群卡片立即更新）
+  afterUpload: () => loadAfterWrite(),
 })
 
 // ── B2a 表单共用（shared-core-plan 3.1）：页面只持有开关与刷新，
@@ -755,10 +774,15 @@ function closeForm(): void {
   editingResource.value = null
 }
 
-/** 保存成功（组件已 emit saved + close）：刷新本页列表 */
+/** 保存成功（组件已 emit saved + close）：刷新本页列表 + 通知面板重载徽标 */
 function onFormSaved(): void {
   closeForm()
-  void loadResources()
+  void loadAfterWrite()
+}
+
+/** 版本管理弹窗内写成功（回滚/还原、弹窗内发布）→ 本页刷新 + 通知面板重载徽标 */
+function onVersionWriteSuccess(): void {
+  void loadAfterWrite()
 }
 
 // ── ZIP 内容弹窗（B2a 共享 ZipContentsModal：内容拉取/加载/错误/空态均在组件内）──
@@ -792,7 +816,7 @@ function applyPublishContext(sr: any) {
 }
 
 function publishResource(sr: any) {
-  publishRefreshFn.value = loadResources
+  publishRefreshFn.value = loadAfterWrite
   applyPublishContext(sr)
   publishVisible.value = true
 }
@@ -804,7 +828,7 @@ function onVmPublishRequested() {
   const sr = resources.value.find((r: { id: number | null }) => r.id === vmId.value)
   if (!sr) return
   publishRefreshFn.value = async () => {
-    await loadResources()
+    await loadAfterWrite()
     vmVisible.value = true
   }
   vmVisible.value = false
@@ -856,7 +880,7 @@ async function onPublishConfirm(nodeIds: number[]) {
       }
     },
   })
-  publishRefreshFn.value = loadResources
+  publishRefreshFn.value = loadAfterWrite
 }
 
 async function deleteResource(sr: any) {
@@ -882,7 +906,7 @@ async function deleteResource(sr: any) {
         deleteDb,
         deleteEdge,
         nodeIds,
-        refreshFn: loadResources,
+        refreshFn: loadAfterWrite,
         clearSelectedFn: () => {},
       })
     },

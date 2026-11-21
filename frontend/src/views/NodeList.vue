@@ -505,7 +505,7 @@
       :cluster-name="scopedClusterName"
       :lock-cluster="isScoped"
       @close="batchImportVisible = false"
-      @saved="refreshList"
+      @saved="onBatchImported"
     />
   </div>
 </template>
@@ -588,6 +588,13 @@ const featuresStore = useFeaturesStore()
  */
 const props = withDefaults(defineProps<{ scopedClusterId?: number | null }>(), { scopedClusterId: null })
 const isScoped = computed(() => props.scopedClusterId != null)
+/**
+ * 写操作成功后的面板通知：统一管理面板以 `@refresh="loadClusters"` 挂载本组件，
+ * 借此重载左侧集群卡片与 Tab 徽标计数（增/改/删/批量删/上传后立即生效）。
+ * **只在写操作成功后 emit**——挂载、翻页、搜索、筛选、切 chip 一律不调，
+ * 否则父级重载会经 prop/数据变化反馈回本组件，形成请求风暴。页面形态无监听者 = 零副作用。
+ */
+const emit = defineEmits<{ refresh: [] }>()
 /** 表单/批量导入弹窗的集群清单：scoped 下只给当前集群（并锁定选择） */
 const formClusterOptions = computed(() => {
   const id = props.scopedClusterId
@@ -723,7 +730,7 @@ async function executeBatchAction(
   })
   message.info(formatClusterBatchSummary(summary))
   clearBatchSelection()
-  await refreshList()
+  await refreshAfterWrite()
 }
 
 function confirmBatchAction(action: 'start' | 'stop' | 'reload', label: string) {
@@ -786,7 +793,7 @@ async function handleBatchDelete() {
       const success = summaries.reduce((acc, s) => acc + s.success, 0)
       const failed = total - success
       clearBatchSelection()
-      await refreshList()
+      await refreshAfterWrite()
       if (failed === 0) {
         message.success(`已删除 ${success} 个节点（仅平台记录，节点机进程不受影响）`)
       } else {
@@ -960,6 +967,16 @@ const headerStatItems = computed(() => [
 async function refreshList(): Promise<void> {
   await loadNodes()
   await loadNodeStats()
+}
+
+/**
+ * 「写操作成功后」的刷新：先通知面板重载集群卡片/徽标，再刷新本页列表。
+ * 共享流程（executeDeleteWithProgress 等）的 `refreshFn` 只在请求成功后调用，
+ * 故把它当作 refreshFn 传递即等价于「删除成功后 emit」，不必改共享 composable 语义（AGENTS #217）。
+ */
+async function refreshAfterWrite(): Promise<void> {
+  emit('refresh')
+  await refreshList()
 }
 
 // ── 列/按钮/搜索个性化（batch3 4.1 / D8）──
@@ -1275,7 +1292,12 @@ function closeFormModal() {
 /** 保存成功（组件已内部提交并 emit saved）：刷新列表并收起弹窗 */
 function onFormSaved() {
   closeFormModal()
-  refreshList()
+  void refreshAfterWrite()
+}
+
+/** 批量导入成功（共享弹窗已提交）：刷新列表 + 通知面板重载徽标 */
+function onBatchImported() {
+  void refreshAfterWrite()
 }
 
 // ── Detail ──
@@ -1390,6 +1412,8 @@ async function executeAction(record: any, action: string, actionLabel: string) {
     execHighlights.value = []
     execStatistics.value = data.statistic ? { ...data.statistic } : null
     execResult.value = { stdout: data.stdout || '', stderr: data.stderr || '', command: finalCommand, rc: data.rc }
+    // 启/停/reload 成功会改节点状态（面板卡片「健康节点 N/M」随之变化）；「状态查询」是只读操作，不通知
+    if (action !== 'status' && data.rc === 0) emit('refresh')
     refreshList()
   } catch (error: unknown) {
     stopElapsedTimer()
@@ -1632,7 +1656,7 @@ function handleDelete(record: any) {
         deleteDb: true,
         deleteEdge: false,
         nodeIds: [],
-        refreshFn: refreshList,
+        refreshFn: refreshAfterWrite,
       })
     },
   })

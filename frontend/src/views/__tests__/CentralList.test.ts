@@ -724,3 +724,68 @@ describe('CentralList.vue 分组筛选（批7：与集群管理对齐）', () =>
     wrapper.unmount()
   })
 })
+
+// ── 面板 Tab 的写操作通知：scoped 子页 emit('refresh') → 面板重载集群卡片/徽标（2026-11-22）──
+describe('CentralList.vue - 最大化面板 Tab emit refresh → loadClusters', () => {
+  const cluster = {
+    id: 1,
+    name: 'demo-cluster',
+    display_name: '演示集群',
+    group_name: '',
+    status: 1,
+    node_count: 1,
+    healthy_node_count: 1,
+    upstream_count: 0,
+    route_count: 0,
+    plugin_config_count: 0,
+    global_rule_count: 0,
+    static_resource_count: 0,
+    plugin_metadata_count: 0,
+    nodes: [],
+    activeTab: 'pluginConfigs',
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    setActivePinia(createPinia())
+  })
+
+  it('子页 emit refresh 后 /clusters 再次拉取（徽标计数随之更新）', async () => {
+    mockLocalStorage()
+    localStorage.setItem('user', JSON.stringify({ id: 1, username: 'admin', role: 'admin' }))
+    localStorage.setItem('token', 'mock-token')
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/clusters') return Promise.resolve({ data: { items: [cluster], total: 1 } })
+      return Promise.resolve({ data: { items: [], total: 0 } })
+    })
+
+    const CentralList = (await import('@/views/CentralList.vue')).default
+    const router = createRouter({
+      history: createWebHistory(),
+      routes: [{ path: '/', name: 'Dashboard', component: { template: '<div />' } }],
+    })
+    const wrapper = mount(CentralList, { global: { plugins: [router] } })
+    await flushPromises()
+    await flushPromises()
+
+    // 进入最大化面板（七个 Tab 均绑定 @refresh="loadClusters"）
+    const vm = wrapper.vm as any
+    vm.maximizedClusterId = 1
+    await flushPromises()
+    await flushPromises()
+
+    const clusterCalls = () => mockApiGet.mock.calls.filter((c: any[]) => c[0] === '/clusters').length
+    const before = clusterCalls()
+    expect(before).toBeGreaterThan(0)
+
+    // 默认 Tab = 集群节点（scoped 子页 = NodeList，绑定 @refresh="loadClusters"）
+    const tab = wrapper.findComponent({ name: 'NodeList' })
+    expect(tab.exists()).toBe(true)
+    tab.vm.$emit('refresh')
+    await flushPromises()
+    await flushPromises()
+
+    expect(clusterCalls()).toBeGreaterThan(before)
+    wrapper.unmount()
+  }, 20_000)
+})

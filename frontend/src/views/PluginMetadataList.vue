@@ -351,8 +351,8 @@
       :cluster-id="vmClusterId"
       :resource-name="vmName"
       :can-publish="true"
-      @version-change="loadItems"
-      @published="loadItems"
+      @version-change="onVersionWriteSuccess"
+      @published="onVersionWriteSuccess"
       @publish-requested="onVmPublishRequested"
     />
 
@@ -421,6 +421,13 @@ import { filterMetadataPlugins, metadataPluginLabel } from '@/utils/pluginMetada
  */
 const props = withDefaults(defineProps<{ scopedClusterId?: number | null }>(), { scopedClusterId: null })
 const isScoped = computed(() => props.scopedClusterId != null)
+/**
+ * 写操作成功后的面板通知：统一管理面板以 `@refresh="loadClusters"` 挂载本组件，
+ * 借此重载左侧集群卡片与 Tab 徽标计数（新建/编辑/删除/批量删/发布/版本回滚后立即生效）。
+ * **只在写操作成功后 emit**——挂载、搜索、筛选、切 chip 一律不调，
+ * 否则父级重载会经 prop/数据变化反馈回本组件，形成请求风暴。页面形态无监听者 = 零副作用。
+ */
+const emit = defineEmits<{ refresh: [] }>()
 /** 列表请求的集群过滤：scoped 恒取作用域集群，页面形态取筛选下拉 */
 function effectiveClusterId(): number | undefined {
   if (props.scopedClusterId != null) return props.scopedClusterId
@@ -496,7 +503,7 @@ const publishTitle = ref('')
 const publishClusterId = ref(0)
 const publishingRecord = ref<any | null>(null)
 /** 本次发布完成后的刷新动作：卡片发布刷新页面列表；版本弹窗出口条发布额外重开弹窗重载版本列表 */
-const publishRefreshFn = ref<() => Promise<void>>(loadItems)
+const publishRefreshFn = ref<() => Promise<void>>(loadAfterWrite)
 
 // ── 重发失败节点（republish-failed-nodes：预览取失败集合并预选，单一实现）──
 const { loading: republishLoading, resolve: resolveFailedNodes } = useRepublishFailedNodes()
@@ -522,7 +529,7 @@ async function republishFailedNodes(item: any): Promise<void> {
     publishingRecord.value = item
     publishTitle.value = `发布插件元数据: ${item.plugin_name}`
     publishClusterId.value = item.cluster_id
-    publishRefreshFn.value = loadItems
+    publishRefreshFn.value = loadAfterWrite
     publishPreselected.value = outcome.failedNodeIds
     publishVisible.value = true
   } else {
@@ -589,6 +596,17 @@ async function loadClusters() {
   }
 }
 
+/**
+ * 「写操作成功后」的刷新：先通知面板重载集群卡片/徽标，再刷新本页列表。
+ * 共享流程（executePublish / executeDeleteWithProgress / useBatchDelete）的刷新回调
+ * 只在请求成功后调用，故把它当作刷新回调传递即等价于「成功后 emit」，
+ * 不必改共享 composable 语义（AGENTS #217）。
+ */
+async function loadAfterWrite(): Promise<void> {
+  emit('refresh')
+  await loadItems()
+}
+
 async function loadBuiltinPlugins() {
   // features 清单兜底加载（插件元数据可选插件的过滤依赖 features.yaml 的
   // plugin_metadata_plugins；main.ts 启动已预载，此处仅覆盖未加载的边角，失败静默 = 不限制）
@@ -608,7 +626,7 @@ function openCreateModal() {
 
 /** 共享创建弹窗保存成功：刷新列表 + publish-guide 单通道引导（「立即发布」复用既有发布链路） */
 async function handleCreateSaved(payload: { clusterId: number; pluginName: string }) {
-  await loadItems()
+  await loadAfterWrite()
   showOverlayModal({
     title: '保存成功',
     content: '配置尚未发布，发布后才会推送到 Edge 节点生效。',
@@ -618,6 +636,11 @@ async function handleCreateSaved(payload: { clusterId: number; pluginName: strin
       publishItem({ cluster_id: payload.clusterId, plugin_name: payload.pluginName })
     },
   })
+}
+
+/** 版本管理弹窗内写成功（回滚/还原、弹窗内发布）→ 本页刷新 + 通知面板重载徽标 */
+function onVersionWriteSuccess() {
+  void loadAfterWrite()
 }
 
 // ——— View ———
@@ -647,7 +670,7 @@ async function handleEditorSave(config: string) {
     const metadata = typeof config === 'string' ? JSON.parse(config) : config
     await updateClusterPluginMetadata(editingItemClusterId.value, editingPluginName.value, metadata)
     editorDrawerVisible.value = false
-    await loadItems()
+    await loadAfterWrite()
     // publish-guide 批 3：单通道引导替代 toast；立即发布复用既有发布链路
     showOverlayModal({
       title: '保存成功',
@@ -686,7 +709,7 @@ async function deleteItem(item: any) {
         deleteDb,
         deleteEdge,
         nodeIds,
-        refreshFn: loadItems,
+        refreshFn: loadAfterWrite,
         clearSelectedFn: () => {},
       })
     },
@@ -698,7 +721,7 @@ function publishItem(item: any) {
   publishingRecord.value = item
   publishClusterId.value = item.cluster_id
   publishTitle.value = `发布插件元数据: ${item.plugin_name}`
-  publishRefreshFn.value = loadItems
+  publishRefreshFn.value = loadAfterWrite
   // 常规发布不带预选（仅「重发失败节点」入口设置；防上一次重发残留）
   publishPreselected.value = []
   publishVisible.value = true
@@ -729,7 +752,7 @@ async function onPublishConfirm(nodeIds: number[]) {
     nodeIds,
     refreshFn: publishRefreshFn.value,
   })
-  publishRefreshFn.value = loadItems
+  publishRefreshFn.value = loadAfterWrite
 }
 
 // ——— Version management ———
@@ -749,7 +772,7 @@ function onVmPublishRequested() {
   publishClusterId.value = vmClusterId.value
   publishTitle.value = `发布插件元数据: ${name}`
   publishRefreshFn.value = async () => {
-    await loadItems()
+    await loadAfterWrite()
     if (vmName.value === name) {
       vmVisible.value = true
     }
@@ -965,7 +988,7 @@ const batchDelete = useBatchDelete<any>({
   nameOf: (item: any) => item.plugin_name,
   clusterIdOf: (item: any) => item.cluster_id,
   clusterNameOf: clusterNameById,
-  refresh: loadItems,
+  refresh: loadAfterWrite,
   clearSelection: () => clearSelection(),
   exitBatch: () => toggleBatchMode(),
   subsetConsequence: '未选中的 {n} 个节点将保留该插件元数据',

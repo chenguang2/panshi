@@ -1955,3 +1955,49 @@ describe('RouteList 插件引用深链（批 7 bug4A：?plugin= 预选「全部�
     wrapper.unmount()
   })
 })
+
+// ── 写操作成功后 emit('refresh')：统一管理面板 Tab 借此重载左侧集群卡片/徽标（2026-11-22）──
+describe('RouteList 写操作 emit refresh（面板 Tab）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockRouteQuery = {}
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/routes') return Promise.resolve({ data: MOCK_ROUTES })
+      if (url === '/routes/status-counts')
+        return Promise.resolve({ data: { total: 2, unpublished: 0, pending: 0, published: 2, upstream_count: 1 } })
+      if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, display_name: '生产集群' }] } })
+      if (url === '/plugins/builtin') return Promise.resolve({ data: { plugins: [] } })
+      return Promise.resolve({ data: { items: [] } })
+    })
+  })
+
+  it('挂载/搜索/切 chip 不 emit；保存成功与版本弹窗写成功各 emit 一次', async () => {
+    const RouteList = (await import('../RouteList.vue')).default
+    const wrapper = mount(RouteList, { global: { stubs } })
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    expect(wrapper.emitted('refresh')).toBeUndefined()
+
+    // 只读交互：搜索 + 切发布状态 chip
+    vm.runSearch()
+    await flushPromises()
+    vm.selectPublishStatus('published')
+    await flushPromises()
+    expect(wrapper.emitted('refresh')).toBeUndefined()
+
+    // 写操作：表单保存成功（新建/编辑路由）
+    vm.onSaved()
+    await flushPromises()
+    expect(wrapper.emitted('refresh')).toHaveLength(1)
+
+    // 写操作：版本管理弹窗内回滚/还原成功
+    const vmModal = wrapper.findComponent('.mock-version-modal')
+    expect(vmModal.exists()).toBe(true)
+    vmModal.vm.$emit('version-change', {})
+    await flushPromises()
+    expect(wrapper.emitted('refresh')).toHaveLength(2)
+    wrapper.unmount()
+  })
+})

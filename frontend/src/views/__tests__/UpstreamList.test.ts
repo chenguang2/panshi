@@ -982,3 +982,45 @@ describe('UpstreamList.vue 集群分组与双模式（list-pages-console-restyle
     wrapper.unmount()
   })
 })
+
+// ── 写操作成功后 emit('refresh')：统一管理面板 Tab 借此重载左侧集群卡片/徽标（2026-11-22）──
+describe('UpstreamList 写操作 emit refresh（面板 Tab）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/upstreams') return Promise.resolve({ data: MOCK_UPSTREAMS })
+      if (url === '/upstreams/status-counts')
+        return Promise.resolve({ data: { total: 2, unpublished: 0, pending: 1, published: 1 } })
+      if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, display_name: '生产集群' }] } })
+      return Promise.reject(new Error('unknown url'))
+    })
+  })
+
+  it('挂载/搜索/切 chip 不 emit；保存成功与版本弹窗写成功各 emit 一次', async () => {
+    const UpstreamList = (await import('../UpstreamList.vue')).default
+    const wrapper = mount(UpstreamList, { global: { stubs } })
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    expect(wrapper.emitted('refresh')).toBeUndefined()
+
+    // 只读交互：搜索 + 切发布状态 chip
+    vm.runSearch()
+    await flushPromises()
+    vm.selectPublishStatus('pending')
+    await flushPromises()
+    expect(wrapper.emitted('refresh')).toBeUndefined()
+
+    // 写操作：表单保存成功（新建/编辑上游）
+    vm.onSaved()
+    await flushPromises()
+    expect(wrapper.emitted('refresh')).toHaveLength(1)
+
+    // 写操作：版本管理弹窗内回滚/还原成功
+    wrapper.findComponent(vmModalStub).vm.$emit('version-change', {})
+    await flushPromises()
+    expect(wrapper.emitted('refresh')).toHaveLength(2)
+    wrapper.unmount()
+  })
+})

@@ -637,3 +637,46 @@ describe('GlobalRuleList 插件引用服务端过滤（plugin-ref-filter）', ()
     vi.doUnmock('vue-router')
   })
 })
+
+// ── 写操作成功后 emit('refresh')：统一管理面板 Tab 借此重载左侧集群卡片/徽标（2026-11-22）──
+describe('GlobalRuleList 写操作 emit refresh（面板 Tab）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/global_rules') return Promise.resolve({ data: MOCK_DATA })
+      if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, display_name: '生产集群' }] } })
+      if (url === '/plugins/builtin') return Promise.resolve({ data: { plugins: [] } })
+      return Promise.reject(new Error('unknown url'))
+    })
+  })
+
+  it('挂载/搜索/清空筛选不 emit；保存成功与版本弹窗写成功各 emit 一次', async () => {
+    const GlobalRuleList = (await import('../GlobalRuleList.vue')).default
+    const wrapper = mount(GlobalRuleList, { global: { stubs } })
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    expect(wrapper.emitted('refresh')).toBeUndefined()
+
+    // 只读交互：搜索 + 清空筛选
+    vm.onSearch()
+    await flushPromises()
+    vm.clearFilters()
+    await flushPromises()
+    expect(wrapper.emitted('refresh')).toBeUndefined()
+
+    // 写操作：表单保存成功
+    vm.onSaved()
+    await flushPromises()
+    expect(wrapper.emitted('refresh')).toHaveLength(1)
+
+    // 写操作：版本管理弹窗内回滚/还原成功
+    const vmModal = wrapper.findComponent({ name: 'MockVersionManagementModal' })
+    expect(vmModal.exists()).toBe(true)
+    vmModal.vm.$emit('version-change', {})
+    await flushPromises()
+    expect(wrapper.emitted('refresh')).toHaveLength(2)
+    wrapper.unmount()
+  })
+})

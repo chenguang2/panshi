@@ -402,3 +402,39 @@ describe('PluginConfigList 插件引用服务端过滤（plugin-ref-filter）', 
     vi.doUnmock('vue-router')
   })
 })
+
+// ── 写操作成功后 emit('refresh')：统一管理面板 Tab 借此重载左侧集群卡片/徽标（2026-11-22）──
+describe('PluginConfigList 写操作 emit refresh（面板 Tab）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/plugin_configs') return Promise.resolve({ data: MOCK_DATA })
+      if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, display_name: '生产集群' }] } })
+      if (url === '/plugins/builtin') return Promise.resolve({ data: { plugins: [] } })
+      return Promise.reject(new Error('unknown url'))
+    })
+  })
+
+  it('挂载/搜索/切插件筛选不 emit；保存成功 emit 一次', async () => {
+    const PluginConfigList = (await import('../PluginConfigList.vue')).default
+    const wrapper = mount(PluginConfigList, { global: { stubs } })
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    expect(wrapper.emitted('refresh')).toBeUndefined()
+
+    // 只读交互：搜索 + 插件筛选下拉
+    vm.onSearch()
+    await flushPromises()
+    vm.onPluginFilterChange()
+    await flushPromises()
+    expect(wrapper.emitted('refresh')).toBeUndefined()
+
+    // 写操作：表单保存成功（新建/编辑插件组）
+    vm.onSaved()
+    await flushPromises()
+    expect(wrapper.emitted('refresh')).toHaveLength(1)
+    wrapper.unmount()
+  })
+})

@@ -190,7 +190,8 @@ describe('节点批量导入共用守卫（B2b-2 / A 试点迁移）', () => {
     expect(s).toContain(':cluster-id="scopedClusterId"')
     expect(s).toContain(':cluster-name="scopedClusterName"')
     expect(s).toContain(':lock-cluster="isScoped"')
-    expect(s).toContain('@saved="refreshList"')
+    // 保存成功回调收敛到 onBatchImported（= 刷新列表 + emit('refresh') 通知面板重载徽标，2026-11-22）
+    expect(s).toContain('@saved="onBatchImported"')
     expect(s).toContain("import NodeBatchImportModal from '@/components/NodeBatchImportModal.vue'")
     // 两个入口都在（页头形态 + 面板工具条紧凑钮共用同一开关函数）
     expect(s).toContain('openBatchImport')

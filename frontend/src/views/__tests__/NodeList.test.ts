@@ -2081,3 +2081,44 @@ describe('NodeList.vue 集群分组与双模式（list-pages-console-restyle）'
     wrapper.unmount()
   })
 })
+
+// ── 写操作成功后 emit('refresh')：统一管理面板 Tab 借此重载左侧集群卡片/徽标（2026-11-22）──
+describe('NodeList 写操作 emit refresh（面板 Tab）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/clusters') return Promise.resolve({ data: { items: MOCK_CLUSTERS } })
+      if (url === '/nodes') return Promise.resolve({ data: MOCK_NODES })
+      return Promise.resolve({ data: { items: [] } })
+    })
+  })
+
+  it('挂载/翻页/切 chip 不 emit；表单保存与批量导入成功各 emit 一次', async () => {
+    const NodeList = (await import('../NodeList.vue')).default
+    const wrapper = mount(NodeList, { props: { scopedClusterId: 1 }, global: { stubs } })
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    // 挂载（含列表加载）不是写操作 → 不通知面板
+    expect(wrapper.emitted('refresh')).toBeUndefined()
+
+    // 只读交互：翻页 + 切状态 chip 一律不 emit（否则父级重载 → 子组件重载形成请求风暴）
+    vm.handlePagerChange(2, 20)
+    await flushPromises()
+    vm.selectStatus('disabled')
+    await flushPromises()
+    expect(wrapper.emitted('refresh')).toBeUndefined()
+
+    // 写操作：单条新增/编辑保存成功
+    wrapper.findComponent({ name: 'NodeFormModal' }).vm.$emit('saved')
+    await flushPromises()
+    expect(wrapper.emitted('refresh')).toHaveLength(1)
+
+    // 写操作：批量导入成功
+    wrapper.findComponent({ name: 'NodeBatchImportModal' }).vm.$emit('saved')
+    await flushPromises()
+    expect(wrapper.emitted('refresh')).toHaveLength(2)
+    wrapper.unmount()
+  })
+})

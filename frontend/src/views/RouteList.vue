@@ -373,8 +373,8 @@
       :cluster-id="vmClusterId"
       :resource-name="vmName"
       :can-publish="true"
-      @version-change="refreshList"
-      @published="refreshList"
+      @version-change="onVersionWriteSuccess"
+      @published="onVersionWriteSuccess"
       @publish-requested="onVmPublishRequested"
     />
     <PublishConfirmModal
@@ -468,6 +468,13 @@ const route = useRoute()
  */
 const props = withDefaults(defineProps<{ scopedClusterId?: number | null }>(), { scopedClusterId: null })
 const isScoped = computed(() => props.scopedClusterId != null)
+/**
+ * 写操作成功后的面板通知：统一管理面板以 `@refresh="loadClusters"` 挂载本组件，
+ * 借此重载左侧集群卡片与 Tab 徽标计数（增/改/删/批量删/发布/版本回滚后立即生效）。
+ * **只在写操作成功后 emit**——挂载、翻页、搜索、筛选、切 chip 一律不调，
+ * 否则父级重载会经 prop/数据变化反馈回本组件，形成请求风暴。页面形态无监听者 = 零副作用。
+ */
+const emit = defineEmits<{ refresh: [] }>()
 /** 列表/计数请求的集群过滤：scoped 恒取作用域集群，页面形态取筛选下拉 */
 function effectiveClusterId(): number | undefined {
   if (props.scopedClusterId != null) return props.scopedClusterId
@@ -637,6 +644,16 @@ function selectPublishStatus(value: string): void {
 async function refreshList(): Promise<void> {
   await loadRoutes()
   await loadStatusCounts()
+}
+
+/**
+ * 「写操作成功后」的刷新：先通知面板重载集群卡片/徽标，再刷新本页列表与计数。
+ * 共享流程（executePublish / executeDeleteWithProgress）的 `refreshFn` 只在请求成功后调用，
+ * 故把它当作 refreshFn 传递即等价于「成功后 emit」，不必改共享 composable 语义（AGENTS #217）。
+ */
+async function refreshAfterWrite(): Promise<void> {
+  emit('refresh')
+  await refreshList()
 }
 const activeMethod = ref('')
 
@@ -1005,8 +1022,13 @@ function closeFormModal() {
   isCopy.value = false
 }
 function onSaved() {
-  refreshList()
   closeFormModal()
+  void refreshAfterWrite()
+}
+
+/** 版本管理弹窗内写成功（回滚/还原、弹窗内发布）→ 本页刷新 + 通知面板重载徽标 */
+function onVersionWriteSuccess() {
+  void refreshAfterWrite()
 }
 
 function copyRoute(r: any) {
@@ -1019,7 +1041,7 @@ function publishRoute(r: any) {
   publishingRecord.value = r
   publishClusterId.value = r.cluster_id
   // 行内发布默认只刷新列表；版本弹窗出口条发布会用「刷新 + 重开版本弹窗」覆盖此默认（组3 3.1）
-  publishRefreshFn.value = refreshList
+  publishRefreshFn.value = refreshAfterWrite
   publishVisible.value = true
 }
 
@@ -1040,7 +1062,7 @@ function onPreviewPublish() {
 
 // 本次发布完成后的刷新动作（组3 3.1）：发布确认弹窗是行内发布与版本弹窗出口条共用的单入口，
 // 出口条链路通过覆盖本刷新函数在发布成功后重开版本弹窗（重开触发既有 open watch 重载版本列表并复位出口条）
-const publishRefreshFn = ref<() => Promise<void>>(refreshList)
+const publishRefreshFn = ref<() => Promise<void>>(refreshAfterWrite)
 
 async function onPublish(nodeIds: number[]) {
   publishVisible.value = false
@@ -1052,7 +1074,7 @@ async function onPublish(nodeIds: number[]) {
     nodeIds,
     refreshFn: publishRefreshFn.value,
   })
-  publishRefreshFn.value = refreshList
+  publishRefreshFn.value = refreshAfterWrite
 }
 
 // route-save-publish-guidance 1.7：表单保存后的「立即发布」出口 → 复用行内发布同一套链路
@@ -1072,7 +1094,7 @@ function onFormPublishRequested(payload: {
     current_version: payload.currentVersion ?? undefined,
   }
   publishClusterId.value = payload.clusterId
-  publishRefreshFn.value = loadRoutes
+  publishRefreshFn.value = refreshAfterWrite
   publishVisible.value = true
 }
 
@@ -1083,7 +1105,7 @@ function onVmPublishRequested() {
   publishingRecord.value = { id: vmId.value, cluster_id: vmClusterId.value, name: vmName.value }
   publishClusterId.value = vmClusterId.value
   publishRefreshFn.value = async () => {
-    await refreshList()
+    await refreshAfterWrite()
     vmVisible.value = true
   }
   vmVisible.value = false
@@ -1112,7 +1134,7 @@ async function deleteRoute(r: any) {
         deleteDb,
         deleteEdge,
         nodeIds,
-        refreshFn: refreshList,
+        refreshFn: refreshAfterWrite,
       })
     },
   })
@@ -1224,7 +1246,7 @@ async function handleBatchDelete() {
       )
       const { success, failed, text } = routeBatchSummaryMessage(summaries)
       clearBatchSelection()
-      await refreshList()
+      await refreshAfterWrite()
       if (failed === 0) message.success(`已删除 ${success} 条路由`)
       else message.warning(text)
     },

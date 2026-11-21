@@ -294,8 +294,8 @@
       :cluster-id="vmClusterId"
       :resource-name="vmName"
       :can-publish="true"
-      @version-change="loadConfigs"
-      @published="loadConfigs"
+      @version-change="onVersionWriteSuccess"
+      @published="onVersionWriteSuccess"
       @publish-requested="onVmPublishRequested"
     />
 
@@ -362,6 +362,13 @@ import SearchInput from '@/components/SearchInput.vue'
  */
 const props = withDefaults(defineProps<{ scopedClusterId?: number | null }>(), { scopedClusterId: null })
 const isScoped = computed(() => props.scopedClusterId != null)
+/**
+ * 写操作成功后的面板通知：统一管理面板以 `@refresh="loadClusters"` 挂载本组件，
+ * 借此重载左侧集群卡片与 Tab 徽标计数（增/改/删/批量删/发布/版本回滚后立即生效）。
+ * **只在写操作成功后 emit**——挂载、翻页、搜索、筛选、切 chip 一律不调，
+ * 否则父级重载会经 prop/数据变化反馈回本组件，形成请求风暴。页面形态无监听者 = 零副作用。
+ */
+const emit = defineEmits<{ refresh: [] }>()
 /** 列表请求的集群过滤：scoped 恒取作用域集群，页面形态取筛选下拉 */
 function effectiveClusterId(): number | undefined {
   if (props.scopedClusterId != null) return props.scopedClusterId
@@ -460,7 +467,7 @@ const publishVisible = ref(false)
 const publishClusterId = ref(0)
 const publishingRecord = ref<any | null>(null)
 /** 本次发布完成后的刷新动作：卡片发布刷新列表；版本弹窗出口条发布额外重开弹窗重载版本列表 */
-const publishRefreshFn = ref<() => Promise<void>>(loadConfigs)
+const publishRefreshFn = ref<() => Promise<void>>(loadAfterWrite)
 
 // ── 重发失败节点（republish-failed-nodes：预览取失败集合并预选，单一实现）──
 const { loading: republishLoading, resolve: resolveFailedNodes } = useRepublishFailedNodes()
@@ -485,7 +492,7 @@ async function republishFailedNodes(pc: any): Promise<void> {
     republishNotices.value[pc.id] = outcome.noticeText
     publishingRecord.value = pc
     publishClusterId.value = pc.cluster_id
-    publishRefreshFn.value = loadConfigs
+    publishRefreshFn.value = loadAfterWrite
     publishPreselected.value = outcome.failedNodeIds
     publishVisible.value = true
   } else {
@@ -531,6 +538,17 @@ async function loadClusters() {
   }
 }
 
+/**
+ * 「写操作成功后」的刷新：先通知面板重载集群卡片/徽标，再刷新本页列表。
+ * 共享流程（executePublish / executeDeleteWithProgress / useBatchDelete）的刷新回调
+ * 只在请求成功后调用，故把它当作刷新回调传递即等价于「成功后 emit」，
+ * 不必改共享 composable 语义（AGENTS #217）。
+ */
+async function loadAfterWrite(): Promise<void> {
+  emit('refresh')
+  await loadConfigs()
+}
+
 function openCreateModal() {
   editingConfig.value = null
   formVisible.value = true
@@ -544,8 +562,13 @@ function closeForm() {
   editingConfig.value = null
 }
 function onSaved() {
-  loadConfigs()
   closeForm()
+  void loadAfterWrite()
+}
+
+/** 版本管理弹窗内写成功（回滚/还原、弹窗内发布）→ 本页刷新 + 通知面板重载徽标 */
+function onVersionWriteSuccess() {
+  void loadAfterWrite()
 }
 
 // publish-guide 批 1：表单保存引导「立即发布」→ 打开该插件组的发布弹窗（与行内发布同链路）
@@ -599,7 +622,7 @@ async function deleteConfig(pc: any) {
             deleteDb,
             deleteEdge,
             nodeIds,
-            refreshFn: loadConfigs,
+            refreshFn: loadAfterWrite,
             clearSelectedFn: () => {},
           })
         },
@@ -611,7 +634,7 @@ async function deleteConfig(pc: any) {
 function publishConfig(pc: any) {
   publishingRecord.value = pc
   publishClusterId.value = pc.cluster_id
-  publishRefreshFn.value = loadConfigs
+  publishRefreshFn.value = loadAfterWrite
   // 常规发布不带预选（仅「重发失败节点」入口设置；防上一次重发残留）
   publishPreselected.value = []
   publishVisible.value = true
@@ -642,7 +665,7 @@ async function onPublishConfirm(nodeIds: number[]) {
     nodeIds,
     refreshFn: publishRefreshFn.value,
   })
-  publishRefreshFn.value = loadConfigs
+  publishRefreshFn.value = loadAfterWrite
 }
 
 // 4.x：版本恢复出口条 → 以版本弹窗上下文资源（调用侧镜像 ref）复用既有发布链路；
@@ -652,7 +675,7 @@ function onVmPublishRequested() {
   publishingRecord.value = { id: vmId.value, cluster_id: vmClusterId.value, name: vmName.value }
   publishClusterId.value = vmClusterId.value
   publishRefreshFn.value = async () => {
-    await loadConfigs()
+    await loadAfterWrite()
     vmVisible.value = true
   }
   publishPreselected.value = []
@@ -820,7 +843,7 @@ const batchDelete = useBatchDelete<any>({
   nameOf: (row: any) => row.name,
   clusterIdOf: (row: any) => row.cluster_id,
   clusterNameOf: clusterNameById,
-  refresh: loadConfigs,
+  refresh: loadAfterWrite,
   clearSelection: () => clearSelection(),
   exitBatch: () => toggleBatchMode(),
   subsetConsequence: '未选中的 {n} 个节点将保留该插件组',

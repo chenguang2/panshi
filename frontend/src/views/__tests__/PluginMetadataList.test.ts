@@ -808,3 +808,39 @@ describe('PluginMetadataList 部分失败提示条（republish-failed-nodes 批 
     expect(notice.text()).toContain('查看差异')
   })
 })
+
+// ── 写操作成功后 emit('refresh')：统一管理面板 Tab 借此重载左侧集群卡片/徽标（2026-11-22）──
+describe('PluginMetadataList 写操作 emit refresh（面板 Tab）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/plugin_metadata') return Promise.resolve({ data: MOCK_DATA })
+      if (url === '/clusters') return Promise.resolve({ data: { items: [{ id: 1, display_name: '生产集群' }] } })
+      if (url === '/plugins/builtin') return Promise.resolve({ data: { plugins: [] } })
+      return Promise.reject(new Error('unknown url'))
+    })
+  })
+
+  it('挂载/搜索/切插件筛选不 emit；创建保存成功 emit 一次', async () => {
+    const PluginMetadataList = (await import('../PluginMetadataList.vue')).default
+    const wrapper = mount(PluginMetadataList, { global: { stubs } })
+    await flushPromises()
+    const vm = wrapper.vm as any
+
+    expect(wrapper.emitted('refresh')).toBeUndefined()
+
+    // 只读交互：搜索 + 插件筛选下拉
+    vm.onSearch()
+    await flushPromises()
+    vm.onPluginFilterChange()
+    await flushPromises()
+    expect(wrapper.emitted('refresh')).toBeUndefined()
+
+    // 写操作：共享创建弹窗保存成功（集群 + 插件名）
+    await vm.handleCreateSaved({ clusterId: 1, pluginName: 'jwt-auth' })
+    await flushPromises()
+    expect(wrapper.emitted('refresh')).toHaveLength(1)
+    wrapper.unmount()
+  })
+})
