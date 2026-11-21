@@ -218,28 +218,44 @@ describe('mockup-parity r5（parity-audit-nodes-r5 逐项批准后的锚点）',
     expect(nodePage).toContain('menuSafeActions')
     expect(nodePage).toContain('menuDangerActions')
     expect(nodePage).toMatch(/<a-menu-item[\s\S]{0,200}danger/)
-    // 路由/上游：手写菜单在删除项前插入分隔线
+    // 路由/上游（B3）：条目定义留在页面内、三栏由 utils/resourceActionMenu 单一构建，
+    // 危险项的 danger 标记与常驻解释由条目元数据驱动（模板不再硬编码 danger 属性）
     for (const f of ['RouteList.vue', 'UpstreamList.vue']) {
-      expect(page(f), f).toMatch(/<a-menu-divider \/>\s*<a-menu-item danger/)
+      const s = page(f)
+      expect(s, f).toContain('buildResourceActionMenu({')
+      expect(s, f).toMatch(/danger: \[\{[\s\S]{0,300}?danger: true\s*\}\]/)
+      expect(s, f).toContain("desc: '删平台配置，可同步删 Edge 已发布配置（弹窗可选）'")
+      expect(s, f).toContain("desc: '历史版本查看与回滚'")
+      expect(s, f).toMatch(/<a-menu-item[\s\S]{0,400}:danger="item\.danger"/)
+      // 解释行常驻：有 desc 的条目渲染 menu-item-stack（主行 + small 解释）
+      expect(s, f).toMatch(
+        /<div v-if="item\.desc" class="menu-item-stack">[\s\S]*?<small>\{\{ item\.desc \}\}<\/small>/,
+      )
     }
-    // #81 三栏顺序：CRUD（复制/编辑）→ 分隔线 → 危险（删除）→ 分隔线 → 动作（版本管理）
+  })
+  it('r5-② 三栏顺序：CRUD（复制/编辑）→ 危险（删除）→ 动作（版本管理）+ 栏间分隔线（页面两处）', () => {
     for (const f of ['RouteList.vue', 'UpstreamList.vue']) {
-      const menu = page(f).match(/<a-menu class="l5-action-menu">[\s\S]*?<\/a-menu>/)
+      const s = page(f)
+      // 条目定义按栏顺序书写（构建器只做过滤/禁用，不重排）
+      const crudAt = s.indexOf('crud: [')
+      const dangerAt = s.indexOf('danger: [')
+      const actionsAt = s.indexOf('actions: [')
+      expect(crudAt, f).toBeGreaterThan(-1)
+      expect(dangerAt, f).toBeGreaterThan(crudAt)
+      expect(actionsAt, f).toBeGreaterThan(dangerAt)
+      // CRUD 栏内「复制」在「编辑」之前；删除归危险栏、版本管理归动作栏
+      const crudBlock = s.slice(crudAt, dangerAt)
+      expect(crudBlock, f).toContain('复制')
+      expect(crudBlock.indexOf('复制'), f).toBeLessThan(crudBlock.indexOf('编辑'))
+      expect(s.slice(dangerAt, actionsAt), f).toContain('删除')
+      expect(s.slice(actionsAt), f).toContain('版本管理')
+      // 分隔线：模板只声明一条「栏间分隔线」，由遍历序号决定位置（首栏不画、空栏由构建器剔除）
+      const menu = s.match(/<a-menu class="l5-action-menu">[\s\S]*?<\/a-menu>/)
       expect(menu, f).toBeTruthy()
-      const body = menu![0]
-      const at = (s: string) => body.indexOf(s)
-      expect(at('复制'), f).toBeGreaterThan(-1)
-      expect(at('编辑'), f).toBeGreaterThan(at('复制'))
-      const deleteAt = body.search(/<a-menu-item danger/)
-      const versionAt = at('版本管理')
-      expect(deleteAt, f).toBeGreaterThan(at('编辑'))
-      expect(versionAt, f).toBeGreaterThan(deleteAt)
-      const dividers = [...body.matchAll(/<a-menu-divider \/>/g)].map((m) => m.index ?? -1)
-      expect(dividers, f).toHaveLength(2)
-      expect(dividers[0], f).toBeGreaterThan(at('编辑'))
-      expect(dividers[0], f).toBeLessThan(deleteAt)
-      expect(dividers[1], f).toBeGreaterThan(deleteAt)
-      expect(dividers[1], f).toBeLessThan(versionAt)
+      const dividers = [...menu![0].matchAll(/<a-menu-divider v-if="gi > 0" \/>/g)]
+      expect(dividers, f).toHaveLength(1)
+      // 两栏有解释项（删除/版本管理）：菜单内含 menu-item-stack 解释行
+      expect(menu![0], f).toContain('class="menu-item-stack"')
     }
   })
   it('r5-② 分隔线形态单点 = 1px 边线 + 4px 6px 边距（非底色块）', () => {

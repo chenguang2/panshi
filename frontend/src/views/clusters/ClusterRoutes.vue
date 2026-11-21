@@ -142,66 +142,61 @@
         </template>
         <template v-if="column.key === 'actions'">
           <!-- 行内动作收敛（parity 批 B / 设计 .ops）：主行动「发布」+ ⋯ 三栏菜单；
-               7.9 DNS 行：发布与菜单一并禁用 + tooltip 指路 -->
+               7.9 DNS 行：发布与菜单一并禁用 + tooltip 指路（菜单条目整组 disabled，见 routeMenuGroupsFor） -->
           <div class="action-cell">
-            <template v-if="isDnsRoute(record)">
-              <a-tooltip :title="DNS_ROUTE_HINT" placement="top">
-                <button type="button" class="op-pub" disabled>发布</button>
-              </a-tooltip>
-              <a-tooltip :title="DNS_ROUTE_HINT" placement="top">
-                <a-button type="text" size="small" class="action-trigger-btn" title="更多操作" disabled>
-                  <StrokeIcon name="dots" />
-                </a-button>
-              </a-tooltip>
-            </template>
-            <template v-else>
+            <a-tooltip :title="isDnsRoute(record) ? DNS_ROUTE_HINT : undefined" placement="top">
               <button
-                v-if="routeActionsSelected.includes('publish')"
+                v-if="isDnsRoute(record) || routeActionsSelected.includes('publish')"
                 type="button"
                 class="op-pub"
+                :disabled="isDnsRoute(record)"
                 @click="handleRouteRowAction(cluster, record, 'publish')"
               >
                 发布
               </button>
-              <a-dropdown v-if="routeMenuGroups.all.length > 0" :trigger="['click']">
-                <a-button type="text" size="small" class="action-trigger-btn" title="更多操作" aria-label="更多操作">
+            </a-tooltip>
+            <a-tooltip :title="isDnsRoute(record) ? DNS_ROUTE_HINT : undefined" placement="top">
+              <a-dropdown
+                v-if="routeMenuGroupsFor(record).length > 0"
+                :trigger="['click']"
+                :disabled="isDnsRoute(record)"
+              >
+                <a-button
+                  type="text"
+                  size="small"
+                  class="action-trigger-btn"
+                  title="更多操作"
+                  :disabled="isDnsRoute(record)"
+                  aria-label="更多操作"
+                >
                   <StrokeIcon name="dots" />
                 </a-button>
+                <!-- 三栏结构（#81）：CRUD → 危险 → 动作；分组/顺序/空栏剔除/整组禁用由
+                     utils/resourceActionMenu 统一构建，栏间分隔线由遍历序号决定（首栏不画）。
+                     注释必须在 overlay 槽外：antd Dropdown 取 overlay 槽第一个 vnode，
+                     槽内前导注释会让整个菜单渲染为空 -->
                 <template #overlay>
                   <a-menu class="l5-action-menu">
-                    <a-menu-item
-                      v-for="btn in routeMenuGroups.crud"
-                      :key="btn.key"
-                      @click="handleRouteRowAction(cluster, record, btn.key)"
-                      >{{ btn.title }}</a-menu-item
-                    >
-                    <a-menu-divider v-if="routeMenuGroups.danger.length" />
-                    <a-menu-item
-                      v-for="btn in routeMenuGroups.danger"
-                      :key="btn.key"
-                      danger
-                      @click="handleRouteRowAction(cluster, record, btn.key)"
-                    >
-                      <div class="menu-item-stack">
-                        <span>{{ btn.title }}</span>
-                        <small>{{ btn.desc }}</small>
-                      </div>
-                    </a-menu-item>
-                    <a-menu-divider v-if="routeMenuGroups.action.length" />
-                    <a-menu-item
-                      v-for="btn in routeMenuGroups.action"
-                      :key="btn.key"
-                      @click="handleRouteRowAction(cluster, record, btn.key)"
-                    >
-                      <div class="menu-item-stack">
-                        <span>{{ btn.title }}</span>
-                        <small>{{ btn.desc }}</small>
-                      </div>
-                    </a-menu-item>
+                    <template v-for="(group, gi) in routeMenuGroupsFor(record)" :key="group.key">
+                      <a-menu-divider v-if="gi > 0" />
+                      <a-menu-item
+                        v-for="item in group.items"
+                        :key="item.key"
+                        :danger="item.danger"
+                        :disabled="item.disabled"
+                        @click="handleRouteRowAction(cluster, record, item.key)"
+                      >
+                        <div v-if="item.desc" class="menu-item-stack">
+                          <span>{{ item.title }}</span>
+                          <small>{{ item.desc }}</small>
+                        </div>
+                        <template v-else>{{ item.title }}</template>
+                      </a-menu-item>
+                    </template>
                   </a-menu>
                 </template>
               </a-dropdown>
-            </template>
+            </a-tooltip>
           </div>
         </template>
       </template>
@@ -274,6 +269,7 @@ import ListPager from '@/components/ListPager.vue'
 import SearchInput from '@/components/SearchInput.vue'
 import StrokeIcon from '@/components/StrokeIcon.vue'
 import EmptyState from '@/components/EmptyState.vue'
+import { buildResourceActionMenu, type ResourceMenuGroup } from '@/utils/resourceActionMenu'
 
 const props = defineProps<{
   cluster: Cluster
@@ -485,19 +481,20 @@ function handleDeleteClick() {
 }
 
 // ── ⋯ 动作菜单（设计 .l5-menu 三栏：CRUD → 危险 → 动作；#81） ──────────────
-// 每项仍受列配置「行动作按钮集」勾选态控制：未勾选的动作不渲染
-const routeMenuGroups = computed(() => {
-  const selected = new Set(routeActionsSelected.value)
-  const crud = [
-    { key: 'copy', title: '复制路由', desc: '' },
-    { key: 'edit', title: '编辑', desc: '' },
-  ].filter((b) => selected.has(b.key))
-  const danger = [{ key: 'delete', title: '删除', desc: '删平台配置，可同步删 Edge 已发布配置（弹窗可选）' }].filter(
-    (b) => selected.has(b.key),
-  )
-  const action = [{ key: 'version', title: '版本管理', desc: '历史版本查看与回滚' }].filter((b) => selected.has(b.key))
-  return { crud, danger, action, all: [...crud, ...danger, ...action] }
-})
+// 三栏构建统一走 utils/resourceActionMenu（B3 单一实现）；每项仍受列配置「行动作按钮集」勾选态控制，
+// DNS 行整组置 disabled（菜单不可点，但不隐藏——行内触发器本身已禁用并带指路 tooltip）。
+function routeMenuGroupsFor(record: Route | null): ResourceMenuGroup[] {
+  return buildResourceActionMenu({
+    crud: [
+      { key: 'copy', title: '复制路由' },
+      { key: 'edit', title: '编辑' },
+    ],
+    danger: [{ key: 'delete', title: '删除', desc: '删平台配置，可同步删 Edge 已发布配置（弹窗可选）', danger: true }],
+    actions: [{ key: 'version', title: '版本管理', desc: '历史版本查看与回滚' }],
+    visible: (key) => routeActionsSelected.value.includes(key),
+    disableAll: record ? isDnsRoute(record) : false,
+  })
+}
 
 // ── 行点击选中（batch1 组5 5.3，A7 对齐 ClusterUpstreams 4.1/D8）──
 // 行点选与复选框共用同一选中载体：selectedRoute（单选操作/高亮依据）+

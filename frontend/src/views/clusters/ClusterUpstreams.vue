@@ -133,41 +133,30 @@
             >
               发布
             </button>
-            <a-dropdown v-if="upstreamMenuGroups.all.length > 0" :trigger="['click']">
+            <a-dropdown v-if="upstreamMenuGroups.length > 0" :trigger="['click']">
               <a-button type="text" size="small" class="action-trigger-btn" title="更多操作" aria-label="更多操作">
                 <StrokeIcon name="dots" />
               </a-button>
+              <!-- 三栏结构（#81）：CRUD → 危险 → 动作；分组/顺序/空栏剔除由 utils/resourceActionMenu 统一构建，
+                   栏间分隔线由遍历序号决定（首栏不画），危险项靠条目自带 danger 标记转红。
+                   注释必须在 overlay 槽外：antd Dropdown 取 overlay 槽第一个 vnode，前导注释会让菜单渲染为空 -->
               <template #overlay>
                 <a-menu class="l5-action-menu">
-                  <a-menu-item
-                    v-for="btn in upstreamMenuGroups.crud"
-                    :key="btn.key"
-                    @click="handleUpstreamRowAction(cluster, record, btn.key)"
-                    >{{ btn.title }}</a-menu-item
-                  >
-                  <a-menu-divider v-if="upstreamMenuGroups.danger.length" />
-                  <a-menu-item
-                    v-for="btn in upstreamMenuGroups.danger"
-                    :key="btn.key"
-                    danger
-                    @click="handleUpstreamRowAction(cluster, record, btn.key)"
-                  >
-                    <div class="menu-item-stack">
-                      <span>{{ btn.title }}</span>
-                      <small>{{ btn.desc }}</small>
-                    </div>
-                  </a-menu-item>
-                  <a-menu-divider v-if="upstreamMenuGroups.action.length" />
-                  <a-menu-item
-                    v-for="btn in upstreamMenuGroups.action"
-                    :key="btn.key"
-                    @click="handleUpstreamRowAction(cluster, record, btn.key)"
-                  >
-                    <div class="menu-item-stack">
-                      <span>{{ btn.title }}</span>
-                      <small>{{ btn.desc }}</small>
-                    </div>
-                  </a-menu-item>
+                  <template v-for="(group, gi) in upstreamMenuGroups" :key="group.key">
+                    <a-menu-divider v-if="gi > 0" />
+                    <a-menu-item
+                      v-for="item in group.items"
+                      :key="item.key"
+                      :danger="item.danger"
+                      @click="handleUpstreamRowAction(cluster, record, item.key)"
+                    >
+                      <div v-if="item.desc" class="menu-item-stack">
+                        <span>{{ item.title }}</span>
+                        <small>{{ item.desc }}</small>
+                      </div>
+                      <template v-else>{{ item.title }}</template>
+                    </a-menu-item>
+                  </template>
                 </a-menu>
               </template>
             </a-dropdown>
@@ -240,6 +229,7 @@ import ListPager from '@/components/ListPager.vue'
 import SearchInput from '@/components/SearchInput.vue'
 import StrokeIcon from '@/components/StrokeIcon.vue'
 import EmptyState from '@/components/EmptyState.vue'
+import { buildResourceActionMenu } from '@/utils/resourceActionMenu'
 
 const props = defineProps<{
   cluster: Cluster
@@ -369,19 +359,19 @@ function handleDeleteClick() {
 }
 
 // ── ⋯ 动作菜单（设计 .l5-menu 三栏：CRUD → 危险 → 动作；#81） ──────────────
-// 每项仍受列配置「行动作按钮集」勾选态控制：未勾选的动作不渲染（不改变原有配置语义）
-const upstreamMenuGroups = computed(() => {
-  const selected = new Set(upstreamActionsSelected.value)
-  const crud = [
-    { key: 'copy', title: '复制', desc: '' },
-    { key: 'edit', title: '编辑', desc: '' },
-  ].filter((b) => selected.has(b.key))
-  const danger = [{ key: 'delete', title: '删除', desc: '删平台配置，可同步删 Edge 已发布配置（弹窗可选）' }].filter(
-    (b) => selected.has(b.key),
-  )
-  const action = [{ key: 'version', title: '版本管理', desc: '历史版本查看与回滚' }].filter((b) => selected.has(b.key))
-  return { crud, danger, action, all: [...crud, ...danger, ...action] }
-})
+// 三栏构建统一走 utils/resourceActionMenu（B3 单一实现）；每项仍受列配置「行动作按钮集」
+// 勾选态控制：未勾选的动作不渲染（不改变原有配置语义）
+const upstreamMenuGroups = computed(() =>
+  buildResourceActionMenu({
+    crud: [
+      { key: 'copy', title: '复制' },
+      { key: 'edit', title: '编辑' },
+    ],
+    danger: [{ key: 'delete', title: '删除', desc: '删平台配置，可同步删 Edge 已发布配置（弹窗可选）', danger: true }],
+    actions: [{ key: 'version', title: '版本管理', desc: '历史版本查看与回滚' }],
+    visible: (key) => upstreamActionsSelected.value.includes(key),
+  }),
+)
 
 // ── 表格序号列 + 表外分页（central-management-parity 批次 A）─────────────
 // 序号列恒展示、不进列配置勾选项（antd CheckboxGroup 会剔除选项外的已选值），

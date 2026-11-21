@@ -94,6 +94,11 @@ describe('ClusterUpstreams 最大化面板 Tab 解剖守卫（parity 批 A）', 
     expect(s).toContain('class="l5-action-menu"')
     expect(s).toContain("desc: '删平台配置，可同步删 Edge 已发布配置（弹窗可选）'")
     expect(s).toContain("desc: '历史版本查看与回滚'")
+    // B3：三栏构建统一走 utils/resourceActionMenu（分组顺序/空栏剔除单点），
+    // 危险项的红色由条目元数据驱动 + 动作勾选门控保持原语义
+    expect(s).toContain('buildResourceActionMenu({')
+    expect(s).toMatch(/<a-menu-item[\s\S]{0,400}:danger="item\.danger"/)
+    expect(s).toContain('visible: (key) => upstreamActionsSelected.value.includes(key)')
   })
 
   it('工具条添加按钮带 plus 图标（三表统一 / #90 页头规范外延）', () => {

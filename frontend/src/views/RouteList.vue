@@ -272,25 +272,26 @@
                 <button type="button" class="op-pub" @click="publishRoute(record)">发布</button>
                 <a-dropdown :trigger="['click']">
                   <a-button type="text" size="small" class="action-trigger-btn"><StrokeIcon name="dots" /></a-button>
+                  <!-- 三栏结构（#81）：CRUD → 危险 → 动作；条目/顺序/空栏剔除由 utils/resourceActionMenu
+                       统一构建。注释必须在 overlay 槽外：antd Dropdown 取 overlay 槽的第一个 vnode，
+                       槽内前导注释会让整个菜单渲染为空 -->
                   <template #overlay>
                     <a-menu class="l5-action-menu">
-                      <!-- 三栏结构（#81）：CRUD → 危险 → 动作 -->
-                      <a-menu-item @click="copyRoute(record)">复制路由</a-menu-item>
-                      <a-menu-item @click="editRoute(record)">编辑</a-menu-item>
-                      <a-menu-divider />
-                      <a-menu-item danger @click="deleteRoute(record)">
-                        <div class="menu-item-stack">
-                          <span>删除</span>
-                          <small>删平台配置，可同步删 Edge 已发布配置（弹窗可选）</small>
-                        </div>
-                      </a-menu-item>
-                      <a-menu-divider />
-                      <a-menu-item @click="openVersionManagement(record)">
-                        <div class="menu-item-stack">
-                          <span>版本管理</span>
-                          <small>历史版本查看与回滚</small>
-                        </div>
-                      </a-menu-item>
+                      <template v-for="(group, gi) in ROUTE_MENU_GROUPS" :key="group.key">
+                        <a-menu-divider v-if="gi > 0" />
+                        <a-menu-item
+                          v-for="item in group.items"
+                          :key="item.key"
+                          :danger="item.danger"
+                          @click="routeMenuAction(item.key, record)"
+                        >
+                          <div v-if="item.desc" class="menu-item-stack">
+                            <span>{{ item.title }}</span>
+                            <small>{{ item.desc }}</small>
+                          </div>
+                          <template v-else>{{ item.title }}</template>
+                        </a-menu-item>
+                      </template>
                     </a-menu>
                   </template>
                 </a-dropdown>
@@ -399,6 +400,7 @@ import ListPager from '@/components/ListPager.vue'
 import PageStatBadges from '@/components/PageStatBadges.vue'
 import { useRoute } from 'vue-router'
 import SearchInput from '@/components/SearchInput.vue'
+import { buildResourceActionMenu } from '@/utils/resourceActionMenu'
 
 const route = useRoute()
 const loading = ref(false)
@@ -1002,6 +1004,27 @@ function openVersionManagement(r: any) {
   vmClusterId.value = r.cluster_id
   vmName.value = r.name
   vmVisible.value = true
+}
+
+/**
+ * 行内 ⋯ 菜单条目定义（B3）：三栏结构固定 CRUD → 危险 → 动作（#81），
+ * 分组顺序/空栏剔除由 utils/resourceActionMenu 单一构建；点击分发到既有单动作函数（业务不变）。
+ */
+const ROUTE_MENU_GROUPS = buildResourceActionMenu({
+  crud: [
+    { key: 'copy', title: '复制路由' },
+    { key: 'edit', title: '编辑' },
+  ],
+  danger: [{ key: 'delete', title: '删除', desc: '删平台配置，可同步删 Edge 已发布配置（弹窗可选）', danger: true }],
+  actions: [{ key: 'version', title: '版本管理', desc: '历史版本查看与回滚' }],
+})
+
+/** ⋯ 菜单点击分发（key → 既有动作，签名保持原函数不变） */
+function routeMenuAction(key: string, record: any): void {
+  if (key === 'copy') copyRoute(record)
+  else if (key === 'edit') editRoute(record)
+  else if (key === 'delete') void deleteRoute(record)
+  else if (key === 'version') openVersionManagement(record)
 }
 
 async function loadPlugins() {

@@ -99,7 +99,13 @@ describe('ClusterRoutes 最大化面板 Tab 解剖守卫（parity 批 A）', () 
     expect(s).toContain('class="l5-action-menu"')
     expect(s).toContain("desc: '删平台配置，可同步删 Edge 已发布配置（弹窗可选）'")
     expect(s).toContain("desc: '历史版本查看与回滚'")
-    expect(s).toContain('danger')
+    // B3：三栏构建统一走 utils/resourceActionMenu（分组顺序/空栏剔除单点），
+    // 危险项的红色由条目元数据驱动（模板不再硬编码 danger 属性）
+    expect(s).toContain('buildResourceActionMenu({')
+    expect(s).toMatch(/<a-menu-item[\s\S]{0,400}:danger="item\.danger"/)
+    // 动作勾选门控 + DNS 行整组禁用（菜单可见但不可点）
+    expect(s).toContain('visible: (key) => routeActionsSelected.value.includes(key)')
+    expect(s).toContain('disableAll: record ? isDnsRoute(record) : false')
     // DNS 行：发布与 ⋯ 一并禁用 + tooltip 指路
     expect(s).toContain('DNS_ROUTE_HINT')
   })

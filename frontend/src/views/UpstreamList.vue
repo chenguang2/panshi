@@ -211,25 +211,26 @@
               <button type="button" class="op-pub" @click="openPublishModal(record)">发布</button>
               <a-dropdown :trigger="['click']">
                 <a-button type="text" size="small" class="action-trigger-btn"><StrokeIcon name="dots" /></a-button>
+                <!-- 三栏结构（#81）：CRUD → 危险 → 动作；条目/顺序/空栏剔除由 utils/resourceActionMenu
+                     统一构建。注释必须在 overlay 槽外：antd Dropdown 取 overlay 槽的第一个 vnode，
+                     槽内前导注释会让整个菜单渲染为空 -->
                 <template #overlay>
                   <a-menu class="l5-action-menu">
-                    <!-- 三栏结构（#81）：CRUD → 危险 → 动作 -->
-                    <a-menu-item @click="handleAction('copy', record)">复制</a-menu-item>
-                    <a-menu-item @click="handleAction('edit', record)">编辑</a-menu-item>
-                    <a-menu-divider />
-                    <a-menu-item danger @click="handleAction('delete', record)">
-                      <div class="menu-item-stack">
-                        <span>删除</span>
-                        <small>删平台配置，可同步删 Edge 已发布配置（弹窗可选）</small>
-                      </div>
-                    </a-menu-item>
-                    <a-menu-divider />
-                    <a-menu-item @click="handleAction('version', record)">
-                      <div class="menu-item-stack">
-                        <span>版本管理</span>
-                        <small>历史版本查看与回滚</small>
-                      </div>
-                    </a-menu-item>
+                    <template v-for="(group, gi) in UPSTREAM_MENU_GROUPS" :key="group.key">
+                      <a-menu-divider v-if="gi > 0" />
+                      <a-menu-item
+                        v-for="item in group.items"
+                        :key="item.key"
+                        :danger="item.danger"
+                        @click="handleAction(item.key, record)"
+                      >
+                        <div v-if="item.desc" class="menu-item-stack">
+                          <span>{{ item.title }}</span>
+                          <small>{{ item.desc }}</small>
+                        </div>
+                        <template v-else>{{ item.title }}</template>
+                      </a-menu-item>
+                    </template>
                   </a-menu>
                 </template>
               </a-dropdown>
@@ -325,6 +326,7 @@ import {
 import { compareUpstreamName } from '@/utils/listGroupSorters'
 import { areTargetsVerified, summarizeTargetHealth, targetDot, targetWeightPercents } from '@/utils/upstreamTargets'
 import { clusterHueClass, CLUSTER_COLUMN_MIN_WIDTH, CLUSTER_COLUMN_WIDTH } from '@/utils/clusterHue'
+import { buildResourceActionMenu } from '@/utils/resourceActionMenu'
 import TableToolbar from '@/components/TableToolbar.vue'
 import { useFitColumnWidths, toDesignWidths } from '@/composables/useFitColumnWidths'
 import ClusterGroupRow from '@/components/ClusterGroupRow.vue'
@@ -590,6 +592,19 @@ function clearFilters() {
   page.value = 1
   refreshList()
 }
+
+/**
+ * 行内 ⋯ 菜单条目定义（B3）：三栏结构固定 CRUD → 危险 → 动作（#81），
+ * 分组顺序/空栏剔除由 utils/resourceActionMenu 单一构建；点击仍分发到既有 handleAction。
+ */
+const UPSTREAM_MENU_GROUPS = buildResourceActionMenu({
+  crud: [
+    { key: 'copy', title: '复制' },
+    { key: 'edit', title: '编辑' },
+  ],
+  danger: [{ key: 'delete', title: '删除', desc: '删平台配置，可同步删 Edge 已发布配置（弹窗可选）', danger: true }],
+  actions: [{ key: 'version', title: '版本管理', desc: '历史版本查看与回滚' }],
+})
 
 function handleAction(action: string, record: any) {
   if (action === 'copy') {
