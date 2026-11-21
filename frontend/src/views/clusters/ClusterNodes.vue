@@ -301,159 +301,15 @@
       @saved="onNodeFormSaved"
     />
 
-    <!-- 批量导入弹窗（B2b-1 后只承载批量块；批量导入逻辑与模板未动，B2b-2 再收敛） -->
-    <Teleport to="body">
-      <div class="modal-overlay" :style="{ display: nodeModalVisible && nodeImportMode === 'batch' ? 'flex' : 'none' }">
-        <div class="modal" style="max-width: 960px">
-          <div class="modal-header">
-            <h2>批量导入节点</h2>
-            <button class="modal-close" @click="nodeModalVisible = false">&times;</button>
-          </div>
-          <div class="modal-body">
-            <div style="display: flex; gap: 8px; margin-bottom: 12px">
-              <button
-                class="btn btn-sm"
-                :class="nodeImportTab === 'text' ? 'btn-primary' : 'btn-secondary'"
-                @click="nodeImportTab = 'text'"
-              >
-                文本粘贴
-              </button>
-              <button
-                class="btn btn-sm"
-                :class="nodeImportTab === 'csv' ? 'btn-primary' : 'btn-secondary'"
-                @click="nodeImportTab = 'csv'"
-              >
-                CSV 上传
-              </button>
-            </div>
-
-            <template v-if="nodeImportTab === 'text'">
-              <textarea
-                v-model="nodeImportText"
-                rows="6"
-                style="
-                  width: 100%;
-                  padding: 8px;
-                  border: 1px solid var(--border);
-                  border-radius: var(--radius-md);
-                  font-family: var(--font-mono);
-                  font-size: 12px;
-                "
-                placeholder="每行一个 IP，支持范围 10.0.0.1-10.0.0.50、CIDR 10.0.0.0/24、注释行 # 开头"
-              ></textarea>
-              <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center">
-                <button class="btn btn-primary btn-sm" @click="parseTextToRows">解析</button>
-                <span style="font-size: 12px; color: var(--muted)"
-                  >已解析 {{ validImportCount }} / {{ nodeImportRows.length }} 个有效节点</span
-                >
-              </div>
-            </template>
-
-            <template v-else>
-              <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 10px">
-                <input type="file" accept=".csv" @change="onCsvFileChange" style="font-size: 12px" />
-                <button class="btn btn-secondary btn-sm" @click="downloadNodeCsvTemplate">下载模板</button>
-              </div>
-              <div v-if="nodeImportRows.length > 0" style="font-size: 12px; color: var(--muted); margin-bottom: 8px">
-                已解析 {{ validImportCount }} / {{ nodeImportRows.length }} 个有效节点
-              </div>
-            </template>
-
-            <div
-              style="
-                display: flex;
-                gap: 10px;
-                align-items: center;
-                margin: 12px 0 8px;
-                font-size: 12px;
-                flex-wrap: wrap;
-                border-top: 1px solid var(--border);
-                padding-top: 10px;
-              "
-            >
-              <span style="color: var(--muted); font-weight: 500">默认值（应用于所有行）</span>
-              <label style="display: flex; align-items: center; gap: 4px; color: var(--fg)">
-                服务端口
-                <input v-model.number="nodeImportDefaults.service_port" type="number" style="width: 70px" />
-              </label>
-              <label style="display: flex; align-items: center; gap: 4px; color: var(--fg)">
-                管理端口
-                <input v-model.number="nodeImportDefaults.management_port" type="number" style="width: 70px" />
-              </label>
-              <label style="display: flex; align-items: center; gap: 4px; color: var(--fg)">
-                Edge路径
-                <input v-model="nodeImportDefaults.edge_path" style="width: 130px" placeholder="/edge" />
-              </label>
-              <label style="display: flex; align-items: center; gap: 4px; color: var(--fg)">
-                Nginx安装目录
-                <input
-                  v-model="nodeImportDefaults.openresty_path"
-                  style="width: 150px"
-                  placeholder="/usr/local/nginx"
-                />
-              </label>
-            </div>
-
-            <div v-if="nodeImportRows.length > 0" style="margin-top: 6px">
-              <div
-                style="
-                  max-height: 260px;
-                  overflow-y: auto;
-                  border: 1px solid var(--border);
-                  border-radius: var(--radius-md);
-                "
-              >
-                <table style="width: 100%; font-size: 12px; border-collapse: collapse">
-                  <thead>
-                    <tr style="background: var(--bg); color: var(--muted); text-align: left">
-                      <th style="padding: 6px 8px">IP</th>
-                      <th style="padding: 6px 8px">服务端口</th>
-                      <th style="padding: 6px 8px">管理端口</th>
-                      <th style="padding: 6px 8px">Edge路径</th>
-                      <th style="padding: 6px 8px">Nginx安装目录</th>
-                      <th style="padding: 6px 8px">状态</th>
-                      <th style="padding: 6px 8px">原因</th>
-                      <th style="padding: 6px 8px"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="(row, idx) in nodeImportRows" :key="idx" :style="rowStyle(row, idx)">
-                      <td style="padding: 4px 8px"><input v-model="row.ip" style="width: 110px" /></td>
-                      <td style="padding: 4px 8px">
-                        <input v-model.number="row.service_port" type="number" style="width: 70px" />
-                      </td>
-                      <td style="padding: 4px 8px">
-                        <input v-model.number="row.management_port" type="number" style="width: 70px" />
-                      </td>
-                      <td style="padding: 4px 8px"><input v-model="row.edge_path" style="width: 130px" /></td>
-                      <td style="padding: 4px 8px"><input v-model="row.openresty_path" style="width: 150px" /></td>
-                      <td style="padding: 4px 8px">
-                        <select v-model.number="row.status" style="width: 70px">
-                          <option :value="1">启用</option>
-                          <option :value="0">禁用</option>
-                        </select>
-                      </td>
-                      <td style="padding: 4px 8px; color: var(--danger); font-size: 11px">
-                        {{ importRowError(row) || '' }}
-                      </td>
-                      <td style="padding: 4px 8px">
-                        <button class="btn btn-ghost btn-sm" @click="removeImportRow(idx)">×</button>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button class="btn btn-secondary" @click="nodeModalVisible = false">取消</button>
-            <button class="btn btn-primary" :disabled="validImportCount === 0" @click="handleImportSubmit">
-              创建 {{ validImportCount }} 个节点
-            </button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
+    <!-- 批量导入：共享弹窗（B2b-2，与节点管理页同一实现；本宿主只做开关 + 局部刷新） -->
+    <NodeBatchImportModal
+      :visible="batchImportVisible"
+      :cluster-id="props.cluster.id"
+      :cluster-name="props.cluster.display_name || props.cluster.name"
+      lock-cluster
+      @close="batchImportVisible = false"
+      @saved="onBatchImportSaved"
+    />
 
     <ConfigDiff v-model:visible="diffDrawerVisible" :cluster-id="diffClusterId" :initial-node-id="diffNodeId" />
 
@@ -508,9 +364,9 @@ import InstallOpenrestyDialog from '@/components/InstallOpenrestyDialog.vue'
 import EdgePackManagementDialog from '@/components/EdgePackManagementDialog.vue'
 import NodeExecutionResultDrawer from '@/components/NodeExecutionResultDrawer.vue'
 import NodeFormModal from '@/components/NodeFormModal.vue'
+import NodeBatchImportModal from '@/components/NodeBatchImportModal.vue'
 import BatchActionProgressModal from '@/components/BatchActionProgressModal.vue'
 import api from '@/api'
-import { validateNodeImportRow } from '@/utils/nodeImport'
 import { buildNodeInstallCommand } from '@/utils/nodeInstallCommand'
 import {
   useClusterNodes,
@@ -546,7 +402,6 @@ const props = defineProps<{
 const clusters = computed<Cluster[]>(() => [props.cluster])
 
 const {
-  nodeModalVisible,
   diffDrawerVisible,
   diffClusterId,
   diffNodeId,
@@ -566,16 +421,6 @@ const {
   loadNodes,
   selectNode,
   selectNodes,
-  importNodes,
-  nodeImportMode,
-  nodeImportTab,
-  nodeImportText,
-  nodeImportRows,
-  nodeImportDefaults,
-  currentClusterId,
-  parseIpList,
-  parseNodeCsv,
-  buildNodeCsvTemplate,
   deleteNode,
   deleteNodes,
   batchNodeAction,
@@ -609,10 +454,12 @@ const formClusters = computed(() => [
 const nodeFormVisible = ref(false)
 const nodeFormRecord = ref<Node | null>(null)
 const nodeFormCopying = ref(false)
+// 批量导入（B2b-2：共享 NodeBatchImportModal，本宿主只持开关）
+const batchImportVisible = ref(false)
 
 function openNodeForm(record: Node | null, copy = false) {
   // 与批量导入弹窗互斥（两者各自独立弹窗，同一时刻只显示一个）
-  nodeModalVisible.value = false
+  batchImportVisible.value = false
   nodeFormRecord.value = record
   nodeFormCopying.value = copy && record != null
   nodeFormVisible.value = true
@@ -639,11 +486,15 @@ async function onNodeFormSaved() {
   await loadNodes(props.cluster)
 }
 
-/** 批量导入弹窗入口（单条表单独立后，批量导入需自己的入口；逻辑与模板本批未动） */
+/** 批量导入弹窗入口（共享 NodeBatchImportModal；与单条表单互斥） */
 function openNodeImportModal() {
   nodeFormVisible.value = false
-  nodeImportMode.value = 'batch'
-  nodeModalVisible.value = true
+  batchImportVisible.value = true
+}
+
+/** 批量导入成功（组件已 emit saved）：局部刷新本集群节点列表（弹窗保持打开以查看逐条结果） */
+async function onBatchImportSaved() {
+  await loadNodes(props.cluster)
 }
 
 // ── 列拖拽手势（调宽 + 移动）共享 composable（cluster-tab-column-personalization 2.2）──
@@ -740,81 +591,6 @@ const hasNodeRowMenu = computed(
     featuresStore.has('install_openresty') ||
     featuresStore.has('install_edge'),
 )
-
-// ── Node batch import helpers ────────────────────────────────
-/** 行实时校验（batch1 4.1）：解析期错误 + 可编辑字段联动（openresty_path 必填，对齐单表单决策） */
-function importRowError(row: { valid: boolean; error?: string; openresty_path?: string }): string | undefined {
-  return validateNodeImportRow(row)
-}
-
-const validImportCount = computed(() => nodeImportRows.value.filter((r) => !importRowError(r)).length)
-
-function parseTextToRows() {
-  const parsed = parseIpList(nodeImportText.value)
-  nodeImportRows.value = parsed.map((row) => ({
-    ip: row.ip,
-    service_port: nodeImportDefaults.service_port,
-    management_port: nodeImportDefaults.management_port,
-    edge_path: nodeImportDefaults.edge_path,
-    openresty_path: nodeImportDefaults.openresty_path,
-    status: nodeImportDefaults.status,
-    valid: row.valid,
-    error: row.error,
-  }))
-}
-
-function onCsvFileChange(event: Event) {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) return
-  const reader = new FileReader()
-  reader.onload = () => {
-    const rows = parseNodeCsv(String(reader.result || ''))
-    nodeImportRows.value = rows.map((r) => ({
-      ip: r.ip,
-      service_port: r.service_port,
-      management_port: r.management_port,
-      edge_path: r.edge_path || nodeImportDefaults.edge_path,
-      openresty_path: r.openresty_path || nodeImportDefaults.openresty_path,
-      status: r.status,
-      valid: r.valid,
-      error: r.error,
-    }))
-  }
-  reader.readAsText(file)
-}
-
-function downloadNodeCsvTemplate() {
-  const blob = new Blob([buildNodeCsvTemplate()], { type: 'text/csv;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = 'node-import-template.csv'
-  a.click()
-  URL.revokeObjectURL(url)
-}
-
-function removeImportRow(index: number) {
-  nodeImportRows.value.splice(index, 1)
-}
-
-function rowStyle(row: { ip: string; valid: boolean; error?: string; openresty_path?: string }, idx: number) {
-  const liveError = importRowError(row)
-  const duplicateIp = liveError
-    ? false
-    : nodeImportRows.value.some((other, otherIdx) => otherIdx !== idx && other.ip === row.ip)
-  if (liveError) return 'background:color-mix(in srgb, var(--danger) 12%, transparent);'
-  if (duplicateIp) return 'background:color-mix(in srgb, var(--warning) 15%, transparent);'
-  return ''
-}
-
-async function handleImportSubmit() {
-  const cluster = clusters.value.find((c) => c.id === currentClusterId?.value)
-  if (!cluster) return
-  // 提交前按实时校验过滤（openresty_path 为空的行不提交，batch1 4.1）
-  const submitRows = nodeImportRows.value.filter((r) => !importRowError(r)).map((r) => ({ ...r, valid: true }))
-  await importNodes(cluster, submitRows)
-}
 
 // ── Custom Confirm (matches NodeList.vue pattern) ──
 function selectedNodeIps(): string[] {

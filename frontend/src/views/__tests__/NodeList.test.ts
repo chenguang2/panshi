@@ -78,6 +78,12 @@ const stubs = {
     template: '<div class="mock-node-form" :data-visible="visible" :data-copying="copyingNode" />',
     props: ['visible', 'editingNode', 'copyingNode', 'clusters', 'defaultClusterId', 'lockCluster'],
   },
+  // B2b-2：批量导入已迁至共享组件，页面测试只断言「传给组件的入参 + saved 刷新」
+  NodeBatchImportModal: {
+    name: 'NodeBatchImportModal',
+    template: '<div class="mock-batch-import" :data-visible="visible" />',
+    props: ['visible', 'clusterId', 'clusterName', 'clusters', 'lockCluster', 'defaults'],
+  },
   NodeExecutionResultDrawer: { template: '<div class="mock-exec-drawer" />', props: ['visible', 'title'] },
   InstallOpenrestyDialog: {
     name: 'InstallOpenrestyDialog',
@@ -1291,130 +1297,52 @@ describe('NodeList.vue batch3 复制节点', () => {
   })
 })
 
-// ── node-management-ux-batch3 3.2 / D7：批量导入弹窗（独立页）────────────────
-describe('NodeList.vue batch3 批量导入', () => {
+// ── B2b-2：批量导入弹窗迁至共享 NodeBatchImportModal（页面只持开关 + 刷新）────────
+describe('NodeList.vue 批量导入（共享弹窗）', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
     mockApiGet.mockImplementation((url: string) => {
       if (url === '/nodes') return Promise.resolve({ data: { total: 0, items: [] } })
       if (url === '/clusters') return Promise.resolve({ data: { total: 3, items: MOCK_CLUSTERS } })
-      return Promise.reject(new Error('unknown url: ' + url))
+      return Promise.resolve({ data: { total: 0, items: [] } })
     })
-    mockApiPost.mockResolvedValue({ data: { message: '成功创建 1 条节点', results: [] } })
   })
 
-  async function openImport() {
+  it('页头「批量导入」打开共享弹窗并注入集群清单（解析/提交不在页面）', async () => {
     const NodeList = (await import('../NodeList.vue')).default
     const wrapper = mount(NodeList, { global: { stubs } })
     await flushPromises()
-    const vm = wrapper.vm as any
-    vm.openBatchImport()
-    await wrapper.vm.$nextTick()
-    return wrapper
-  }
+    const importBtn = wrapper.findAll('button').find((b) => b.text().includes('批量导入'))
+    expect(importBtn, '页头应有「批量导入」入口').toBeDefined()
 
-  it('工具栏含「批量导入」按钮，弹窗集群下拉占位与模型空串精确匹配（#204 → a-select placeholder 语义）', async () => {
-    const wrapper = await openImport()
-    const vm = wrapper.vm as any
-    expect(vm.importModalVisible).toBe(true)
-    expect(vm.importClusterId).toBe('')
-    // 集群字段已换装 ClusterSelect：必选模式（无「全部集群」项），'' 经组件规范化触发 placeholder
-    // （圈定导入弹窗 overlay，避免命中页首筛选条的 allow-all 控件）
-    const overlay = wrapper.findAll('.modal-overlay').find((o) => o.text().includes('批量导入节点'))!
-    const clusterSelect = overlay.find('.cluster-select')
-    expect(clusterSelect.exists()).toBe(true)
-    expect(clusterSelect.attributes('placeholder')).toBe('请选择集群')
-    expect(clusterSelect.text()).not.toContain('全部集群')
-    wrapper.unmount()
-  })
-
-  it('未选集群或无有效行时提交禁用', async () => {
-    const wrapper = await openImport()
-    const submit = wrapper.findAll('button').find((b) => b.text().includes('提交'))
-    expect(submit).toBeDefined()
-    expect(submit!.attributes('disabled')).toBeDefined()
-    wrapper.unmount()
-  })
-
-  it('粘贴解析 → 提交走 submitNodeBatchImport 同款端点，成功后关弹窗并重载', async () => {
-    const wrapper = await openImport()
-    const vm = wrapper.vm as any
-    vm.importClusterId = 2
-    vm.importText = '10.1.1.5\n10.1.1.6'
-    await wrapper.vm.$nextTick()
-    vm.parseImportText()
-    await wrapper.vm.$nextTick()
-    expect(vm.importRows).toHaveLength(2)
-    expect(vm.importRows[0]).toMatchObject({ ip: '10.1.1.5', service_port: 80, management_port: 9180 })
-    const submit = wrapper.findAll('button').find((b) => b.text().includes('提交'))
-    expect(submit!.attributes('disabled')).toBeUndefined()
-    await submit!.trigger('click')
+    await importBtn!.trigger('click')
     await flushPromises()
-    expect(mockApiPost).toHaveBeenCalledWith('/clusters/2/nodes/batch', {
-      nodes: [
-        {
-          ip: '10.1.1.5',
-          service_port: 80,
-          management_port: 9180,
-          edge_path: '/edge',
-          openresty_path: '/usr/local/nginx',
-          status: 1,
-        },
-        {
-          ip: '10.1.1.6',
-          service_port: 80,
-          management_port: 9180,
-          edge_path: '/edge',
-          openresty_path: '/usr/local/nginx',
-          status: 1,
-        },
-      ],
-    })
-    expect(vm.importModalVisible).toBe(false)
+
+    const modal = wrapper.findComponent({ name: 'NodeBatchImportModal' })
+    expect(modal.exists()).toBe(true)
+    expect(modal.props('visible')).toBe(true)
+    expect((modal.props('clusters') as typeof MOCK_CLUSTERS).length).toBe(3)
+    // 宿主不再持有批量导入的解析/提交状态（旧内联实现已删）
+    expect((wrapper.vm as any).importRows).toBeUndefined()
+    expect((wrapper.vm as any).importText).toBeUndefined()
     wrapper.unmount()
   })
 
-  it('缺陷修复：文本解析保留 parse 层有效性判定（非法行计无效、原因列显示、提交剔除）', async () => {
-    mockApiPost.mockResolvedValue({ data: { message: '成功创建 1 条节点', results: [] } })
-    const wrapper = await openImport()
-    const vm = wrapper.vm as any
-    vm.importClusterId = 2
-    // mock 形状取自真实 parseIpList 返回（utils/nodeImport.ts）：非法行 { valid: false, error: '不是合法的 IP 地址' }
-    vm.importText = '10.1.1.5\n999.1.1.1'
-    await wrapper.vm.$nextTick()
-    vm.parseImportText()
-    await wrapper.vm.$nextTick()
-    expect(vm.importRows).toHaveLength(2)
-    expect(vm.importRows[1]).toMatchObject({ ip: '999.1.1.1', valid: false, error: '不是合法的 IP 地址' })
-    // 预览头「有效」计数不含无效行
-    expect(wrapper.text()).toContain('有效 1 行')
-    // 预览表「原因」列出现解析层错误
-    expect(vm.importRowError(vm.importRows[1])).toBe('不是合法的 IP 地址')
-    // 提交请求体不含非法行
-    const submit = wrapper.findAll('button').find((b) => b.text().includes('提交'))
-    expect(submit!.attributes('disabled')).toBeUndefined()
-    await submit!.trigger('click')
+  it('共享弹窗 saved 后刷新列表，关闭由 close 事件回写', async () => {
+    const NodeList = (await import('../NodeList.vue')).default
+    const wrapper = mount(NodeList, { global: { stubs } })
     await flushPromises()
-    const call = mockApiPost.mock.calls.find((c) => String(c[0]) === '/clusters/2/nodes/batch')
-    expect(call).toBeDefined()
-    const body = call![1] as { nodes: Array<{ ip: string }> }
-    expect(body.nodes.some((n) => n.ip === '999.1.1.1')).toBe(false)
-    expect(body.nodes.some((n) => n.ip === '10.1.1.5')).toBe(true)
-    wrapper.unmount()
-  })
+    const callsBefore = mockApiGet.mock.calls.filter((call) => call[0] === '/nodes').length
 
-  it('CSV 模板下载与 CSV 上传解析（F2 双 tab）', async () => {
-    const wrapper = await openImport()
-    // CSV tab 切换后：文件选择 + 模板下载按钮（同 Tab 双 tab 结构）
-    const csvTab = wrapper.findAll('button').find((b) => b.text().includes('CSV 上传'))
-    expect(csvTab).toBeDefined()
-    await csvTab!.trigger('click')
-    await wrapper.vm.$nextTick()
-    const fileInput = wrapper.find('input[type="file"]')
-    expect(fileInput.exists()).toBe(true)
-    const tplBtn = wrapper.findAll('button').find((b) => b.text().includes('下载模板'))
-    expect(tplBtn).toBeDefined()
+    const modal = wrapper.findComponent({ name: 'NodeBatchImportModal' })
+    modal.vm.$emit('saved')
+    await flushPromises()
+    expect(mockApiGet.mock.calls.filter((call) => call[0] === '/nodes').length).toBeGreaterThan(callsBefore)
+
+    modal.vm.$emit('close')
+    await flushPromises()
+    expect(modal.props('visible')).toBe(false)
     wrapper.unmount()
   })
 })

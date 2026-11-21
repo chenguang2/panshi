@@ -23,18 +23,20 @@ describe('ClusterNodes 动作确认收敛守卫（batch3 5.1）', () => {
   })
 })
 
-// ── 措辞守卫（batch2 1.4 / design D9；B2b-1 反转：单条表单迁至共享 NodeFormModal）──
+// ── 措辞守卫（batch2 1.4 / design D9；B2b-1 反转单条表单、B2b-2 反转批量导入 → 共享组件）──
 describe('ClusterNodes 措辞守卫（batch2 1.4 / D9）', () => {
-  it('单条表单状态选项（a-select 启用/禁用）在共享 NodeFormModal；本 Tab 只留批量导入 select', () => {
+  it('状态选项（启用/禁用）在共享组件；本 Tab 内联表单与批量预览零残留', () => {
     const tab = src()
-    const modal = readFileSync(resolve(process.cwd(), 'src/components/NodeFormModal.vue'), 'utf-8')
-    expect(modal).toContain('<a-select-option :value="1">启用</a-select-option>')
-    expect(modal).toContain('<a-select-option :value="0">禁用</a-select-option>')
-    expect(tab).toContain('<option :value="1">启用</option>')
-    expect(tab).toContain('<option :value="0">禁用</option>')
-    // 单条表单已不在 Tab 内联（无 a-form；状态下拉的 a-select-option 只在共享组件）
+    const form = readFileSync(resolve(process.cwd(), 'src/components/NodeFormModal.vue'), 'utf-8')
+    const batch = readFileSync(resolve(process.cwd(), 'src/components/NodeBatchImportModal.vue'), 'utf-8')
+    expect(form).toContain('<a-select-option :value="1">启用</a-select-option>')
+    expect(form).toContain('<a-select-option :value="0">禁用</a-select-option>')
+    expect(batch).toContain('<option :value="1">启用</option>')
+    expect(batch).toContain('<option :value="0">禁用</option>')
+    // 单条表单与批量导入预览都已在共享组件内，Tab 不再自持
     expect(tab).not.toContain('<a-form')
     expect(tab).not.toContain('v-model:value="nodeForm.')
+    expect(tab).not.toContain('<option :value="1">启用</option>')
   })
 
   it('节点语境零「正常」措辞残留', () => {

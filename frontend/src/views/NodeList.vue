@@ -475,86 +475,13 @@
       "
     />
 
-    <!-- 批量导入弹窗（batch3 3.2 / D7：粘贴/CSV 双 tab，与 Tab 同一 parse/validate/submit 机制） -->
-    <div class="modal-overlay" :style="{ display: importModalVisible ? 'flex' : 'none' }">
-      <div class="modal modal-wide">
-        <div class="modal-header">
-          <h2>批量导入节点</h2>
-          <button class="modal-close" @click="closeImportModal">&times;</button>
-        </div>
-        <div class="modal-body">
-          <div class="form-group">
-            <label class="form-label">所属集群</label>
-            <!-- #204 迁移：a-select placeholder 语义（必选模式，modelValue '' ↔ placeholder 显示） -->
-            <ClusterSelect v-model="importClusterId" :clusters="clusters" />
-          </div>
-          <div class="import-toolbar">
-            <button
-              class="btn btn-sm"
-              :class="importTab === 'text' ? 'btn-primary' : 'btn-secondary'"
-              @click="importTab = 'text'"
-            >
-              粘贴 IP 列表
-            </button>
-            <button
-              class="btn btn-sm"
-              :class="importTab === 'csv' ? 'btn-primary' : 'btn-secondary'"
-              @click="importTab = 'csv'"
-            >
-              CSV 上传
-            </button>
-          </div>
-          <div v-if="importTab === 'text'" class="import-pane">
-            <textarea
-              v-model="importText"
-              class="form-input import-textarea"
-              rows="5"
-              placeholder="每行一个 IP，支持 # 注释"
-            ></textarea>
-            <button class="btn btn-secondary btn-sm" @click="parseImportText">解析</button>
-          </div>
-          <div v-else class="import-pane">
-            <input type="file" accept=".csv" @change="onImportCsvChange" style="font-size: 12px" />
-            <button class="btn btn-secondary btn-sm" @click="downloadImportTemplate">下载模板</button>
-          </div>
-          <div v-if="importRows.length" class="import-preview">
-            <div class="text-sm text-muted">
-              共 {{ importRows.length }} 行，有效 {{ importValidCount }} 行（默认值：服务端口
-              {{ importDefaults.service_port }}、管理端口 {{ importDefaults.management_port }}、Edge 路径
-              {{ importDefaults.edge_path }}）
-            </div>
-            <table class="import-table">
-              <thead>
-                <tr>
-                  <th>IP</th>
-                  <th>服务端口</th>
-                  <th>管理端口</th>
-                  <th>Edge 路径</th>
-                  <th>原因</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="(row, idx) in importRows" :key="idx" :class="{ 'import-row-invalid': importRowError(row) }">
-                  <td class="text-mono">{{ row.ip }}</td>
-                  <td>{{ row.service_port }}</td>
-                  <td>{{ row.management_port }}</td>
-                  <td>{{ row.edge_path }}</td>
-                  <td class="import-error-cell">{{ importRowError(row) || '' }}</td>
-                  <td><button class="btn btn-ghost btn-sm" @click="importRows.splice(idx, 1)">移除</button></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" @click="closeImportModal">取消</button>
-          <button class="btn btn-primary" :disabled="importSubmitDisabled" @click="submitImport">
-            提交（{{ importValidCount }}）
-          </button>
-        </div>
-      </div>
-    </div>
+    <!-- 批量导入：共享弹窗（B2b-2，与统一管理面板同一实现；集群在本弹窗内选择） -->
+    <NodeBatchImportModal
+      :visible="batchImportVisible"
+      :clusters="clusters"
+      @close="batchImportVisible = false"
+      @saved="refreshList"
+    />
   </div>
 </template>
 
@@ -574,6 +501,7 @@ import PageHeader from '@/components/PageHeader.vue'
 import BadgeStatus from '@/components/BadgeStatus.vue'
 import NodeExecutionResultDrawer from '@/components/NodeExecutionResultDrawer.vue'
 import NodeFormModal from '@/components/NodeFormModal.vue'
+import NodeBatchImportModal from '@/components/NodeBatchImportModal.vue'
 import BatchActionProgressModal from '@/components/BatchActionProgressModal.vue'
 import ConfigDiff from '@/views/ConfigDiff.vue'
 import InstallOpenrestyDialog from '@/components/InstallOpenrestyDialog.vue'
@@ -596,13 +524,7 @@ import ListPager from '@/components/ListPager.vue'
 import PageStatBadges from '@/components/PageStatBadges.vue'
 import { useFeaturesStore } from '@/stores/features'
 import { listNodes } from '@/api/nodes'
-import {
-  nginxState,
-  createCancelNodeInstallHandler,
-  submitNodeBatchImport,
-  allNodeActionButtons,
-  type NodeImportRow,
-} from '@/composables/useClusterNodes'
+import { nginxState, createCancelNodeInstallHandler, allNodeActionButtons } from '@/composables/useClusterNodes'
 import { showNodeDeleteConfirm, executeDeleteWithProgress, showBatchStatusModal } from '@/composables/useClusterUtils'
 import {
   runClusterGroupedBatchAction,
@@ -612,7 +534,6 @@ import {
   warnNoNodesSelected,
   type BatchProgressState,
 } from '@/composables/useBatchNodeAction'
-import { parseIpList, parseNodeCsv, buildNodeCsvTemplate, validateNodeImportRow } from '@/utils/nodeImport'
 import { getApiErrorMessage } from '@/utils/error'
 import { buildNodeInstallCommand } from '@/utils/nodeInstallCommand'
 import { isStructuredSseEvent } from '@/utils/sse'
@@ -783,95 +704,12 @@ function handleCopy(record: Node) {
   formModalVisible.value = true
 }
 
-// ── 批量导入弹窗（batch3 3.2 / D7：与 Tab 同一 parse/validate/submit 机制）──
-const importModalVisible = ref(false)
-const importClusterId = ref<number | string>('')
-const importTab = ref<'text' | 'csv'>('text')
-const importText = ref('')
-const importRows = ref<NodeImportRow[]>([])
-const importDefaults = reactive({
-  service_port: 80,
-  management_port: 9180,
-  status: 1,
-  edge_path: '/edge',
-  openresty_path: '/usr/local/nginx',
-})
-const importCluster = computed(() => clusters.value.find((c) => c.id === Number(importClusterId.value)))
-const importValidCount = computed(() => importRows.value.filter((r) => !validateNodeImportRow(r)).length)
-const importSubmitDisabled = computed(() => !importClusterId.value || importValidCount.value === 0)
+// ── 批量导入弹窗（B2b-2：解析/默认值/预览/提交全在共享 NodeBatchImportModal）──
+// 本页只持开关与刷新；集群在弹窗内选择（:clusters 注入，未选集群时提交禁用）
+const batchImportVisible = ref(false)
 
 function openBatchImport() {
-  importClusterId.value = ''
-  importTab.value = 'text'
-  importText.value = ''
-  importRows.value = []
-  importModalVisible.value = true
-}
-
-function closeImportModal() {
-  importModalVisible.value = false
-}
-
-function parseImportText() {
-  const parsed = parseIpList(importText.value)
-  // 透传 parse 层有效性判定（验收缺陷修复）：非法行 valid=false + error 进预览原因列，
-  // importValidCount 不计无效行，submitNodeBatchImport 按 valid 过滤（非法 IP 不入提交体）
-  importRows.value = parsed.map((row) => ({
-    ip: row.ip,
-    service_port: importDefaults.service_port,
-    management_port: importDefaults.management_port,
-    edge_path: importDefaults.edge_path,
-    openresty_path: importDefaults.openresty_path,
-    status: importDefaults.status,
-    valid: row.valid,
-    error: row.error,
-  }))
-}
-
-function onImportCsvChange(event: Event) {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) return
-  const reader = new FileReader()
-  reader.onload = () => {
-    const rows = parseNodeCsv(String(reader.result || ''))
-    importRows.value = rows.map((r) => ({
-      ip: r.ip,
-      service_port: r.service_port,
-      management_port: r.management_port,
-      edge_path: r.edge_path || importDefaults.edge_path,
-      openresty_path: r.openresty_path || importDefaults.openresty_path,
-      status: r.status,
-      valid: r.valid,
-      error: r.error,
-    }))
-  }
-  reader.readAsText(file)
-  input.value = ''
-}
-
-function downloadImportTemplate() {
-  const blob = new Blob([buildNodeCsvTemplate()], { type: 'text/csv;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = 'node-import-template.csv'
-  a.click()
-  URL.revokeObjectURL(url)
-}
-
-function importRowError(row: NodeImportRow): string | undefined {
-  return validateNodeImportRow(row)
-}
-
-async function submitImport() {
-  if (!importCluster.value || importSubmitDisabled.value) return
-  const ok = await submitNodeBatchImport(importCluster.value, importRows.value)
-  if (!ok) return
-  importModalVisible.value = false
-  importRows.value = []
-  importText.value = ''
-  await refreshList()
+  batchImportVisible.value = true
 }
 
 // batch3 1.3 / D3：危险红确认上移为 useOverlayModal 具名导出，本视图改直接引用（原本地包装已删）。
@@ -1786,44 +1624,6 @@ defineExpose({ viewMode })
 
 <style scoped>
 /* 批量条解剖移交共享 .l5-batchbar（mockup-parity-standard）；页面仅保留批量导入弹窗自有样式 */
-/* 批量导入弹窗（batch3 3.2） */
-.import-toolbar {
-  display: flex;
-  gap: 8px;
-  margin: 10px 0;
-}
-.import-pane {
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
-}
-.import-textarea {
-  flex: 1;
-  font-family: var(--font-mono);
-  font-size: 12px;
-}
-.import-preview {
-  margin-top: 10px;
-}
-.import-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 6px;
-  font-size: 12px;
-}
-.import-table th,
-.import-table td {
-  border: 1px solid var(--border);
-  padding: 4px 8px;
-  text-align: left;
-}
-.import-row-invalid td {
-  background: rgba(255, 77, 79, 0.08);
-}
-.import-error-cell {
-  color: var(--danger);
-}
-
 /* 工具条（list-pages-console-restyle）：结构移交共享 TableToolbar（.l5-toolbar 单点），
    本类仅承载卡内贴合与源码守卫依赖的换行语义（NodeList.source.test.ts 断言 flex-wrap: wrap） */
 .node-filter-bar {

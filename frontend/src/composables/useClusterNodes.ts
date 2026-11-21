@@ -198,19 +198,31 @@ export interface NodeImportRow {
   valid: boolean
 }
 
+/** 批量创建请求结果（纯 IO 产物，无提示/弹窗副作用） */
+export interface NodeBatchCreateOutcome {
+  ok: boolean
+  /** 无有效行（提示用 warning，与请求失败区分） */
+  empty?: boolean
+  message: string
+  results: BatchResultItem[]
+}
+
 /**
- * 批量导入提交共享实现（node-management-ux-batch3 3.2 / design D7）：
- * 过滤有效行 → POST /clusters/{id}/nodes/batch → 部分失败弹结果表/全部成功 message。
- * 返回是否成功（调用方据此做各自的弹窗态清理与列表重载）。
+ * 批量创建节点的唯一载荷构造 + 请求点（B2b-2）：
+ * 过滤有效行 → POST /clusters/{id}/nodes/batch，返回逐条结果供调用方自行呈现
+ * （共享弹窗内联展示；旧 submitNodeBatchImport 适配器弹结果弹窗）。
+ * 禁止在视图/组件内另写一份 `nodes/batch` 载荷。
  */
-export async function submitNodeBatchImport(cluster: Pick<Cluster, 'id'>, rows: NodeImportRow[]): Promise<boolean> {
+export async function requestNodeBatchCreate(
+  clusterId: number,
+  rows: NodeImportRow[],
+): Promise<NodeBatchCreateOutcome> {
   const validRows = rows.filter((r) => r.valid)
   if (validRows.length === 0) {
-    message.warning('没有有效的节点可创建')
-    return false
+    return { ok: false, empty: true, message: '没有有效的节点可创建', results: [] }
   }
   try {
-    const res = await api.post(`/clusters/${cluster.id}/nodes/batch`, {
+    const res = await api.post(`/clusters/${clusterId}/nodes/batch`, {
       nodes: validRows.map((r) => ({
         ip: r.ip,
         service_port: r.service_port,
@@ -221,19 +233,34 @@ export async function submitNodeBatchImport(cluster: Pick<Cluster, 'id'>, rows: 
       })),
     })
     const data = res.data
-    const results: BatchResultItem[] = data?.results || []
-    const hasFailure = results.some((r) => r.status !== 'success')
-    if (hasFailure) {
-      showBatchResultModal(data?.message || '批量创建结果', results)
-    } else {
-      message.success(data?.message || `成功创建 ${validRows.length} 条节点`)
+    return {
+      ok: true,
+      message: data?.message || `成功创建 ${validRows.length} 条节点`,
+      results: (data?.results || []) as BatchResultItem[],
     }
-    return true
   } catch (error: unknown) {
     const detail = (error as { response?: { data?: { detail?: unknown } } }).response?.data?.detail
-    message.error(typeof detail === 'string' ? detail : '批量创建失败')
+    return { ok: false, message: typeof detail === 'string' ? detail : '批量创建失败', results: [] }
+  }
+}
+
+/**
+ * 批量导入提交共享实现（node-management-ux-batch3 3.2 / design D7）：
+ * 部分失败弹结果表/全部成功 message。返回是否成功（调用方据此做弹窗态清理与列表重载）。
+ */
+export async function submitNodeBatchImport(cluster: Pick<Cluster, 'id'>, rows: NodeImportRow[]): Promise<boolean> {
+  const outcome = await requestNodeBatchCreate(cluster.id, rows)
+  if (!outcome.ok) {
+    if (outcome.empty) message.warning(outcome.message)
+    else message.error(outcome.message)
     return false
   }
+  if (outcome.results.some((r) => r.status !== 'success')) {
+    showBatchResultModal(outcome.message, outcome.results)
+  } else {
+    message.success(outcome.message)
+  }
+  return true
 }
 
 export function useClusterNodes(options: { clusters: Ref<Cluster[]>; onRefresh?: () => void | Promise<void> }) {

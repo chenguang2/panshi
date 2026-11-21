@@ -85,9 +85,9 @@ describe('节点 Tab 表单共用守卫（B2b-1）', () => {
     expect(s).not.toMatch(/\bnodeForm\b/)
     expect(s).not.toContain('handleNodeSubmit')
     expect(s).not.toContain('validateIP')
-    // 批量导入块保留（B2b-2 再处理）：既有 parse/importNodes 链路仍在
-    expect(s).toContain('handleImportSubmit')
-    expect(s).toContain('parseTextToRows')
+    // B2b-2 已把批量导入迁至共享组件（原「批量块保留」断言在此反转）
+    expect(s).not.toContain('handleImportSubmit')
+    expect(s).not.toContain('parseTextToRows')
   })
 
   it('保存/关闭只做列表刷新，提交逻辑不在宿主重写', () => {
@@ -97,5 +97,72 @@ describe('节点 Tab 表单共用守卫（B2b-1）', () => {
     // 单条提交的 POST/PUT 只剩在共享组件内（面板里没有 /nodes` 或 /nodes/${id} 的创建/更新调用）
     expect(s).not.toContain('api.post(`/clusters/${clusterId}/nodes`')
     expect(s).not.toContain('api.put(`/clusters/')
+  })
+})
+
+// ── 节点批量导入共用守卫（B2b-2）：两侧超集合并进 NodeBatchImportModal ──
+const BATCH_IMPORT_LEAK_MARKERS = [
+  'parseIpList',
+  'parseNodeCsv',
+  'buildNodeCsvTemplate',
+  'validateNodeImportRow',
+  'nodeImportRows',
+  'nodes/batch',
+]
+
+describe('节点批量导入共用守卫（B2b-2）', () => {
+  const COMPONENT_PATH = resolve(process.cwd(), 'src/components/NodeBatchImportModal.vue')
+
+  it('面板 ClusterNodes 引用共享弹窗，集群由上下文锁定', () => {
+    const s = src('ClusterNodes.vue')
+    expect(s).toContain('<NodeBatchImportModal')
+    expect(s).toContain(':cluster-id="props.cluster.id"')
+    expect(s).toContain('lock-cluster')
+    expect(s).toContain('@saved="onBatchImportSaved"')
+    expect(s).toContain("import NodeBatchImportModal from '@/components/NodeBatchImportModal.vue'")
+  })
+
+  it('页面 NodeList 引用共享弹窗，集群清单注入弹窗内选择', () => {
+    const page = readFileSync(resolve(process.cwd(), 'src/views/NodeList.vue'), 'utf-8')
+    expect(page).toContain('<NodeBatchImportModal')
+    expect(page).toContain(':clusters="clusters"')
+    expect(page).toContain('@saved="refreshList"')
+    expect(page).toContain("import NodeBatchImportModal from '@/components/NodeBatchImportModal.vue'")
+    // 页头入口仍在（mockup-parity r5：批量导入先于添加节点）
+    expect(page).toContain('openBatchImport')
+  })
+
+  it.each([
+    ['ClusterNodes.vue', () => src('ClusterNodes.vue')],
+    ['NodeList.vue', () => readFileSync(resolve(process.cwd(), 'src/views/NodeList.vue'), 'utf-8')],
+  ])('%s 不再自持批量导入逻辑（解析/校验/模板/提交零回流）', (file, read) => {
+    const s = read()
+    for (const marker of BATCH_IMPORT_LEAK_MARKERS) {
+      expect(s, `${file} 不应再出现 ${marker}`).not.toContain(marker)
+    }
+    expect(s).not.toContain('handleImportSubmit')
+    expect(s).not.toContain('parseTextToRows')
+    expect(s).not.toContain('submitNodeBatchImport')
+  })
+
+  it('共享组件承担解析/校验/提交单点，预览列覆盖两侧并集', () => {
+    const component = readFileSync(COMPONENT_PATH, 'utf-8')
+    expect(component).toContain("from '@/utils/nodeImport'")
+    expect(component).toContain('validateNodeImportRow')
+    expect(component).toContain('requestNodeBatchCreate')
+    // 载荷构造只在 composable 单点，组件不得直写 POST
+    expect(component).not.toContain('api.post(')
+    for (const head of ['IP', '服务端口', '管理端口', 'Edge 路径', 'Nginx 安装目录', '状态', '原因']) {
+      expect(component, `预览表应含列 ${head}`).toContain(`<th>${head}</th>`)
+    }
+    // 默认值可编辑（面板能力保留）
+    for (const cls of [
+      'batch-import-default-service-port',
+      'batch-import-default-management-port',
+      'batch-import-default-edge-path',
+      'batch-import-default-openresty-path',
+    ]) {
+      expect(component).toContain(cls)
+    }
   })
 })

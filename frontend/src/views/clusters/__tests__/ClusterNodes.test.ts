@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount, DOMWrapper, flushPromises } from '@vue/test-utils'
+import { mount, flushPromises } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
 
 const mockApiGet = vi.fn()
@@ -96,50 +96,6 @@ describe('ClusterNodes.vue batch1 快修', () => {
   it('搜索字段下拉不含「名称」（Node 无 name 列，后端 search 仅按 IP）', async () => {
     const wrapper = await mountTab()
     expect(wrapper.html()).not.toContain('>名称<')
-    wrapper.unmount()
-  })
-
-  it('批量导入预览：openresty_path 清空 → 行标红显示原因，有效计数归零（4.1）', async () => {
-    const wrapper = await mountTab()
-    const vm = wrapper.vm as any
-    vm.nodeImportMode = 'batch'
-    vm.nodeModalVisible = true
-    vm.nodeImportText = '10.0.0.1\n'
-    vm.parseTextToRows()
-    await wrapper.vm.$nextTick()
-    expect(vm.validImportCount).toBe(1)
-
-    // 节点弹窗在 Teleport to="body" 内：从 document.body 查询预览表行内 input
-    //（第 5 个 = openresty_path，默认值预填 /usr/local/nginx）
-    const rowInputs = document.body.querySelectorAll('tbody input')
-    expect(rowInputs.length).toBe(5)
-    expect((rowInputs[4] as HTMLInputElement).value).toBe('/usr/local/nginx')
-    await new DOMWrapper(rowInputs[4]).setValue('')
-    await wrapper.vm.$nextTick()
-
-    const tr = rowInputs[4].closest('tr') as HTMLElement
-    expect(tr.getAttribute('style'), 'openresty_path 清空的行应标红').toContain('var(--danger)')
-    expect(tr.textContent).toContain('OpenResty 安装路径为空')
-    expect(vm.validImportCount).toBe(0)
-    wrapper.unmount()
-  })
-
-  it('批量导入预览：路径恢复后行恢复有效（可编辑联动）', async () => {
-    const wrapper = await mountTab()
-    const vm = wrapper.vm as any
-    vm.nodeImportMode = 'batch'
-    vm.nodeModalVisible = true
-    vm.nodeImportText = '10.0.0.1\n'
-    vm.parseTextToRows()
-    await wrapper.vm.$nextTick()
-    const rowInputs = document.body.querySelectorAll('tbody input')
-    await new DOMWrapper(rowInputs[4]).setValue('')
-    await wrapper.vm.$nextTick()
-    await new DOMWrapper(rowInputs[4]).setValue('/usr/local/openresty')
-    await wrapper.vm.$nextTick()
-    expect(vm.validImportCount).toBe(1)
-    const tr = rowInputs[4].closest('tr') as HTMLElement
-    expect(tr.getAttribute('style') || '').not.toContain('var(--danger)')
     wrapper.unmount()
   })
 })

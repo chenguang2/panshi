@@ -35,12 +35,14 @@ test.describe('Node Batch Import E2E', () => {
   async function openNodesTab(page: import('@playwright/test').Page) {
     await page.goto('/central-management')
 
-    const nodeStat = page
-      .locator('.cl-stat-link')
-      .filter({ has: page.locator('.cl-stat-label', { hasText: '节点' }) })
-      .first()
-    await expect(nodeStat).toBeVisible({ timeout: 10000 })
-    await nodeStat.click()
+    // 统一管理页的统计格已改 router-link（filter-architecture G 批），面板节点 Tab 需先最大化一张集群卡
+    const maximizeBtn = page.locator('.maximize-btn-sm').first()
+    await expect(maximizeBtn).toBeVisible({ timeout: 10000 })
+    await maximizeBtn.click()
+
+    // 默认 Tab 即「集群节点」；显式点一次保证复用上次展开态时也落在节点页
+    const nodesTab = page.locator('.dtabs .dt').filter({ hasText: '集群节点' }).first()
+    if (await nodesTab.isVisible().catch(() => false)) await nodesTab.click()
 
     const toolbar = page.locator('.node-actions')
     await expect(toolbar).toBeVisible({ timeout: 10000 })
@@ -50,29 +52,28 @@ test.describe('Node Batch Import E2E', () => {
     return toolbar
   }
 
-  async function openNodeAddModal(page: import('@playwright/test').Page) {
+  /**
+   * B2b-1/B2b-2 后批量导入入口移到节点工具条（`批量导入`），弹窗为共享 NodeBatchImportModal，
+   * 与单条表单（NodeFormModal）平级且互斥——不再需要先打开「添加节点」再切批量模式。
+   */
+  async function openBatchImportModal(page: import('@playwright/test').Page) {
     const toolbar = await openNodesTab(page)
-    const addBtn = toolbar.locator('button').filter({ hasText: '添加节点' }).first()
-    await expect(addBtn).toBeVisible({ timeout: 5000 })
-    await addBtn.click()
-    // 页面残留多个隐藏 overlay（display:none 常驻 DOM）：以 :visible 过滤出刚打开的节点弹窗
-    // （标题可能是 添加节点/批量导入节点），toBeVisible 自动等待替代固定 sleep + count/isVisible 轮询
+    const importBtn = toolbar.locator('button').filter({ hasText: '批量导入' }).first()
+    await expect(importBtn).toBeVisible({ timeout: 5000 })
+    await importBtn.click()
+    // 页面残留多个隐藏 overlay（display:none 常驻 DOM）：以 :visible 过滤出刚打开的弹窗
     const visibleModal = page
       .locator('.modal-overlay:visible')
-      .filter({ has: page.locator('.modal-header h2', { hasText: '节点' }) })
+      .filter({ has: page.locator('.modal-header h2', { hasText: '批量导入节点' }) })
       .first()
-    await expect(visibleModal, '节点弹窗未打开').toBeVisible({ timeout: 5000 })
+    await expect(visibleModal, '批量导入弹窗未打开').toBeVisible({ timeout: 5000 })
     return visibleModal
   }
 
   test('batch import flow: paste IP range, parse, preview, create', async ({ page, request }) => {
     const headers = await apiHeaders(request)
     try {
-      const modal = await openNodeAddModal(page)
-
-      // Switch to batch import mode
-      const batchBtn = modal.locator('button').filter({ hasText: '批量导入' }).first()
-      await batchBtn.click()
+      const modal = await openBatchImportModal(page)
 
       // Paste text into textarea
       const textarea = modal.locator('textarea').first()
@@ -83,17 +84,19 @@ test.describe('Node Batch Import E2E', () => {
       await parseBtn.click()
 
       // Preview table should show 4 parsed nodes (comment line skipped)
-      const previewRows = modal.locator('tbody tr')
+      const previewRows = modal.locator('.batch-import-preview tbody tr')
       await expect(previewRows).toHaveCount(4)
 
       // Create button should show count 4
-      const createBtn = modal.locator('.modal-footer button').filter({ hasText: '创建' }).first()
+      const createBtn = modal.locator('.batch-import-submit').first()
       const btnText = (await createBtn.textContent()) || ''
       expect(btnText).toContain('4')
 
       // Click create, then assert the result instead of blind-sleeping:
       // 节点列表 API 必须包含全部 4 个 IP（批量创建为纯库写入，单条失败不阻塞其余）
       await createBtn.click()
+      // 共享弹窗提交后保持打开并展示逐条结果（B2b-2），以结果区出现作为完成信号
+      await expect(modal.locator('.batch-import-results')).toBeVisible({ timeout: 10000 })
       const imported = await listImportedNodes(request, headers)
       const createdIps = imported.map((n) => n.ip)
       for (const ip of IMPORT_IPS) {
@@ -116,10 +119,7 @@ test.describe('Node Batch Import E2E', () => {
   })
 
   test('CSV template download button exists', async ({ page }) => {
-    const modal = await openNodeAddModal(page)
-
-    const batchBtn = modal.locator('button').filter({ hasText: '批量导入' }).first()
-    await batchBtn.click()
+    const modal = await openBatchImportModal(page)
 
     const csvTab = modal.locator('button').filter({ hasText: 'CSV 上传' }).first()
     await csvTab.click()
