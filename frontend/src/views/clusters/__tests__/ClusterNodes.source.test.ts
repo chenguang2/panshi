@@ -87,10 +87,30 @@ describe('ClusterNodes 最大化面板 Tab 解剖守卫（parity 批 A）', () =
     expect(s).not.toMatch(/allNodeColumns\s*=\s*\[[\s\S]*key: 'index'/)
   })
 
-  it('序号公式 = 后端分页跨页连续 (page-1)*pageSize + index + 1', () => {
+  it('序号列渲染 = 共享原语 IndexCell（跨页连续公式单点在原语内）', () => {
     const s = src()
-    expect(s).toContain('((pag?.page || 1) - 1) * (pag?.pageSize || 20) + index + 1')
-    expect(s).toContain('<span class="c-idx">{{ rowIndexLabel(cluster, index) }}</span>')
+    expect(s).toContain('<IndexCell')
+    expect(s).toContain(':page="cluster.nodesPagination?.page ?? 1"')
+    expect(s).toContain(':page-size="cluster.nodesPagination?.pageSize ?? 20"')
+    expect(s).toContain(':index="index"')
+    // 公式与内联标记已移交原语（B4a），宿主零残留
+    expect(s).not.toContain('rowIndexLabel')
+    expect(s).not.toContain('<span class="c-idx">')
+    expect(s).not.toContain('((pag?.page || 1) - 1) * (pag?.pageSize || 20) + index + 1')
+  })
+
+  it('状态格 = 共享原语 NodeStatusCell variant="panel"（内联两枚胶囊已移交）', () => {
+    const s = src()
+    expect(s).toContain('<NodeStatusCell')
+    expect(s).toContain('variant="panel"')
+    expect(s).toContain(':enabled="record.status !== 0"')
+    expect(s).toContain(':runtime="nodeCellRuntime(record)"')
+    expect(s).toContain(':exec-text="nodeCellExecText(record)"')
+    // 内联胶囊标记零残留（原语是唯一实现，避免双份解剖）
+    expect(s).not.toContain('class="ps-tag ps-pub"')
+    expect(s).not.toContain('class="ps-tag ps-unpub"')
+    expect(s).not.toContain('class="ps-tag ps-partial"')
+    expect(s).not.toContain('BadgeStatus')
   })
 
   it('分页改表外 ListPager（a-table :pagination="false"），单位「个节点」', () => {

@@ -5,6 +5,7 @@ import api from '@/api'
 import type { Cluster, Node } from '@/types'
 import { useColumnConfig, resolveOrderedColumns, applyColumnWidths } from './useColumnConfig'
 import { getApiErrorMessage } from '@/utils/error'
+import { formatRelativeTime } from '@/utils/format'
 
 /** 节点命令执行结果（/clusters/{id}/nodes/{nid}/{action} 响应） */
 interface ExecCommandResult {
@@ -92,6 +93,20 @@ export function nginxState(node: Pick<Node, 'status_detail' | 'status'> | null |
   if (running === true) return 'running'
   if (running === false) return 'stopped'
   return 'unchecked'
+}
+
+/** 状态格（components/resource-cells/NodeStatusCell）运行态入参：`unchecked` → `unknown`（原语三态契约）。 */
+export function nodeCellRuntime(
+  node: Pick<Node, 'status_detail' | 'status'> | null | undefined,
+): 'running' | 'stopped' | 'unknown' {
+  const state = nginxState(node)
+  return state === 'unchecked' ? 'unknown' : state
+}
+
+/** 状态格检测时效文案：原语不拼后缀，整句（`N 分钟前检测`）由调用方给；无 last_execution → 不渲染。 */
+export function nodeCellExecText(node: Pick<Node, 'status_detail'> | null | undefined): string | undefined {
+  const lastExecution = node?.status_detail?.last_execution
+  return lastExecution ? `${formatRelativeTime(lastExecution)}检测` : undefined
 }
 
 /** 取消安装共享工厂的视图态依赖（node-management-ux-batch3 1.2 / design D2） */

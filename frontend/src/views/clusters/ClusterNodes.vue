@@ -164,39 +164,25 @@
       </template>
       <template #bodyCell="{ column, record, index }">
         <template v-if="column.key === 'index'">
-          <span class="c-idx">{{ rowIndexLabel(cluster, index) }}</span>
+          <IndexCell
+            :page="cluster.nodesPagination?.page ?? 1"
+            :page-size="cluster.nodesPagination?.pageSize ?? 20"
+            :index="index"
+          />
         </template>
         <template v-if="column.key === 'edge_version'">
           {{ record.status_detail?.statistic?.edge_version || '-' }}
         </template>
         <template v-if="column.key === 'status'">
-          <div class="node-status-cell">
-            <!-- 状态格 = 两枚无圆点胶囊（central.html 第 323/333/343 行 .pub-cell > .ps-tag）：
-                 ① 管理开关态（已启用/已禁用）② 运行态（在线/离线/未检测）。
-                 与节点独立页 NodeList.vue 的单枚 .pill-run「运行中/已停止」刻意不同——
-                 独立页设计 nodes.html 只有运行态一列，最大化面板设计 central.html 两枚并列。 -->
-            <span
-              v-if="record.status === 0"
-              class="ps-tag ps-unpub"
-              title="管理开关已禁用：不承载业务流量，仍可执行节点任务与状态查询"
-              >已禁用</span
-            >
-            <span v-else class="ps-tag ps-pub" title="管理开关：已启用">已启用</span>
-            <span v-if="nginxState(record) === 'running'" class="ps-tag ps-pub" title="运行态：在线（Edge 进程运行中）"
-              >在线</span
-            >
-            <span
-              v-else-if="nginxState(record) === 'stopped'"
-              class="ps-tag ps-partial"
-              title="运行态：离线（Edge 进程已停止）"
-              >离线</span
-            >
-            <span v-else class="ps-tag ps-unpub" title="运行态：未检测">未检测</span>
-            <!-- 检测时效（batch2 2.2 / D3）：无 last_execution 不渲染 -->
-            <span v-if="record.status_detail?.last_execution" class="status-exec-time"
-              >{{ formatRelativeTime(record.status_detail.last_execution) }}检测</span
-            >
-          </div>
+          <!-- 状态格 = 共享原语（B4a）：两枚无圆点胶囊（管理开关态 + 运行态）+ 检测时效。
+               面板设计 central.html 双枚并列，与节点独立页 nodes.html 的单枚徽章形态刻意不同，
+               差异只由 variant 表达（components/resource-cells/NodeStatusCell.vue）。 -->
+          <NodeStatusCell
+            variant="panel"
+            :enabled="record.status !== 0"
+            :runtime="nodeCellRuntime(record)"
+            :exec-text="nodeCellExecText(record)"
+          />
         </template>
         <template v-if="column.key === 'actions'">
           <!-- 行内动作收敛（parity 批 B / 设计 .ops）：主行动「重载」+ ghost「状态」+ ⋯ 三栏菜单。
@@ -357,7 +343,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref, onMounted, onUnmounted, toValue } from 'vue'
 import type { Cluster, Node } from '@/types'
-import { formatRelativeTime } from '@/utils/format'
 import ConfigDiff from '@/views/ConfigDiff.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import InstallOpenrestyDialog from '@/components/InstallOpenrestyDialog.vue'
@@ -372,7 +357,8 @@ import {
   useClusterNodes,
   allNodeColumns,
   allNodeActionButtons,
-  nginxState,
+  nodeCellRuntime,
+  nodeCellExecText,
   createCancelNodeInstallHandler,
 } from '@/composables/useClusterNodes'
 import { showDangerConfirm } from '@/composables/useOverlayModal'
@@ -383,6 +369,8 @@ import { useFeaturesStore } from '@/stores/features'
 import SearchInput from '@/components/SearchInput.vue'
 import ColumnConfigPopover from '@/components/ColumnConfigPopover.vue'
 import ListPager from '@/components/ListPager.vue'
+import IndexCell from '@/components/resource-cells/IndexCell.vue'
+import NodeStatusCell from '@/components/resource-cells/NodeStatusCell.vue'
 import StrokeIcon from '@/components/StrokeIcon.vue'
 import EmptyState from '@/components/EmptyState.vue'
 
@@ -527,11 +515,7 @@ const NODE_INDEX_COLUMN = { title: '#', key: 'index', width: 45, align: 'center'
 
 const nodeTableColumns = computed(() => [NODE_INDEX_COLUMN, ...toValue(visibleNodeColumns)])
 
-/** 后端分页序号 = (page-1)*pageSize + 本页行号 + 1（#59 表格解剖） */
-function rowIndexLabel(cluster: Cluster, index: number): number {
-  const pag = cluster.nodesPagination
-  return ((pag?.page || 1) - 1) * (pag?.pageSize || 20) + index + 1
-}
+// 序号渲染 = 共享原语 IndexCell（B4a）：跨页连续 (page-1)*pageSize + 行号 + 1，公式单点在原语内。
 
 /** ListPager 翻页：写回分页状态 → 清选择 → 复用既有加载函数 */
 function onNodePageChange(page: number, pageSize: number): void {
@@ -974,16 +958,15 @@ onUnmounted(() => {
 }
 
 /* 状态单元格：运行态/配置态徽章并排 + 检测时效弱化文字（batch2 1.2/1.3/2.2）
-   gap 6 = 设计 .pub-cell 值（parity max-r2 批次 C） */
+   gap 6 = 设计 .pub-cell 值（parity max-r2 批次 C）。
+   B4a 起解剖由共享原语 components/resource-cells/NodeStatusCell.vue 承担（同值），
+   此处保留容器规则作为宿主的兜底（原语根节点带父作用域 id，规则仍命中）。
+   检测时效的 12px/muted 现值只由原语提供，宿主不再重复声明。 */
 .node-status-cell {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
-}
-.status-exec-time {
-  font-size: 12px;
-  color: var(--muted);
 }
 
 .node-tab {

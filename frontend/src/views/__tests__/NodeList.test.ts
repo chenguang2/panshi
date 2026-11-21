@@ -811,7 +811,7 @@ describe('NodeList.vue batch2 检测时效展示', () => {
 
   it('有 last_execution → 徽章下方弱化文字「N 分钟前检测」', async () => {
     const wrapper = await mountWithNode(nodeWithLastExec(5.5))
-    const cell = wrapper.find('.status-cell')
+    const cell = wrapper.find('.node-status-cell.is-page')
     expect(cell.exists()).toBe(true)
     expect(cell.text()).toContain('运行中')
     expect(cell.text()).toMatch(/5 分钟前检测/)
@@ -820,7 +820,7 @@ describe('NodeList.vue batch2 检测时效展示', () => {
 
   it('无 last_execution → 不渲染时效文字', async () => {
     const wrapper = await mountWithNode(nodeWithLastExec(null))
-    const cell = wrapper.find('.status-cell')
+    const cell = wrapper.find('.node-status-cell.is-page')
     expect(cell.exists()).toBe(true)
     expect(cell.text()).not.toContain('分钟前')
     expect(cell.text()).not.toContain('刚刚')

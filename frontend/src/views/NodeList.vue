@@ -182,7 +182,9 @@
             </ClusterGroupRow>
           </template>
           <template v-else-if="column.key === 'index'">
-            <!-- 行号 = 跨页偏移 + 渲染序（组合式 sequenceOf：组标记行不占号，分组/平铺两模式 1 基连续） -->
+            <!-- 行号 = 跨页偏移 + 渲染序（组合式 sequenceOf：组标记行不占号，分组/平铺两模式 1 基连续）。
+                 序号公式未换共享原语 IndexCell：面板用 IndexCell，页面因分组偏移保留 sequenceOf
+                 （组标记行混在同一 tbody，a-table 的 index 会把组头计入，与原公式不等价）。 -->
             <span class="c-idx">{{ (page - 1) * pageSize + sequenceOf(record) }}</span>
           </template>
           <template v-else-if="column.key === 'ip'">
@@ -218,27 +220,14 @@
           </template>
 
           <template v-else-if="column.key === 'status'">
-            <!-- 状态格两行封顶（mockup-parity r3-5：胶囊横排一行 + 检测时间一行，L5 .status-cell 解剖） -->
-            <div class="status-cell">
-              <div class="s-row">
-                <!-- 配置态徽章（管理开关，r5-③：设计 .pill-disabled = 空心虚线胶囊 + 无圆点 + 语义 title，
-                     与运行态徽章并排，两维度互不替代） -->
-                <BadgeStatus
-                  v-if="record.status === 0"
-                  text="已禁用"
-                  status="disabled"
-                  title="管理开关已禁用：不承载业务流量，仍可执行节点任务与状态查询"
-                />
-                <!-- 运行态三态徽章（batch2 1.2 / D1-D2）：运行中/已停止/未检测互斥，不假绿 -->
-                <BadgeStatus v-if="nginxState(record) === 'running'" text="运行中" status="online" />
-                <BadgeStatus v-else-if="nginxState(record) === 'stopped'" text="已停止" status="offline" />
-                <BadgeStatus v-else text="未检测" status="neutral" />
-              </div>
-              <!-- 检测时效（batch2 2.2 / D3）：无 last_execution 不渲染 -->
-              <span v-if="record.status_detail?.last_execution" class="exec-time"
-                >{{ formatRelativeTime(record.status_detail.last_execution) }}检测</span
-              >
-            </div>
+            <!-- 状态格 = 共享原语（B4a）：BadgeStatus 两行封顶（胶囊横排一行 + 检测时间一行），
+                 面板侧同一原语以 variant="panel" 渲染两枚 .ps-tag（差异只在 variant）。 -->
+            <NodeStatusCell
+              variant="page"
+              :enabled="record.status !== 0"
+              :runtime="nodeCellRuntime(record)"
+              :exec-text="nodeCellExecText(record)"
+            />
           </template>
 
           <template v-else-if="column.key === 'edge_version'">
@@ -499,6 +488,7 @@ import { showDangerConfirm } from '@/composables/useOverlayModal'
 import { PAGE_SIZE_TABLE, PAGE_SIZE_DROPDOWN } from '@/constants'
 import PageHeader from '@/components/PageHeader.vue'
 import BadgeStatus from '@/components/BadgeStatus.vue'
+import NodeStatusCell from '@/components/resource-cells/NodeStatusCell.vue'
 import NodeExecutionResultDrawer from '@/components/NodeExecutionResultDrawer.vue'
 import NodeFormModal from '@/components/NodeFormModal.vue'
 import NodeBatchImportModal from '@/components/NodeBatchImportModal.vue'
@@ -524,7 +514,13 @@ import ListPager from '@/components/ListPager.vue'
 import PageStatBadges from '@/components/PageStatBadges.vue'
 import { useFeaturesStore } from '@/stores/features'
 import { listNodes } from '@/api/nodes'
-import { nginxState, createCancelNodeInstallHandler, allNodeActionButtons } from '@/composables/useClusterNodes'
+import {
+  nginxState,
+  nodeCellRuntime,
+  nodeCellExecText,
+  createCancelNodeInstallHandler,
+  allNodeActionButtons,
+} from '@/composables/useClusterNodes'
 import { showNodeDeleteConfirm, executeDeleteWithProgress, showBatchStatusModal } from '@/composables/useClusterUtils'
 import {
   runClusterGroupedBatchAction,

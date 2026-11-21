@@ -206,6 +206,31 @@ describe('ClusterNodes.vue batch2 运行态三态徽章', () => {
     expect(cell.text()).toMatch(/5 分钟前检测/)
     wrapper.unmount()
   })
+
+  // ── B4a：序号列接入共享原语 IndexCell（跨页连续）──
+  it('序号列 = IndexCell：(page-1)*pageSize + 行号 + 1（面板第 2 页 21/22）', async () => {
+    const indexStubs = {
+      ...stubs,
+      ATable: {
+        template:
+          '<table><tbody><tr v-for="(r, i) in dataSource" :key="r.id"><td class="idx-cell"><slot name="bodyCell" :record="r" :column="{ key: \'index\' }" :index="i" /></td></tr></tbody></table>',
+        props: ['columns', 'dataSource', 'pagination', 'loading', 'rowKey', 'rowSelection', 'customRow'],
+      },
+    }
+    const ClusterNodes = (await import('../ClusterNodes.vue')).default
+    const cluster = {
+      ...fullCluster(),
+      nodes: [nodeWith(1, '10.0.0.1', {}), nodeWith(2, '10.0.0.2', {})],
+      nodesPagination: { total: 42, page: 2, pageSize: 20 },
+    }
+    const wrapper = mount(ClusterNodes, {
+      props: { cluster, clusters: [cluster], openPublishModal: async () => [] },
+      global: { stubs: indexStubs },
+    })
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findAll('.idx-cell .c-idx').map((el) => el.text())).toEqual(['21', '22'])
+    wrapper.unmount()
+  })
 })
 
 describe('ClusterNodes.vue batch2 刷新按钮（面板局部刷新）', () => {

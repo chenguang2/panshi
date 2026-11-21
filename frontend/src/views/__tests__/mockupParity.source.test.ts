@@ -138,13 +138,17 @@ describe('mockup-parity r3：细看轮锚点', () => {
       expect(page(f)).toContain('拖动表头右缘可调整列宽，拖动表头整格可调整列序')
     }
   })
-  it('r3-5 状态格两行解剖（status-cell/s-row/exec-time；node-status-cell 零残留）', () => {
+  it('r3-5 状态格两行解剖（表格状态列走共享原语 NodeStatusCell；详情弹窗仍 .status-cell/.s-row/.exec-time）', () => {
     const s = page('NodeList.vue')
+    // B4a：表格状态列改共享原语（variant="page"），两行解剖与胶囊类名在组件内单点
+    expect(s).toMatch(/<NodeStatusCell[\s\S]{0,240}variant="page"/)
+    // 详情弹窗内的同构状态格仍由页面持有（本批未接入原语，见 tasks 备注）
     expect(s).toMatch(/class="status-cell"/)
     expect(s).toMatch(/class="s-row"/)
     expect(s).toContain('class="exec-time"')
-    expect(s).not.toContain('node-status-cell')
-    expect(s).not.toContain('status-exec-time')
+    // 原语内部类名不得在页面手写（避免绕过原语另起一份解剖）
+    expect(s).not.toContain('class="node-status-cell"')
+    expect(s).not.toContain('class="status-exec-time"')
     // r5-③ 已撤销 r3-5 的 0 5px 收紧（状态列回 147px 后收紧前提消失，内距回设计值 0 8px）
     expect(css).not.toMatch(/\.table-container\.l5-card \.status-cell \.badge-status \{[^}]*padding: 0 5px/)
   })
@@ -269,23 +273,31 @@ describe('mockup-parity r5（parity-audit-nodes-r5 逐项批准后的锚点）',
     expect(badge).toMatch(/\.badge-disabled \{[^}]*border: 1px dashed/)
     expect(badge).toMatch(/v-if="status !== 'disabled'"/)
     expect(badge).toContain("status: 'online' | 'offline' | 'warning' | 'info' | 'neutral' | 'disabled'")
-    // 消费点：节点独立页行内 + 节点详情 2 处（统一管理最大化面板状态格已改为
-    // 两枚原生 .ps-tag 胶囊 —— 见 parity-max-status-pills 段的断言反转）
-    const rowConsumers: Array<[string, number]> = [['NodeList.vue', 2]]
+    // 消费点：节点独立页行内（B4a 起由共享原语 components/resource-cells/NodeStatusCell.vue 渲染）
+    // + 节点详情弹窗 1 处（统一管理最大化面板状态格已改为两枚原生 .ps-tag 胶囊
+    // —— 见 parity-max-status-pills 段的断言反转）
+    const rowConsumers: Array<[string, number]> = [['NodeList.vue', 1]]
     for (const [f, count] of rowConsumers) {
       const s = page(f)
       expect(s, f).toContain('status="disabled"')
       expect((s.match(/status="disabled"/g) || []).length, f).toBe(count)
       expect(s, f).not.toContain('text="已禁用" status="neutral"')
     }
+    // 行内状态格（页面形态）的「已禁用」空心虚线胶囊由原语负责
+    const pageCell = readFileSync(resolve(process.cwd(), 'src/components/resource-cells/NodeStatusCell.vue'), 'utf-8')
+    expect(pageCell).toContain('status="disabled"')
     // 最大化面板 Tab 状态格：BadgeStatus 退场，改 central.html 的两枚 .ps-tag
+    // （B4a 起该解剖由共享原语 components/resource-cells/NodeStatusCell.vue 承担）
     const tab = page('clusters/ClusterNodes.vue')
     expect(tab).not.toContain('status="disabled"')
     expect(tab).not.toContain('BadgeStatus')
-    expect(tab).toMatch(/class="ps-tag ps-unpub"[\s\S]{0,120}>已禁用</)
-    expect(tab).toMatch(/class="ps-tag ps-pub" title="管理开关：已启用">已启用</)
-    expect(tab).toMatch(/class="ps-tag ps-pub"[\s\S]{0,80}>在线</)
-    expect(tab).toMatch(/class="ps-tag ps-partial"[\s\S]{0,80}>离线</)
+    expect(tab).toContain('<NodeStatusCell')
+    expect(tab).toContain('variant="panel"')
+    const cell = readFileSync(resolve(process.cwd(), 'src/components/resource-cells/NodeStatusCell.vue'), 'utf-8')
+    expect(cell).toMatch(/class="ps-tag ps-unpub"[\s\S]{0,120}>已禁用</)
+    expect(cell).toMatch(/class="ps-tag ps-pub" title="管理开关：已启用">已启用</)
+    expect(cell).toMatch(/class="ps-tag ps-pub"[\s\S]{0,80}>在线</)
+    expect(cell).toMatch(/class="ps-tag ps-partial"[\s\S]{0,80}>离线</)
   })
   it('r5-④ 逐元素微差锚点：序号 mono 12px、路径值 muted、行内按钮 400、表头行盒 19px、页头 1.5 行高/2px 上距', () => {
     expect(css).toMatch(/\.table-container\.l5-card \.c-idx \{[^}]*font-family: var\(--font-mono\)/)

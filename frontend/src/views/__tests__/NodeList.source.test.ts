@@ -24,10 +24,16 @@ describe('节点表单状态控件（B2b-1：唯一实现在共享 NodeFormModal
   })
   it('表格状态列可见节点禁用态（已禁用徽章，与 nginx 运行态并存）', () => {
     const s = src()
-    // batch2 1.2/1.3 后状态列为 BadgeStatus 三态 + 并排配置态徽章（结构变长，放宽窗口到 1200）
-    const block = s.match(/column\.key === 'status'[\s\S]{0,1200}?<\/template>/)
-    expect(block, '需存在 status 列模板').toBeTruthy()
-    expect(block![0]).toMatch(/record\.status === 0[\s\S]{0,200}已禁用/)
+    // B4a：状态列接入共享原语 NodeStatusCell（variant="page"）——「已禁用」徽章与原语运行态
+    // 徽章并排，解剖单点在组件内（页面只管传 enabled/runtime/execText）
+    const block = s.match(/column\.key === 'status'[\s\S]{0,600}?\/>/)
+    expect(block, '需存在 status 列模板（共享原语）').toBeTruthy()
+    expect(block![0]).toContain('variant="page"')
+    expect(block![0]).toContain(':enabled="record.status !== 0"')
+    expect(block![0]).toContain(':runtime="nodeCellRuntime(record)"')
+    const cell = readFileSync(resolve(process.cwd(), 'src/components/resource-cells/NodeStatusCell.vue'), 'utf-8')
+    expect(cell, '「已禁用」徽章（管理开关）须与运行态徽章并存').toMatch(/v-if="!enabled"[\s\S]{0,200}已禁用/)
+    expect(cell).toContain('text="已停止"')
   })
 })
 
