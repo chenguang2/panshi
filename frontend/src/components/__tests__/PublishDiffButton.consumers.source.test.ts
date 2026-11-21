@@ -15,7 +15,6 @@ const ROOT = resolve(__dirname, '../../..')
 const ENTRY_FILES = [
   'src/views/UpstreamList.vue',
   'src/views/RouteList.vue',
-  'src/views/clusters/ClusterRoutes.vue',
   'src/views/PluginConfigList.vue',
   'src/views/GlobalRuleList.vue',
   'src/views/PluginMetadataList.vue',
