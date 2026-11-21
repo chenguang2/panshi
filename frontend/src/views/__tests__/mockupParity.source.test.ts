@@ -286,18 +286,19 @@ describe('mockup-parity r5（parity-audit-nodes-r5 逐项批准后的锚点）',
     // 行内状态格（页面形态）的「已禁用」空心虚线胶囊由原语负责
     const pageCell = readFileSync(resolve(process.cwd(), 'src/components/resource-cells/NodeStatusCell.vue'), 'utf-8')
     expect(pageCell).toContain('status="disabled"')
-    // 最大化面板 Tab 状态格：BadgeStatus 退场，改 central.html 的两枚 .ps-tag
-    // （B4a 起该解剖由共享原语 components/resource-cells/NodeStatusCell.vue 承担）
+    // 最大化面板 Tab 状态格：2026-11-21 用户裁决与节点独立页统一为 BadgeStatus 形态
+    // （解剖由共享原语 components/resource-cells/NodeStatusCell.vue 承担，variant="page"）
     const tab = page('clusters/ClusterNodes.vue')
-    expect(tab).not.toContain('status="disabled"')
-    expect(tab).not.toContain('BadgeStatus')
     expect(tab).toContain('<NodeStatusCell')
-    expect(tab).toContain('variant="panel"')
+    expect(tab).toContain('variant="page"')
     const cell = readFileSync(resolve(process.cwd(), 'src/components/resource-cells/NodeStatusCell.vue'), 'utf-8')
-    expect(cell).toMatch(/class="ps-tag ps-unpub"[\s\S]{0,120}>已禁用</)
-    expect(cell).toMatch(/class="ps-tag ps-pub" title="管理开关：已启用">已启用</)
-    expect(cell).toMatch(/class="ps-tag ps-pub"[\s\S]{0,80}>在线</)
-    expect(cell).toMatch(/class="ps-tag ps-partial"[\s\S]{0,80}>离线</)
+    expect(cell).toContain('status="disabled"')
+    expect(cell).toContain('运行中')
+    expect(cell).toContain('已停止')
+    // 设计页 central.html 节点状态格同步为 .pill 形态（#298：实现有意变化必须回填设计页）
+    const design = readFileSync(resolve(process.cwd(), '../docs/ui/Live-Artifact-5/proposal-c/central.html'), 'utf-8')
+    expect(design).toContain('pill pill-run')
+    expect(design).toMatch(/pill pill-stop[\s\S]{0,40}已停止/)
   })
   it('r5-④ 逐元素微差锚点：序号 mono 12px、路径值 muted、行内按钮 400、表头行盒 19px、页头 1.5 行高/2px 上距', () => {
     expect(css).toMatch(/\.table-container\.l5-card \.c-idx \{[^}]*font-family: var\(--font-mono\)/)

@@ -155,7 +155,9 @@ describe('ClusterNodes.vue batch2 运行态三态徽章', () => {
     return wrapper
   }
 
-  it('状态格恒显两枚胶囊：管理开关「已启用」+ 运行态三态「在线/离线/未检测」', async () => {
+  // 2026-11-21 用户裁决：面板状态格与节点独立页统一为 BadgeStatus 形态（圆点实底 +
+  // 「已禁用」仅在禁用时出现的虚线胶囊），文案 运行中/已停止/未检测（#217 断言反转）
+  it('状态格为 BadgeStatus 形态：启用行只显运行态「运行中/已停止/未检测」', async () => {
     const wrapper = await mountTabWithNodes([
       nodeWith(1, '10.0.0.1', { nginx: { nginx_running: true } }),
       nodeWith(2, '10.0.0.2', { nginx: { nginx_running: false } }),
@@ -163,36 +165,30 @@ describe('ClusterNodes.vue batch2 运行态三态徽章', () => {
     ])
     const cells = wrapper
       .findAll('.node-status-cell')
-      .map((c) => c.findAll('.ps-tag').map((t) => ({ text: t.text(), cls: t.classes() })))
-    // 每行恒两枚（central.html 状态格）：① 管理开关态 ② 运行态
+      .map((c) => c.findAll('.badge-status').map((t) => ({ text: t.text(), cls: t.classes() })))
     expect(cells).toHaveLength(3)
-    cells.forEach((pills) => expect(pills).toHaveLength(2))
-    expect(cells[0][0].text).toBe('已启用')
-    expect(cells[0][0].cls).toContain('ps-pub')
-    expect(cells[0][1].text).toBe('在线')
-    expect(cells[0][1].cls).toContain('ps-pub')
-    expect(cells[1][1].text).toBe('离线')
-    expect(cells[1][1].cls).toContain('ps-partial')
-    // 未检测不假绿（既不是在线也不沿用管理开关的绿）
-    expect(cells[2][1].text).toBe('未检测')
-    expect(cells[2][1].cls).toContain('ps-unpub')
-    expect(cells[2][1].cls).not.toContain('ps-pub')
-    // 面板状态格已退出 BadgeStatus（改原生胶囊）
-    expect(wrapper.findAll('.badge-status')).toHaveLength(0)
+    // 启用行只有一枚运行态徽章（不再有恒显的「已启用」胶囊）
+    cells.forEach((badges) => expect(badges).toHaveLength(1))
+    expect(cells[0][0].text).toBe('运行中')
+    expect(cells[0][0].cls).toContain('badge-online')
+    expect(cells[1][0].text).toBe('已停止')
+    expect(cells[1][0].cls).toContain('badge-offline')
+    expect(cells[2][0].text).toBe('未检测')
+    expect(cells[2][0].cls).toContain('badge-neutral')
+    // 面板内不再出现两枚原生 ps-tag 胶囊
+    expect(wrapper.findAll('.node-status-cell .ps-tag')).toHaveLength(0)
     wrapper.unmount()
   })
 
-  it('禁用节点：管理开关胶囊「已禁用」（ps-unpub）与运行态胶囊并排', async () => {
+  it('禁用节点：虚线「已禁用」徽章 + 运行态徽章并排（管理开关维度不被吞）', async () => {
     const wrapper = await mountTabWithNodes([nodeWith(1, '10.0.0.1', { nginx: { nginx_running: false } }, 0)])
-    const pills = wrapper.findAll('.node-status-cell .ps-tag')
-    expect(pills).toHaveLength(2)
-    const disabled = pills.find((p) => p.text() === '已禁用')
+    const badges = wrapper.findAll('.node-status-cell .badge-status')
+    expect(badges).toHaveLength(2)
+    const disabled = badges.find((p) => p.text() === '已禁用')
     expect(disabled).toBeDefined()
-    expect(disabled!.classes()).toContain('ps-unpub')
-    expect(disabled!.classes()).not.toContain('ps-pub')
+    expect(disabled!.classes()).toContain('badge-disabled')
     expect(disabled!.attributes('title')).toContain('管理开关已禁用')
-    // 运行态独立判定：禁用节点仍如实显示运行态
-    expect(pills[1].text()).toBe('离线')
+    expect(badges[1].text()).toBe('已停止')
     wrapper.unmount()
   })
 

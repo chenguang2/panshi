@@ -99,10 +99,11 @@ describe('ClusterNodes 最大化面板 Tab 解剖守卫（parity 批 A）', () =
     expect(s).not.toContain('((pag?.page || 1) - 1) * (pag?.pageSize || 20) + index + 1')
   })
 
-  it('状态格 = 共享原语 NodeStatusCell variant="panel"（内联两枚胶囊已移交）', () => {
+  // 2026-11-21 用户裁决：面板与节点页统一为 BadgeStatus 形态（variant="page"）
+  it('状态格 = 共享原语 NodeStatusCell variant="page"（内联胶囊已移交）', () => {
     const s = src()
     expect(s).toContain('<NodeStatusCell')
-    expect(s).toContain('variant="panel"')
+    expect(s).toContain('variant="page"')
     expect(s).toContain(':enabled="record.status !== 0"')
     expect(s).toContain(':runtime="nodeCellRuntime(record)"')
     expect(s).toContain(':exec-text="nodeCellExecText(record)"')
@@ -110,7 +111,9 @@ describe('ClusterNodes 最大化面板 Tab 解剖守卫（parity 批 A）', () =
     expect(s).not.toContain('class="ps-tag ps-pub"')
     expect(s).not.toContain('class="ps-tag ps-unpub"')
     expect(s).not.toContain('class="ps-tag ps-partial"')
-    expect(s).not.toContain('BadgeStatus')
+    // 不直接 import/渲染 BadgeStatus（由原语 NodeStatusCell 内部承担）
+    expect(s).not.toMatch(/import BadgeStatus/)
+    expect(s).not.toMatch(/<BadgeStatus/)
   })
 
   it('分页改表外 ListPager（a-table :pagination="false"），单位「个节点」', () => {

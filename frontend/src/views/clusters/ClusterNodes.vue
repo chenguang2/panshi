@@ -174,11 +174,11 @@
           {{ record.status_detail?.statistic?.edge_version || '-' }}
         </template>
         <template v-if="column.key === 'status'">
-          <!-- 状态格 = 共享原语（B4a）：两枚无圆点胶囊（管理开关态 + 运行态）+ 检测时效。
-               面板设计 central.html 双枚并列，与节点独立页 nodes.html 的单枚徽章形态刻意不同，
-               差异只由 variant 表达（components/resource-cells/NodeStatusCell.vue）。 -->
+          <!-- 状态格 = 共享原语（B4a）。2026-11-21 用户裁决：面板与节点独立页统一为
+               BadgeStatus 形态（圆点实底 + 「已禁用」仅在禁用时出现的虚线胶囊），
+               文案随之为 运行中/已停止/未检测；central.html 已同步为 .pill 形态。 -->
           <NodeStatusCell
-            variant="panel"
+            variant="page"
             :enabled="record.status !== 0"
             :runtime="nodeCellRuntime(record)"
             :exec-text="nodeCellExecText(record)"
