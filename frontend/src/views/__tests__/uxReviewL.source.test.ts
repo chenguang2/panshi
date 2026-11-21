@@ -59,10 +59,12 @@ describe('L6 高频操作提频露出', () => {
 })
 
 describe('L7 集群卡片按钮主次', () => {
-  it('详情为次级强调按钮（btn-secondary），其余保持 ghost', () => {
+  // 2026-11-21 用户裁决：卡片页最下一排按钮统一带边框（原「仅详情 secondary、其余 ghost」反转）
+  it('卡片脚动作按钮统一为次级描边按钮（btn-secondary）', () => {
     const s = src('views', 'ClusterList.vue')
     expect(s).toMatch(/<button class="btn btn-secondary btn-sm cl-action-btn" @click="viewCluster\(c\)">详情<\/button>/)
-    expect(s).toMatch(/<button class="btn btn-ghost btn-sm cl-action-btn" @click="testCluster\(c\)">连接测试/)
+    expect(s).toMatch(/<button class="btn btn-secondary btn-sm cl-action-btn" @click="testCluster\(c\)">连接测试/)
+    expect(s).not.toMatch(/btn-ghost btn-sm cl-action-btn/)
   })
 })
 

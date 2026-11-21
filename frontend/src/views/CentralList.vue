@@ -125,11 +125,11 @@
               </template>
               <template #actions>
                 <button class="btn btn-secondary btn-sm" @click.stop="viewClusterDetail(cluster)">详情</button>
-                <button class="btn btn-ghost btn-sm" @click.stop="testCluster(cluster)">连接测试</button>
-                <button class="btn btn-ghost btn-sm" @click.stop="openDrift(cluster)">漂移检测</button>
-                <button class="btn btn-ghost btn-sm" @click.stop="editCluster(cluster)">编辑</button>
+                <button class="btn btn-secondary btn-sm" @click.stop="testCluster(cluster)">连接测试</button>
+                <button class="btn btn-secondary btn-sm" @click.stop="openDrift(cluster)">漂移检测</button>
+                <button class="btn btn-secondary btn-sm" @click.stop="editCluster(cluster)">编辑</button>
                 <a-dropdown :trigger="['click']">
-                  <button class="btn btn-ghost btn-sm" @click.stop>更多 ▾</button>
+                  <button class="btn btn-secondary btn-sm" @click.stop>更多 ▾</button>
                   <template #overlay>
                     <a-menu @click="onCardMenuClick($event, cluster)">
                       <a-menu-item key="backup">备份下载</a-menu-item>
@@ -137,7 +137,11 @@
                     </a-menu>
                   </template>
                 </a-dropdown>
-                <button class="btn btn-ghost btn-sm" style="color: var(--danger)" @click.stop="deleteCluster(cluster)">
+                <button
+                  class="btn btn-secondary btn-sm"
+                  style="color: var(--danger)"
+                  @click.stop="deleteCluster(cluster)"
+                >
                   删除
                 </button>
               </template>

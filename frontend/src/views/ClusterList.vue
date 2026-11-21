@@ -117,11 +117,11 @@
             <ClusterCard :cluster="c" :route-badge="routeBadge(c)" @test="testCluster(c)">
               <template #actions>
                 <button class="btn btn-secondary btn-sm cl-action-btn" @click="viewCluster(c)">详情</button>
-                <button class="btn btn-ghost btn-sm cl-action-btn" @click="testCluster(c)">连接测试</button>
-                <button class="btn btn-ghost btn-sm cl-action-btn" @click="openDrift(c)">漂移检测</button>
-                <button class="btn btn-ghost btn-sm cl-action-btn" @click="editCluster(c)">编辑</button>
+                <button class="btn btn-secondary btn-sm cl-action-btn" @click="testCluster(c)">连接测试</button>
+                <button class="btn btn-secondary btn-sm cl-action-btn" @click="openDrift(c)">漂移检测</button>
+                <button class="btn btn-secondary btn-sm cl-action-btn" @click="editCluster(c)">编辑</button>
                 <a-dropdown :trigger="['click']">
-                  <button class="btn btn-ghost btn-sm cl-action-btn" type="button">更多 ▾</button>
+                  <button class="btn btn-secondary btn-sm cl-action-btn" type="button">更多 ▾</button>
                   <template #overlay>
                     <a-menu @click="onCardMenuClick($event, c)">
                       <a-menu-item key="backup">备份下载</a-menu-item>
@@ -130,7 +130,7 @@
                   </template>
                 </a-dropdown>
                 <button
-                  class="btn btn-ghost btn-sm cl-action-btn"
+                  class="btn btn-secondary btn-sm cl-action-btn"
                   style="color: var(--danger)"
                   @click="deleteCluster(c)"
                 >
