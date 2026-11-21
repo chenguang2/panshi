@@ -46,9 +46,8 @@
 .dt .db { font-size: 11px; font-family: var(--font-mono); padding: 1px 6px; border-radius: 8px; background: var(--surface); border: 1px solid var(--border); color: var(--muted); }
 .dt.active .db { background: var(--accent-bg); color: var(--accent); border-color: oklch(56% 0.16 210 / 30%); }
 .dbody { padding: 14px 16px 16px; background: var(--bg); }
-.tab-toolbar { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
-.tab-toolbar .divider { width: 1px; height: 20px; background: var(--border); margin: 0 6px; }
-.tab-toolbar .spacer { flex: 1; }
+/* Tab 内容解剖一律走共享类：工具条 .l5-toolbar / 状态 .l5-chiprow / 批量 .l5-batchbar /
+   表格 .l5-table / 卡片 .card-grid + .l5-panel / 容器 .tab-card（theme.css 单点） */
 .table-note { font-size: 11.5px; color: var(--muted); margin-top: 10px; }
 .table-note b { color: var(--fg); }
 .page-header h1 { font-size: 21px; }
@@ -279,350 +278,548 @@
       <!-- ── Tab 1 · 集群节点（scoped 形态：单集群 / 恒平铺 / 无页头，页面级动作收敛到工具条左侧；
            解剖与节点管理独立页同构，差异仅在「无分组下拉 / 无集群筛选 / 无分组|平铺 / 无分组带 / 无集群列」） ── -->
       <div class="dbody tab-body" data-body="nodes">
-        <div class="l5-toolbar nowrap" style="gap:6px;">
-          <button class="btn btn-primary btn-sm"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>添加节点</button>
-          <button class="btn btn-secondary btn-sm"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 9l5-5 5 5"/><path d="M12 4v10"/></svg>批量导入</button>
-          <div class="l5-search"><input type="text" style="width:150px" placeholder="搜索 IP..."><svg class="s-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>
-          <span class="t-spacer"></span>
-          <button class="tool-btn" title="重新拉取列表"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 11-2.64-6.36"/><path d="M21 3v6h-6"/></svg>刷新</button>
-          <div class="pop-anchor">
-            <button class="btn btn-secondary btn-sm" data-pop="popColN"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>列配置 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button>
-            <div class="l5-popover" id="popColN">
-              <div class="pop-title">选择显示列 <span class="pop-note">序号列恒展示，不参与勾选</span></div>
-              <div class="l5-pop-label">显示字段</div>
-              <div class="l5-checks">
-                <label class="l5-check"><input type="checkbox" checked>IP</label>
-                <label class="l5-check"><input type="checkbox" checked>服务端口</label>
-                <label class="l5-check"><input type="checkbox" checked>管理端口</label>
-                <label class="l5-check"><input type="checkbox" checked>Edge 安装路径</label>
-                <label class="l5-check"><input type="checkbox" checked>OpenResty 安装路径</label>
-                <label class="l5-check"><input type="checkbox" checked>状态</label>
-                <label class="l5-check"><input type="checkbox" checked>Edge 版本</label>
-                <label class="l5-check"><input type="checkbox" checked>操作</label>
+        <div class="tab-card">
+          <div class="l5-toolbar nowrap" style="gap:6px;">
+            <button class="btn btn-primary btn-sm"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>添加节点</button>
+            <button class="btn btn-secondary btn-sm"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 9l5-5 5 5"/><path d="M12 4v10"/></svg>批量导入</button>
+            <div class="l5-search"><input type="text" style="width:150px" placeholder="搜索 IP..."><svg class="s-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>
+            <span class="t-spacer"></span>
+            <button class="tool-btn" title="重新拉取列表"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 11-2.64-6.36"/><path d="M21 3v6h-6"/></svg>刷新</button>
+            <div class="pop-anchor">
+              <button class="btn btn-secondary btn-sm" data-pop="popColN"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>列配置 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button>
+              <div class="l5-popover" id="popColN">
+                <div class="pop-title">选择显示列 <span class="pop-note">序号列恒展示，不参与勾选</span></div>
+                <div class="l5-pop-label">显示字段</div>
+                <div class="l5-checks">
+                  <label class="l5-check"><input type="checkbox" checked>IP</label>
+                  <label class="l5-check"><input type="checkbox" checked>服务端口</label>
+                  <label class="l5-check"><input type="checkbox" checked>管理端口</label>
+                  <label class="l5-check"><input type="checkbox" checked>Edge 安装路径</label>
+                  <label class="l5-check"><input type="checkbox" checked>OpenResty 安装路径</label>
+                  <label class="l5-check"><input type="checkbox" checked>状态</label>
+                  <label class="l5-check"><input type="checkbox" checked>Edge 版本</label>
+                  <label class="l5-check"><input type="checkbox" checked>操作</label>
+                </div>
+                <hr class="pop-sep">
+                <div class="l5-pop-label">操作按钮</div>
+                <div class="l5-checks">
+                  <label class="l5-check"><input type="checkbox" checked>启动</label>
+                  <label class="l5-check"><input type="checkbox" checked>停止</label>
+                  <label class="l5-check"><input type="checkbox" checked>状态查询</label>
+                </div>
+                <hr class="pop-sep">
+                <div class="l5-pop-label">搜索</div>
+                <div class="l5-checks"><label class="l5-check"><input type="checkbox" checked>显示搜索框</label></div>
+                <div class="pop-hint"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="18 8 22 12 18 16"/><polyline points="6 8 2 12 6 16"/><line x1="2" y1="12" x2="22" y2="12"/></svg><span>拖动表头右缘可调整列宽，拖动表头整格可调整列序</span></div>
+                <div class="pop-foot"><button class="btn btn-primary btn-sm">重置列宽</button></div>
               </div>
-              <hr class="pop-sep">
-              <div class="l5-pop-label">操作按钮</div>
-              <div class="l5-checks">
-                <label class="l5-check"><input type="checkbox" checked>启动</label>
-                <label class="l5-check"><input type="checkbox" checked>停止</label>
-                <label class="l5-check"><input type="checkbox" checked>状态查询</label>
-              </div>
-              <hr class="pop-sep">
-              <div class="l5-pop-label">搜索</div>
-              <div class="l5-checks"><label class="l5-check"><input type="checkbox" checked>显示搜索框</label></div>
-              <div class="pop-hint"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="18 8 22 12 18 16"/><polyline points="6 8 2 12 6 16"/><line x1="2" y1="12" x2="22" y2="12"/></svg><span>拖动表头右缘可调整列宽，拖动表头整格可调整列序</span></div>
-              <div class="pop-foot"><button class="btn btn-primary btn-sm">重置列宽</button></div>
             </div>
           </div>
-        </div>
-        <div class="l5-chiprow"><span class="chiprow-label">状态</span><div class="f-chips"><span class="f-chip chip-status active">全部<span class="f-count">3</span></span><span class="f-chip chip-status">运行中<span class="f-count">1</span></span><span class="f-chip chip-status">已停止<span class="f-count">1</span></span><span class="f-chip chip-status">未检测<span class="f-count">1</span></span><span class="f-chip chip-status empty">已禁用<span class="f-count">0</span></span></div><span class="t-spacer"></span></div>
-        <div class="l5-batchbar has-sel">
-          <span class="b-count">已选 2 项</span>
-          <span class="b-sep"></span>
-          <button class="btn btn-ghost btn-sm need-sel"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg> 批量启动</button>
-          <button class="btn btn-ghost btn-sm need-sel"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg> 批量停止</button>
-          <button class="btn btn-ghost btn-sm need-sel"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 11-2.64-6.36"/><path d="M21 3v6h-6"/></svg> 批量重载</button>
-          <button class="btn btn-ghost btn-sm need-sel"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> 批量状态查询</button>
-          <span class="b-sep"></span>
-          <button class="btn btn-danger btn-sm need-sel"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg> 批量删除(2)</button>
-          <span class="b-spacer"></span>
-          <button class="btn btn-secondary btn-sm">清除选择</button>
-        </div>
-        <div class="l5-table-wrap">
-          <table class="l5-table" style="min-width:1086px">
-            <colgroup><col style="width:34px"><col style="width:40px"><col style="width:124px"><col style="width:68px"><col style="width:68px"><col style="width:314px"><col style="width:122px"><col style="width:72px"><col style="width:248px"></colgroup>
-            <thead><tr><th class="cbx c-c"><input type="checkbox" id="selAll"></th><th class="c-c">#</th><th class="resizable sortable">IP</th><th class="resizable sortable">服务端口</th><th class="resizable sortable">管理端口</th><th class="resizable sortable">安装路径</th><th class="resizable sortable">状态</th><th class="resizable">Edge 版本</th><th class="resizable">操作</th></tr></thead>
-            <tbody>
-              <tr class="row-selected"><td class="cbx c-c"><input type="checkbox" class="row-cb" checked></td><td class="c-c"><span class="c-idx">1</span></td><td class="nw"><span class="c-mono c-strong">192.168.1.11</span></td><td class="nw"><span class="c-mono">8080</span></td><td class="nw"><span class="c-mono">9180</span></td><td><div class="path-stack"><div class="path-line"><span class="path-k">Edge</span><span class="c-mono c-dim" title="/opt/edge">/opt/edge</span></div><div class="path-line"><span class="path-k">OR</span><span class="c-mono c-dim" title="/usr/local/openresty/nginx">/usr/local/openresty/nginx</span></div></div></td><td class="nw"><div class="status-cell"><span class="s-row"><span class="pill pill-run"><span class="dot"></span>运行中</span></span><span class="exec-time">12 小时前检测</span></div></td><td class="nw"><span class="c-mono">v1.2.0</span></td><td class="ops-cell"><div class="ops"><button class="op-btn" title="启动"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg>启动</button><button class="op-btn" title="停止"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>停止</button><button class="op-btn" title="状态查询"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>状态</button><span class="v-sep"></span><button class="op-btn" title="重载 nginx"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 11-2.64-6.36"/><path d="M21 3v6h-6"/></svg>重载</button><div class="menu-anchor"><button class="op-btn" title="更多操作" style="padding:0 6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">详情</span></button><button class="mi"><span class="mi-main">编辑</span></button><button class="mi"><span class="mi-main">复制</span></button><button class="mi"><span class="mi-main">数据库对比</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 已发布配置（弹窗可选）</span></button><hr class="menu-sep"><button class="mi"><span class="mi-main">安装 OpenResty</span><span class="mi-sub">选择安装包在节点上安装 OpenResty</span></button><button class="mi"><span class="mi-main">安装 Edge</span><span class="mi-sub">在节点 edge_path 部署 Edge 程序</span></button><button class="mi"><span class="mi-main">关联新 OpenResty</span><span class="mi-sub">把本机 Edge 切换关联到新装的 OpenResty</span></button><button class="mi"><span class="mi-main">升级 Edge 小版本</span><span class="mi-sub">版本包管理与 Edge 小版本升级</span></button></div></div></div></td></tr>
-              <tr class="row-selected"><td class="cbx c-c"><input type="checkbox" class="row-cb" checked></td><td class="c-c"><span class="c-idx">2</span></td><td class="nw"><span class="c-mono c-strong">192.168.1.12</span></td><td class="nw"><span class="c-mono">8080</span></td><td class="nw"><span class="c-mono">9180</span></td><td><div class="path-stack"><div class="path-line"><span class="path-k">Edge</span><span class="c-mono c-dim" title="/opt/edge">/opt/edge</span></div><div class="path-line"><span class="path-k">OR</span><span class="c-mono c-dim" title="/usr/local/openresty/nginx">/usr/local/openresty/nginx</span></div></div></td><td class="nw"><div class="status-cell"><span class="s-row"><span class="pill pill-stop"><span class="dot"></span>已停止</span></span><span class="exec-time">12 小时前检测</span></div></td><td class="nw"><span class="c-mono">v1.2.0</span></td><td class="ops-cell"><div class="ops"><button class="op-btn" title="启动"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg>启动</button><button class="op-btn" title="停止"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>停止</button><button class="op-btn" title="状态查询"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>状态</button><span class="v-sep"></span><button class="op-btn" title="重载 nginx"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 11-2.64-6.36"/><path d="M21 3v6h-6"/></svg>重载</button><div class="menu-anchor"><button class="op-btn" title="更多操作" style="padding:0 6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">详情</span></button><button class="mi"><span class="mi-main">编辑</span></button><button class="mi"><span class="mi-main">复制</span></button><button class="mi"><span class="mi-main">数据库对比</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 已发布配置（弹窗可选）</span></button><hr class="menu-sep"><button class="mi"><span class="mi-main">安装 OpenResty</span><span class="mi-sub">选择安装包在节点上安装 OpenResty</span></button><button class="mi"><span class="mi-main">安装 Edge</span><span class="mi-sub">在节点 edge_path 部署 Edge 程序</span></button><button class="mi"><span class="mi-main">关联新 OpenResty</span><span class="mi-sub">把本机 Edge 切换关联到新装的 OpenResty</span></button><button class="mi"><span class="mi-main">升级 Edge 小版本</span><span class="mi-sub">版本包管理与 Edge 小版本升级</span></button></div></div></div></td></tr>
-              <tr><td class="cbx c-c"><input type="checkbox" class="row-cb"></td><td class="c-c"><span class="c-idx">3</span></td><td class="nw"><span class="c-mono c-strong">192.168.1.13</span></td><td class="nw"><span class="c-mono">8080</span></td><td class="nw"><span class="c-mono">9180</span></td><td><div class="path-stack"><div class="path-line"><span class="path-k">Edge</span><span class="c-mono c-dim" title="/opt/edge">/opt/edge</span></div><div class="path-line"><span class="path-k">OR</span><span class="c-mono c-dim" title="/usr/local/openresty/nginx">/usr/local/openresty/nginx</span></div></div></td><td class="nw"><div class="status-cell"><span class="s-row"><span class="pill pill-unknown"><span class="dot"></span>未检测</span></span></div></td><td class="nw"><span class="c-mono c-dim">—</span></td><td class="ops-cell"><div class="ops"><button class="op-btn" title="启动"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg>启动</button><button class="op-btn" title="停止"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>停止</button><button class="op-btn" title="状态查询"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>状态</button><span class="v-sep"></span><button class="op-btn" title="重载 nginx"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 11-2.64-6.36"/><path d="M21 3v6h-6"/></svg>重载</button><div class="menu-anchor"><button class="op-btn" title="更多操作" style="padding:0 6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">详情</span></button><button class="mi"><span class="mi-main">编辑</span></button><button class="mi"><span class="mi-main">复制</span></button><button class="mi"><span class="mi-main">数据库对比</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 已发布配置（弹窗可选）</span></button><hr class="menu-sep"><button class="mi"><span class="mi-main">安装 OpenResty</span><span class="mi-sub">选择安装包在节点上安装 OpenResty</span></button><button class="mi"><span class="mi-main">安装 Edge</span><span class="mi-sub">在节点 edge_path 部署 Edge 程序</span></button><button class="mi"><span class="mi-main">关联新 OpenResty</span><span class="mi-sub">把本机 Edge 切换关联到新装的 OpenResty</span></button><button class="mi"><span class="mi-main">升级 Edge 小版本</span><span class="mi-sub">版本包管理与 Edge 小版本升级</span></button></div></div></div></td></tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="l5-pager">
-          <span class="p-info">共 <b>3</b> 个节点 · 每页 <select class="pager-select"><option>10 条</option><option selected>20 条</option><option>50 条</option><option>100 条</option></select></span>
-          <span class="p-nav"><button class="p-btn" disabled><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 6 9 12 15 18"/></svg></button><button class="p-btn active">1</button><button class="p-btn" disabled><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg></button><span class="p-jump">跳至 <input value="1"> 页</span></span>
+          <div class="l5-chiprow"><span class="chiprow-label">状态</span><div class="f-chips"><span class="f-chip chip-status active">全部<span class="f-count">3</span></span><span class="f-chip chip-status">运行中<span class="f-count">1</span></span><span class="f-chip chip-status">已停止<span class="f-count">1</span></span><span class="f-chip chip-status">未检测<span class="f-count">1</span></span><span class="f-chip chip-status empty">已禁用<span class="f-count">0</span></span></div><span class="t-spacer"></span></div>
+          <div class="l5-batchbar has-sel">
+            <span class="b-count">已选 2 项</span>
+            <span class="b-sep"></span>
+            <button class="btn btn-ghost btn-sm need-sel"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg> 批量启动</button>
+            <button class="btn btn-ghost btn-sm need-sel"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg> 批量停止</button>
+            <button class="btn btn-ghost btn-sm need-sel"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 11-2.64-6.36"/><path d="M21 3v6h-6"/></svg> 批量重载</button>
+            <button class="btn btn-ghost btn-sm need-sel"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> 批量状态查询</button>
+            <span class="b-sep"></span>
+            <button class="btn btn-danger btn-sm need-sel"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg> 批量删除(2)</button>
+            <span class="b-spacer"></span>
+            <button class="btn btn-secondary btn-sm">清除选择</button>
+          </div>
+          <div class="l5-table-wrap">
+            <table class="l5-table" style="min-width:1086px">
+              <colgroup><col style="width:34px"><col style="width:40px"><col style="width:124px"><col style="width:68px"><col style="width:68px"><col style="width:314px"><col style="width:122px"><col style="width:72px"><col style="width:248px"></colgroup>
+              <thead><tr><th class="cbx c-c"><input type="checkbox" id="selAll"></th><th class="c-c">#</th><th class="resizable sortable">IP</th><th class="resizable sortable">服务端口</th><th class="resizable sortable">管理端口</th><th class="resizable sortable">安装路径</th><th class="resizable sortable">状态</th><th class="resizable">Edge 版本</th><th class="resizable">操作</th></tr></thead>
+              <tbody>
+                <tr class="row-selected"><td class="cbx c-c"><input type="checkbox" class="row-cb" checked></td><td class="c-c"><span class="c-idx">1</span></td><td class="nw"><span class="c-mono c-strong">192.168.1.11</span></td><td class="nw"><span class="c-mono">8080</span></td><td class="nw"><span class="c-mono">9180</span></td><td><div class="path-stack"><div class="path-line"><span class="path-k">Edge</span><span class="c-mono c-dim" title="/opt/edge">/opt/edge</span></div><div class="path-line"><span class="path-k">OR</span><span class="c-mono c-dim" title="/usr/local/openresty/nginx">/usr/local/openresty/nginx</span></div></div></td><td class="nw"><div class="status-cell"><span class="s-row"><span class="pill pill-run"><span class="dot"></span>运行中</span></span><span class="exec-time">12 小时前检测</span></div></td><td class="nw"><span class="c-mono">v1.2.0</span></td><td class="ops-cell"><div class="ops"><button class="op-btn" title="启动"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg>启动</button><button class="op-btn" title="停止"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>停止</button><button class="op-btn" title="状态查询"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>状态</button><span class="v-sep"></span><button class="op-btn" title="重载 nginx"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 11-2.64-6.36"/><path d="M21 3v6h-6"/></svg>重载</button><div class="menu-anchor"><button class="op-btn" title="更多操作" style="padding:0 6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">详情</span></button><button class="mi"><span class="mi-main">编辑</span></button><button class="mi"><span class="mi-main">复制</span></button><button class="mi"><span class="mi-main">数据库对比</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 已发布配置（弹窗可选）</span></button><hr class="menu-sep"><button class="mi"><span class="mi-main">安装 OpenResty</span><span class="mi-sub">选择安装包在节点上安装 OpenResty</span></button><button class="mi"><span class="mi-main">安装 Edge</span><span class="mi-sub">在节点 edge_path 部署 Edge 程序</span></button><button class="mi"><span class="mi-main">关联新 OpenResty</span><span class="mi-sub">把本机 Edge 切换关联到新装的 OpenResty</span></button><button class="mi"><span class="mi-main">升级 Edge 小版本</span><span class="mi-sub">版本包管理与 Edge 小版本升级</span></button></div></div></div></td></tr>
+                <tr class="row-selected"><td class="cbx c-c"><input type="checkbox" class="row-cb" checked></td><td class="c-c"><span class="c-idx">2</span></td><td class="nw"><span class="c-mono c-strong">192.168.1.12</span></td><td class="nw"><span class="c-mono">8080</span></td><td class="nw"><span class="c-mono">9180</span></td><td><div class="path-stack"><div class="path-line"><span class="path-k">Edge</span><span class="c-mono c-dim" title="/opt/edge">/opt/edge</span></div><div class="path-line"><span class="path-k">OR</span><span class="c-mono c-dim" title="/usr/local/openresty/nginx">/usr/local/openresty/nginx</span></div></div></td><td class="nw"><div class="status-cell"><span class="s-row"><span class="pill pill-stop"><span class="dot"></span>已停止</span></span><span class="exec-time">12 小时前检测</span></div></td><td class="nw"><span class="c-mono">v1.2.0</span></td><td class="ops-cell"><div class="ops"><button class="op-btn" title="启动"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg>启动</button><button class="op-btn" title="停止"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>停止</button><button class="op-btn" title="状态查询"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>状态</button><span class="v-sep"></span><button class="op-btn" title="重载 nginx"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 11-2.64-6.36"/><path d="M21 3v6h-6"/></svg>重载</button><div class="menu-anchor"><button class="op-btn" title="更多操作" style="padding:0 6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">详情</span></button><button class="mi"><span class="mi-main">编辑</span></button><button class="mi"><span class="mi-main">复制</span></button><button class="mi"><span class="mi-main">数据库对比</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 已发布配置（弹窗可选）</span></button><hr class="menu-sep"><button class="mi"><span class="mi-main">安装 OpenResty</span><span class="mi-sub">选择安装包在节点上安装 OpenResty</span></button><button class="mi"><span class="mi-main">安装 Edge</span><span class="mi-sub">在节点 edge_path 部署 Edge 程序</span></button><button class="mi"><span class="mi-main">关联新 OpenResty</span><span class="mi-sub">把本机 Edge 切换关联到新装的 OpenResty</span></button><button class="mi"><span class="mi-main">升级 Edge 小版本</span><span class="mi-sub">版本包管理与 Edge 小版本升级</span></button></div></div></div></td></tr>
+                <tr><td class="cbx c-c"><input type="checkbox" class="row-cb"></td><td class="c-c"><span class="c-idx">3</span></td><td class="nw"><span class="c-mono c-strong">192.168.1.13</span></td><td class="nw"><span class="c-mono">8080</span></td><td class="nw"><span class="c-mono">9180</span></td><td><div class="path-stack"><div class="path-line"><span class="path-k">Edge</span><span class="c-mono c-dim" title="/opt/edge">/opt/edge</span></div><div class="path-line"><span class="path-k">OR</span><span class="c-mono c-dim" title="/usr/local/openresty/nginx">/usr/local/openresty/nginx</span></div></div></td><td class="nw"><div class="status-cell"><span class="s-row"><span class="pill pill-unknown"><span class="dot"></span>未检测</span></span></div></td><td class="nw"><span class="c-mono c-dim">—</span></td><td class="ops-cell"><div class="ops"><button class="op-btn" title="启动"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg>启动</button><button class="op-btn" title="停止"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>停止</button><button class="op-btn" title="状态查询"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>状态</button><span class="v-sep"></span><button class="op-btn" title="重载 nginx"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 11-2.64-6.36"/><path d="M21 3v6h-6"/></svg>重载</button><div class="menu-anchor"><button class="op-btn" title="更多操作" style="padding:0 6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">详情</span></button><button class="mi"><span class="mi-main">编辑</span></button><button class="mi"><span class="mi-main">复制</span></button><button class="mi"><span class="mi-main">数据库对比</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 已发布配置（弹窗可选）</span></button><hr class="menu-sep"><button class="mi"><span class="mi-main">安装 OpenResty</span><span class="mi-sub">选择安装包在节点上安装 OpenResty</span></button><button class="mi"><span class="mi-main">安装 Edge</span><span class="mi-sub">在节点 edge_path 部署 Edge 程序</span></button><button class="mi"><span class="mi-main">关联新 OpenResty</span><span class="mi-sub">把本机 Edge 切换关联到新装的 OpenResty</span></button><button class="mi"><span class="mi-main">升级 Edge 小版本</span><span class="mi-sub">版本包管理与 Edge 小版本升级</span></button></div></div></div></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="l5-pager">
+            <span class="p-info">共 <b>3</b> 个节点 · 每页 <select class="pager-select"><option>10 条</option><option selected>20 条</option><option>50 条</option><option>100 条</option></select></span>
+            <span class="p-nav"><button class="p-btn" disabled><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 6 9 12 15 18"/></svg></button><button class="p-btn active">1</button><button class="p-btn" disabled><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg></button><span class="p-jump">跳至 <input value="1"> 页</span></span>
+          </div>
         </div>
       </div>
 
       <!-- ── Tab 2 · 上游（scoped 形态：单集群 / 恒平铺 / 无页头，页面级动作收敛到工具条左侧；
            解剖与上游管理独立页同构，差异仅在「无分组下拉 / 无集群筛选 / 无分组|平铺 / 无全部收起 / 无分组带 / 无集群列」） ── -->
       <div class="dbody tab-body" data-body="upstreams">
-        <div class="l5-toolbar nowrap" style="gap:6px;">
-          <button class="btn btn-primary btn-sm" data-test="scope-add-upstream"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>添加上游</button>
-          <div class="l5-search"><input type="text" style="width:150px" placeholder="搜索名称或描述..."><svg class="s-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>
-          <select class="l5-select" style="width:120px"><option>全部算法</option><option>加权轮询</option><option>一致性哈希</option><option>延迟最小</option><option>最少连接</option></select>
-          <span class="t-spacer"></span>
-          <button class="tool-btn" title="重新拉取列表"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 11-2.64-6.36"/><path d="M21 3v6h-6"/></svg>刷新</button>
-          <div class="pop-anchor">
-            <button class="btn btn-secondary btn-sm" data-pop="popColU"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>列配置 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button>
-            <div class="l5-popover" id="popColU">
-              <div class="pop-title">选择显示列 <span class="pop-note">序号列恒展示，不参与勾选</span></div>
-              <div class="l5-pop-label">显示字段</div>
-              <div class="l5-checks">
-                <label class="l5-check"><input type="checkbox" checked>名称</label>
-                <label class="l5-check"><input type="checkbox" checked>负载均衡</label>
-                <label class="l5-check"><input type="checkbox" checked>目标节点与健康</label>
-                <label class="l5-check"><input type="checkbox" checked>协议</label>
-                <label class="l5-check"><input type="checkbox" checked>发布状态</label>
-                <label class="l5-check"><input type="checkbox" checked>操作</label>
+        <div class="tab-card">
+          <div class="l5-toolbar nowrap" style="gap:6px;">
+            <button class="btn btn-primary btn-sm" data-test="scope-add-upstream"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>添加上游</button>
+            <div class="l5-search"><input type="text" style="width:150px" placeholder="搜索名称或描述..."><svg class="s-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>
+            <select class="l5-select" style="width:120px"><option>全部算法</option><option>加权轮询</option><option>一致性哈希</option><option>延迟最小</option><option>最少连接</option></select>
+            <span class="t-spacer"></span>
+            <button class="tool-btn" title="重新拉取列表"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 11-2.64-6.36"/><path d="M21 3v6h-6"/></svg>刷新</button>
+            <div class="pop-anchor">
+              <button class="btn btn-secondary btn-sm" data-pop="popColU"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>列配置 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button>
+              <div class="l5-popover" id="popColU">
+                <div class="pop-title">选择显示列 <span class="pop-note">序号列恒展示，不参与勾选</span></div>
+                <div class="l5-pop-label">显示字段</div>
+                <div class="l5-checks">
+                  <label class="l5-check"><input type="checkbox" checked>名称</label>
+                  <label class="l5-check"><input type="checkbox" checked>负载均衡</label>
+                  <label class="l5-check"><input type="checkbox" checked>目标节点与健康</label>
+                  <label class="l5-check"><input type="checkbox" checked>协议</label>
+                  <label class="l5-check"><input type="checkbox" checked>发布状态</label>
+                  <label class="l5-check"><input type="checkbox" checked>操作</label>
+                </div>
+                <hr class="pop-sep">
+                <div class="l5-pop-label">搜索</div>
+                <div class="l5-checks"><label class="l5-check"><input type="checkbox" checked>显示搜索框</label></div>
+                <div class="pop-hint"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="18 8 22 12 18 16"/><polyline points="6 8 2 12 6 16"/><line x1="2" y1="12" x2="22" y2="12"/></svg><span>拖动表头右缘可调整列宽，拖动表头整格可调整列序</span></div>
+                <div class="pop-foot"><button class="btn btn-primary btn-sm">重置列宽</button></div>
               </div>
-              <hr class="pop-sep">
-              <div class="l5-pop-label">搜索</div>
-              <div class="l5-checks"><label class="l5-check"><input type="checkbox" checked>显示搜索框</label></div>
-              <div class="pop-hint"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="18 8 22 12 18 16"/><polyline points="6 8 2 12 6 16"/><line x1="2" y1="12" x2="22" y2="12"/></svg><span>拖动表头右缘可调整列宽，拖动表头整格可调整列序</span></div>
-              <div class="pop-foot"><button class="btn btn-primary btn-sm">重置列宽</button></div>
             </div>
           </div>
+          <div class="l5-chiprow"><span class="chiprow-label">状态</span><div class="f-chips"><span class="f-chip chip-status active">全部<span class="f-count">2</span></span><span class="f-chip chip-status empty">未发布<span class="f-count">0</span></span><span class="f-chip chip-status">待发布<span class="f-count">1</span></span><span class="f-chip chip-status">已发布<span class="f-count">1</span></span></div><span class="t-spacer"></span></div>
+          <div class="l5-batchbar">
+            <span class="b-count">已选 0 项</span>
+            <span class="b-sep"></span>
+            <button class="btn btn-danger btn-sm need-sel"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg> 批量删除</button>
+            <span class="b-spacer"></span>
+            <button class="btn btn-secondary btn-sm">清除选择</button>
+          </div>
+          <div class="l5-table-wrap">
+            <table class="l5-table" style="min-width:1150px">
+              <colgroup><col style="width:40px"><col style="width:40px"><col style="width:176px"><col style="width:120px"><col style="width:314px"><col style="width:90px"><col style="width:220px"><col style="width:150px"></colgroup>
+              <thead><tr><th class="cbx c-c"><input type="checkbox" id="selAllU"></th><th class="c-c">#</th><th class="resizable sortable">名称</th><th class="resizable sortable">负载均衡</th><th class="resizable">目标节点与健康</th><th class="resizable">协议</th><th class="resizable">发布状态</th><th class="resizable">操作</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td class="cbx c-c"><input type="checkbox" class="row-cb"></td>
+                  <td class="c-c"><span class="c-idx">1</span></td>
+                  <td><div class="cell-stack"><span class="c-strong" title="订单服务">订单服务</span><span class="c-sub" title="订单创建 / 查询 / 取消">订单创建 / 查询 / 取消</span></div></td>
+                  <td class="nw"><span class="lb-chip">加权轮询</span></td>
+                  <td><div class="tg-list"><span class="tg-chip"><span class="dot d-warn" title="目标健康：待验证（上游未发布、有待发布变更或上次发布存在未生效节点）"></span>192.168.1.11:8100<span class="tg-bar"><i style="width:100%"></i></span><span class="tg-w">100 · 100%</span></span><span class="tg-sum" title="目标健康：待验证（上游未发布、有待发布变更或上次发布存在未生效节点）"><b>1</b> 目标 · <span style="color:var(--warning);font-weight:600;">1 项待验证</span></span></div></td>
+                  <td class="nw"><span class="scheme-chip">http</span></td>
+                  <td class="nw"><span class="pub-cell"><span class="ps-tag ps-pending" title="配置已修改，发布后生效">待发布</span><button class="diff-btn" title="查看与 Edge 节点的差异" aria-label="查看与 Edge 节点的差异">差异</button></span></td>
+                  <td class="ops-cell"><div class="ops"><button class="op-pub">发布</button><div class="menu-anchor"><button class="op-btn" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">复制</span></button><button class="mi"><span class="mi-main">编辑</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 已发布配置（弹窗可选）</span></button><hr class="menu-sep"><button class="mi"><span class="mi-main">版本管理</span><span class="mi-sub">历史版本查看与回滚</span></button></div></div></div></td>
+                </tr>
+                <tr>
+                  <td class="cbx c-c"><input type="checkbox" class="row-cb"></td>
+                  <td class="c-c"><span class="c-idx">2</span></td>
+                  <td><div class="cell-stack"><span class="c-strong" title="用户服务">用户服务</span><span class="c-sub" title="核心用户鉴权与资料查询">核心用户鉴权与资料查询</span></div></td>
+                  <td class="nw"><span class="lb-chip">加权轮询</span></td>
+                  <td><div class="tg-list"><span class="tg-chip"><span class="dot d-ok" title="目标健康：上游已发布且无发布异常（目标级健康未采集，按发布态近似）"></span>192.168.1.11:8000<span class="tg-bar"><i style="width:44%"></i></span><span class="tg-w">80 · 44%</span></span><span class="tg-chip"><span class="dot d-ok" title="目标健康：上游已发布且无发布异常（目标级健康未采集，按发布态近似）"></span>192.168.1.12:8000<span class="tg-bar"><i style="width:33%"></i></span><span class="tg-w">60 · 33%</span></span><span class="tg-chip"><span class="dot d-ok" title="目标健康：上游已发布且无发布异常（目标级健康未采集，按发布态近似）"></span>192.168.1.13:8000<span class="tg-bar"><i style="width:22%"></i></span><span class="tg-w">40 · 22%</span></span><span class="tg-sum" title="目标健康：上游已发布且无发布异常（目标级健康未采集，按发布态近似）"><b>3</b> 目标 · <b>全部健康</b></span></div></td>
+                  <td class="nw"><span class="scheme-chip">http</span></td>
+                  <td class="nw"><span class="pub-cell"><span class="ps-tag ps-pub">v6 · 11-12 14:32</span><button class="diff-btn" title="查看与 Edge 节点的差异" aria-label="查看与 Edge 节点的差异">差异</button></span></td>
+                  <td class="ops-cell"><div class="ops"><button class="op-pub">发布</button><div class="menu-anchor"><button class="op-btn" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">复制</span></button><button class="mi"><span class="mi-main">编辑</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 已发布配置（弹窗可选）</span></button><hr class="menu-sep"><button class="mi"><span class="mi-main">版本管理</span><span class="mi-sub">历史版本查看与回滚</span></button></div></div></div></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="l5-pager">
+            <span class="p-info">共 <b>2</b> 个上游 · 每页 <select class="pager-select"><option>10 条</option><option selected>20 条</option><option>50 条</option><option>100 条</option></select></span>
+            <span class="p-nav"><button class="p-btn" disabled><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 6 9 12 15 18"/></svg></button><button class="p-btn active">1</button><button class="p-btn" disabled><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg></button><span class="p-jump">跳至 <input value="1"> 页</span></span>
+          </div>
         </div>
-        <div class="l5-chiprow"><span class="chiprow-label">状态</span><div class="f-chips"><span class="f-chip chip-status active">全部<span class="f-count">2</span></span><span class="f-chip chip-status empty">未发布<span class="f-count">0</span></span><span class="f-chip chip-status">待发布<span class="f-count">1</span></span><span class="f-chip chip-status">已发布<span class="f-count">1</span></span></div><span class="t-spacer"></span></div>
-        <div class="l5-batchbar">
-          <span class="b-count">已选 0 项</span>
-          <span class="b-sep"></span>
-          <button class="btn btn-danger btn-sm need-sel"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg> 批量删除</button>
-          <span class="b-spacer"></span>
-          <button class="btn btn-secondary btn-sm">清除选择</button>
-        </div>
-        <div class="l5-table-wrap">
-          <table class="l5-table" style="min-width:1150px">
-            <colgroup><col style="width:40px"><col style="width:40px"><col style="width:176px"><col style="width:120px"><col style="width:314px"><col style="width:90px"><col style="width:220px"><col style="width:150px"></colgroup>
-            <thead><tr><th class="cbx c-c"><input type="checkbox" id="selAllU"></th><th class="c-c">#</th><th class="resizable sortable">名称</th><th class="resizable sortable">负载均衡</th><th class="resizable">目标节点与健康</th><th class="resizable">协议</th><th class="resizable">发布状态</th><th class="resizable">操作</th></tr></thead>
-            <tbody>
+      </div>
+
+      <!-- ── Tab 3 · 路由（scoped 形态：单集群 / 恒平铺 / 无页头，页面级动作收敛到工具条左侧；解剖与路由管理独立页同构，差异仅在「无分组下拉 / 无集群筛选 / 无分组|平铺 / 无全部收起 / 无分组带 / 无集群列」） ── -->
+      <div class="dbody tab-body" data-body="routes">
+        <div class="tab-card">
+          <div class="l5-toolbar nowrap" style="gap:6px;">
+            <button class="btn btn-primary btn-sm" data-test="scope-add-route"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>添加路由</button>
+            <div class="l5-search"><input type="text" style="width:150px" placeholder="搜索名称、URI、描述..."><svg class="s-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>
+            <select class="l5-select" style="width:104px"><option>全部上游</option><option>order-api</option><option>user-svc</option><option>pay-gateway</option></select>
+            <select class="l5-select" style="width:104px"><option>全部插件</option><option>限流</option><option>JWT 鉴权</option><option>CORS 跨域</option></select>
+            <select class="l5-select" style="width:104px"><option>全部方法</option><option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option></select>
+            <span class="t-spacer"></span>
+            <button class="tool-btn" title="重新拉取列表"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 11-2.64-6.36"/><path d="M21 3v6h-6"/></svg>刷新</button>
+            <div class="pop-anchor">
+              <button class="btn btn-secondary btn-sm" data-pop="popColR"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>列配置 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button>
+              <div class="l5-popover" id="popColR">
+                <div class="pop-title">选择显示列 <span class="pop-note">序号列恒展示，不参与勾选</span></div>
+                <div class="l5-pop-label">显示字段</div>
+                <div class="l5-checks">
+                  <label class="l5-check"><input type="checkbox" checked>名称</label>
+                  <label class="l5-check"><input type="checkbox" checked>请求匹配</label>
+                  <label class="l5-check"><input type="checkbox" checked>方法</label>
+                  <label class="l5-check"><input type="checkbox" checked>上游</label>
+                  <label class="l5-check"><input type="checkbox" checked>优先级</label>
+                  <label class="l5-check"><input type="checkbox" checked>发布状态</label>
+                  <label class="l5-check"><input type="checkbox" checked>创建时间</label>
+                  <label class="l5-check"><input type="checkbox" checked>操作</label>
+                </div>
+                <hr class="pop-sep">
+                <div class="l5-pop-label">搜索</div>
+                <div class="l5-checks"><label class="l5-check"><input type="checkbox" checked>显示搜索框</label></div>
+                <div class="pop-hint"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="18 8 22 12 18 16"/><polyline points="6 8 2 12 6 16"/><line x1="2" y1="12" x2="22" y2="12"/></svg><span>拖动表头右缘可调整列宽，拖动表头整格可调整列序</span></div>
+                <div class="pop-foot"><button class="btn btn-primary btn-sm">重置列宽</button></div>
+              </div>
+            </div>
+          </div>
+          <div class="l5-chiprow"><span class="chiprow-label">状态</span><div class="f-chips"><span class="f-chip chip-status active">全部<span class="f-count">12</span></span><span class="f-chip chip-status">未发布<span class="f-count">1</span></span><span class="f-chip chip-status">待发布<span class="f-count">3</span></span><span class="f-chip chip-status">已发布<span class="f-count">8</span></span></div><span class="t-spacer"></span></div>
+          <div class="l5-batchbar">
+            <span class="b-count">已选 0 项</span>
+            <span class="b-sep"></span>
+            <button class="btn btn-danger btn-sm need-sel"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg> 批量删除</button>
+            <span class="b-spacer"></span>
+            <button class="btn btn-secondary btn-sm">清除选择</button>
+          </div>
+            <div class="l5-table-wrap">
+              <table class="l5-table" style="min-width:1188px">
+                <colgroup><col style="width:40px"><col style="width:40px"><col style="width:200px"><col style="width:280px"><col style="width:160px"><col style="width:78px"><col style="width:170px"><col style="width:110px"><col style="width:110px"></colgroup>
+                <thead><tr><th class="cbx c-c"><input type="checkbox" id="selAllR"></th><th class="c-c">#</th><th class="resizable sortable">名称</th><th class="resizable sortable">请求匹配</th><th class="resizable">上游</th><th class="resizable sortable c-c">优先级</th><th class="resizable">发布状态</th><th class="resizable sortable">创建时间</th><th class="resizable">操作</th></tr></thead>
+                <tbody>
               <tr>
                 <td class="cbx c-c"><input type="checkbox" class="row-cb"></td>
                 <td class="c-c"><span class="c-idx">1</span></td>
-                <td><div class="cell-stack"><span class="c-strong" title="订单服务">订单服务</span><span class="c-sub" title="订单创建 / 查询 / 取消">订单创建 / 查询 / 取消</span></div></td>
-                <td class="nw"><span class="lb-chip">加权轮询</span></td>
-                <td><div class="tg-list"><span class="tg-chip"><span class="dot d-warn" title="目标健康：待验证（上游未发布、有待发布变更或上次发布存在未生效节点）"></span>192.168.1.11:8100<span class="tg-bar"><i style="width:100%"></i></span><span class="tg-w">100 · 100%</span></span><span class="tg-sum" title="目标健康：待验证（上游未发布、有待发布变更或上次发布存在未生效节点）"><b>1</b> 目标 · <span style="color:var(--warning);font-weight:600;">1 项待验证</span></span></div></td>
-                <td class="nw"><span class="scheme-chip">http</span></td>
+                <td><div class="cell-stack"><span class="c-strong" title="订单创建">订单创建</span><span class="c-sub" title="下单入口（幂等校验）">下单入口（幂等校验）</span></div></td>
+                <td><div class="match-cell"><span class="m-row"><span class="m-tag POST">POST</span><span class="m-tag PUT">PUT</span></span><span class="pipe-uri">/api/orders</span></div></td>
+                <td class="nw"><span class="pipe-up" title="上游 order-api（节点数示意）">order-api<span class="up-n">1 节点</span></span></td>
+                <td class="nw c-c"><span class="prio" title="优先级 0：按数值顺序依次尝试匹配">P0</span></td>
                 <td class="nw"><span class="pub-cell"><span class="ps-tag ps-pending" title="配置已修改，发布后生效">待发布</span><button class="diff-btn" title="查看与 Edge 节点的差异" aria-label="查看与 Edge 节点的差异">差异</button></span></td>
-                <td class="ops-cell"><div class="ops"><button class="op-pub">发布</button><div class="menu-anchor"><button class="op-btn" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">复制</span></button><button class="mi"><span class="mi-main">编辑</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 已发布配置（弹窗可选）</span></button><hr class="menu-sep"><button class="mi"><span class="mi-main">版本管理</span><span class="mi-sub">历史版本查看与回滚</span></button></div></div></div></td>
+                <td class="nw"><span class="c-mono c-dim">2025-08-10</span></td>
+                <td class="ops-cell"><div class="ops"><button class="op-pub">发布</button><div class="menu-anchor"><button class="op-btn" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">复制路由</span></button><button class="mi"><span class="mi-main">编辑</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 已发布配置（弹窗可选）</span></button><hr class="menu-sep"><button class="mi"><span class="mi-main">版本管理</span><span class="mi-sub">历史版本查看与回滚</span></button></div></div></div></td>
               </tr>
               <tr>
                 <td class="cbx c-c"><input type="checkbox" class="row-cb"></td>
                 <td class="c-c"><span class="c-idx">2</span></td>
-                <td><div class="cell-stack"><span class="c-strong" title="用户服务">用户服务</span><span class="c-sub" title="核心用户鉴权与资料查询">核心用户鉴权与资料查询</span></div></td>
-                <td class="nw"><span class="lb-chip">加权轮询</span></td>
-                <td><div class="tg-list"><span class="tg-chip"><span class="dot d-ok" title="目标健康：上游已发布且无发布异常（目标级健康未采集，按发布态近似）"></span>192.168.1.11:8000<span class="tg-bar"><i style="width:44%"></i></span><span class="tg-w">80 · 44%</span></span><span class="tg-chip"><span class="dot d-ok" title="目标健康：上游已发布且无发布异常（目标级健康未采集，按发布态近似）"></span>192.168.1.12:8000<span class="tg-bar"><i style="width:33%"></i></span><span class="tg-w">60 · 33%</span></span><span class="tg-chip"><span class="dot d-ok" title="目标健康：上游已发布且无发布异常（目标级健康未采集，按发布态近似）"></span>192.168.1.13:8000<span class="tg-bar"><i style="width:22%"></i></span><span class="tg-w">40 · 22%</span></span><span class="tg-sum" title="目标健康：上游已发布且无发布异常（目标级健康未采集，按发布态近似）"><b>3</b> 目标 · <b>全部健康</b></span></div></td>
-                <td class="nw"><span class="scheme-chip">http</span></td>
-                <td class="nw"><span class="pub-cell"><span class="ps-tag ps-pub">v6 · 11-12 14:32</span><button class="diff-btn" title="查看与 Edge 节点的差异" aria-label="查看与 Edge 节点的差异">差异</button></span></td>
-                <td class="ops-cell"><div class="ops"><button class="op-pub">发布</button><div class="menu-anchor"><button class="op-btn" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">复制</span></button><button class="mi"><span class="mi-main">编辑</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 已发布配置（弹窗可选）</span></button><hr class="menu-sep"><button class="mi"><span class="mi-main">版本管理</span><span class="mi-sub">历史版本查看与回滚</span></button></div></div></div></td>
+                <td><div class="cell-stack"><span class="c-strong" title="用户查询接口">用户查询接口</span><span class="c-sub" title="用户列表与详情查询">用户列表与详情查询</span></div></td>
+                <td><div class="match-cell"><span class="m-row"><span class="m-tag GET">GET</span></span><span class="pipe-uri">/api/users/*</span></div></td>
+                <td class="nw"><span class="pipe-up" title="上游 user-svc（节点数示意）">user-svc<span class="up-n">3 节点</span></span></td>
+                <td class="nw c-c"><span class="prio" title="优先级 10：按数值顺序依次尝试匹配">P10</span></td>
+                <td class="nw"><span class="pub-cell"><span class="ps-tag ps-pub">v6</span><span class="ps-date">11-12 14:32</span></span></td>
+                <td class="nw"><span class="c-mono c-dim">2025-08-02</span></td>
+                <td class="ops-cell"><div class="ops"><button class="op-pub">发布</button><div class="menu-anchor"><button class="op-btn" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">复制路由</span></button><button class="mi"><span class="mi-main">编辑</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 已发布配置（弹窗可选）</span></button><hr class="menu-sep"><button class="mi"><span class="mi-main">版本管理</span><span class="mi-sub">历史版本查看与回滚</span></button></div></div></div></td>
               </tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="l5-pager">
-          <span class="p-info">共 <b>2</b> 个上游 · 每页 <select class="pager-select"><option>10 条</option><option selected>20 条</option><option>50 条</option><option>100 条</option></select></span>
-          <span class="p-nav"><button class="p-btn" disabled><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 6 9 12 15 18"/></svg></button><button class="p-btn active">1</button><button class="p-btn" disabled><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg></button><span class="p-jump">跳至 <input value="1"> 页</span></span>
-        </div>
-      </div>
-
-      <!-- ── Tab 3 · 路由 ── -->
-      <div class="dbody tab-body" data-body="routes">
-        <div class="tab-toolbar">
-          <button class="tool-btn">＋ 添加路由</button>
-          <span class="spacer"></span>
-          <div class="pop-anchor">
-            <button class="tool-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>列配置</button>
-          </div>
-        </div>
-        <table class="l5-table" style="min-width:1150px">
-          <colgroup><col style="width:40px"><col style="width:160px"><col style="width:230px"><col style="width:130px"><col style="width:90px"><col style="width:220px"><col style="width:200px"><col style="width:110px"></colgroup>
-          <thead><tr><th class="c-c">#</th><th class="resizable sortable">名称</th><th class="resizable sortable">URI</th><th class="resizable">方法</th><th class="resizable sortable">优先级</th><th class="resizable">发布状态</th><th class="resizable sortable">描述</th><th class="resizable">操作</th></tr></thead>
-          <tbody>
-            <tr>
-              <td class="c-c"><span class="c-idx">1</span></td>
-              <td><span class="c-strong" title="订单创建">订单创建</span></td>
-              <td><span class="pipe-uri">/api/orders</span></td>
-              <td><span class="m-tag POST">POST</span></td>
-              <td class="nw c-c"><span class="prio" title="优先级 0：按数值顺序依次尝试匹配">P0</span></td>
-              <td class="nw"><span class="pub-cell"><span class="ps-tag ps-pub">v3 · 11-14 20:05</span><button class="diff-btn" title="查看与 Edge 节点的差异" aria-label="查看与 Edge 节点的差异">差异</button></span></td>
-              <td><span class="c-dim">下单入口（幂等校验）</span></td>
-              <td><div class="ops"><button class="op-pub">发布</button><div class="menu-anchor"><button class="op-btn" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">编辑</span></button><button class="mi"><span class="mi-main">版本管理</span><span class="mi-sub">历史版本查看与回滚</span></button><button class="mi"><span class="mi-main">复制路由</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 已发布配置（弹窗可选）</span></button></div></div></div></td>
-            </tr>
-            <tr>
-              <td class="c-c"><span class="c-idx">2</span></td>
-              <td><span class="c-strong" title="用户查询接口">用户查询接口</span></td>
-              <td><span class="pipe-uri">/api/users/*</span></td>
-              <td><span class="m-tag GET">GET</span></td>
-              <td class="nw c-c"><span class="prio">P10</span></td>
-              <td class="nw"><span class="pub-cell"><span class="ps-tag ps-pending" title="配置已修改，发布后生效">待发布</span><button class="diff-btn" title="查看与 Edge 节点的差异" aria-label="查看与 Edge 节点的差异">差异</button></span></td>
-              <td><span class="c-dim">用户列表与详情查询</span></td>
-              <td><div class="ops"><button class="op-pub">发布</button><div class="menu-anchor"><button class="op-btn" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">编辑</span></button><button class="mi"><span class="mi-main">版本管理</span><span class="mi-sub">历史版本查看与回滚</span></button><button class="mi"><span class="mi-main">复制路由</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 已发布配置（弹窗可选）</span></button></div></div></div></td>
-            </tr>
-            <tr>
-              <td class="c-c"><span class="c-idx">3</span></td>
-              <td><span class="c-strong" title="健康探测">健康探测</span></td>
-              <td><span class="pipe-uri">/healthz</span></td>
-              <td><span class="m-tag GET">GET</span></td>
-              <td class="nw c-c"><span class="prio">P200</span></td>
-              <td class="nw"><span class="pub-cell"><span class="ps-tag ps-pub">v1 · 11-02 09:12</span></span></td>
-              <td><span class="c-dim">负载均衡健康检查</span></td>
-              <td><div class="ops"><button class="op-pub">发布</button><div class="menu-anchor"><button class="op-btn" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">编辑</span></button><button class="mi"><span class="mi-main">版本管理</span><span class="mi-sub">历史版本查看与回滚</span></button><button class="mi"><span class="mi-main">复制路由</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 已发布配置（弹窗可选）</span></button></div></div></div></td>
-            </tr>
-          </tbody>
-        </table>
-        <div class="l5-pager" >
-          <span class="p-info">共 <b>12</b> 条路由 · 每页 <select class="pager-select"><option selected>20 条</option></select></span>
-          <span class="p-nav"><button class="p-btn" disabled><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 6 9 12 15 18"/></svg></button><button class="p-btn active">1</button><button class="p-btn">2</button><span class="p-jump">跳至 <input value="1"> 页</span></span>
+              <tr>
+                <td class="cbx c-c"><input type="checkbox" class="row-cb" disabled title="DNS 路由请在「DNS 代理」页管理"></td>
+                <td class="c-c"><span class="c-idx">3</span></td>
+                <td><div class="cell-stack"><span class="c-strong" title="DNS 解析转发">DNS 解析转发<span class="dns-badge" title="含 dns_upstream 插件：请在「DNS 代理」页管理">DNS</span></span><span class="c-sub" title="内网域名解析分流">内网域名解析分流</span></div></td>
+                <td><div class="match-cell"><span class="m-row"><span class="m-tag GET">GET</span><span class="m-tag POST">POST</span></span><span class="pipe-uri">/dns/query</span></div></td>
+                <td class="nw"><span class="pipe-up" title="上游 内网DNS解析（节点数示意）">内网DNS解析<span class="up-n">1 节点</span></span></td>
+                <td class="nw c-c"><span class="prio" title="优先级 50：按数值顺序依次尝试匹配">P50</span></td>
+                <td class="nw"><span class="pub-cell"><span class="ps-tag ps-pub">v1</span><span class="ps-date">10-01 08:00</span></span></td>
+                <td class="nw"><span class="c-mono c-dim">2025-09-28</span></td>
+                <td class="ops-cell"><div class="ops"><button class="op-pub" disabled title="DNS 路由请在「DNS 代理」页管理">发布</button><button class="op-btn" disabled title="DNS 路由请在「DNS 代理」页管理" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button></div></td>
+              </tr>
+              <tr>
+                <td class="cbx c-c"><input type="checkbox" class="row-cb"></td>
+                <td class="c-c"><span class="c-idx">4</span></td>
+                <td><div class="cell-stack"><span class="c-strong" title="支付回调">支付回调</span><span class="c-sub" title="渠道异步通知接收">渠道异步通知接收</span></div></td>
+                <td><div class="match-cell"><span class="m-row"><span class="m-tag POST">POST</span></span><span class="pipe-uri">/api/pay/notify</span></div></td>
+                <td class="nw"><span class="pipe-up" title="上游 pay-gateway（节点数示意）">pay-gateway<span class="up-n">2 节点</span></span></td>
+                <td class="nw c-c"><span class="prio" title="优先级 100：按数值顺序依次尝试匹配">P100</span></td>
+                <td class="nw"><span class="pub-cell"><span class="ps-tag ps-partial" title="上次发布存在未生效节点，请重新发布">部分失败</span><span class="ps-date">v5 · 1 节点未生效</span><button class="diff-btn" title="查看与 Edge 节点的差异" aria-label="查看与 Edge 节点的差异">差异</button></span></td>
+                <td class="nw"><span class="c-mono c-dim">2025-07-21</span></td>
+                <td class="ops-cell"><div class="ops"><button class="op-pub">发布</button><div class="menu-anchor"><button class="op-btn" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">复制路由</span></button><button class="mi"><span class="mi-main">编辑</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 已发布配置（弹窗可选）</span></button><hr class="menu-sep"><button class="mi"><span class="mi-main">版本管理</span><span class="mi-sub">历史版本查看与回滚</span></button></div></div></div></td>
+              </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="l5-pager">
+              <span class="p-info">共 <b>12</b> 条路由 · 每页 <select class="pager-select"><option>10 条</option><option selected>20 条</option><option>50 条</option><option>100 条</option></select></span>
+              <span class="p-nav"><button class="p-btn" disabled><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 6 9 12 15 18"/></svg></button><button class="p-btn active">1</button><button class="p-btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg></button><span class="p-jump">跳至 <input value="1"> 页</span></span>
+            </div>
         </div>
       </div>
 
-      <!-- ── Tab 4 · 插件组 ── -->
+      <!-- ── Tab 4 · 插件组（scoped 形态：单集群 / 恒平铺 / 无页头，页面级动作（添加 + 批量管理）收敛到工具条左侧；卡片 = card-grid + l5-panel，与插件组独立页同构，差异仅在「无分组下拉 / 无集群筛选 / 无分组|平铺 / 无全部收起 / 无分组带 / 卡片无集群与分组徽标」，strip 只保留右端「引用 · N 条路由」） ── -->
       <div class="dbody tab-body" data-body="pluginConfigs">
-        <div class="tab-toolbar">
-          <button class="tool-btn">＋ 添加插件组</button>
-          <span class="spacer"></span>
-        </div>
-        <div style="display:flex;flex-wrap:wrap;gap:14px;">
-          <div class="pcc-card">
-            <div class="pcc-head">
-              <strong class="pcc-title">限流跨域组</strong>
-              <span class="pub-cell"><span class="ps-tag ps-pub">v2 · 11-14 20:05</span><button class="diff-btn" title="查看与 Edge 节点的差异" aria-label="查看与 Edge 节点的差异">差异</button></span>
-            </div>
-            <div class="pcc-desc">限流 + 跨域组合</div>
-            <div class="pcc-tags"><span class="lp-tag tech">limit-count</span><span class="lp-tag tech">cors</span></div>
-            <div class="pcc-actions">
-              <button class="tool-btn">查看</button>
-              <button class="tool-btn">编辑</button>
-              <button class="tool-btn" style="color: var(--danger)">删除</button>
-              <span style="flex:1"></span>
-              <button class="op-pub">发布</button>
-              <button class="tool-btn">版本管理</button>
-            </div>
+        <div class="tab-card l5-card mode-flat batch">
+          <div class="l5-toolbar nowrap" style="gap:6px;">
+            <button class="btn btn-primary btn-sm" data-test="scope-add-plugin-config"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>添加插件组</button>
+            <button class="btn btn-secondary btn-sm" data-test="scope-batch-toggle" aria-pressed="true">退出批量管理</button>
+            <div class="l5-search"><input type="text" style="width:150px" placeholder="搜索插件组名称..."><svg class="s-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>
+            <select class="l5-select" style="width:104px"><option>全部插件</option><option>limit-count 请求数限流</option><option>cors 跨域</option><option>jwt-auth JWT 鉴权</option><option>prometheus 指标暴露</option></select>
+            <span class="t-spacer"></span>
+            <button class="tool-btn" title="重新拉取列表"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 11-2.64-6.36"/><path d="M21 3v6h-6"/></svg>刷新</button>
           </div>
-          <div class="pcc-card">
-            <div class="pcc-head">
-              <strong class="pcc-title">鉴权组</strong>
-              <span class="pub-cell"><span class="ps-tag ps-pending" title="配置已修改，发布后生效">待发布</span><button class="diff-btn" title="查看与 Edge 节点的差异" aria-label="查看与 Edge 节点的差异">差异</button></span>
-            </div>
-            <div class="pcc-desc">JWT 鉴权 + IP 白名单</div>
-            <div class="pcc-tags"><span class="lp-tag tech">jwt-auth</span><span class="lp-tag tech">ip-restriction</span></div>
-            <div class="pcc-actions">
-              <button class="tool-btn">查看</button>
-              <button class="tool-btn">编辑</button>
-              <button class="tool-btn" style="color: var(--danger)">删除</button>
-              <span style="flex:1"></span>
-              <button class="op-pub">发布</button>
-              <button class="tool-btn">版本管理</button>
-            </div>
+          <div class="l5-chiprow"><span class="chiprow-label">状态</span><div class="f-chips"><span class="f-chip chip-status active">全部<span class="f-count">3</span></span><span class="f-chip chip-status">未发布<span class="f-count">1</span></span><span class="f-chip chip-status">待发布<span class="f-count">1</span></span><span class="f-chip chip-status">已发布<span class="f-count">1</span></span><span class="f-chip chip-status empty">部分失败<span class="f-count">0</span></span></div><span class="t-spacer"></span></div>
+          <div class="l5-batchbar batchbar-dynamic has-sel">
+            <span class="b-count">已选 1 项</span>
+            <span class="b-sep"></span>
+            <button class="btn btn-danger btn-sm need-sel"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg> 批量删除</button>
+            <span class="b-spacer"></span>
+            <button class="btn btn-ghost btn-sm">全选当前筛选结果</button>
+            <button class="btn btn-ghost btn-sm">清除选择</button>
           </div>
-          <div class="pcc-card">
-            <div class="pcc-head">
-              <strong class="pcc-title">监控组</strong>
-              <span class="pub-cell"><span class="ps-tag ps-unpub" title="从未发布或已全部回滚">未发布</span></span>
+          <div class="card-grid">
+          <article class="l5-panel cluster-c1 is-selected">
+            <span class="lp-check" aria-hidden="true"></span>
+            <div class="lp-strip"><span class="st-algo">引用 · <b>12</b> 条路由</span></div>
+            <div class="lp-head">
+              <div class="lp-title"><span class="lp-name" title="限流跨域组">限流跨域组</span></div>
+              <div class="lp-status"><span class="ps-tag ps-pub">v8</span><span class="ps-date">11-17 14:32</span></div>
             </div>
-            <div class="pcc-desc">Prometheus 指标暴露</div>
-            <div class="pcc-tags"><span class="lp-tag tech">prometheus</span></div>
-            <div class="pcc-actions">
-              <button class="tool-btn">查看</button>
-              <button class="tool-btn">编辑</button>
-              <button class="tool-btn" style="color: var(--danger)">删除</button>
-              <span style="flex:1"></span>
+            <div class="lp-body">
+              <div class="lp-row"><span class="lp-k">插件</span><div class="lp-chips"><span class="lp-chip">limit-count</span><span class="lp-chip">cors</span></div><span class="lp-cnt">2 个</span></div>
+              <div class="lp-row"><span class="lp-k">描述</span><span class="lp-v dim" title="对外 API 统一限流与跨域">对外 API 统一限流与跨域</span></div>
+            </div>
+            <div class="lp-foot">
               <button class="op-pub">发布</button>
-              <button class="tool-btn">版本管理</button>
+              <div class="menu-anchor"><button class="op-btn" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">查看</span></button><button class="mi"><span class="mi-main">编辑</span></button><button class="mi"><span class="mi-main">版本管理</span><span class="mi-sub">历史版本查看与回滚</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 插件组（弹窗可选）</span></button></div></div>
             </div>
+          </article>
+          <article class="l5-panel cluster-c1">
+            <span class="lp-check" aria-hidden="true"></span>
+            <div class="lp-strip"><span class="st-algo">引用 · <b>5</b> 条路由</span></div>
+            <div class="lp-head">
+              <div class="lp-title"><span class="lp-name" title="鉴权组">鉴权组</span></div>
+              <div class="lp-status"><span class="ps-tag ps-pending" title="配置已修改，发布后生效">待发布</span><button class="diff-btn" title="查看与 Edge 节点的差异" aria-label="查看与 Edge 节点的差异">差异</button></div>
+            </div>
+            <div class="lp-body">
+              <div class="lp-row"><span class="lp-k">插件</span><div class="lp-chips"><span class="lp-chip">jwt-auth</span><span class="lp-chip">ip-restriction</span></div><span class="lp-cnt">2 个</span></div>
+              <div class="lp-row"><span class="lp-k">描述</span><span class="lp-v dim" title="JWT 鉴权 + IP 白名单">JWT 鉴权 + IP 白名单</span></div>
+            </div>
+            <div class="lp-foot">
+              <button class="op-pub">发布</button>
+              <div class="menu-anchor"><button class="op-btn" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">查看</span></button><button class="mi"><span class="mi-main">编辑</span></button><button class="mi"><span class="mi-main">版本管理</span><span class="mi-sub">历史版本查看与回滚</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 插件组（弹窗可选）</span></button></div></div>
+            </div>
+          </article>
+          <article class="l5-panel cluster-c1">
+            <span class="lp-check" aria-hidden="true"></span>
+            <div class="lp-strip"><span class="st-algo">引用 · <b>0</b> 条路由</span></div>
+            <div class="lp-head">
+              <div class="lp-title"><span class="lp-name" title="监控组">监控组</span></div>
+              <div class="lp-status"><span class="ps-tag ps-unpub" title="从未发布或已全部回滚">未发布</span></div>
+            </div>
+            <div class="lp-body">
+              <div class="lp-row"><span class="lp-k">插件</span><div class="lp-chips"><span class="lp-chip">prometheus</span></div><span class="lp-cnt">1 个</span></div>
+              <div class="lp-row"><span class="lp-k">描述</span><span class="lp-v dim" title="Prometheus 指标暴露">Prometheus 指标暴露</span></div>
+            </div>
+            <div class="lp-foot">
+              <button class="op-pub">发布</button>
+              <div class="menu-anchor"><button class="op-btn" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">查看</span></button><button class="mi"><span class="mi-main">编辑</span></button><button class="mi"><span class="mi-main">版本管理</span><span class="mi-sub">历史版本查看与回滚</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 插件组（弹窗可选）</span></button></div></div>
+            </div>
+          </article>
           </div>
         </div>
       </div>
 
-      <!-- ── Tab 5 · 插件元数据 ── -->
+      <!-- ── Tab 5 · 插件元数据（scoped 形态：单集群 / 恒平铺 / 无页头，页面级动作（添加 + 批量管理）收敛到工具条左侧；卡片 = card-grid + l5-panel；配置 = 折叠式美化 JSON（JSON.stringify(v, null, 2)、缩进 2 空格、max-height 220px 滚动、默认全展开，空配置显示「无配置」且不渲染 {}）；中文名为主 + 裸插件名 .lp-key 弱化标识） ── -->
       <div class="dbody tab-body" data-body="pluginMetadata">
-        <div class="tab-toolbar">
-          <button class="tool-btn">＋ 添加插件元数据</button>
-          <span class="spacer"></span>
-        </div>
-        <div style="display:flex;flex-wrap:wrap;gap:14px;">
-          <div class="pcc-card">
-            <div class="pcc-head">
-              <strong class="pcc-title">JWT 鉴权</strong>
-              <span class="lp-tag tech">jwt-auth</span>
-              <span class="pub-cell"><span class="ps-tag ps-pub">v1 · 11-10 09:15</span><button class="diff-btn" title="查看与 Edge 节点的差异" aria-label="查看与 Edge 节点的差异">差异</button></span>
-            </div>
-            <div class="pcc-tags"><span class="lp-key">jwt-auth</span><span class="lp-tag">元数据</span></div>
-            <div class="lp-json-toggle">2 项 ⌄</div>
-            <pre class="lp-json">{ "issuer": "https://auth.example.com",
-  "audience": "panshi-gw" }</pre>
-            <div class="pcc-actions">
-              <button class="tool-btn">查看</button>
-              <button class="tool-btn">编辑</button>
-              <button class="tool-btn" style="color: var(--danger)">删除</button>
-              <span style="flex:1"></span>
-              <button class="op-pub">发布</button>
-              <button class="tool-btn">版本管理</button>
-            </div>
+        <div class="tab-card l5-card mode-flat">
+          <div class="l5-toolbar nowrap" style="gap:6px;">
+            <button class="btn btn-primary btn-sm" data-test="scope-add-plugin-metadata"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>添加插件元数据</button>
+            <button class="btn btn-secondary btn-sm" data-test="scope-batch-toggle" aria-pressed="false">批量管理</button>
+            <div class="l5-search"><input type="text" style="width:150px" placeholder="搜索插件名称..."><svg class="s-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>
+            <select class="l5-select" style="width:104px"><option>全部插件</option><option value="log_process">日志记录</option><option value="traffic_limit_count">请求数限流</option><option value="jwt-auth">JWT 鉴权</option><option value="functions_pre">自定义预处理</option></select>
+            <span class="t-spacer"></span>
+            <button class="tool-btn" title="重新拉取列表"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 11-2.64-6.36"/><path d="M21 3v6h-6"/></svg>刷新</button>
+            <button class="tool-btn" data-config-toggle data-test="config-toggle-all" title="收起全部配置 JSON"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7 4 12 9 17 4"/><polyline points="7 20 12 15 17 20"/></svg><span class="fold-all-label">收起配置</span></button>
           </div>
-          <div class="pcc-card">
-            <div class="pcc-head">
-              <strong class="pcc-title">CORS 跨域</strong>
-              <span class="lp-tag tech">cors</span>
-              <span class="pub-cell"><span class="ps-tag ps-pub">v1 · 11-10 09:15</span></span>
+          <div class="l5-chiprow"><span class="chiprow-label">状态</span><div class="f-chips"><span class="f-chip chip-status active">全部<span class="f-count">3</span></span><span class="f-chip chip-status empty">未发布<span class="f-count">0</span></span><span class="f-chip chip-status">待发布<span class="f-count">1</span></span><span class="f-chip chip-status">已发布<span class="f-count">2</span></span><span class="f-chip chip-status empty">部分失败<span class="f-count">0</span></span></div><span class="t-spacer"></span></div>
+          <div class="l5-batchbar batchbar-dynamic">
+            <span class="b-count">已选 0 项</span>
+            <span class="b-sep"></span>
+            <button class="btn btn-danger btn-sm need-sel"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg> 批量删除</button>
+            <span class="b-spacer"></span>
+            <button class="btn btn-ghost btn-sm">全选当前筛选结果</button>
+            <button class="btn btn-ghost btn-sm">清除选择</button>
+          </div>
+          <div class="card-grid">
+          <article class="l5-panel cluster-c1">
+            <div class="lp-strip"><span class="st-algo">参数 · <b>1</b> 项</span></div>
+            <div class="lp-head">
+              <div class="lp-title"><span class="lp-name">日志记录</span><span class="lp-key" title="log_process">log_process</span></div>
+              <div class="lp-status"><span class="ps-tag ps-pub">v1</span><span class="ps-date">2026-07-22 14:18:49</span></div>
             </div>
-            <div class="pcc-tags"><span class="lp-key">cors</span><span class="lp-tag">元数据</span></div>
-            <div class="lp-json-toggle">1 项 ⌄</div>
-            <pre class="lp-json">{ "allow_origins": "*" }</pre>
-            <div class="pcc-actions">
-              <button class="tool-btn">查看</button>
-              <button class="tool-btn">编辑</button>
-              <button class="tool-btn" style="color: var(--danger)">删除</button>
-              <span style="flex:1"></span>
+            <div class="lp-body">
+              <div class="lp-row lp-row-config"><span class="lp-k">配置</span><button type="button" class="lp-json-toggle" data-json-toggle aria-expanded="true" title="收起配置 JSON"><span class="c-mono">1 项</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7 4 12 9 17 4"/><polyline points="7 20 12 15 17 20"/></svg></button></div>
+              <pre class="lp-json">{
+  "logs": {
+    "logs/process.log": {
+      "formats": [
+        "${req_start_time#time_format,%Y%m%d%H%M%S}",
+        "${http_x-edge-traceid}",
+        "${username}",
+        "${clientip}",
+        "${deviceid}",
+        "${udid}",
+        "${http_jessionid}",
+        "${method}"
+      ]
+    }
+  }
+}</pre>
+            </div>
+            <div class="lp-foot">
               <button class="op-pub">发布</button>
-              <button class="tool-btn">版本管理</button>
+              <div class="menu-anchor"><button class="op-btn" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">查看</span><span class="mi-sub">只读查看元数据 JSON</span></button><button class="mi"><span class="mi-main">编辑</span><span class="mi-sub">表单 / JSON 双模式</span></button><button class="mi"><span class="mi-main">版本管理</span><span class="mi-sub">历史版本查看与回滚</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 已发布配置（弹窗可选）</span></button></div></div>
             </div>
+          </article>
+          <article class="l5-panel cluster-c1">
+            <div class="lp-strip"><span class="st-algo">参数 · <b>0</b> 项</span></div>
+            <div class="lp-head">
+              <div class="lp-title"><span class="lp-name">自定义预处理(旧版)</span><span class="lp-key" title="functions_pre">functions_pre</span></div>
+              <div class="lp-status"><span class="ps-tag ps-pub">v1</span><span class="ps-date">2026-07-22 14:18:49</span></div>
+            </div>
+            <div class="lp-body">
+              <div class="lp-row lp-row-config"><span class="lp-k">配置</span><span class="lp-v dim">无配置</span></div>
+            </div>
+            <div class="lp-foot">
+              <button class="op-pub">发布</button>
+              <div class="menu-anchor"><button class="op-btn" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">查看</span><span class="mi-sub">只读查看元数据 JSON</span></button><button class="mi"><span class="mi-main">编辑</span><span class="mi-sub">表单 / JSON 双模式</span></button><button class="mi"><span class="mi-main">版本管理</span><span class="mi-sub">历史版本查看与回滚</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 已发布配置（弹窗可选）</span></button></div></div>
+            </div>
+          </article>
+          <article class="l5-panel cluster-c1">
+            <div class="lp-strip"><span class="st-algo">参数 · <b>1</b> 项</span></div>
+            <div class="lp-head">
+              <div class="lp-title"><span class="lp-name">请求数限流</span><span class="lp-key" title="traffic_limit_count">traffic_limit_count</span></div>
+              <div class="lp-status"><span class="ps-tag ps-pending" title="配置已修改，发布后生效">待发布</span><button class="diff-btn" title="查看与 Edge 节点的差异" aria-label="查看与 Edge 节点的差异">差异</button></div>
+            </div>
+            <div class="lp-body">
+              <div class="lp-row lp-row-config"><span class="lp-k">配置</span><button type="button" class="lp-json-toggle" data-json-toggle aria-expanded="false" title="展开配置 JSON"><span class="c-mono">1 项</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7 9 12 4 17 9"/><polyline points="7 15 12 20 17 15"/></svg></button></div>
+            </div>
+            <div class="lp-foot">
+              <button class="op-pub">发布</button>
+              <div class="menu-anchor"><button class="op-btn" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">查看</span><span class="mi-sub">只读查看元数据 JSON</span></button><button class="mi"><span class="mi-main">编辑</span><span class="mi-sub">表单 / JSON 双模式</span></button><button class="mi"><span class="mi-main">版本管理</span><span class="mi-sub">历史版本查看与回滚</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 已发布配置（弹窗可选）</span></button></div></div>
+            </div>
+          </article>
           </div>
         </div>
       </div>
 
-      <!-- ── Tab 6 · 全局规则 ── -->
+      <!-- ── Tab 6 · 全局规则（scoped 形态：单集群 / 恒平铺 / 无页头；卡片 strip 只保留「生效 · 全部路由 N 条」，不渲染集群与分组徽标；末位附「空态样张」= 无数据时整块替换卡片网格） ── -->
       <div class="dbody tab-body" data-body="globalRules">
-        <div class="tab-toolbar">
-          <button class="tool-btn">＋ 添加全局规则</button>
-          <span class="spacer"></span>
-        </div>
-        <div style="display:flex;flex-wrap:wrap;gap:14px;">
-          <div class="pcc-card">
-            <div class="pcc-head">
-              <strong class="pcc-title">全局 CORS</strong>
-              <span class="pub-cell"><span class="ps-tag ps-pub">v1 · 11-12 14:32</span><button class="diff-btn" title="查看与 Edge 节点的差异" aria-label="查看与 Edge 节点的差异">差异</button></span>
+        <div class="tab-card l5-card mode-flat">
+          <div class="l5-toolbar nowrap" style="gap:6px;">
+            <button class="btn btn-primary btn-sm" data-test="scope-add-global-rule"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>添加全局规则</button>
+            <button class="btn btn-secondary btn-sm" data-test="scope-batch-toggle" aria-pressed="false">批量管理</button>
+            <div class="l5-search"><input type="text" style="width:150px" placeholder="搜索全局规则名称..."><svg class="s-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>
+            <select class="l5-select" style="width:104px"><option>全部插件</option><option>cors 跨域</option><option>jwt-auth JWT 鉴权</option><option>traceid 链路 ID</option><option>monitor 监控上报</option></select>
+            <span class="t-spacer"></span>
+            <button class="tool-btn" title="重新拉取列表"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 11-2.64-6.36"/><path d="M21 3v6h-6"/></svg>刷新</button>
+          </div>
+          <div class="l5-chiprow"><span class="chiprow-label">状态</span><div class="f-chips"><span class="f-chip chip-status active">全部<span class="f-count">2</span></span><span class="f-chip chip-status empty">未发布<span class="f-count">0</span></span><span class="f-chip chip-status">待发布<span class="f-count">1</span></span><span class="f-chip chip-status">已发布<span class="f-count">1</span></span><span class="f-chip chip-status empty">部分失败<span class="f-count">0</span></span></div><span class="t-spacer"></span></div>
+          <div class="l5-batchbar batchbar-dynamic">
+            <span class="b-count">已选 0 项</span>
+            <span class="b-sep"></span>
+            <button class="btn btn-danger btn-sm need-sel"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg> 批量删除</button>
+            <span class="b-spacer"></span>
+            <button class="btn btn-ghost btn-sm">全选当前筛选结果</button>
+            <button class="btn btn-ghost btn-sm">清除选择</button>
+          </div>
+          <div class="card-grid">
+          <article class="l5-panel cluster-c1">
+            <div class="lp-strip"><span class="st-algo">生效 · <b>全部路由 32 条</b></span></div>
+            <div class="lp-head">
+              <div class="lp-title"><span class="lp-name" title="全局 CORS">全局 CORS</span></div>
+              <div class="lp-status"><span class="ps-tag ps-pending" title="配置已修改，发布后生效">待发布</span><button class="diff-btn" title="查看与 Edge 节点的差异" aria-label="查看与 Edge 节点的差异">差异</button></div>
             </div>
-            <div class="pcc-desc">对全部路由生效</div>
-            <div class="pcc-tags"><span class="lp-tag tech">cors</span></div>
-            <div class="pcc-actions">
-              <button class="tool-btn">查看</button>
-              <button class="tool-btn">编辑</button>
-              <button class="tool-btn" style="color: var(--danger)">删除</button>
-              <span style="flex:1"></span>
+            <div class="lp-body">
+              <div class="lp-row"><span class="lp-k">插件</span><div class="lp-chips"><span class="lp-chip">cors</span></div><span class="lp-cnt">1 个</span></div>
+              <div class="lp-row"><span class="lp-k">描述</span><span class="lp-v dim" title="对全部路由生效">对全部路由生效</span></div>
+            </div>
+            <div class="lp-foot">
               <button class="op-pub">发布</button>
-              <button class="tool-btn">版本管理</button>
+              <div class="menu-anchor"><button class="op-btn" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">查看</span></button><button class="mi"><span class="mi-main">编辑</span></button><button class="mi"><span class="mi-main">版本管理</span><span class="mi-sub">历史版本查看与回滚</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 全局规则（弹窗可选）</span></button></div></div>
+            </div>
+          </article>
+          <article class="l5-panel cluster-c1">
+            <div class="lp-strip"><span class="st-algo">生效 · <b>全部路由 32 条</b></span></div>
+            <div class="lp-head">
+              <div class="lp-title"><span class="lp-name" title="生产安全基线">生产安全基线</span></div>
+              <div class="lp-status"><span class="ps-tag ps-pub">v3</span><span class="ps-date">11-12 14:32</span></div>
+            </div>
+            <div class="lp-body">
+              <div class="lp-row"><span class="lp-k">插件</span><div class="lp-chips"><span class="lp-chip">cors</span><span class="lp-chip">jwt-auth</span></div><span class="lp-cnt">2 个</span></div>
+              <div class="lp-row"><span class="lp-k">描述</span><span class="lp-v dim" title="全局鉴权与跨域基线">全局鉴权与跨域基线</span></div>
+            </div>
+            <div class="lp-foot">
+              <button class="op-pub">发布</button>
+              <div class="menu-anchor"><button class="op-btn" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">查看</span></button><button class="mi"><span class="mi-main">编辑</span></button><button class="mi"><span class="mi-main">版本管理</span><span class="mi-sub">历史版本查看与回滚</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 全局规则（弹窗可选）</span></button></div></div>
+            </div>
+          </article>
+            <div style="grid-column:1/-1;padding-top:4px;border-top:1px dashed var(--border);">
+              <div style="font-size:11px;color:var(--muted);margin:8px 0 0;">空态样张（无数据时整块替换卡片网格）</div>
+              <div style="display:flex;flex-direction:column;align-items:center;padding:60px 20px;text-align:center;">
+                <div style="font-size:40px;color:var(--muted);opacity:.4;margin-bottom:12px;">▣</div>
+                <div style="font-size:14px;color:var(--muted);">暂无全局规则</div>
+                <button class="btn btn-primary" style="margin-top:12px;">添加全局规则</button>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- ── Tab 7 · 静态资源 ── -->
+      <!-- ── Tab 7 · 静态资源（scoped 形态：单集群 / 恒平铺 / 无页头；卡片 strip 只保留「绑定 · 路由名」，状态六枚 chips（全部/待上传/待分发/已分发/分发失败/配置异常），分发失败与配置异常各带错误提示块） ── -->
       <div class="dbody tab-body" data-body="staticResources">
-        <div class="tab-toolbar">
-          <button class="tool-btn">＋ 添加静态资源</button>
-          <span class="spacer"></span>
-        </div>
-        <div style="display:flex;flex-wrap:wrap;gap:14px;">
-          <div class="pcc-card">
-            <div class="pcc-head">
-              <strong class="pcc-title">门户静态包</strong>
-              <span class="lp-tag cl-direct-badge" title="分发路径">/static/portal/</span>
-              <span class="pub-cell"><span class="ps-tag ps-pub" title="已分发 3/3 节点">已分发 3/3</span></span>
+        <div class="tab-card l5-card mode-flat">
+          <div class="l5-toolbar nowrap" style="gap:6px;">
+            <button class="btn btn-primary btn-sm" data-test="scope-add-static-resource"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>添加静态资源</button>
+            <button class="btn btn-secondary btn-sm" data-test="scope-batch-toggle" aria-pressed="false">批量管理</button>
+            <div class="l5-search"><input type="text" style="width:150px" placeholder="搜索名称..."><svg class="s-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>
+            <span class="t-spacer"></span>
+            <button class="tool-btn" title="重新拉取列表"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 11-2.64-6.36"/><path d="M21 3v6h-6"/></svg>刷新</button>
+          </div>
+          <div class="l5-chiprow"><span class="chiprow-label">状态</span><div class="f-chips"><span class="f-chip chip-status active">全部<span class="f-count">3</span></span><span class="f-chip chip-status empty">待上传<span class="f-count">0</span></span><span class="f-chip chip-status empty">待分发<span class="f-count">0</span></span><span class="f-chip chip-status">已分发<span class="f-count">1</span></span><span class="f-chip chip-status">分发失败<span class="f-count">1</span></span><span class="f-chip chip-status">配置异常<span class="f-count">1</span></span></div><span class="t-spacer"></span></div>
+          <div class="l5-batchbar batchbar-dynamic">
+            <span class="b-count">已选 0 项</span>
+            <span class="b-sep"></span>
+            <button class="btn btn-danger btn-sm need-sel"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg> 批量删除</button>
+            <span class="b-spacer"></span>
+            <button class="btn btn-ghost btn-sm">全选当前筛选结果</button>
+            <button class="btn btn-ghost btn-sm">清除选择</button>
+          </div>
+          <div class="card-grid">
+          <article class="l5-panel cluster-c1">
+            <div class="lp-strip"><span class="st-algo">绑定 · <b>门户首页</b></span></div>
+            <div class="lp-head">
+              <div class="lp-title"><span class="lp-name" title="门户静态包">门户静态包</span><span class="lp-tag">2.4 MB</span></div>
+              <div class="lp-status"><span class="ps-tag ps-pub" title="最近分发: 2026-11-14 09:20">已分发 3/3 节点</span></div>
             </div>
-            <div class="pcc-desc">门户与下载边缘静态内容</div>
-            <div class="pcc-tags"><span class="lp-tag">2.4 MB</span><span class="lp-tag">上传 11-14 09:20</span><span class="lp-tag tech">v3</span></div>
-            <div class="pcc-actions">
-              <button class="tool-btn">查看 ZIP</button>
-              <button class="tool-btn">编辑</button>
-              <button class="tool-btn">上传 ZIP</button>
-              <button class="tool-btn" style="color: var(--danger)">删除</button>
-              <span style="flex:1"></span>
-              <button class="op-pub">发布</button>
-              <button class="tool-btn">版本管理</button>
+            <div class="lp-body">
+              <div class="lp-row"><span class="lp-k">路径</span><span class="lp-v mono" title="/static/portal/">/static/portal/</span></div>
+              <div class="lp-row"><span class="lp-k">描述</span><span class="lp-v dim">门户与下载边缘静态内容</span></div>
+              <div class="lp-row"><span class="lp-k">上传</span><span class="lp-v mono dim">2026-11-14 09:20</span></div>
             </div>
+
+            <div class="lp-foot">
+<button class="op-pub">发布</button>
+              <div class="menu-anchor"><button class="op-btn" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">查看 ZIP 内容</span><span class="mi-sub">只读列出包内文件</span></button><button class="mi"><span class="mi-main">编辑</span><span class="mi-sub">改绑路由需重新上传并发布</span></button><button class="mi"><span class="mi-main">替换 ZIP</span></button><button class="mi"><span class="mi-main">版本管理</span><span class="mi-sub">历史版本查看与回滚</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 已分发文件（弹窗可选）</span></button></div></div>
+            </div>
+          </article>
+          <article class="l5-panel cluster-c1">
+            <div class="lp-strip"><span class="st-algo">绑定 · <b>下载中心</b></span></div>
+            <div class="lp-head">
+              <div class="lp-title"><span class="lp-name" title="下载中心附件">下载中心附件</span><span class="lp-tag">12.6 MB</span></div>
+              <div class="lp-status"><span class="ps-tag ps-partial" title="上次分发存在失败节点，可重发">分发失败</span></div>
+            </div>
+            <div class="lp-body">
+              <div class="lp-row"><span class="lp-k">路径</span><span class="lp-v mono" title="/static/downloads/">/static/downloads/</span></div>
+              <div class="lp-row"><span class="lp-k">描述</span><span class="lp-v dim">客户端下载包与驱动附件</span></div>
+              <div class="lp-row"><span class="lp-k">上传</span><span class="lp-v mono dim">2026-11-14 09:20</span></div>
+            </div>
+            <div class="lp-notice alert alert-error">
+              <span class="n-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3.2 21.4 20H2.6L12 3.2z" fill="currentColor"/><path d="M12 9.4v4M12 16.6v.1" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></span>
+              <span class="n-txt">1 个节点分发失败（10.0.0.14 超时）</span>
+              <button class="n-act">重发</button>
+            </div>
+            <div class="lp-foot">
+<button class="op-pub">重发失败节点</button>
+              <div class="menu-anchor"><button class="op-btn" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">查看 ZIP 内容</span><span class="mi-sub">只读列出包内文件</span></button><button class="mi"><span class="mi-main">编辑</span><span class="mi-sub">改绑路由需重新上传并发布</span></button><button class="mi"><span class="mi-main">替换 ZIP</span></button><button class="mi"><span class="mi-main">版本管理</span><span class="mi-sub">历史版本查看与回滚</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 已分发文件（弹窗可选）</span></button></div></div>
+            </div>
+          </article>
+          <article class="l5-panel cluster-c1">
+            <div class="lp-strip"><span class="st-algo">绑定 · <b><b class="c-danger">已删除</b></b></span></div>
+            <div class="lp-head">
+              <div class="lp-title"><span class="lp-name" title="旧版营销页">旧版营销页</span><span class="lp-tag">860 KB</span></div>
+              <div class="lp-status"><span class="ps-tag ps-partial" title="关联路由不存在，请删除该资源或重建路由">配置异常</span></div>
+            </div>
+            <div class="lp-body">
+              <div class="lp-row"><span class="lp-k">路径</span><span class="lp-v mono" title="/static/marketing-old/">/static/marketing-old/</span></div>
+              <div class="lp-row"><span class="lp-k">描述</span><span class="lp-v dim">历史活动页（关联路由已移除）</span></div>
+              <div class="lp-row"><span class="lp-k">上传</span><span class="lp-v mono dim">2026-10-02 11:30</span></div>
+            </div>
+            <div class="lp-notice alert alert-error">
+              <span class="n-ico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3.2 21.4 20H2.6L12 3.2z" fill="currentColor"/><path d="M12 9.4v4M12 16.6v.1" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></span>
+              <span class="n-txt">关联路由已不存在，该资源不可访问</span>
+              <button class="n-act">重建路由</button>
+            </div>
+            <div class="lp-foot">
+<button class="op-pub" disabled title="配置异常：请删除该资源或重建路由">发布</button>
+              <div class="menu-anchor"><button class="op-btn" title="更多操作" aria-label="更多操作"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="l5-menu"><button class="mi"><span class="mi-main">查看 ZIP 内容</span><span class="mi-sub">只读列出包内文件</span></button><button class="mi"><span class="mi-main">编辑</span><span class="mi-sub">改绑路由需重新上传并发布</span></button><button class="mi"><span class="mi-main">替换 ZIP</span></button><button class="mi"><span class="mi-main">版本管理</span><span class="mi-sub">历史版本查看与回滚</span></button><hr class="menu-sep"><button class="mi danger"><span class="mi-main">删除</span><span class="mi-sub">删平台配置，可同步删 Edge 已分发文件（弹窗可选）</span></button></div></div>
+            </div>
+          </article>
           </div>
         </div>
       </div>
@@ -630,7 +827,7 @@
       <div style="padding: 0 16px 14px;">
         <div class="table-note">
           <b>交互模型</b>：点击卡片上的任意<b>统计格</b>（如「上游 12」）或卡脚「统一管理」= 该集群<b>立即最大化</b>（集群网格收起、面板全屏接管空间），且<b>直达统计格对应的 Tab</b>（openStatTab 语义）；✕ 还原还原为网格。同屏只展示一个集群；七个 Tab 均为该集群作用域的资源列表，可对全部资源做增删改与发布——
-          <b>节点/上游/路由 = 表格</b>（列宽/列序个性化 +「选择显示列」弹窗 + 外置分页条），<b>插件组/插件元数据/全局规则/静态资源 = 迷你卡片</b>（与集群管理 Tab 同款形态）；
+          <b>节点/上游/路由 = 表格</b>（列宽/列序个性化 +「选择显示列」弹窗 + 外置分页条），<b>插件组/插件元数据/全局规则/静态资源 = 卡片网格</b>（card-grid + l5-panel，与各自卡片页同构；面板内恒平铺、无分组带、卡片无集群与分组徽标）；<b>七个 Tab 的内容统一包在 .tab-card 封闭容器内</b>（白底 + 1px 边框 + 8px 圆角、无阴影，与实现 .tab-content 同值）；
           行内/卡内 = 发布（op-pub）+ 状态四态 + 「差异」胶囊（批 7）+ ⋯ 菜单（r5 三栏）；统计格点击直达对应 Tab（openStatTab 语义）。
         </div>
       </div>
@@ -640,14 +837,8 @@
 </div>
 
 <style>
-/* Tab 4–7 迷你卡片（实现侧 plugin-config-card 同语义，走 theme token） */
-.pcc-card { width: 320px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); padding: 12px 14px; }
-.pcc-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
-.pcc-title { font-size: 13.5px; font-weight: 700; color: var(--fg); }
-.pcc-desc { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
-.pcc-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
-.pcc-actions { display: flex; gap: 6px; align-items: center; border-top: 1px solid var(--border); padding-top: 10px; }
-.lp-json-toggle { font-size: 11px; color: var(--accent); cursor: pointer; margin-bottom: 6px; }
+/* Tab 4–7 的卡片解剖已统一走 theme.css 共享类（.card-grid / .l5-panel / .lp-* / .lp-json），
+   页面不再持有卡片专属样式；本块只保留「Tab 显隐 + 切换动画 + 集群切换条」等页面级样式 */
 .tab-body { display: none; }
 .tab-body.active { display: block; }
 /* 集群切换专用动画（Tab 切换不套用）：强 accent 底闪现 + 内描边辉光 + 位移，650ms */
@@ -677,6 +868,18 @@ document.querySelectorAll('.op-btn').forEach((btn) => {
     const menu = btn.parentElement.querySelector('.l5-menu')
     document.querySelectorAll('.l5-menu.open').forEach((m) => m !== menu && m.classList.remove('open'))
     menu.classList.toggle('open')
+    menu.classList.remove('flip-up')
+    // 卡内菜单：.tab-card 的 overflow:hidden 会裁掉向下溢出部分（与实现同语义），
+    // 空间不足时向上开（实现 .l5-menu.flip-up 同原语）
+    if (menu.classList.contains('open')) {
+      const clip = btn.closest('.tab-card')
+      if (clip) {
+        const a = btn.getBoundingClientRect()
+        const c = clip.getBoundingClientRect()
+        const need = menu.offsetHeight + 8
+        if (c.bottom - a.bottom < need && a.top - c.top > need) menu.classList.add('flip-up')
+      }
+    }
   })
 })
 document.addEventListener('click', () => document.querySelectorAll('.l5-menu.open').forEach((m) => m.classList.remove('open')))
@@ -771,13 +974,36 @@ document.querySelectorAll('.dt').forEach((tab) => {
     document.querySelectorAll('.tab-body').forEach((b) => b.classList.toggle('active', b.dataset.body === key))
   })
 })
+// 配置 JSON 折叠块（插件元数据 Tab）：默认全展开（BRIEF §七 r27），点击只切「本卡」的 pre.lp-json
 document.querySelectorAll('.lp-json-toggle').forEach((t) => {
-  t.addEventListener('click', () => {
-    const pre = t.nextElementSibling
-    pre.style.display = pre.style.display === 'none' ? 'block' : 'none'
+  t.addEventListener('click', (e) => {
+    e.stopPropagation()
+    const body = t.closest('.lp-body')
+    const pre = body && body.querySelector('.lp-json')
+    if (!pre) return
+    const willClose = pre.style.display !== 'none'
+    pre.style.display = willClose ? 'none' : 'block'
+    t.setAttribute('aria-expanded', String(!willClose))
+    t.title = willClose ? '展开配置 JSON' : '收起配置 JSON'
+    const svg = t.querySelector('svg')
+    if (svg) {
+      svg.innerHTML = willClose
+        ? '<polyline points="7 9 12 4 17 9"/><polyline points="7 15 12 20 17 15"/>'
+        : '<polyline points="7 4 12 9 17 4"/><polyline points="7 20 12 15 17 20"/>'
+    }
   })
 })
-document.querySelectorAll('.lp-json').forEach((pre) => (pre.style.display = 'none'))
+// 工具条「收起配置 / 展开配置」全局开关（实现 config-toggle-all 同语义）
+document.querySelectorAll('[data-config-toggle]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const all = document.querySelectorAll('.tab-body[data-body="pluginMetadata"] .lp-json')
+    const fold = btn.dataset.state !== 'folded'
+    all.forEach((pre) => (pre.style.display = fold ? 'none' : 'block'))
+    btn.dataset.state = fold ? 'folded' : 'open'
+    const label = btn.querySelector('.fold-all-label')
+    if (label) label.textContent = fold ? '展开配置' : '收起配置'
+  })
+})
 </script>
 </body>
 </html>

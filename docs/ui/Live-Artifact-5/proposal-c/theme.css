@@ -2691,3 +2691,16 @@ tr.l5-group td { background: var(--bg); padding: 0; border-bottom: 1px solid var
   background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
   padding: 0 5px; line-height: 1.6; align-self: center;
 }
+
+/* ==========================================================
+   Tab 内容封闭容器（统一管理 · 最大化面板，2026-11-22 回填）
+   与实现同一语义：`.max-panel .dbody > .tab-content` = 白底 + 1px 边框
+   + radius-lg（8px）+ overflow:hidden，**无 box-shadow**（面板本身已是卡片）。
+   ========================================================== */
+.tab-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+/* 卡片类 Tab 的容器与 .l5-card 同挂（复用平铺态原语：lp-strip 显示 / 左缘集群色条 / 批量勾选框），
+   此处压掉 .l5-card 自带阴影——与实现「内层容器不加 box-shadow」同一裁决 */
+.tab-card.l5-card { box-shadow: none; }
+/* 容器 overflow:hidden 会裁掉卡内绝对定位菜单（实现同语义，由「空间不足向上翻转」兜住）；
+   移植实现同一原语：菜单贴底时改向上开（.l5-menu.flip-up，与产品 style.css 同名） */
+.l5-menu.flip-up { top: auto; bottom: calc(100% + 6px); }
