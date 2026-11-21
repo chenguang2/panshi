@@ -287,8 +287,10 @@ describe('mockup-parity r5（parity-audit-nodes-r5 逐项批准后的锚点）',
     const pageCell = readFileSync(resolve(process.cwd(), 'src/components/resource-cells/NodeStatusCell.vue'), 'utf-8')
     expect(pageCell).toContain('status="disabled"')
     // 最大化面板 Tab 状态格：2026-11-21 用户裁决与节点独立页统一为 BadgeStatus 形态
-    // （解剖由共享原语 components/resource-cells/NodeStatusCell.vue 承担，variant="page"）
-    const tab = page('clusters/ClusterNodes.vue')
+    // （解剖由共享原语 components/resource-cells/NodeStatusCell.vue 承担，variant="page"）。
+    // 2026-11-21 A 试点：面板不再有自写状态格——节点 Tab 直接渲染 NodeList（scoped 形态），
+    // 故 assert 反转：NodeList 的状态格即面板的状态格（唯一实现）。
+    const tab = page('NodeList.vue')
     expect(tab).toContain('<NodeStatusCell')
     expect(tab).toContain('variant="page"')
     const cell = readFileSync(resolve(process.cwd(), 'src/components/resource-cells/NodeStatusCell.vue'), 'utf-8')
@@ -572,12 +574,16 @@ describe('mockup-parity r11（筛选行与状态行之间的分隔线）', () =>
 })
 
 describe('mockup-parity r12（平铺视图集群标识 / 优先级 mono）', () => {
-  it('r12-① 三页「集群」列定义在 columns 里，且仅平铺可见、不进列配置弹窗', () => {
+  it('r12-① 三页「集群」列定义在 columns 里，且仅平铺可见、不进列配置弹窗（节点页另加 scoped 判定：面板单集群无此列）', () => {
     for (const f of ['NodeList.vue', 'UpstreamList.vue', 'RouteList.vue']) {
       const s = page(f)
       expect(s, f).toContain("key: 'cluster'")
-      // 分组态过滤：isVisible 里按 viewMode 判定
-      expect(s, f).toMatch(/if \(k === 'cluster'\) return viewMode\.value === 'flat'/)
+      // 分组态过滤：isVisible 里按 viewMode 判定；NodeList 另有 isScoped（A 试点：面板恒无集群列）
+      const expected =
+        f === 'NodeList.vue'
+          ? /if \(k === 'cluster'\) return !isScoped\.value && viewMode\.value === 'flat'/
+          : /if \(k === 'cluster'\) return viewMode\.value === 'flat'/
+      expect(s, f).toMatch(expected)
       // 列配置弹窗不含集群列
       expect(s, f).toMatch(/key === 'cluster'\) continue|!== 'cluster'/)
     }

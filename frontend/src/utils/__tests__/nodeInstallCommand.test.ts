@@ -35,17 +35,15 @@ describe('buildNodeInstallCommand', () => {
   })
 
   // ── 源码守卫：两视图引用共享实现，硬编码绝对路径清零（batch3 1.1）──
-  it('两视图引用共享实现；Tab 硬编码 /home/qcg 与 jboss@ 账号清零', () => {
+  it('安装命令单一实现：NodeList 引用共享 buildNodeInstallCommand，面板 Tab 复用同一组件', () => {
     const nodeList = readFileSync(resolve(process.cwd(), 'src/views/NodeList.vue'), 'utf-8')
-    const clusterNodes = readFileSync(resolve(process.cwd(), 'src/views/clusters/ClusterNodes.vue'), 'utf-8')
-    for (const [name, src] of [
-      ['NodeList.vue', nodeList],
-      ['ClusterNodes.vue', clusterNodes],
-    ] as const) {
-      expect(src, `${name} 应引用共享 buildNodeInstallCommand`).toContain('buildNodeInstallCommand')
-      expect(src, `${name} 不应内联重复实现`).not.toMatch(/function buildInstallCommand/)
-      expect(src, `${name} 不应保留硬编码绝对路径`).not.toContain('/home/qcg')
-      expect(src, `${name} 不应保留 jboss@ 硬编码账号`).not.toContain('jboss@')
-    }
+    const central = readFileSync(resolve(process.cwd(), 'src/views/CentralList.vue'), 'utf-8')
+    expect(nodeList, 'NodeList 应引用共享 buildNodeInstallCommand').toContain('buildNodeInstallCommand')
+    expect(nodeList, '不应内联重复实现').not.toMatch(/function buildInstallCommand/)
+    expect(nodeList, '不应保留硬编码绝对路径').not.toContain('/home/qcg')
+    expect(nodeList, '不应保留 jboss@ 硬编码账号').not.toContain('jboss@')
+    // 统一管理面板节点 Tab = NodeList 的 scoped 形态（无第二份安装流实现）
+    expect(central).toContain('NodeList')
+    expect(central).not.toContain('clusters/ClusterNodes.vue')
   })
 })

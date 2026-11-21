@@ -80,7 +80,8 @@
 /**
  * 节点单条新增/编辑共享表单（B2b-1，对齐 B1 的 UpstreamFormModal/RouteFormModal 先例）。
  *
- * 取代两处内联实现：统一管理面板 ClusterNodes 的单条表单、节点管理页 NodeList 的内联表单。
+ * 取代两处内联实现：统一管理面板节点 Tab（原 ClusterNodes，现为 NodeList 的 scoped 形态）、
+ * 节点管理页 NodeList 的旧内联表单。
  * 字段 = 两侧并集（页面多「所属集群」），校验取两侧更严格者（AntDV rules 统一）：
  * - IP：必填 + IPv4 正则
  * - 服务端口 / 管理端口：必填 + 1-65535；SSH 端口可选（同样 1-65535）

@@ -1385,11 +1385,12 @@ describe('NodeList.vue batch3 列配置', () => {
     return wrapper
   }
 
-  it('独立 storage key「node_standalone」，与 Tab 的 node 配置互不影响（D8 源码守卫）', async () => {
+  it('独立 storage key「node_standalone」（面板 scoped 形态用 node_panel），与 Tab 的 node 配置互不影响（D8 源码守卫）', async () => {
     const { readFileSync } = await import('node:fs')
     const { resolve } = await import('node:path')
     const s = readFileSync(resolve(process.cwd(), 'src/views/NodeList.vue'), 'utf-8')
-    expect(s).toContain("key: 'node_standalone'")
+    // 2026-11-21 A 试点：页面/面板两形态存储键分立（node_standalone / node_panel）
+    expect(s).toContain("key: isScoped.value ? 'node_panel' : 'node_standalone',")
     expect(s).toContain(':columns="visibleNodeColumns"')
     expect(s).toContain(':row-selection="rowSelection"')
   })

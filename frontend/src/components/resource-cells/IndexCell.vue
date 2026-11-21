@@ -9,7 +9,7 @@ import { computed } from 'vue'
 /**
  * 纯展示：只算序号，不读分页状态来源。
  *
- * `page` / `pageSize` 缺省值与 `rowIndexLabel`（ClusterNodes 等）及 `ListPager` 一致
+ * `page` / `pageSize` 缺省值与 `rowIndexLabel`（旧 ClusterNodes 面板 Tab）及 `ListPager` 一致
  * （1 / 20），故未加载时也不会出现 `-19` 之类的负号。
  */
 const props = withDefaults(

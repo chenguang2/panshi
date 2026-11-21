@@ -41,6 +41,13 @@ const IP_PATTERN = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]
 
 // 默认列宽档（cluster-tab-column-personalization D6）：table-layout: fixed 下无宽列会被
 // 剩余空间均分、长内容列压到不可读，故逐列给默认档，用户拖拽宽度经 applyColumnWidths 覆盖。
+// ⚠️ 2026-11-21（shared-core-plan A 试点）：唯一消费方 clusters/ClusterNodes.vue 已删除
+// （面板改渲染 NodeList 的 scoped 形态，列定义归 NodeList 自有 columns）。本常量与下方
+// `useClusterNodes` 中「面板专供」成员（allNodeColumns / visibleNodeColumns / orderedNodeColumns /
+// nodeColumnPopoverVisible / moreNodeActions / getNodeActionButtonTitle / handleNodeAction /
+// handleNodeTableChange / selectNode(s) / deleteNode(s) / batchNodeAction / batchNodeStatus /
+// startNode / stopNode / queryNodeStatus / executeNodeAction）在生产代码中已零引用，
+// 按 B1.5 约定**本批只标注不删除**（存量测试仍在挂），清理另批。
 export const allNodeColumns = [
   { title: 'IP', dataIndex: 'ip', key: 'ip', width: 140, sorter: true },
   { title: 'Edge版本', key: 'edge_version', width: 110 },

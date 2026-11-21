@@ -79,36 +79,40 @@ describe('面板 Tab 表单共用守卫（B1）', () => {
 })
 
 // ── 节点 Tab 表单共用守卫（B2b-1）：与 B1 三个 Tab 同口径 ──
-describe('节点 Tab 表单共用守卫（B2b-1）', () => {
-  it('引用共享 NodeFormModal，带单元素集群清单 + lock-cluster', () => {
-    const s = src('ClusterNodes.vue')
+// 2026-11-21（shared-core-plan A 试点）：面板节点 Tab 不再有自写表格/表单宿主，
+// 直接渲染 NodeList 的 scoped 形态 → 断言对象由 clusters/ClusterNodes.vue 迁移到 views/NodeList.vue。
+describe('节点 Tab 表单共用守卫（B2b-1 / A 试点迁移）', () => {
+  const nodeList = () => readFileSync(resolve(process.cwd(), 'src/views/NodeList.vue'), 'utf-8')
+
+  it('引用共享 NodeFormModal；scoped 下集群预选并锁定（页面形态仍可跨集群选择）', () => {
+    const s = nodeList()
     expect(s).toContain('<NodeFormModal')
-    expect(s).toContain(':clusters="formClusters"')
-    expect(s).toContain(':default-cluster-id="props.cluster.id"')
-    expect(s).toContain('lock-cluster')
+    expect(s).toContain(':clusters="formClusterOptions"')
+    expect(s).toContain(':default-cluster-id="scopedClusterId"')
+    expect(s).toContain(':lock-cluster="isScoped"')
     expect(s).toContain("import NodeFormModal from '@/components/NodeFormModal.vue'")
-    expect(s).toContain('{ id: props.cluster.id, name: props.cluster.name, display_name: props.cluster.display_name }')
+    // scoped 单元素集群清单（与 B1 三个 Tab 同构）
+    expect(s).toContain("return [{ id, name: c?.name ?? '', display_name: c?.display_name }]")
   })
 
   it('单条表单模板不得回流：无 a-form / a-form-item / nodeForm 模型 / handleNodeSubmit / validateIP', () => {
-    const s = src('ClusterNodes.vue')
+    const s = nodeList()
     expect(s).not.toContain('<a-form')
     expect(s).not.toContain('a-form-item')
     expect(s).not.toMatch(/\bnodeForm\b/)
     expect(s).not.toContain('handleNodeSubmit')
     expect(s).not.toContain('validateIP')
-    // B2b-2 已把批量导入迁至共享组件（原「批量块保留」断言在此反转）
     expect(s).not.toContain('handleImportSubmit')
     expect(s).not.toContain('parseTextToRows')
   })
 
   it('保存/关闭只做列表刷新，提交逻辑不在宿主重写', () => {
-    const s = src('ClusterNodes.vue')
-    expect(s).toContain('@saved="onNodeFormSaved"')
-    expect(s).toContain('@close="closeNodeForm"')
-    // 单条提交的 POST/PUT 只剩在共享组件内（面板里没有 /nodes` 或 /nodes/${id} 的创建/更新调用）
-    expect(s).not.toContain('api.post(`/clusters/${clusterId}/nodes`')
-    expect(s).not.toContain('api.put(`/clusters/')
+    const s = nodeList()
+    expect(s).toContain('@saved="onFormSaved"')
+    expect(s).toContain('@close="closeFormModal"')
+    // 单条提交的 POST/PUT 只剩在共享组件内
+    expect(s).not.toContain('createNode')
+    expect(s).not.toContain('updateNode')
   })
 })
 
@@ -122,35 +126,31 @@ const BATCH_IMPORT_LEAK_MARKERS = [
   'nodes/batch',
 ]
 
-describe('节点批量导入共用守卫（B2b-2）', () => {
+describe('节点批量导入共用守卫（B2b-2 / A 试点迁移）', () => {
   const COMPONENT_PATH = resolve(process.cwd(), 'src/components/NodeBatchImportModal.vue')
+  const nodeList = () => readFileSync(resolve(process.cwd(), 'src/views/NodeList.vue'), 'utf-8')
 
-  it('面板 ClusterNodes 引用共享弹窗，集群由上下文锁定', () => {
-    const s = src('ClusterNodes.vue')
+  it('唯一宿主 NodeList：页面形态在弹窗内选集群、scoped 形态由上下文锁定集群', () => {
+    const s = nodeList()
     expect(s).toContain('<NodeBatchImportModal')
-    expect(s).toContain(':cluster-id="props.cluster.id"')
-    expect(s).toContain('lock-cluster')
-    expect(s).toContain('@saved="onBatchImportSaved"')
+    expect(s).toContain(':clusters="isScoped ? [] : clusters"')
+    expect(s).toContain(':cluster-id="scopedClusterId"')
+    expect(s).toContain(':cluster-name="scopedClusterName"')
+    expect(s).toContain(':lock-cluster="isScoped"')
+    expect(s).toContain('@saved="refreshList"')
     expect(s).toContain("import NodeBatchImportModal from '@/components/NodeBatchImportModal.vue'")
+    // 两个入口都在（页头形态 + 面板工具条紧凑钮共用同一开关函数）
+    expect(s).toContain('openBatchImport')
   })
 
-  it('页面 NodeList 引用共享弹窗，集群清单注入弹窗内选择', () => {
-    const page = readFileSync(resolve(process.cwd(), 'src/views/NodeList.vue'), 'utf-8')
-    expect(page).toContain('<NodeBatchImportModal')
-    expect(page).toContain(':clusters="clusters"')
-    expect(page).toContain('@saved="refreshList"')
-    expect(page).toContain("import NodeBatchImportModal from '@/components/NodeBatchImportModal.vue'")
-    // 页头入口仍在（mockup-parity r5：批量导入先于添加节点）
-    expect(page).toContain('openBatchImport')
+  it('clusters/ClusterNodes.vue 不得回流（节点 Tab 只允许渲染 NodeList 的 scoped 形态）', () => {
+    expect(() => src('ClusterNodes.vue')).toThrow()
   })
 
-  it.each([
-    ['ClusterNodes.vue', () => src('ClusterNodes.vue')],
-    ['NodeList.vue', () => readFileSync(resolve(process.cwd(), 'src/views/NodeList.vue'), 'utf-8')],
-  ])('%s 不再自持批量导入逻辑（解析/校验/模板/提交零回流）', (file, read) => {
-    const s = read()
+  it('NodeList 不再自持批量导入逻辑（解析/校验/模板/提交零回流）', () => {
+    const s = nodeList()
     for (const marker of BATCH_IMPORT_LEAK_MARKERS) {
-      expect(s, `${file} 不应再出现 ${marker}`).not.toContain(marker)
+      expect(s, `NodeList.vue 不应再出现 ${marker}`).not.toContain(marker)
     }
     expect(s).not.toContain('handleImportSubmit')
     expect(s).not.toContain('parseTextToRows')

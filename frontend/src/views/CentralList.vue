@@ -404,7 +404,13 @@
               :nodes="maximizedCluster.nodes"
             />
           </div>
-          <ClusterNodes v-else :cluster="maximizedCluster" @refresh="loadClusters" />
+          <!-- 集群节点 Tab = 节点管理页组件的「单集群作用域」形态（A 试点：一份实现两处挂载）：
+               页面组件隐藏页头/集群与分组筛选/分组切换/集群列，页面级动作改由工具条左侧紧凑钮；
+               chips / 批量条 / 表格 / 分页 / 列配置与页面同一份实现。
+               @refresh 保留既有绑定（节点 Tab 自身不发 refresh——列表变更后由面板壳决定是否全量重载）。 -->
+          <div v-else class="tab-content">
+            <NodeList :scoped-cluster-id="maximizedCluster.id" @refresh="loadClusters" />
+          </div>
         </div>
       </div>
     </div>
@@ -523,14 +529,14 @@ import ClusterBackupDialog from '@/components/ClusterBackupDialog.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import type { PublishModalOptions } from '@/composables/useClusterResourceCore'
 import ConfigDiff from '@/views/ConfigDiff.vue'
-import { useClusterNodes, allNodeColumns, allNodeActionButtons } from '@/composables/useClusterNodes'
+import { useClusterNodes } from '@/composables/useClusterNodes'
 import { useClusterUpstreams } from '@/composables/useClusterUpstreams'
 import { useClusterRoutes } from '@/composables/useClusterRoutes'
 import { useClusterPluginConfigs } from '@/composables/useClusterPluginConfigs'
 import { useClusterGlobalRules } from '@/composables/useClusterGlobalRules'
 import { useClusterStaticResources } from '@/composables/useClusterStaticResources'
 import { PAGE_SIZE_CARD_GRID } from '@/constants'
-import ClusterNodes from '@/views/clusters/ClusterNodes.vue'
+import NodeList from '@/views/NodeList.vue'
 import ClusterUpstreams from '@/views/clusters/ClusterUpstreams.vue'
 import ClusterRoutes from '@/views/clusters/ClusterRoutes.vue'
 import ClusterPluginConfigs from '@/views/clusters/ClusterPluginConfigs.vue'
@@ -892,26 +898,10 @@ const onRefresh = () => {
 // ── Composables ──
 // 单条节点表单已迁至共享 NodeFormModal（B2b-1）：本页只保留与列表/面板相关的绑定，
 // 原内联表单及其表单模型/校验/提交一并退场（唯一实现在组件内）。
-const {
-  diffDrawerVisible,
-  diffClusterId,
-  diffNodeId,
-  nodeColumnPopoverVisible,
-  nodeColumnsSelected,
-  nodeSearchVisible,
-  nodeActionsSelected,
-  moreNodeActions,
-  visibleNodeColumns,
-  getNodeActionButtonTitle,
-  handleNodeAction,
-  handleNodeTableChange,
-  loadNodes,
-  selectNode,
-  deleteNode,
-  startNode,
-  stopNode,
-  queryNodeStatus,
-} = useClusterNodes({
+// 2026-11-21（shared-core-plan A 试点）：节点 Tab 改渲染 NodeList 的 scoped 形态，
+// 原面板表格的列/动作/批量绑定已无消费方（表格机制归 NodeList 独占），此处只留卡片预览与
+// 外部触发的节点刷新（loadNodes）+ 数据库对比抽屉。
+const { diffDrawerVisible, diffClusterId, diffNodeId, loadNodes } = useClusterNodes({
   clusters,
   onRefresh,
 })
@@ -1627,20 +1617,8 @@ onMounted(async () => {
   min-height: 100px;
 }
 
-.node-tab {
-  width: 100%;
-}
 .tab-content {
   min-height: 100px;
-}
-.node-actions {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-  flex-wrap: wrap;
-}
-.node-table {
-  margin-top: 8px;
 }
 
 .empty-state {
@@ -1688,98 +1666,9 @@ onMounted(async () => {
   margin: 0;
 }
 
-/* 表头：保留品牌色底 + 主色下框（页面标识，沿用 --p-* 令牌），其余机械属性对齐列表页契约 */
-:deep(.node-table) .ant-table-thead > tr > th {
-  background: var(--accent-bg) !important;
-  border-bottom: 2px solid var(--accent) !important;
-  color: var(--fg) !important;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 12px 8px;
-  white-space: nowrap;
-}
-:deep(.node-table) .ant-table-thead > tr > th::before {
-  display: none !important;
-}
-:deep(.node-table) .ant-table-tbody > tr > td {
-  background: transparent !important;
-  border-bottom: 1px solid var(--border) !important;
-  color: var(--muted);
-  font-size: 13px;
-  padding: 12px 8px;
-  white-space: nowrap;
-}
-:deep(.node-table) .ant-table-tbody > tr:last-child > td {
-  border-bottom: none !important;
-}
-:deep(.node-table) .ant-table-tbody > tr:hover > td {
-  background: var(--bg) !important;
-}
-:deep(.node-table) .ant-empty-description {
-  color: var(--muted) !important;
-}
-:deep(.node-table) .ant-tag {
-  border: none;
-  font-weight: 500;
-  border-radius: var(--radius-sm);
-}
-:deep(.node-table) .ant-badge-status-text {
-  color: var(--muted);
-}
-
-:deep(.node-table) .ant-table-tbody .ant-btn {
-  background: var(--bg) !important;
-  border: 1px solid var(--border) !important;
-  color: var(--muted) !important;
-  border-radius: var(--radius-sm);
-  height: 26px;
-  font-size: 12px;
-  padding: 0 8px;
-}
-:deep(.node-table) .ant-table-tbody .ant-btn:hover {
-  background: var(--accent-bg) !important;
-  border-color: var(--accent) !important;
-  color: var(--accent) !important;
-}
-:deep(.node-table) .ant-table-tbody .ant-btn-dangerous {
-  color: var(--danger) !important;
-}
-
-:deep(.node-table) .ant-pagination .ant-pagination-item {
-  background: var(--surface) !important;
-  border: 1px solid var(--border) !important;
-  border-radius: var(--radius-sm);
-}
-:deep(.node-table) .ant-pagination .ant-pagination-item a {
-  color: var(--muted) !important;
-}
-:deep(.node-table) .ant-pagination .ant-pagination-item-active {
-  background: var(--accent) !important;
-  border-color: var(--accent) !important;
-}
-:deep(.node-table) .ant-pagination .ant-pagination-item-active a {
-  color: #fff !important;
-}
-:deep(.node-table) .ant-pagination .ant-pagination-prev button,
-:deep(.node-table) .ant-pagination .ant-pagination-next button {
-  background: var(--surface) !important;
-  border: 1px solid var(--border) !important;
-  color: var(--muted) !important;
-}
-:deep(.node-table) .ant-pagination .ant-pagination-disabled button {
-  opacity: 0.3 !important;
-}
-:deep(.node-table) .ant-pagination-options .ant-select-selector {
-  background: var(--surface) !important;
-  border: 1px solid var(--border) !important;
-  color: var(--muted) !important;
-}
-:deep(.node-table) .ant-pagination-total-text {
-  color: var(--muted) !important;
-}
-
+/* 2026-11-21（shared-core-plan A 试点）：原面板节点表格的品牌色表头/紧凑单元格/antd 分页样式
+   随 ClusterNodes 退场（节点 Tab 改渲染 NodeList scoped 形态，表格解剖由全局
+   `.table-container.l5-card` 段单点承担，避免面板覆盖与页面 parity 规则互相争夺）。 */
 :deep(.dbody) .ant-input-affix-wrapper {
   background: var(--surface) !important;
   border: 1px solid var(--border) !important;

@@ -39,8 +39,9 @@ import BadgeStatus from '@/components/BadgeStatus.vue'
 /**
  * 节点状态格（纯展示）——两种既有渲染形态的二选一：
  *
- * · `panel`：最大化面板（ClusterNodes.vue）双 `.ps-tag` 无圆点，
- *   管理开关（已启用 `ps-pub` / 已禁用 `ps-unpub`）+ 运行态（在线/离线/未检测）；
+ * · `panel`：旧最大化面板（ClusterNodes.vue，2026-11-21 已删除）的双 `.ps-tag` 无圆点形态：
+ *   管理开关（已启用 `ps-pub` / 已禁用 `ps-unpub`）+ 运行态（在线/离线/未检测）。
+ *   面板现直接渲染 NodeList 的 scoped 形态（两处均为 `page` 变体），panel 变体仅留向后兼容。
  * · `page`：节点独立页（NodeList.vue）`BadgeStatus`，只在管理开关关闭时多一枚
  *   「已禁用」虚线胶囊，运行态三态互斥。
  *
@@ -62,7 +63,7 @@ withDefaults(
 </script>
 
 <style scoped>
-/* 面板解剖（= ClusterNodes 的 .node-status-cell：并排 + gap 6 + 可折行） */
+/* 面板解剖（= 旧 ClusterNodes 的 .node-status-cell：并排 + gap 6 + 可折行；现仅向后兼容） */
 .node-status-cell {
   display: inline-flex;
   align-items: center;

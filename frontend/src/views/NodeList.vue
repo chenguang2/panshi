@@ -1,6 +1,10 @@
 <template>
-  <div class="node-list">
-    <PageHeader title="节点管理" description="管理 Edge 网关节点，监控运行状态并执行操作">
+  <!-- 单实现双形态（shared-core-plan A 试点）：
+       缺省 = 独立列表页（PageHeader + 集群筛选 + 分组/平铺）；
+       传 scopedClusterId = 统一管理最大化面板的「集群节点」Tab（隐藏页头/集群筛选/分组切换与集群列，
+       页面级动作改由工具条左侧紧凑钮承载，其余（chips/批量条/表格/分页/列配置）与页面同一份实现）。 -->
+  <div class="node-list" :class="{ 'node-list-scoped': isScoped }">
+    <PageHeader v-if="!isScoped" title="节点管理" description="管理 Edge 网关节点，监控运行状态并执行操作">
       <template #stats>
         <PageStatBadges :items="headerStatItems" />
       </template>
@@ -12,18 +16,29 @@
       </template>
     </PageHeader>
 
-    <div ref="cardRef" class="table-container l5-card">
-      <!-- 工具条（list-pages-console-restyle）：共享 TableToolbar，右端簇 = 计数 → 刷新 → 列配置 → 分组|平铺 -->
+    <div ref="cardRef" class="table-container l5-card" :class="{ 'scope-card': isScoped }">
+      <!-- 工具条（list-pages-console-restyle）：共享 TableToolbar，右端簇 = 计数 → 刷新 → 列配置 → 分组|平铺。
+           scoped（面板 Tab）隐藏「分组|平铺」（单集群下无意义，恒平铺）。 -->
       <TableToolbar
         v-model:mode="viewMode"
         class="node-filter-bar nowrap"
         :count="totalCount"
         count-unit="个节点"
         :show-count="false"
+        :show-mode="!isScoped"
         :refreshing="loading"
         @refresh="refreshList"
       >
         <template #filters>
+          <!-- scoped：页面级动作（原本在 PageHeader）收敛为工具条左侧紧凑钮（#90 页头动作区规范的 scoped 替代） -->
+          <template v-if="isScoped">
+            <button class="btn btn-primary btn-sm" data-test="scope-add-node" @click="openAddModal">
+              <StrokeIcon name="plus" :size="13" /> 添加节点
+            </button>
+            <button class="btn btn-secondary btn-sm" data-test="scope-batch-import" @click="openBatchImport">
+              <StrokeIcon name="upload" :size="13" /> 批量导入
+            </button>
+          </template>
           <SearchInput
             v-if="nodeSearchVisible"
             v-model="searchText"
@@ -31,7 +46,9 @@
             :width="150"
             @input="onSearchInput"
           />
+          <!-- 分组/集群筛选仅页面形态（面板恒单集群、恒平铺） -->
           <select
+            v-if="!isScoped"
             v-model="groupFilter"
             :title="groupFilter.startsWith('__') ? '' : groupFilter"
             class="l5-select"
@@ -43,6 +60,7 @@
             <option value="__ung__">未分组</option>
           </select>
           <ClusterSelect
+            v-if="!isScoped"
             v-model="clusterFilter"
             :clusters="filteredClusters"
             allow-all
@@ -325,12 +343,14 @@
       <ListPager :page="page" :page-size="pageSize" :total="totalCount" unit="个节点" @change="handlePagerChange" />
     </div>
 
-    <!-- 单条新增/编辑：共享表单（B2b-1，与面板 ClusterNodes 同一组件；提交/校验在组件内） -->
+    <!-- 单条新增/编辑：共享表单（B2b-1，面板 Tab 与本页同一组件；scoped 下预选并锁定当前集群） -->
     <NodeFormModal
       :visible="formModalVisible"
       :editing-node="editingNode"
       :copying-node="copyingNode"
-      :clusters="clusters"
+      :clusters="formClusterOptions"
+      :default-cluster-id="scopedClusterId"
+      :lock-cluster="isScoped"
       @close="closeFormModal"
       @saved="onFormSaved"
     />
@@ -464,10 +484,13 @@
       "
     />
 
-    <!-- 批量导入：共享弹窗（B2b-2，与统一管理面板同一实现；集群在本弹窗内选择） -->
+    <!-- 批量导入：共享弹窗（B2b-2；页面形态在弹窗内选集群，scoped 形态由上下文锁定集群） -->
     <NodeBatchImportModal
       :visible="batchImportVisible"
-      :clusters="clusters"
+      :clusters="isScoped ? [] : clusters"
+      :cluster-id="scopedClusterId"
+      :cluster-name="scopedClusterName"
+      :lock-cluster="isScoped"
       @close="batchImportVisible = false"
       @saved="refreshList"
     />
@@ -540,6 +563,37 @@ import SearchInput from '@/components/SearchInput.vue'
 
 const route = useRoute()
 const featuresStore = useFeaturesStore()
+
+/**
+ * 单实现双形态（docs/refactoring/shared-core-plan-2026-11-21.md，A 试点）：
+ * - 不传 `scopedClusterId`：独立列表页（现状——跨集群、分组/平铺、集群列）。
+ * - 传 `scopedClusterId`：统一管理最大化面板的「集群节点」Tab——只承载该集群：
+ *   隐藏 PageHeader / 集群与分组筛选 / 分组带 / 集群列，视图恒平铺；
+ *   页面级动作（添加节点、批量导入）改由工具条左侧紧凑钮承载；
+ *   列配置走独立存储键 `node_panel`，与页面 `node_standalone` 互不污染。
+ */
+const props = withDefaults(defineProps<{ scopedClusterId?: number | null }>(), { scopedClusterId: null })
+const isScoped = computed(() => props.scopedClusterId != null)
+/** 表单/批量导入弹窗的集群清单：scoped 下只给当前集群（并锁定选择） */
+const formClusterOptions = computed(() => {
+  const id = props.scopedClusterId
+  if (id == null) return clusters.value
+  const c = clusters.value.find((x) => x.id === id)
+  return [{ id, name: c?.name ?? '', display_name: c?.display_name }]
+})
+const scopedClusterName = computed(() => {
+  const c = clusters.value.find((x) => x.id === props.scopedClusterId)
+  return c ? c.display_name || c.name : ''
+})
+/** 列表/统计请求的集群过滤：scoped 恒取作用域集群，页面形态取筛选下拉 */
+function effectiveClusterId(): number | undefined {
+  if (props.scopedClusterId != null) return props.scopedClusterId
+  return clusterFilter.value ? Number(clusterFilter.value) : undefined
+}
+/** 分组过滤仅页面形态生效（面板单集群下恒「全部分组」） */
+function effectiveGroupName(): string {
+  return isScoped.value ? '__all__' : groupFilter.value
+}
 
 // ── State ──
 const loading = ref(false)
@@ -742,7 +796,8 @@ const ALL_COLUMN_KEYS: string[] = (() => {
 })()
 
 // ── 集群分组 + 双模式（list-page-cluster-grouping，共享组合式单点）──
-const viewMode = ref<ListViewMode>('group')
+// scoped（面板 Tab）= 单集群，分组带无意义 → 恒平铺（切换器同时隐藏）
+const viewMode = ref<ListViewMode>(isScoped.value ? 'flat' : 'group')
 /** 运行态三元过滤（batch2 3.1 / D5）：按 nginxState 判定，不按管理开关字段。
  *  抽出纯函数：displayedNodes 与 loadNodes 的 loadAll 计数共用同一口径（规格要求
  *  「徽标/计数随筛选数据集更新」，loadAll 模式 totalCount 须为过滤后全量而非载入全量）。 */
@@ -794,11 +849,13 @@ const statsNodes = ref<any[]>([])
 async function loadNodeStats() {
   try {
     const res = await listNodes({
-      groupName: groupFilter.value,
+      groupName: effectiveGroupName(),
       page: 1,
       pageSize: PAGE_SIZE_DROPDOWN, // MAX_PAGE_SIZE：全量一次取回（与节点规模匹配）
       search: searchText.value || undefined,
-      clusterId: clusterFilter.value ? Number(clusterFilter.value) : undefined,
+      // scoped（面板 Tab）= 当前集群：计数口径与列表同源（无 /nodes/stats 聚合端点，
+      // 运行态来自 status_detail JSON 也无法 SQL 聚合，故沿用「全量拉取后前端计数」）
+      clusterId: effectiveClusterId(),
       status: undefined,
     })
     statsNodes.value = res.data.items || []
@@ -849,7 +906,7 @@ async function refreshList(): Promise<void> {
 }
 
 // ── 列/按钮/搜索个性化（batch3 4.1 / D8）──
-// 独立 storage key「node_standalone」，与 Tab 的 useColumnConfig('node') 互不影响。
+// 存储键：页面形态 = `node_standalone`，scoped（面板 Tab）= `node_panel`（两形态互不污染）。
 // 行内可调动作 = start/stop/status（reload 为本页特有动作，固定展示）；
 // 编辑/复制/删除/数据库对比 恒驻「更多」菜单（D6），不作为 popover 勾选项。
 const NODE_ROW_ACTION_KEYS = ['start', 'stop', 'status']
@@ -864,7 +921,7 @@ const {
   columnOrder: nodeColumnOrder,
   setColumnOrder: setNodeColumnOrder,
 } = useColumnConfig({
-  key: 'node_standalone',
+  key: isScoped.value ? 'node_panel' : 'node_standalone',
   // 默认勾选/顺序清洗均按全量列键（含被合并的 openresty_path，#79 route-column-reorder-fix）
   defaultColumns: [...ALL_COLUMN_KEYS],
   allColumns: [...ALL_COLUMN_KEYS],
@@ -926,7 +983,8 @@ const cardRef = ref<HTMLElement | null>(null)
 // 集群列已在 columns 定义里（仅平铺可见）；分组态不参与列宽缩放
 const designWidths = () => {
   const base = toDesignWidths(columns)
-  if (viewMode.value === 'flat') return base
+  // 集群列只在「页面形态 + 平铺」参与缩放（分组视图由组头承担；scoped 单集群无此列）
+  if (!isScoped.value && viewMode.value === 'flat') return base
   const { cluster: _cluster, ...rest } = base
   return rest
 }
@@ -940,7 +998,7 @@ const { widths: fittedColumnWidths, minTableWidth } = useFitColumnWidths({
   // 操作列按钮组 ≈ 268px（压到其下内容溢出）；状态列 140px（两枚胶囊并排需 115.6 + 内距 24）。
   // scroll.x = 下限之和 740 + 选择列 40 = 780 → 窗口 ≥ ~1180 时永不出现横向滚动。
   minWidths: () => ({
-    ...(viewMode.value === 'flat' ? { cluster: CLUSTER_COLUMN_MIN_WIDTH } : {}),
+    ...(!isScoped.value && viewMode.value === 'flat' ? { cluster: CLUSTER_COLUMN_MIN_WIDTH } : {}),
     index: 40,
     ip: 90,
     service_port: 60,
@@ -958,8 +1016,8 @@ const visibleNodeColumns = computed(() => {
   const cols = orderedColumns.value.filter((c) => {
     const k = String(c.key)
     if (k === 'index') return true
-    // 集群列仅平铺视图存在（分组视图由组头承担），不进列配置弹窗
-    if (k === 'cluster') return viewMode.value === 'flat'
+    // 集群列仅「页面形态 + 平铺」存在（分组视图由组头承担；scoped 面板单集群下无意义），不进列配置弹窗
+    if (k === 'cluster') return !isScoped.value && viewMode.value === 'flat'
     if (k === 'edge_path') return selected.has('edge_path') || selected.has('openresty_path')
     return selected.has(k)
   })
@@ -1076,13 +1134,14 @@ async function loadNodes() {
     const hasStatus = !!statusFilter.value
     const loadAll = hasStatus // 仅 statusFilter 触发客户端过滤，group 过滤走服务端
     const res = await listNodes({
-      groupName: groupFilter.value,
+      groupName: effectiveGroupName(),
       page: loadAll ? 1 : page.value,
       pageSize: loadAll ? PAGE_SIZE_DROPDOWN : pageSize.value,
       search: searchText.value || undefined,
-      clusterId: clusterFilter.value ? Number(clusterFilter.value) : undefined,
+      // scoped（面板 Tab）恒带当前集群；页面形态取筛选下拉
+      clusterId: effectiveClusterId(),
       status: undefined, // 全部通过 nginxRunning() 客户端过滤
-      // 分组视图按组内固定序（IP），不参与服务端排序
+      // 分组视图按组内固定序（IP），不参与服务端排序；scoped 恒平铺
       sortBy: sortBy.value && viewMode.value === 'flat' ? sortBy.value : undefined,
       sortOrder: sortBy.value && viewMode.value === 'flat' ? ((sortOrder.value || 'asc') as 'asc' | 'desc') : undefined,
     })
@@ -1537,9 +1596,12 @@ function handleDiff(record: any) {
 // ── Lifecycle ──
 
 onMounted(() => {
-  const clusterId = route.query.cluster_id as string | undefined
-  const numeric = Number(clusterId)
-  if (Number.isFinite(numeric)) clusterFilter.value = numeric
+  // 深链集群筛选仅页面形态；scoped（面板 Tab）集群由 props 决定
+  if (!isScoped.value) {
+    const clusterId = route.query.cluster_id as string | undefined
+    const numeric = Number(clusterId)
+    if (Number.isFinite(numeric)) clusterFilter.value = numeric
+  }
   loadClusters()
   refreshList()
 
@@ -1619,6 +1681,17 @@ defineExpose({ viewMode })
 </script>
 
 <style scoped>
+/* scoped 形态（统一管理最大化面板「集群节点」Tab）：外层沿用页面卡片类，
+   保证 `.table-container.l5-card .c-idx` / 行内动作钮等全站解剖规则命中，
+   只压掉卡片自身的边框/底色/内距/圆角，使其融入面板 .dbody（不出现卡中卡）。 */
+.scope-card {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+  overflow: visible;
+}
+
 /* 批量条解剖移交共享 .l5-batchbar（mockup-parity-standard）；页面仅保留批量导入弹窗自有样式 */
 /* 工具条（list-pages-console-restyle）：结构移交共享 TableToolbar（.l5-toolbar 单点），
    本类仅承载卡内贴合与源码守卫依赖的换行语义（NodeList.source.test.ts 断言 flex-wrap: wrap） */

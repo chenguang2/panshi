@@ -69,7 +69,7 @@ describe('统一管理·最大化面板切换动效（方案 A）', () => {
     expect(tag).toContain('ref="swapEl"')
     expect(tag).toContain(':class="swapClass"')
     expect(tag, '.max-swap 禁止 :key（会重挂载 Tab 子组件）').not.toContain(':key')
-    // 七个 Tab 分支原样搬入包裹层（结构未丢）
+    // 七个 Tab 分支原样搬入包裹层（结构未丢）；节点 Tab = NodeList 的 scoped 形态（A 试点）
     for (const comp of [
       'ClusterUpstreams',
       'ClusterRoutes',
@@ -77,7 +77,7 @@ describe('统一管理·最大化面板切换动效（方案 A）', () => {
       'ClusterGlobalRules',
       'ClusterStaticResources',
       'PluginMetadata',
-      'ClusterNodes',
+      'NodeList',
     ]) {
       expect(text.slice(tagStartAt, text.indexOf('<!-- Node Form Modal -->'))).toContain(`<${comp}`)
     }

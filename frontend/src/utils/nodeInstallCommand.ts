@@ -1,6 +1,7 @@
 /**
  * 节点安装命令预览构建（node-management-ux-batch3 1.1 / design D1）：
- * 以 NodeList 相对路径形态为唯一实现提取的纯函数，NodeList 与 ClusterNodes 两视图共用。
+ * 以 NodeList 相对路径形态为唯一实现提取的纯函数（面板节点 Tab 复用 NodeList 的 scoped 形态，
+ * 原 ClusterNodes 视图已于 2026-11-21 删除）。
  * batch1 修复基线：inventory/extravars 走相对路径（-i inventory -e @env/extravars），
  * ssh 命令不虚构账号与密钥（ssh_port 缺省 22）。
  */

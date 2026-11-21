@@ -40,9 +40,10 @@ describe('视图生命周期清理守卫（源码守卫）', () => {
     expect(fnBody).toContain("message.warning('集群列表加载失败')")
   })
 
-  it('clusters/ClusterNodes.vue: onUnmounted 清理安装进度定时器（clearInstallTimer）', () => {
-    const block = onUnmountedBlock(sourceOf('clusters', 'ClusterNodes.vue'))
-    expect(block).toContain('clearInstallTimer()')
+  it('NodeList.vue: onUnmounted 移除 edge-pack 全局监听（节点表格单一实现，安装流清理不回流到独立 Tab）', () => {
+    const block = onUnmountedBlock(sourceOf('NodeList.vue'))
+    expect(block).toContain("removeEventListener('edge-pack-add'")
+    expect(block).toContain("removeEventListener('edge-pack-rebase'")
   })
 
   it('DbMigrationCard.vue: onUnmounted 中止迁移 SSE（migrationController.abort）——2026-09 迁移段自 DatabaseManagement.vue 抽出', () => {
