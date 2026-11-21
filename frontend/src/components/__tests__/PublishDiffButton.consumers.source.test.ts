@@ -18,7 +18,6 @@ const ENTRY_FILES = [
   'src/views/PluginConfigList.vue',
   'src/views/GlobalRuleList.vue',
   'src/views/PluginMetadataList.vue',
-  'src/views/clusters/ClusterPluginConfigs.vue',
   'src/components/PluginMetadata.vue',
   'src/views/StreamProxyList.vue',
   'src/views/DnsUdpProxyList.vue',

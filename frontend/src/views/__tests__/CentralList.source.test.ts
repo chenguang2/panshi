@@ -73,7 +73,7 @@ describe('统一管理·最大化面板切换动效（方案 A）', () => {
     for (const comp of [
       'UpstreamList',
       'RouteList',
-      'ClusterPluginConfigs',
+      'PluginConfigList',
       'GlobalRuleList',
       'ClusterStaticResources',
       'PluginMetadata',
@@ -81,6 +81,17 @@ describe('统一管理·最大化面板切换动效（方案 A）', () => {
     ]) {
       expect(text.slice(tagStartAt, text.indexOf('<!-- Node Form Modal -->'))).toContain(`<${comp}`)
     }
+  })
+
+  it('Tab 分支不得用裸 v-else（独立 v-if 容器并存后，裸 v-else 会挂到末位 v-else-if 上叠渲染）', () => {
+    // 2026-11-22（面板插件组 Tab 实测）：上游/路由/插件组/全局规则已改为独立 `v-if` 容器，
+    // 节点 Tab 若仍写裸 `v-else`，它会挂到 globalPlugins 的 `v-else-if` 上 →
+    // 除 globalRules/globalPlugins/staticResources 外的每个 Tab 下方都叠渲染一块节点表格。
+    const text = s()
+    const body = text.slice(text.indexOf('class="max-swap"'), text.indexOf('<!-- Node Form Modal -->'))
+    expect(body, 'Tab 分支禁止裸 v-else（须写 activeTab 显式条件）').not.toMatch(/<div\s+v-else\s+class="tab-content"/)
+    // 节点 Tab 分支存在且带显式条件
+    expect(body).toContain('<div v-if="maximizedCluster.activeTab === \'nodes\'" class="tab-content">')
   })
 
   it('三个关键帧齐备：方向滑入两条 + 切 Tab 淡入', () => {

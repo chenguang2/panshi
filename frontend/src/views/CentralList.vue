@@ -364,16 +364,12 @@
                  chips / 批量条（含批量删除）/ 表格 / 分页 / 列配置与页面同一份实现。 -->
             <RouteList :scoped-cluster-id="maximizedCluster.id" @refresh="loadClusters" />
           </div>
-          <ClusterPluginConfigs
-            v-else-if="maximizedCluster.activeTab === 'pluginConfigs'"
-            :cluster="maximizedCluster"
-            :clusters="clusters"
-            :open-publish-modal="openPublishModal"
-            :available-plugins="availablePlugins"
-            :load-available-plugins="loadAvailablePlugins"
-            :loading="loading"
-            @refresh="loadClusters"
-          />
+          <div v-if="maximizedCluster.activeTab === 'pluginConfigs'" class="tab-content">
+            <!-- 插件组 Tab = 插件组页组件的「单集群作用域」形态（A 推广第 2 个卡片类资源，同全局规则做法）：
+                 隐藏页头/集群与分组筛选/分组切换/集群带，页面级动作「添加插件组 / 批量管理」改由工具条左侧紧凑钮；
+                 chips / 批量条（含批量删除）/ 卡片网格（含「引用 · N 条路由」）/ 卡脚「发布 + ⋯」与页面同一份实现。 -->
+            <PluginConfigList :scoped-cluster-id="maximizedCluster.id" @refresh="loadClusters" />
+          </div>
           <div v-if="maximizedCluster.activeTab === 'globalRules'" class="tab-content">
             <!-- 全局规则 Tab = 全局规则页组件的「单集群作用域」形态（A 推广首个卡片类资源，同节点/上游/路由做法）：
                  隐藏页头/集群与分组筛选/分组切换/集群带，页面级动作「添加全局规则 / 批量管理」改由工具条左侧紧凑钮；
@@ -399,8 +395,11 @@
           <!-- 集群节点 Tab = 节点管理页组件的「单集群作用域」形态（A 试点：一份实现两处挂载）：
                页面组件隐藏页头/集群与分组筛选/分组切换/集群列，页面级动作改由工具条左侧紧凑钮；
                chips / 批量条 / 表格 / 分页 / 列配置与页面同一份实现。
-               @refresh 保留既有绑定（节点 Tab 自身不发 refresh——列表变更后由面板壳决定是否全量重载）。 -->
-          <div v-else class="tab-content">
+               @refresh 保留既有绑定（节点 Tab 自身不发 refresh——列表变更后由面板壳决定是否全量重载）。
+               分支必须写显式条件（不得用裸 v-else）：上游/路由/插件组/全局规则四个 Tab 已改为独立
+               `v-if` 容器，裸 `v-else` 会挂到末位 `v-else-if`（globalPlugins）上，导致这几个 Tab
+               下方叠渲染整块节点表格（2026-11-22 面板插件组 Tab 实测）。 -->
+          <div v-if="maximizedCluster.activeTab === 'nodes'" class="tab-content">
             <NodeList :scoped-cluster-id="maximizedCluster.id" @refresh="loadClusters" />
           </div>
         </div>
@@ -530,7 +529,7 @@ import NodeList from '@/views/NodeList.vue'
 import UpstreamList from '@/views/UpstreamList.vue'
 import RouteList from '@/views/RouteList.vue'
 import GlobalRuleList from '@/views/GlobalRuleList.vue'
-import ClusterPluginConfigs from '@/views/clusters/ClusterPluginConfigs.vue'
+import PluginConfigList from '@/views/PluginConfigList.vue'
 import ClusterStaticResources from '@/views/clusters/ClusterStaticResources.vue'
 import SearchInput from '@/components/SearchInput.vue'
 import TableToolbar from '@/components/TableToolbar.vue'
@@ -729,15 +728,13 @@ function openStatTab(cluster: Cluster, key: string) {
   handleTabClick(cluster, cluster.activeTab)
 }
 
-// 上游 / 路由 / 全局规则 Tab = UpstreamList / RouteList / GlobalRuleList 的 scoped 形态（同一做法），
-// 列表由组件自身按作用域集群加载，故此处不再预拉上游/路由/全局规则（与节点不同：节点仍预拉，
-// 因为集群卡片节点区要渲染节点数据）。
+// 上游 / 路由 / 插件组 / 全局规则 Tab = UpstreamList / RouteList / PluginConfigList / GlobalRuleList 的
+// scoped 形态（同一做法），列表由组件自身按作用域集群加载，故此处不再预拉上游/路由/插件组/全局规则
+// （与节点不同：节点仍预拉，因为集群卡片节点区要渲染节点数据）。
 // 注：useClusterRoutes 仍保留——静态资源 Tab 的路由选择清单（loadRoutes 填充 cluster.routes）仍消费它。
 const handleTabClick = async (cluster: Cluster, key: string) => {
   if (key === 'nodes') {
     await loadNodes(cluster)
-  } else if (key === 'pluginConfigs') {
-    await loadPluginConfigs(cluster)
   } else if (key === 'staticResources') {
     await loadStaticResources(cluster)
   }

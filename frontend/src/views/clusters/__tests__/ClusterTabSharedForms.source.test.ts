@@ -19,6 +19,8 @@ const upstreamPage = () => readFileSync(resolve(process.cwd(), 'src/views/Upstre
 const routePage = () => readFileSync(resolve(process.cwd(), 'src/views/RouteList.vue'), 'utf-8')
 // 2026-11-22（A 推广首个卡片类资源）：全局规则 Tab 同上改为渲染 GlobalRuleList 的 scoped 形态。
 const globalRulePage = () => readFileSync(resolve(process.cwd(), 'src/views/GlobalRuleList.vue'), 'utf-8')
+// 2026-11-22（A 推广第 2 个卡片类资源）：插件组 Tab 同上改为渲染 PluginConfigList 的 scoped 形态。
+const pluginConfigPage = () => readFileSync(resolve(process.cwd(), 'src/views/PluginConfigList.vue'), 'utf-8')
 
 describe('面板 Tab 表单共用守卫（B1）', () => {
   it('上游 Tab：引用共享 UpstreamFormModal；scoped 下集群预选并锁定', () => {
@@ -56,20 +58,22 @@ describe('面板 Tab 表单共用守卫（B1）', () => {
   })
 
   it('插件组 Tab：引用共享 PluginEntityFormModal（plugin_config + 发布引导）', () => {
-    const s = src('ClusterPluginConfigs.vue')
+    // 2026-11-22（A 推广·第 2 个卡片类资源批）：面板插件组 Tab 不再有自写卡片/表单宿主，
+    // 直接渲染 PluginConfigList 的 scoped 形态 → 断言对象由 clusters/ClusterPluginConfigs.vue 迁移到 views/PluginConfigList.vue。
+    const s = pluginConfigPage()
     expect(s).toContain('<PluginEntityFormModal')
     expect(s).toContain('resource-type="plugin_config"')
     expect(s).toContain('with-publish-guide')
-    expect(s).toContain(':clusters="formClusters"')
-    expect(s).toContain(':default-cluster-id="props.cluster.id"')
-    expect(s).toContain('lock-cluster')
+    expect(s).toContain(':clusters="formClusterOptions"')
+    expect(s).toContain(':default-cluster-id="isScoped ? scopedClusterId : null"')
+    expect(s).toContain(':lock-cluster="isScoped"')
     expect(s).toContain("import PluginEntityFormModal from '@/components/PluginEntityFormModal.vue'")
   })
 
-  it('ClusterPluginConfigs.vue 不再包含内联表单块（a-form / a-form-item / modal-overlay / Teleport）', () => {
-    const s = src('ClusterPluginConfigs.vue')
+  it('PluginConfigList.vue（插件组 Tab 唯一宿主）不再包含内联表单块（a-form / a-form-item / modal-overlay / Teleport）', () => {
+    const s = pluginConfigPage()
     for (const marker of INLINE_FORM_MARKERS) {
-      expect(s, `ClusterPluginConfigs.vue 不应再出现 ${marker}`).not.toContain(marker)
+      expect(s, `PluginConfigList.vue 不应再出现 ${marker}`).not.toContain(marker)
     }
   })
 
@@ -95,7 +99,7 @@ describe('面板 Tab 表单共用守卫（B1）', () => {
     // 面板不再有自写提交函数（handleXxxSubmit / 提交时拼 payload 的 api.post/api.put 调用）
     const upstreams = upstreamPage()
     const routes = routePage()
-    const pluginConfigs = src('ClusterPluginConfigs.vue')
+    const pluginConfigs = pluginConfigPage()
     expect(upstreams).not.toContain('handleUpstreamSubmit')
     expect(upstreams).not.toContain('/upstreams`, submitData')
     expect(routes).not.toContain('handleRouteSubmit')

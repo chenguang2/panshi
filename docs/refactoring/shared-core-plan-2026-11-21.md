@@ -182,6 +182,13 @@
     - 附带修复（共享缺陷，面板暴露）：卡内 ⋯ 菜单是**绝对定位弹层**，面板 `.max-panel` 与 Tab 的 `.tab-content` 均 `overflow: hidden` → 点 ⋯ 只看到一条白边（实测菜单被裁到 4px）。`toggleCardMenu` 的翻转判定由「视口底边」改为「**最近 `overflow != visible` 祖先的底边**」，页面形态行为不变（无裁剪祖先 → 等价视口）。回归 `GlobalRuleList.scoped.test.ts` 「5b」。
     - 面板不再预拉全局规则（`handleTabClick` 的 `loadGlobalRules` 与 `useClusterGlobalRules` 引用一并移除）；`composables/useClusterGlobalRules.ts` 现已无生产引用（清理待裁决：需同步删 `panelFormDeadCode.source.test.ts` 的薄封装用例与 `Cluster.global_rules`/`globalRulesLoadError` 类型字段）。
     - 设计页未同步（按约定先报告）：`proposal-c/central.html` Tab 6（全局规则）仍是 `.plugin-config-card` + `.pcc-actions` 旧形态，尚无 `.l5-toolbar` / `.l5-chiprow` / `.l5-batchbar` / `card-grid` 卡片解剖。
+  - [已完成 2026-11-22] **A 推广 3/6（插件组，第 2 个卡片类资源）**：面板「插件组」Tab 改渲染 `views/PluginConfigList.vue` 的 scoped 形态，`views/clusters/ClusterPluginConfigs.vue` 及其测试（`ClusterPluginConfigs.publishState.test.ts`）删除（插件组卡片只剩一份实现）。
+    - props/隐藏/新增项与全局规则批完全同构（`scopedClusterId` / `scope-add-plugin-config` / `scope-batch-toggle`）；请求 `GET /plugin_configs?cluster_id={id}&group_name=__all__&page_size=500`（端点本就支持 `cluster_id`，后端零改动）。
+    - 插件组特有：卡顶 strip「引用 · N 条路由」与卡内「引用」行在 scoped 下保留（`reference_count`，同集群跨路由复用仍有意义）；删除守卫 PLG-07 与页面同源（`deletePluginConfigWithReferenceCheck` + 后端兜底），未新造判断；卡内插件 chips 按「以页面为准」保留纯展示形态（面板旧的可点 `viewPluginConfigDetail` 随 ClusterPluginConfigs 退场）。
+    - 批量删除保留页面同一实现（`useBatchDelete` → 全局 `DELETE /plugin_configs`，`plugin_config_ids`）；批量条无「批量发布」。
+    - **附带修复（面板壳存量缺陷，本批暴露）**：Tab 分支由 v-else-if 链改独立 `v-if` 容器后，节点 Tab 仍是裸 `v-else`，它挂到末位 `v-else-if`（globalPlugins）上 → 上游/路由/插件组/静态资源等 Tab 下方**叠渲染整块节点表格**（实测插件组 Tab 下出现 4 行节点表）。节点分支改为显式 `v-if="activeTab === 'nodes'"`，守卫 `CentralList.source.test.ts`「Tab 分支不得用裸 v-else」。
+    - 面板不再预拉插件组（`handleTabClick` 的 `loadPluginConfigs` 移除）；`CentralList` 仍保留 `useClusterPluginConfigs` 的 `loadPluginConfigs` 作为 `useClusterRoutes` 依赖占位。`composables/useClusterPluginConfigs.ts` 的面板专用表单态已无生产消费方，仅加「已迁移」注释，清理另批（需同步 `panelFormDeadCode.source.test.ts` 与 `Cluster.plugin_configs`/`pluginConfigsLoadError` 类型字段）。
+    - 设计页未同步（按约定先报告）：`proposal-c/central.html` Tab 4（插件组）仍是 `.tab-toolbar` + `.pcc-card`/`.pcc-actions` 旧形态，尚无 `.l5-toolbar` / `.l5-chiprow` / `.l5-batchbar` / `card-grid` 卡片解剖与「引用 · N 条路由」strip。
   - [待开始] B4 单元格接线 / B5 卡片动作条
 
 ## 七、待收口：主 spec 与实现漂移（2026-11-21）

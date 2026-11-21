@@ -1216,7 +1216,7 @@ describe('最大化面板：Tab 内容封闭容器（tab-content card，2026-11-
   })
 
   it('卡片 Tab 网格内距四向 16px（不再贴容器左右边框）', () => {
-    for (const f of ['views/clusters/ClusterPluginConfigs.vue', 'views/clusters/ClusterStaticResources.vue']) {
+    for (const f of ['views/clusters/ClusterStaticResources.vue']) {
       const src = readFileSync(resolve(process.cwd(), 'src', f), 'utf-8')
       expect(src, `${f} 网格内距`).toContain('gap: 16px; padding: 16px"')
       expect(src, `${f} 不得留 16px 0`).not.toContain('gap: 16px; padding: 16px 0"')
