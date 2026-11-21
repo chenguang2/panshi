@@ -86,6 +86,8 @@
       :visible="formVisible"
       :editing-config="editingGr"
       :clusters="[props.cluster]"
+      :default-cluster-id="props.cluster.id"
+      lock-cluster
       resource-type="global_rule"
       with-publish-guide
       @close="closeForm"

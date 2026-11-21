@@ -30,12 +30,24 @@ describe('面板 Tab 表单共用守卫（B1）', () => {
     expect(s).toContain("import RouteFormModal from '@/components/RouteFormModal.vue'")
   })
 
+  it('全局规则 Tab：引用共享 PluginEntityFormModal（global_rule）+ 预选并锁定当前集群', () => {
+    // 2026-11-21 用户实测：面板「添加全局规则」集群默认未选中 → 补 defaultClusterId + lockCluster
+    const s = src('ClusterGlobalRules.vue')
+    expect(s).toContain('<PluginEntityFormModal')
+    expect(s).toContain('resource-type="global_rule"')
+    expect(s).toContain(':clusters="[props.cluster]"')
+    expect(s).toContain(':default-cluster-id="props.cluster.id"')
+    expect(s).toContain('lock-cluster')
+  })
+
   it('插件组 Tab：引用共享 PluginEntityFormModal（plugin_config + 发布引导）', () => {
     const s = src('ClusterPluginConfigs.vue')
     expect(s).toContain('<PluginEntityFormModal')
     expect(s).toContain('resource-type="plugin_config"')
     expect(s).toContain('with-publish-guide')
     expect(s).toContain(':clusters="formClusters"')
+    expect(s).toContain(':default-cluster-id="props.cluster.id"')
+    expect(s).toContain('lock-cluster')
     expect(s).toContain("import PluginEntityFormModal from '@/components/PluginEntityFormModal.vue'")
   })
 
