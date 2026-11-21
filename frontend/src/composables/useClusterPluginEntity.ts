@@ -1,5 +1,4 @@
-import { ref, reactive, h, type Ref } from 'vue'
-import { message } from 'ant-design-vue'
+import { ref, h, type Ref } from 'vue'
 import api from '@/api'
 import type { Cluster, Plugin, GlobalRule, PluginConfig } from '@/types'
 import { showDeleteConfirm, deletePluginConfigWithReferenceCheck } from './useClusterUtils'
@@ -23,14 +22,12 @@ interface PluginEntityConfig {
   versionType: 'upstream' | 'route' | 'plugin_config' | 'global_rule' | 'static_resource'
   /** 发布确认弹窗显示「将创建新版本 v(N+1)」提示（M5，插件组开启；全局规则等默认关闭） */
   publishVersionHint?: boolean
-  /** 保存后发布引导（publish-guide 批 1 插件组 / 批 2 全局规则）：保存成功弹「立即发布/稍后」
-   * 引导弹窗并停发 toast；默认关闭保持 toast（无引导入口的唯一反馈） */
-  publishGuide?: boolean
 }
 
 export interface PluginEntityDeps {
   clusters: Ref<Cluster[]>
   versionModal: VersionModalState
+  /** B1 后由共享 PluginEntityFormModal 自取插件清单；保留字段以兼容既有调用方传参 */
   availablePlugins: Ref<Plugin[]>
   loadAvailablePlugins: () => Promise<void>
   openPublishModal: (title: string, clusterId: number) => Promise<number[]>
@@ -48,11 +45,13 @@ export function globalRuleDeleteWarning(clusterName: string): string {
  * Shared composable for plugin-config and global-rule CRUD.
  *
  * 删除/发布/版本管理由 useClusterResourceCore 共享实现（Phase 4 合并）；
- * 本工厂保留表单/抽屉/加载等插件实体专属逻辑。
+ * 创建/编辑表单在共享 PluginEntityFormModal（B1），本工厂只保留查看抽屉 + 列表加载。
  */
 export function useClusterPluginEntity(config: PluginEntityConfig, deps: PluginEntityDeps) {
-  const { clusters, versionModal, availablePlugins, loadAvailablePlugins, openPublishModal } = deps
-  const { apiEndpoint, displayName, clusterProp, versionType, publishGuide } = config
+  // availablePlugins / loadAvailablePlugins 只为原表单的插件选择器服务，B1 后无消费点；
+  // 保留在 deps 类型里以兼容调用方传参，不再解构。
+  const { clusters, versionModal, openPublishModal } = deps
+  const { apiEndpoint, displayName, clusterProp, versionType } = config
 
   const core = useClusterResourceCore(
     {
@@ -98,20 +97,6 @@ export function useClusterPluginEntity(config: PluginEntityConfig, deps: PluginE
     },
   )
 
-  const modalVisible = ref(false)
-  const activeTab = ref('basic')
-  const formMode = ref<'add' | 'edit'>('add')
-  const editingClusterId = ref<number | null>(null)
-  const editingId = ref<number | null>(null)
-  /** 编辑进入时的 current_version（引导弹窗「立即发布」经 publishByRecord 提示「将创建 v(N+1)」；新增为 null） */
-  const editingCurrentVersion = ref<number | null>(null)
-
-  const formData = reactive({
-    name: '',
-    description: '',
-    selectedPlugins: [] as { plugin_name: string; config: string }[],
-  })
-
   const viewDrawerVisible = ref(false)
   const viewingItem = ref<PluginEntityItem | null>(null)
 
@@ -137,99 +122,9 @@ export function useClusterPluginEntity(config: PluginEntityConfig, deps: PluginE
     }
   }
 
-  const showAdd = async (cluster: Cluster) => {
-    if (availablePlugins.value.length === 0) await loadAvailablePlugins()
-    formMode.value = 'add'
-    editingClusterId.value = cluster.id
-    editingId.value = null
-    editingCurrentVersion.value = null
-    formData.name = ''
-    formData.description = ''
-    formData.selectedPlugins = []
-    activeTab.value = 'basic'
-    modalVisible.value = true
-  }
-
   const viewItem = (item: PluginEntityItem) => {
     viewingItem.value = item
     viewDrawerVisible.value = true
-  }
-
-  const editItem = async (cluster: Cluster, item: PluginEntityItem) => {
-    if (availablePlugins.value.length === 0) await loadAvailablePlugins()
-    formMode.value = 'edit'
-    editingClusterId.value = cluster.id
-    editingId.value = item.id
-    editingCurrentVersion.value = (item as { current_version?: number | null }).current_version ?? null
-    formData.name = item.name || ''
-    formData.description = item.description || ''
-    formData.selectedPlugins = Object.entries(item.plugins).map(([plugin_name, config]) => ({
-      plugin_name,
-      config: JSON.stringify(config),
-    }))
-    activeTab.value = 'basic'
-    modalVisible.value = true
-  }
-
-  const handleSubmit = async () => {
-    if (!editingClusterId.value) return
-    if (!formData.name) {
-      message.warning(`请输入${displayName}名称`)
-      return
-    }
-
-    const plugins: Record<string, unknown> = {}
-    for (const sp of formData.selectedPlugins) {
-      if (sp.config) {
-        try {
-          plugins[sp.plugin_name] = JSON.parse(sp.config)
-        } catch {
-          plugins[sp.plugin_name] = sp.config
-        }
-      } else {
-        plugins[sp.plugin_name] = {}
-      }
-    }
-
-    try {
-      const payload = { name: formData.name, description: formData.description, plugins }
-      // 保存 ≠ 生效：两条分支统一文案（对齐上游先例），保存后下方 loadItems 立即刷新出「待发布」
-      const savedToast = `${displayName}已保存。配置尚未发布，需发布后才会在 Edge 节点生效`
-      let savedId: number | null = null
-      if (editingId.value) {
-        savedId = editingId.value
-        await api.put(`/clusters/${editingClusterId.value}/${apiEndpoint}/${editingId.value}`, payload)
-        if (!publishGuide) message.success(savedToast)
-      } else {
-        const res = await api.post(`/clusters/${editingClusterId.value}/${apiEndpoint}`, payload)
-        savedId = (res as { data?: { id?: number } })?.data?.id ?? null
-        if (!publishGuide) message.success(savedToast)
-      }
-
-      modalVisible.value = false
-      const cluster = clusters.value.find((c) => c.id === editingClusterId.value)
-      if (cluster) await loadItems(cluster)
-      if (publishGuide) {
-        // publish-guide：先关表单/刷新出「待发布」再弹引导（save-guide-single-channel 单通道，
-        // 不再 toast）；「立即发布」复用既有 publishByRecord（内置发布确认弹窗选节点），不自动发布
-        showOverlayModal({
-          title: '保存成功',
-          content: '配置尚未发布，发布后才会推送到 Edge 节点生效。',
-          okText: '立即发布',
-          cancelText: '稍后',
-          onOk: () => {
-            if (!cluster) return
-            void publishItem(cluster, {
-              id: savedId,
-              name: formData.name,
-              current_version: editingCurrentVersion.value,
-            } as PluginEntityItem)
-          },
-        })
-      }
-    } catch (error: unknown) {
-      message.error(getApiErrorMessage(error))
-    }
   }
 
   const deleteItem = async (cluster: Cluster, item: PluginEntityItem) => {
@@ -270,21 +165,14 @@ export function useClusterPluginEntity(config: PluginEntityConfig, deps: PluginE
     })
   }
 
+  // 创建/编辑表单已统一走共享 PluginEntityFormModal（B1）：原表单状态、回填与提交逻辑一并迁出
+  // （提交校验 + 保存后发布引导都在组件内），本工厂只保留查看抽屉、列表加载、删除、发布与版本管理。
   return {
-    modalVisible,
-    activeTab,
-    formMode,
-    editingClusterId,
-    editingId,
-    formData,
     viewDrawerVisible,
     viewingItem,
 
     loadItems,
-    showAdd,
     viewItem,
-    editItem,
-    handleSubmit,
     deleteItem,
     publishItem,
     openVersionManagement,

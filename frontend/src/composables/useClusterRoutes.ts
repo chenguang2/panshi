@@ -1,29 +1,10 @@
-import { ref, reactive, computed, watch, h, type Ref } from 'vue'
+import { computed, type Ref } from 'vue'
 import { message } from 'ant-design-vue'
-import api from '@/api'
-import type { Cluster, Route, RoutePlugin, Plugin, PluginConfig } from '@/types'
+import type { Cluster, Route } from '@/types'
 import { useAuthStore } from '@/stores/auth'
 import { useColumnConfig, resolveOrderedColumns, applyColumnWidths } from './useColumnConfig'
 import { useClusterResource } from './useClusterResource'
 import { publishStatusRender } from './useClusterUtils'
-import { showOverlayModal } from './useOverlayModal'
-import { getApiErrorMessage } from '@/utils/error'
-
-// ── helpers ────────────────────────────────────────────────────────────
-
-const ALL_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS', 'CONNECT', 'TRACE']
-
-function getFieldName(name: string): string {
-  const nameMap: Record<string, string> = {
-    name: '名称',
-    uri: 'URI',
-    methods: '请求方法',
-    upstream_id: '上游',
-    priority: '优先级',
-    status: '状态',
-  }
-  return nameMap[name] || name
-}
 
 // ── column / action definitions ────────────────────────────────────────
 
@@ -61,6 +42,7 @@ const allActionButtons = [
 // ── external dependency types ──────────────────────────────────────────
 
 interface RouteComposableDeps {
+  /** B1 后表单在共享 RouteFormModal，二者不再被本 composable 消费（保留以兼容调用方传参） */
   clusters: Ref<Cluster[]>
   currentClusterId: Ref<number | null>
 
@@ -74,6 +56,7 @@ interface RouteComposableDeps {
     nodes?: { id: number; ip: string; management_port: number }[]
   }) => void
 
+  /** B1 后表单在共享 RouteFormModal（自行加载插件组），不再被本 composable 消费 */
   loadPluginConfigs: (cluster: Cluster) => Promise<void>
 
   // ── version-management shared refs (owned by the embedding component) ─
@@ -88,12 +71,11 @@ interface RouteComposableDeps {
 // ── composable ─────────────────────────────────────────────────────────
 
 export function useClusterRoutes(deps: RouteComposableDeps) {
+  // 表单已迁至共享组件 RouteFormModal（B1）：clusters / currentClusterId / loadPluginConfigs
+  // 曾只被原表单回填与提交使用，现已无消费点；保留在 deps 类型里以兼容调用方传参，不再解构。
   const {
-    clusters,
-    currentClusterId,
     openPublishModal,
     showDeleteConfirm,
-    loadPluginConfigs,
     versionModalVisible,
     versionModalType,
     versionModalResourceId,
@@ -169,31 +151,6 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
     return core.getActionButtonTitle(key, allActionButtons)
   }
 
-  // ── modal / form state ──────────────────────────────────────────────
-
-  const routeModalVisible = ref(false)
-  const routeModalActiveTab = ref('basic')
-  const editingRoute = ref<Route | null>(null)
-  const copyingRoute = ref(false)
-  const routeFormRef = ref()
-
-  const routeForm = reactive({
-    name: '',
-    uri: '',
-    methods: [] as string[],
-    priority: 0,
-    status: 1,
-    upstream_id: undefined as number | undefined,
-    description: '',
-    advancedMatchEnabled: false,
-    advancedMatch: {
-      vars: [] as (string | string[])[][],
-    },
-    plugins: [] as RoutePlugin[],
-    plugin_config_ids: [] as string[],
-    enableWebsocket: false,
-  })
-
   // ── column / search config ──────────────────────────────────────────
 
   const routeCfg = useColumnConfig({
@@ -224,83 +181,7 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
     )
   })
 
-  // ── plugins ─────────────────────────────────────────────────────────
-  const _localPlugins = ref<Plugin[]>([])
-  const availablePlugins = _localPlugins
-
-  const loadAvailablePlugins = async () => {
-    try {
-      const res = await api.get('/plugins/builtin')
-      _localPlugins.value = res.data.plugins || []
-    } catch {
-      // ignore
-    }
-  }
-
-  const currentCluster = computed(() => clusters.value.find((c) => c.id === currentClusterId.value))
-
-  const clusterPluginGroups = computed(() => {
-    const c = currentCluster.value
-    return (c?.plugin_configs || []) as PluginConfig[]
-  })
-
-  // ── methods helpers ─────────────────────────────────────────────────
-
-  const allMethodsSelected = computed(() => ALL_METHODS.every((m) => routeForm.methods.includes(m)))
-
-  function toggleAllMethods() {
-    routeForm.methods = allMethodsSelected.value ? [] : [...ALL_METHODS]
-  }
-
-  function isPluginGroupSelected(edgeUuid: string) {
-    return routeForm.plugin_config_ids.indexOf(edgeUuid) !== -1
-  }
-
-  function togglePluginGroup(pg: PluginConfig) {
-    const idx = routeForm.plugin_config_ids.indexOf(pg.edge_uuid ?? '')
-    if (idx !== -1) {
-      routeForm.plugin_config_ids.splice(idx, 1)
-    } else {
-      routeForm.plugin_config_ids.push(pg.edge_uuid ?? '')
-    }
-  }
-
-  function viewPluginConfigDetail(pg: PluginConfig, pname: string, pcfg: unknown) {
-    const configStr = typeof pcfg === 'object' ? JSON.stringify(pcfg, null, 2) : String(pcfg)
-    showOverlayModal({
-      title: `${pg.name} - ${pname}`,
-      content: h(
-        'pre',
-        {
-          style:
-            'font-size: 12px; white-space: pre-wrap; background: var(--bg); padding: 12px; border-radius: 4px; max-height: 400px; overflow-y: auto; color: var(--fg);',
-        },
-        configStr,
-      ),
-      okText: '关闭',
-      showCancel: false,
-      width: 560,
-    })
-  }
-
-  // ── watch ──────────────────────────────────────────────────────────
-
-  // Reset advanced match when toggled off
-  watch(
-    () => routeForm.advancedMatchEnabled,
-    (newVal) => {
-      if (!newVal) {
-        routeForm.advancedMatch = { vars: [] }
-      }
-    },
-  )
-
   // ── upstream resolution ────────────────────────────────────────────
-
-  function getClusterUpstreams() {
-    const cluster = clusters.value.find((c) => c.id === currentClusterId.value)
-    return cluster?.upstreams || []
-  }
 
   function getUpstreamName(cluster: Cluster, upstreamId: number | null) {
     if (!upstreamId || !cluster.upstreams) return '-'
@@ -318,12 +199,6 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
       case 'version':
         openRouteVersionManagementByRecord(cluster, record)
         break
-      case 'copy':
-        copyRouteByRecord(cluster, record)
-        break
-      case 'edit':
-        editRouteByRecord(cluster, record)
-        break
       case 'delete':
         deleteRouteByRecord(cluster, record)
         break
@@ -336,241 +211,6 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
 
   function hasDnsRouteIn(records: Route[]): Route | undefined {
     return records.find(isDnsRoute)
-  }
-
-  // ── add / edit / copy modal ────────────────────────────────────────
-
-  async function showAddRouteModal(cluster: Cluster) {
-    // 7.7（C4）：Tab 开新建弹窗不再前置 await loadRoutes（C2 数据源下新建无列表依赖）
-    await loadAvailablePlugins()
-    editingRoute.value = null
-    copyingRoute.value = false
-    currentClusterId.value = cluster.id
-    Object.assign(routeForm, {
-      name: '',
-      uri: '',
-      methods: [],
-      priority: 0,
-      status: 1,
-      upstream_id: undefined,
-      description: '',
-      advancedMatchEnabled: false,
-      advancedMatch: { vars: [] },
-      plugins: [],
-      plugin_config_ids: [],
-      enableWebsocket: false,
-    })
-    routeModalActiveTab.value = 'basic'
-    if ((cluster.plugin_configs?.length ?? 0) > 0 || !cluster.plugin_configs) {
-      await loadPluginConfigs(cluster)
-    }
-    routeModalVisible.value = true
-  }
-
-  function editRoute(cluster: Cluster) {
-    const selected = core.requireSelected(cluster)
-    if (!selected) return
-    editRouteByRecord(cluster, selected)
-  }
-
-  async function editRouteByRecord(cluster: Cluster, route: Route) {
-    await loadAvailablePlugins()
-    await loadPluginConfigs(cluster)
-
-    // 7.7（C4）：Tab 行编辑不再前置 await loadRoutes——直接用列表现有记录回填；
-    // 仅「列表找不到记录」时重载一次（列表可能滞后），仍找不到才提示。
-    let routeData = cluster.routes?.find((r) => r.id === route.id)
-    if (!routeData) {
-      await loadRoutes(cluster)
-      routeData = cluster.routes?.find((r) => r.id === route.id)
-    }
-    if (!routeData) {
-      message.warning('路由不存在')
-      return
-    }
-
-    editingRoute.value = routeData
-    copyingRoute.value = false
-    currentClusterId.value = cluster.id
-    routeForm.name = routeData.name
-    routeForm.uri = routeData.uri
-    routeForm.methods = routeData.methods ? routeData.methods.split(',') : []
-    routeForm.priority = routeData.priority
-    routeForm.status = routeData.status
-    routeForm.upstream_id = routeData.upstream_id
-    routeForm.description = routeData.description || ''
-    routeForm.advancedMatch = { vars: [...(routeData.vars || [])] }
-    routeForm.advancedMatchEnabled = !!(routeData.advanced_match_enabled || routeForm.advancedMatch.vars.length > 0)
-    routeForm.enableWebsocket = !!routeData.enable_websocket
-    routeForm.plugins = []
-    routeForm.plugin_config_ids = (routeData as unknown as Record<string, unknown>).plugin_config_ids
-      ? [...((routeData as unknown as Record<string, unknown>).plugin_config_ids as string[])]
-      : []
-    routeModalActiveTab.value = 'basic'
-
-    try {
-      const res = await api.get(`/clusters/${cluster.id}/routes/${routeData.id}/plugins`)
-      routeForm.plugins = res.data.plugins || []
-    } catch {
-      console.error('加载路由插件失败:')
-      message.error('加载路由插件失败，请重试')
-      routeForm.plugins = []
-    }
-    routeModalVisible.value = true
-  }
-
-  function copyRoute(cluster: Cluster) {
-    const selected = core.requireSelected(cluster)
-    if (!selected) return
-    copyRouteByRecord(cluster, selected)
-  }
-
-  async function copyRouteByRecord(cluster: Cluster, route: Route) {
-    await loadAvailablePlugins()
-
-    // 7.7（C4）：与编辑同语义——不再前置 await loadRoutes；仅「列表找不到记录」时
-    // 重载一次，仍找不到不再拿旧 record 兜底（提示后直接返回，宁可不响应也不复制脏数据）。
-    let routeData = cluster.routes?.find((r) => r.id === route.id)
-    if (!routeData) {
-      await loadRoutes(cluster)
-      routeData = cluster.routes?.find((r) => r.id === route.id)
-    }
-    if (!routeData) {
-      message.warning('路由不存在')
-      return
-    }
-    const sourceRoute = routeData
-
-    editingRoute.value = null
-    copyingRoute.value = true
-    currentClusterId.value = cluster.id
-    routeForm.name = `复制_${sourceRoute.name}`
-    routeForm.uri = sourceRoute.uri
-    routeForm.methods = sourceRoute.methods ? sourceRoute.methods.split(',') : []
-    routeForm.priority = sourceRoute.priority
-    routeForm.status = sourceRoute.status
-    routeForm.upstream_id = sourceRoute.upstream_id
-    routeForm.description = sourceRoute.description || ''
-    routeForm.advancedMatch = { vars: sourceRoute.vars || [] }
-    routeForm.advancedMatchEnabled = !!(sourceRoute.advanced_match_enabled || routeForm.advancedMatch.vars.length > 0)
-    // 复制表单整体回填（batch1 组1 1.1）：WS/插件组必须来自源路由本身，
-    // 不得残留同会话前一次编辑/复制弹窗的表单脏状态（写法对齐 editRouteByRecord）
-    routeForm.enableWebsocket = !!sourceRoute.enable_websocket
-    routeForm.plugin_config_ids = (sourceRoute as unknown as Record<string, unknown>).plugin_config_ids
-      ? [...((sourceRoute as unknown as Record<string, unknown>).plugin_config_ids as string[])]
-      : []
-    routeForm.plugins = []
-    routeModalActiveTab.value = 'basic'
-
-    try {
-      const res = await api.get(`/clusters/${cluster.id}/routes/${sourceRoute.id}/plugins`)
-      routeForm.plugins = res.data.plugins || []
-    } catch {
-      console.error('加载路由插件失败:')
-      message.error('加载路由插件失败，请重试')
-      routeForm.plugins = []
-    }
-    routeModalVisible.value = true
-  }
-
-  // ── submit ─────────────────────────────────────────────────────────
-
-  async function handleRouteSubmit() {
-    if (!currentClusterId.value) return
-    try {
-      await routeFormRef.value.validate()
-      const payload: Record<string, unknown> = {
-        name: routeForm.name,
-        uri: routeForm.uri,
-        methods: Array.isArray(routeForm.methods) ? routeForm.methods.join(',') : routeForm.methods,
-        priority: routeForm.priority || 0,
-        status: routeForm.status,
-        upstream_id: routeForm.upstream_id,
-        description: routeForm.description,
-        advanced_match_enabled: routeForm.advancedMatchEnabled,
-      }
-
-      payload.plugin_config_ids = routeForm.plugin_config_ids
-      payload.enable_websocket = routeForm.enableWebsocket
-
-      if (routeForm.advancedMatchEnabled) {
-        payload.vars = routeForm.advancedMatch?.vars || []
-      } else {
-        payload.vars = []
-      }
-
-      let routeId: number
-      if (editingRoute.value) {
-        await api.put(`/clusters/${currentClusterId.value}/routes/${editingRoute.value.id}`, payload)
-        routeId = editingRoute.value.id
-      } else {
-        const res = await api.post(`/clusters/${currentClusterId.value}/routes`, payload)
-        routeId = res.data.id
-      }
-
-      await api.put(`/clusters/${currentClusterId.value}/routes/${routeId}/plugins`, {
-        plugins: routeForm.plugins,
-      })
-
-      // save-guide-single-feedback：单通道——不再弹成功 toast（恒在引导弹窗遮罩之下且自动消失），
-      // 成功与「尚未发布」语义由下方 showSavePublishGuide 弹窗承担（仍放在插件写入之后）
-      routeModalVisible.value = false
-      const c = clusters.value.find((c) => c.id === currentClusterId.value)
-      let savedRecord: Route | null = editingRoute.value ?? null
-      if (c) {
-        const res = await api.get(`/clusters/${c.id}/routes`)
-        c.routes = res.data.items
-        c.route_count = c.routes!.length
-        // 刷新后的行记录才是权威（含 plugins / current_version），发布上下文优先用它
-        savedRecord = c.routes?.find((r) => r.id === routeId) ?? savedRecord
-      }
-      showSavePublishGuide(c ?? null, routeId, routeForm.name, savedRecord)
-    } catch (error: unknown) {
-      const err = error as Record<string, unknown>
-      if (err.errorFields) {
-        const firstError = (err.errorFields as Array<{ name?: unknown[] }>)?.[0]
-        if (firstError?.name) {
-          const fieldName = getFieldName((firstError.name as string[])[0])
-          message.error(`请填写必填字段: ${fieldName}`)
-        } else {
-          message.error('请检查表单填写是否完整')
-        }
-        // 与 RouteFormModal 同款反馈：切回基础配置 tab 让内联红字可见，
-        // 否则用户停在高级匹配等 tab 时表现为「只弹提示、界面没反应」（2026-11-10）
-        routeModalActiveTab.value = 'basic'
-        return
-      }
-      message.error(getApiErrorMessage(error))
-    }
-  }
-
-  // ── 保存后发布引导（route-save-publish-guidance 2.2/2.3） ────────────
-  // 与独立页同款语义：先关表单再弹引导（useOverlayModal 挂 body），「立即发布」复用集群内
-  // 既有 publishByRecord（openPublishModal 选节点 → executePublish），系统不自动发布。
-  // DNS 查询路由在 Tab 内本已只读（按钮禁用 + tooltip），引导绝不能成为第二条发布路径。
-  function showSavePublishGuide(cluster: Cluster | null, routeId: number, name: string, record: Route | null) {
-    if (!cluster) return
-    const dns =
-      (record ? isDnsRoute(record) : false) ||
-      (routeForm.plugins || []).some((p: any) => p?.plugin_name === 'dns_upstream')
-    if (dns) {
-      showOverlayModal({
-        title: '保存成功',
-        content: '配置尚未发布。DNS 路由请在「DNS 代理」页管理，发布后才会推送到 Edge 节点生效。',
-        okText: '知道了',
-        showCancel: false,
-      })
-      return
-    }
-    showOverlayModal({
-      title: '保存成功',
-      content: '配置尚未发布，发布后才会推送到 Edge 节点生效。',
-      okText: '立即发布',
-      cancelText: '稍后',
-      onOk: () => {
-        void publishRouteByRecord(cluster, record ?? ({ id: routeId, name } as Route))
-      },
-    })
   }
 
   // ── delete ─────────────────────────────────────────────────────────
@@ -587,17 +227,10 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
     return authStore.hasPermission?.('plugin_groups') ?? false
   }
 
-  // ── return ─────────────────────────────────────────────────────────
-
+  // ── return ──
+  // 表单态/提交/校验/发布引导与插件选择器已随共享 RouteFormModal 迁出
+  // （B1，见 docs/refactoring/shared-core-plan-2026-11-21.md 3.1）
   return {
-    // modal / form
-    routeModalVisible,
-    routeModalActiveTab,
-    editingRoute,
-    copyingRoute,
-    routeForm,
-    routeFormRef,
-
     // column config
     allRouteColumns,
     routeColumnPopoverVisible,
@@ -613,20 +246,7 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
     visibleRouteColumns,
     allActionButtons,
 
-    // plugins
-    availablePlugins,
-    clusterPluginGroups,
-
-    // methods helpers
-    ALL_METHODS,
-    allMethodsSelected,
-    toggleAllMethods,
-    isPluginGroupSelected,
-    togglePluginGroup,
-    viewPluginConfigDetail,
-
     // upstream resolution
-    getClusterUpstreams,
     getUpstreamName,
 
     // actions
@@ -639,13 +259,6 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
     // crud
     loadRoutes,
     handleRouteTableChange,
-    loadAvailablePlugins,
-    showAddRouteModal,
-    editRoute,
-    editRouteByRecord,
-    copyRoute,
-    copyRouteByRecord,
-    handleRouteSubmit,
     deleteRoute,
     deleteRouteByRecord,
     deleteRoutes,

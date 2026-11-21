@@ -145,5 +145,5 @@
     - 裁决：`UpstreamTargetsCell` 的 detailed 仅 chip + 健康摘要，权重条/占比留到 B4 由页面算好经 props 传入（保持组件纯展示）；
     - `execText` 传完整文案（含「检测」后缀由调用方拼）、`healthTitle` 保留、`clusterResourceState.loading` 可选；
     - 泛型 `<Row, ClusterLike>`：B4 一律用推断，必要时显式写两个参数。
-  - [待办] B1.5 清理三个 composable 中约 400 行表单死代码（含专属测试）
+  - [已完成 2026-11-21] **B1.5** 清理三个 composable 的表单死代码：生产 −1,197 / +31（`useClusterUpstreams` 939→288、`useClusterRoutes` 664→275、`useClusterPluginEntity` 293→181），测试 −809；新增 `panelFormDeadCode.source.test.ts` 防回填。保留项：列表加载 / 动作分发 / 发布 / 版本 / 列配置 / 选择态，以及 deps 里「调用方仍在传」的字段（不改公开签名）。
   - [待开始] B2 / B3 / B4 / B5

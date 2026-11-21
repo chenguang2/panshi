@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
 import type { HealthCheckConfig, ActiveHealthCheck, PassiveHealthCheck } from '@/types'
-import type { UpstreamFormData } from '@/composables/useClusterUpstreams'
 
 describe('HealthCheckConfig types', () => {
   it('constructs active-only config', () => {
