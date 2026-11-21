@@ -374,16 +374,12 @@
             :loading="loading"
             @refresh="loadClusters"
           />
-          <ClusterGlobalRules
-            v-else-if="maximizedCluster.activeTab === 'globalRules'"
-            :cluster="maximizedCluster"
-            :clusters="clusters"
-            :open-publish-modal="openPublishModal"
-            :available-plugins="availablePlugins"
-            :load-available-plugins="loadAvailablePlugins"
-            :loading="loading"
-            @refresh="loadClusters"
-          />
+          <div v-if="maximizedCluster.activeTab === 'globalRules'" class="tab-content">
+            <!-- 全局规则 Tab = 全局规则页组件的「单集群作用域」形态（A 推广首个卡片类资源，同节点/上游/路由做法）：
+                 隐藏页头/集群与分组筛选/分组切换/集群带，页面级动作「添加全局规则 / 批量管理」改由工具条左侧紧凑钮；
+                 chips / 批量条（含批量删除）/ 卡片网格 / 卡脚「发布 + ⋯」与页面同一份实现。 -->
+            <GlobalRuleList :scoped-cluster-id="maximizedCluster.id" @refresh="loadClusters" />
+          </div>
           <ClusterStaticResources
             v-else-if="maximizedCluster.activeTab === 'staticResources'"
             :cluster="maximizedCluster"
@@ -528,14 +524,13 @@ import ConfigDiff from '@/views/ConfigDiff.vue'
 import { useClusterNodes } from '@/composables/useClusterNodes'
 import { useClusterRoutes } from '@/composables/useClusterRoutes'
 import { useClusterPluginConfigs } from '@/composables/useClusterPluginConfigs'
-import { useClusterGlobalRules } from '@/composables/useClusterGlobalRules'
 import { useClusterStaticResources } from '@/composables/useClusterStaticResources'
 import { PAGE_SIZE_CARD_GRID } from '@/constants'
 import NodeList from '@/views/NodeList.vue'
 import UpstreamList from '@/views/UpstreamList.vue'
 import RouteList from '@/views/RouteList.vue'
+import GlobalRuleList from '@/views/GlobalRuleList.vue'
 import ClusterPluginConfigs from '@/views/clusters/ClusterPluginConfigs.vue'
-import ClusterGlobalRules from '@/views/clusters/ClusterGlobalRules.vue'
 import ClusterStaticResources from '@/views/clusters/ClusterStaticResources.vue'
 import SearchInput from '@/components/SearchInput.vue'
 import TableToolbar from '@/components/TableToolbar.vue'
@@ -734,16 +729,15 @@ function openStatTab(cluster: Cluster, key: string) {
   handleTabClick(cluster, cluster.activeTab)
 }
 
-// 上游/路由 Tab = UpstreamList / RouteList 的 scoped 形态（同一做法），列表由组件自身按作用域集群加载，
-// 故此处不再预拉上游/路由（与节点不同：节点仍预拉，因为集群卡片节点区要渲染节点数据）。
+// 上游 / 路由 / 全局规则 Tab = UpstreamList / RouteList / GlobalRuleList 的 scoped 形态（同一做法），
+// 列表由组件自身按作用域集群加载，故此处不再预拉上游/路由/全局规则（与节点不同：节点仍预拉，
+// 因为集群卡片节点区要渲染节点数据）。
 // 注：useClusterRoutes 仍保留——静态资源 Tab 的路由选择清单（loadRoutes 填充 cluster.routes）仍消费它。
 const handleTabClick = async (cluster: Cluster, key: string) => {
   if (key === 'nodes') {
     await loadNodes(cluster)
   } else if (key === 'pluginConfigs') {
     await loadPluginConfigs(cluster)
-  } else if (key === 'globalRules') {
-    await loadGlobalRules(cluster)
   } else if (key === 'staticResources') {
     await loadStaticResources(cluster)
   }
@@ -933,14 +927,6 @@ const { loadRoutes } = useClusterRoutes({
   versionModalClusterId,
   versionModalResourceName,
   versionModalEdgeUuid,
-})
-
-const { loadGlobalRules } = useClusterGlobalRules({
-  clusters,
-  versionModal,
-  availablePlugins,
-  loadAvailablePlugins,
-  openPublishModal,
 })
 
 const { loadStaticResources } = useClusterStaticResources({

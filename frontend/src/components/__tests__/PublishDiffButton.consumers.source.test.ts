@@ -19,7 +19,6 @@ const ENTRY_FILES = [
   'src/views/GlobalRuleList.vue',
   'src/views/PluginMetadataList.vue',
   'src/views/clusters/ClusterPluginConfigs.vue',
-  'src/views/clusters/ClusterGlobalRules.vue',
   'src/components/PluginMetadata.vue',
   'src/views/StreamProxyList.vue',
   'src/views/DnsUdpProxyList.vue',

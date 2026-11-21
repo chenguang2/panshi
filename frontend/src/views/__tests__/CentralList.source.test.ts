@@ -74,7 +74,7 @@ describe('统一管理·最大化面板切换动效（方案 A）', () => {
       'UpstreamList',
       'RouteList',
       'ClusterPluginConfigs',
-      'ClusterGlobalRules',
+      'GlobalRuleList',
       'ClusterStaticResources',
       'PluginMetadata',
       'NodeList',

@@ -174,6 +174,14 @@
     - 面板不再预拉路由（`handleTabClick` 的 `loadRoutes` 移除）；`useClusterRoutes` 仍保留在 `CentralList`——静态资源 Tab 的路由选择清单（`cluster.routes`）仍消费它。
     - 附带修复（共享 CSS，非组件实现）：`style.css` 的面板 ⋯ 触发器规则由 `.node-table` 扩到 `.route-table` / `.upstream-table`——CentralList 的 `:deep(.dbody) .ant-btn{padding:3px 10px}` 曾把 26px 宽触发器内容区压到 4px、svg 被 flex 收缩成 4×12（面板里 ⋯ 看起来是空框，上游 Tab 同样存在）。
     - 设计页未同步（按约定先报告）：`proposal-c/central.html` 路由 Tab 仍是 `.tab-toolbar` 旧形态；`routes.html` 尚无行选择列与 `.l5-batchbar`。
+  - [已完成 2026-11-22] **A 推广（全局规则，首个卡片类资源）**：面板「全局规则」Tab 改渲染 `views/GlobalRuleList.vue` 的 scoped 形态，`views/clusters/ClusterGlobalRules.vue` 及其测试删除（全局规则卡片只剩一份实现）。
+    - props 契约同上：`scopedClusterId?: number | null`；scoped 隐藏 `PageHeader`/分组与集群筛选/`分组|平铺`/分组带（恒平铺）/卡片上的集群与分组徽标，动作「添加全局规则」（primary）+「批量管理」（切换批量态）→ 工具条左侧紧凑钮（`scope-add-global-rule` / `scope-batch-toggle`）。
+    - 卡片解剖**以页面为准**：共享 `.card-grid` + `.std-card` + `.lp-*` + `.l5-menu` 三栏动作菜单（查看/编辑/版本管理 → 分隔线 → 删除）；面板旧紧凑 `.plugin-config-card` + `.pcc-actions` 平铺按钮随 ClusterGlobalRules 退场，卡片与页面完全同构。
+    - 计数与请求：`GET /global_rules?cluster_id={id}&group_name=__all__&page_size=500`（该端点**本就支持 `cluster_id`**，无需后端改动）；chips 沿用页面「前端按已加载数据聚合」，scoped 下与列表同源同口径。
+    - 批量删除保留页面同一实现（`useBatchDelete` → 全局 `DELETE /global_rules`，`rule_ids`）；面板不新增第二套。
+    - 附带修复（共享缺陷，面板暴露）：卡内 ⋯ 菜单是**绝对定位弹层**，面板 `.max-panel` 与 Tab 的 `.tab-content` 均 `overflow: hidden` → 点 ⋯ 只看到一条白边（实测菜单被裁到 4px）。`toggleCardMenu` 的翻转判定由「视口底边」改为「**最近 `overflow != visible` 祖先的底边**」，页面形态行为不变（无裁剪祖先 → 等价视口）。回归 `GlobalRuleList.scoped.test.ts` 「5b」。
+    - 面板不再预拉全局规则（`handleTabClick` 的 `loadGlobalRules` 与 `useClusterGlobalRules` 引用一并移除）；`composables/useClusterGlobalRules.ts` 现已无生产引用（清理待裁决：需同步删 `panelFormDeadCode.source.test.ts` 的薄封装用例与 `Cluster.global_rules`/`globalRulesLoadError` 类型字段）。
+    - 设计页未同步（按约定先报告）：`proposal-c/central.html` Tab 6（全局规则）仍是 `.plugin-config-card` + `.pcc-actions` 旧形态，尚无 `.l5-toolbar` / `.l5-chiprow` / `.l5-batchbar` / `card-grid` 卡片解剖。
   - [待开始] B4 单元格接线 / B5 卡片动作条
 
 ## 七、待收口：主 spec 与实现漂移（2026-11-21）

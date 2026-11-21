@@ -17,6 +17,8 @@ const INLINE_FORM_MARKERS = ['<a-form', 'a-form-item', 'class="modal-overlay"', 
 const upstreamPage = () => readFileSync(resolve(process.cwd(), 'src/views/UpstreamList.vue'), 'utf-8')
 // 2026-11-22（路由批）：路由 Tab 同上改为渲染 RouteList 的 scoped 形态。
 const routePage = () => readFileSync(resolve(process.cwd(), 'src/views/RouteList.vue'), 'utf-8')
+// 2026-11-22（A 推广首个卡片类资源）：全局规则 Tab 同上改为渲染 GlobalRuleList 的 scoped 形态。
+const globalRulePage = () => readFileSync(resolve(process.cwd(), 'src/views/GlobalRuleList.vue'), 'utf-8')
 
 describe('面板 Tab 表单共用守卫（B1）', () => {
   it('上游 Tab：引用共享 UpstreamFormModal；scoped 下集群预选并锁定', () => {
@@ -42,12 +44,15 @@ describe('面板 Tab 表单共用守卫（B1）', () => {
 
   it('全局规则 Tab：引用共享 PluginEntityFormModal（global_rule）+ 预选并锁定当前集群', () => {
     // 2026-11-21 用户实测：面板「添加全局规则」集群默认未选中 → 补 defaultClusterId + lockCluster
-    const s = src('ClusterGlobalRules.vue')
+    // 2026-11-22（A 推广·卡片类资源批）：面板全局规则 Tab 不再有自写卡片/表单宿主，
+    // 直接渲染 GlobalRuleList 的 scoped 形态 → 断言对象由 clusters/ClusterGlobalRules.vue 迁移到 views/GlobalRuleList.vue。
+    const s = globalRulePage()
     expect(s).toContain('<PluginEntityFormModal')
     expect(s).toContain('resource-type="global_rule"')
-    expect(s).toContain(':clusters="[props.cluster]"')
-    expect(s).toContain(':default-cluster-id="props.cluster.id"')
-    expect(s).toContain('lock-cluster')
+    expect(s).toContain(':clusters="formClusterOptions"')
+    expect(s).toContain(':default-cluster-id="isScoped ? scopedClusterId : null"')
+    expect(s).toContain(':lock-cluster="isScoped"')
+    expect(s).toContain("import PluginEntityFormModal from '@/components/PluginEntityFormModal.vue'")
   })
 
   it('插件组 Tab：引用共享 PluginEntityFormModal（plugin_config + 发布引导）', () => {
