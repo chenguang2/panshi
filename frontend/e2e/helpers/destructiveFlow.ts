@@ -93,9 +93,9 @@ export async function openClusterTab(page: Page, cluster: ClusterRef, statLabel:
     .first()
   await expect(stat, `集群卡片「${statLabel}」统计格应可见`).toBeVisible({ timeout: 10000 })
   await stat.click()
-  // 节点 Tab 自 2026-11-21（shared-core-plan A 试点）起渲染 NodeList 的 scoped 形态：
-  // 工具条是共享 .l5-toolbar（旧面板自有的 .node-actions 已随 ClusterNodes 退场）；
-  // 上游/路由 Tab 仍是 .node-actions —— 两者都接受，避免把「Tab 切换失败」误报成工具栏缺失。
+  // 节点/上游 Tab 自 2026-11-21（shared-core-plan A 试点起）渲染 NodeList / UpstreamList 的 scoped 形态：
+  // 工具条是共享 .l5-toolbar（旧面板自有的 .node-actions 已随 ClusterNodes/ClusterUpstreams 陆续退场）；
+  // 路由/插件组等 Tab 仍是 .node-actions —— 两者都接受，避免把「Tab 切换失败」误报成工具栏缺失。
   const toolbar = page.locator('.node-actions, .l5-toolbar').first()
   await expect(toolbar, '展开视图工具栏未出现（Tab 切换失败）').toBeVisible({ timeout: 10000 })
   const table = page.locator('.tab-content .ant-table-tbody')

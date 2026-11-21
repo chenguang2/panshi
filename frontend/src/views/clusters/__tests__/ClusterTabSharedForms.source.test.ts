@@ -12,14 +12,19 @@ function src(file: string): string {
 
 const INLINE_FORM_MARKERS = ['<a-form', 'a-form-item', 'class="modal-overlay"', '<Teleport']
 
+// 2026-11-21（shared-core-plan A 试点上游批）：面板上游 Tab 不再有自写表格/表单宿主，
+// 直接渲染 UpstreamList 的 scoped 形态 → 上游断言对象由 clusters/ClusterUpstreams.vue 迁移到 views/UpstreamList.vue。
+const upstreamPage = () => readFileSync(resolve(process.cwd(), 'src/views/UpstreamList.vue'), 'utf-8')
+
 describe('面板 Tab 表单共用守卫（B1）', () => {
-  it('上游 Tab：引用共享 UpstreamFormModal，且传单元素集群清单', () => {
-    const s = src('ClusterUpstreams.vue')
+  it('上游 Tab：引用共享 UpstreamFormModal；scoped 下集群预选并锁定', () => {
+    const s = upstreamPage()
     expect(s).toContain('<UpstreamFormModal')
-    expect(s).toContain(':clusters="formClusters"')
     expect(s).toContain("import UpstreamFormModal from '@/components/UpstreamFormModal.vue'")
-    // 面板只有一个集群 → 单元素清单（组件内 ClusterSelect 编辑态禁用，add 态仅一个可选项）
-    expect(s).toContain('{ id: props.cluster.id, name: props.cluster.name, display_name: props.cluster.display_name }')
+    expect(s).toContain(':default-cluster-id="scopedClusterId"')
+    expect(s).toContain(':lock-cluster="isScoped"')
+    // scoped 单元素集群清单（与 B1 三个 Tab 同构）
+    expect(s).toContain("return [{ id, name: c?.name ?? '', display_name: c?.display_name }]")
   })
 
   it('路由 Tab：引用共享 RouteFormModal，带 defaultClusterId 单集群上下文', () => {
@@ -51,7 +56,7 @@ describe('面板 Tab 表单共用守卫（B1）', () => {
     expect(s).toContain("import PluginEntityFormModal from '@/components/PluginEntityFormModal.vue'")
   })
 
-  it.each(['ClusterUpstreams.vue', 'ClusterRoutes.vue', 'ClusterPluginConfigs.vue'])(
+  it.each(['ClusterRoutes.vue', 'ClusterPluginConfigs.vue'])(
     '%s 不再包含内联表单块（a-form / a-form-item / modal-overlay / Teleport）',
     (file) => {
       const s = src(file)
@@ -61,9 +66,20 @@ describe('面板 Tab 表单共用守卫（B1）', () => {
     },
   )
 
+  it('UpstreamList.vue（上游 Tab 唯一宿主）同样不自持内联表单块', () => {
+    const s = upstreamPage()
+    for (const marker of INLINE_FORM_MARKERS) {
+      expect(s, `UpstreamList.vue 不应再出现 ${marker}`).not.toContain(marker)
+    }
+  })
+
+  it('clusters/ClusterUpstreams.vue 不得回流（上游 Tab 只允许渲染 UpstreamList 的 scoped 形态）', () => {
+    expect(() => src('ClusterUpstreams.vue')).toThrow()
+  })
+
   it('三个 Tab 只做「关闭 + 刷新 + 发布引导」，提交逻辑留在共享组件内', () => {
     // 面板不再有自写提交函数（handleXxxSubmit / 提交时拼 payload 的 api.post/api.put 调用）
-    const upstreams = src('ClusterUpstreams.vue')
+    const upstreams = upstreamPage()
     const routes = src('ClusterRoutes.vue')
     const pluginConfigs = src('ClusterPluginConfigs.vue')
     expect(upstreams).not.toContain('handleUpstreamSubmit')

@@ -496,7 +496,7 @@ function routeMenuGroupsFor(record: Route | null): ResourceMenuGroup[] {
   })
 }
 
-// ── 行点击选中（batch1 组5 5.3，A7 对齐 ClusterUpstreams 4.1/D8）──
+// ── 行点击选中（batch1 组5 5.3，A7 对齐上游列表页行选中（4.1/D8））──
 // 行点选与复选框共用同一选中载体：selectedRoute（单选操作/高亮依据）+
 // selectedRouteKeys（工具栏批量计数）。再点已选中行 = 取消选中；DNS 路由仅禁复选框，行点选仍可选中查看。
 function toggleRouteSelection(record: Route) {
@@ -577,7 +577,7 @@ function methodTitle(methods?: string | null): string {
   margin-top: 8px;
 }
 
-/* ── 选中行高亮（batch1 组5 5.3）：selectedRoute 来源为行点选或勾选均生效，与 ClusterUpstreams 行选中风格一致 ── */
+/* ── 选中行高亮（batch1 组5 5.3）：selectedRoute 来源为行点选或勾选均生效，与上游列表页行选中风格一致 ── */
 .node-table :deep(tr.row-selected > td) {
   background: oklch(56% 0.16 210 / 10%) !important;
 }

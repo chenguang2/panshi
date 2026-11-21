@@ -158,6 +158,13 @@
     - chips 计数：无 `/nodes/stats` 聚合端点，沿用 `listNodes(page_size=500)` 前端计数，scoped 下请求带 `cluster_id` → 计数与列表同源（无降级）。
     - 能力差集（需用户裁决）：面板失去「批量删除节点 / 编辑选中节点 / 安装下拉」这些面板旧工具条独有入口（逐条删除与安装项仍在行 ⋯ 菜单，批量启动/停止/重载/状态查询在批量条）。`e2e/node-batch-delete.spec.ts` 因此描述的是已移除的 UI，待裁决后重写或下线。
     - 设计页未同步（按约定先报告）：`proposal-c/central.html` 节点 Tab 仍是 `.tab-toolbar` 旧形态，尚无 `.l5-toolbar` / `.l5-chiprow` / `.l5-batchbar` / `ListPager`。
+  - [已完成 2026-11-21] **A 试点（上游）**：同一做法——面板「上游」Tab 改渲染 `views/UpstreamList.vue` 的 scoped 形态，`views/clusters/ClusterUpstreams.vue` 及其 2 个测试文件删除。
+    - props 契约同上：`scopedClusterId?: number | null`；scoped 隐藏 `PageHeader`/分组与集群筛选/`分组|平铺`/集群列/分组带/全部收起，动作「新建上游」→ 工具条紧凑钮 `scope-add-upstream`（文案「添加上游」）。
+    - 列集**以页面为准**：`#/名称(内嵌描述)/负载均衡/目标节点与健康(详细版：逐目标 chip+权重条+占比+健康摘要)/协议/发布状态/操作`；面板旧独立「描述」列与精简 targets 形态随之退场（信息未丢：描述在名称单元格 `.cell-secondary`）。
+    - 计数：沿用后端聚合端点 `/upstreams/status-counts`，scoped 下带 `cluster_id` 与 `group_name=__all__`，chips 与列表同源。
+    - 能力补齐（用户裁决：能力不能丢）：页面新增**行选择 + 共享批量条**（只有「批量删除」+「清除选择」）；确认复用既有 `showDeleteConfirm`（数据库 / Edge 节点可勾选 + 平台-only 提示），执行走 `composables/useBatchUpstreamDelete.ts`（`DELETE /clusters/{cid}/upstreams`，跨集群按 `cluster_id` 分组顺序请求、节点选择逐集群裁剪），进度弹窗与节点批量条同组件 `BatchActionProgressModal`。筛选/搜索/翻页清空选择（沿用面板 D9 语义）。
+    - 面板不再预拉上游（`useClusterUpstreams` 调用从 `CentralList` 移除），上游列表由 scoped 组件自持加载。
+    - 设计页未同步（按约定先报告）：`proposal-c/central.html` 上游 Tab 仍是 `.tab-toolbar` + 精简 targets/描述列/无行选择旧形态。
   - [待开始] B4 单元格接线 / B5 卡片动作条
 
 ## 七、待收口：主 spec 与实现漂移（2026-11-21）

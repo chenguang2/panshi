@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type APIRequestContext } from '@playwright/test'
 import {
   apiHeaders,
   apiJson,
@@ -6,7 +6,6 @@ import {
   cleanupUpstreamsByPrefix,
   expectAntModal,
   filterTableBySearch,
-  interceptBatchDelete,
   openClusterTab,
   skipIfNoCluster,
   uniqueName,
@@ -14,7 +13,18 @@ import {
 } from './helpers/destructiveFlow'
 import { login as uiLogin } from './helpers/navigation'
 
-test.describe('Upstream Batch Delete E2E（route 拦截：不触达真实删除）', () => {
+/**
+ * 上游批量删除（2026-11-21：面板上游 Tab 直接渲染 UpstreamList 的 scoped 形态，
+ * 行选择 + 批量删除随共享批量条一起落到两处，旧面板工具栏「删除上游(N)」已退场）。
+ *
+ * 本 spec **不执行真实删除**：只验证「批量条的删除入口存在 → 计数口径 → 危险确认弹窗内容
+ * → 取消」这条链路，取消后用 API 复核数据未变。真实删除的执行路径由
+ * `useBatchUpstreamDelete`（集群分组顺序请求）与 `UpstreamList.scoped.test.ts`
+ * （route 级 api mock 断言载荷）覆盖。
+ */
+const SEARCH_PLACEHOLDER = '搜索名称或描述...'
+
+test.describe('Upstream Batch Delete E2E（确认弹窗后取消，不触达真实删除）', () => {
   let cluster: ClusterRef
   let headers: Record<string, string>
   let prefix: string
@@ -26,7 +36,7 @@ test.describe('Upstream Batch Delete E2E（route 拦截：不触达真实删除�
     headers = await apiHeaders(request)
     await uiLogin(page)
 
-    // 造数：两条唯一名测试上游（demo 库上游 170 条，靠唯一前缀搜索锁定）
+    // 造数：两条唯一名测试上游（demo 库上游较多，靠唯一前缀搜索锁定）
     prefix = uniqueName('e2e-bd-u')
     created = []
     for (const suffix of ['-1', '-2']) {
@@ -46,56 +56,8 @@ test.describe('Upstream Batch Delete E2E（route 拦截：不触达真实删除�
     await cleanupUpstreamsByPrefix(request, headers, cluster.id, 'e2e-bd-u-')
   })
 
-  test('batch delete flow: check own rows, confirm, intercepted payload + UI progress, zero backend effect', async ({
-    page,
-    request,
-  }) => {
-    const table = await openClusterTab(page, cluster, '上游')
-    await filterTableBySearch(page, table, '搜索上游', prefix)
-    await checkRowsByContent(
-      table,
-      created.map((u) => u.name),
-    )
-
-    // 删除按钮显示勾选计数；多选时单选操作按钮禁用
-    const deleteBtn = page.locator('.node-actions button').filter({ hasText: '删除上游' }).first()
-    await expect(deleteBtn).toContainText('(2)')
-    const editBtn = page.locator('.node-actions button').filter({ hasText: '编辑上游' }).first()
-    await expect(editBtn).toBeDisabled()
-
-    // 拦截批量删除端点（DELETE /clusters/{id}/upstreams 集合端点，cluster_upstreams.py:223）
-    const names = new Map(created.map((u) => [u.id, u.name]))
-    const captured = await interceptBatchDelete(page, cluster.id, 'upstreams', {
-      idField: 'upstream_ids',
-      resultIdField: 'upstream_id',
-      resultNameField: 'upstream_name',
-      label: '上游',
-      names,
-    })
-
-    await deleteBtn.click()
-    const modal = await expectAntModal(page, /确认删除/, '删除确认弹窗')
-    await modal.locator('label').filter({ hasText: '数据库' }).first().locator('input[type="checkbox"]').check()
-    await modal.locator('button.ant-btn-dangerous').last().click()
-
-    const progress = await expectAntModal(page, new RegExp(`批量删除上游: `), '批量删除进度弹窗')
-    for (const u of created) {
-      await expect(progress.locator('.ant-modal-body')).toContainText(`删除上游 ${u.name}: 数据库✅`)
-    }
-    await expect(progress.locator('.ant-modal-body')).toContainText('✅ 批量删除完成!')
-
-    // 载荷断言：仅含被勾选的两条造数上游，未误伤真实上游
-    expect(captured).toHaveLength(1)
-    expect(captured[0].body.delete_db).toBe(true)
-    expect(captured[0].body.delete_edge).toBe(false)
-    expect([...((captured[0].body.upstream_ids as number[]) || [])].sort()).toEqual(created.map((u) => u.id).sort())
-
-    // 完成后选择被清空
-    const deleteBtnAfter = page.locator('.node-actions button').filter({ hasText: '删除上游' }).first()
-    await expect(deleteBtnAfter).toBeVisible({ timeout: 5000 })
-    await expect.poll(async () => (await deleteBtnAfter.textContent()) || '', { timeout: 15000 }).not.toContain('(')
-
-    // 拦截生效证据：真实后端零副作用——两条测试上游仍然存在
+  /** 取消后复核：两条造数上游仍在库（真实删除路径未被触发） */
+  async function expectUpstreamsStillExist(request: APIRequestContext) {
     const list = await apiJson<{ items: Array<{ id: number }> }>(
       request,
       'GET',
@@ -103,19 +65,91 @@ test.describe('Upstream Batch Delete E2E（route 拦截：不触达真实删除�
       undefined,
       headers,
     )
-    expect(list.items.map((u) => u.id).sort(), '拦截应阻止真实删除').toEqual(created.map((u) => u.id).sort())
+    expect(list.items.map((u) => u.id).sort(), '取消后应无真实删除：两条造数上游仍应在库').toEqual(
+      created.map((u) => u.id).sort(),
+    )
+  }
+
+  test('页面形态 /upstreams：勾选 2 行 → 批量条「批量删除(2)」→ 危险确认（数据库/Edge 可勾选）→ 取消后数据未变', async ({
+    page,
+    request,
+  }) => {
+    await page.goto(`/upstreams?cluster_id=${cluster.id}`)
+    const table = page.locator('.upstream-table .ant-table-tbody')
+    await expect(table, '上游表格应渲染').toBeVisible({ timeout: 15000 })
+    await filterTableBySearch(page, table, SEARCH_PLACEHOLDER, prefix)
+    await checkRowsByContent(
+      table,
+      created.map((u) => u.name),
+    )
+
+    // 批量删除按钮：选中后显示计数并启用（危险色；未选时禁用）
+    const delBtn = page.locator('[data-test="batch-delete"]')
+    await expect(delBtn, '批量条应含批量删除按钮').toBeVisible()
+    await expect(delBtn).toContainText(/批量删除\s*\(2\)/)
+    await expect(delBtn).toBeEnabled()
+    await expect(page.locator('.l5-batchbar .b-count')).toContainText('已选 2 项')
+
+    await delBtn.click()
+    // 确认弹窗 = 既有危险确认（showDeleteConfirm：AppModal「确认删除」，数据库/Edge 节点两勾选框）
+    const modal = await expectAntModal(page, /确认删除/, '批量删除确认弹窗')
+    await expect(modal).toContainText(`确定要删除选中的 2 条上游吗？`)
+    await expect(modal).toContainText(created[0].name)
+    await expect(modal).toContainText(created[1].name)
+    await expect(modal.locator('label').filter({ hasText: '数据库' })).toBeVisible()
+    await expect(modal.locator('label').filter({ hasText: 'Edge 节点' })).toBeVisible()
+
+    // 取消：不发删除请求、不清选择（计数仍在 = 用户可继续操作）
+    await modal
+      .locator('button')
+      .filter({ hasText: /取\s*消/ })
+      .first()
+      .click()
+    await expect(modal, '取消后确认弹窗应关闭').toBeHidden({ timeout: 5000 })
+    await expect(delBtn).toContainText(/批量删除\s*\(2\)/)
+    await expectUpstreamsStillExist(request)
   })
 
-  test('search clears batch selection (D9)', async ({ page }) => {
+  test('面板形态（统一管理 → 集群上游 Tab）：同一批量条、同一按钮与计数口径，取消后数据未变', async ({
+    page,
+    request,
+  }) => {
     const table = await openClusterTab(page, cluster, '上游')
-    await filterTableBySearch(page, table, '搜索上游', prefix)
+    await filterTableBySearch(page, table, SEARCH_PLACEHOLDER, prefix)
+    await checkRowsByContent(
+      table,
+      created.map((u) => u.name),
+    )
+
+    const delBtn = page.locator('[data-test="batch-delete"]')
+    await expect(delBtn, '面板批量条应含同一批量删除按钮').toBeVisible()
+    await expect(delBtn).toContainText(/批量删除\s*\(2\)/)
+    await expect(page.locator('.l5-batchbar .b-count')).toContainText('已选 2 项')
+
+    await delBtn.click()
+    const modal = await expectAntModal(page, /确认删除/, '面板批量删除确认弹窗')
+    await expect(modal).toContainText(created[0].name)
+    await modal
+      .locator('button')
+      .filter({ hasText: /取\s*消/ })
+      .first()
+      .click()
+    await expect(modal).toBeHidden({ timeout: 5000 })
+
+    await expectUpstreamsStillExist(request)
+  })
+
+  test('搜索改变后清空批量选择（面板既有 D9 语义，页面沿用）', async ({ page }) => {
+    await page.goto(`/upstreams?cluster_id=${cluster.id}`)
+    const table = page.locator('.upstream-table .ant-table-tbody')
+    await expect(table, '上游表格应渲染').toBeVisible({ timeout: 15000 })
+    await filterTableBySearch(page, table, SEARCH_PLACEHOLDER, prefix)
     await checkRowsByContent(table, [created[0].name])
 
-    const deleteBtn = page.locator('.node-actions button').filter({ hasText: '删除上游' }).first()
-    await expect(deleteBtn).toContainText('(1)')
+    const delBtn = page.locator('[data-test="batch-delete"]')
+    await expect(delBtn).toContainText(/批量删除\s*\(1\)/)
 
-    await filterTableBySearch(page, table, '搜索上游', '__no_such_upstream__', false)
-    const deleteBtnAfter = page.locator('.node-actions button').filter({ hasText: '删除上游' }).first()
-    await expect.poll(async () => (await deleteBtnAfter.textContent()) || '', { timeout: 15000 }).not.toContain('(')
+    await filterTableBySearch(page, table, SEARCH_PLACEHOLDER, '__no_such_upstream__', false)
+    await expect.poll(async () => (await delBtn.textContent()) || '', { timeout: 15000 }).not.toContain('(')
   })
 })

@@ -24,7 +24,7 @@ describe('节点表格单一实现（面板 Tab = NodeList scoped 形态）', ()
     const files = [
       'src/views/NodeList.vue',
       'src/views/CentralList.vue',
-      'src/views/clusters/ClusterUpstreams.vue',
+      'src/views/UpstreamList.vue',
       'src/views/clusters/ClusterRoutes.vue',
     ]
     const owners = files.filter((f) => read(f).includes('class="node-table grid-table"'))

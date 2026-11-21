@@ -352,13 +352,12 @@
         <!-- 切换动效包裹层：绝不给本层加 :key（否则 7 个 Tab 子组件整体重挂载，丢滚动/选中态并重复拉取）；
              重播靠 swapClass（fx-cluster dir-next|prev / fx-tab），260ms 后清类避免 transform 长期残留 -->
         <div ref="swapEl" class="max-swap" :class="swapClass">
-          <ClusterUpstreams
-            v-if="maximizedCluster.activeTab === 'upstreams'"
-            :cluster="maximizedCluster"
-            :clusters="clusters"
-            :open-publish-modal="openPublishModal"
-            @refresh="loadClusters"
-          />
+          <!-- 上游 Tab = 上游管理页组件的「单集群作用域」形态（A 试点同一做法：一份实现两处挂载）：
+               隐藏页头/集群与分组筛选/分组切换/集群列，页面级动作「添加上游」改由工具条左侧紧凑钮；
+               chips / 批量条（含批量删除）/ 表格 / 分页 / 列配置与页面同一份实现。 -->
+          <div v-if="maximizedCluster.activeTab === 'upstreams'" class="tab-content">
+            <UpstreamList :scoped-cluster-id="maximizedCluster.id" @refresh="loadClusters" />
+          </div>
           <ClusterRoutes
             v-else-if="maximizedCluster.activeTab === 'routes'"
             :cluster="maximizedCluster"
@@ -530,14 +529,13 @@ import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
 import type { PublishModalOptions } from '@/composables/useClusterResourceCore'
 import ConfigDiff from '@/views/ConfigDiff.vue'
 import { useClusterNodes } from '@/composables/useClusterNodes'
-import { useClusterUpstreams } from '@/composables/useClusterUpstreams'
 import { useClusterRoutes } from '@/composables/useClusterRoutes'
 import { useClusterPluginConfigs } from '@/composables/useClusterPluginConfigs'
 import { useClusterGlobalRules } from '@/composables/useClusterGlobalRules'
 import { useClusterStaticResources } from '@/composables/useClusterStaticResources'
 import { PAGE_SIZE_CARD_GRID } from '@/constants'
 import NodeList from '@/views/NodeList.vue'
-import ClusterUpstreams from '@/views/clusters/ClusterUpstreams.vue'
+import UpstreamList from '@/views/UpstreamList.vue'
 import ClusterRoutes from '@/views/clusters/ClusterRoutes.vue'
 import ClusterPluginConfigs from '@/views/clusters/ClusterPluginConfigs.vue'
 import ClusterGlobalRules from '@/views/clusters/ClusterGlobalRules.vue'
@@ -739,10 +737,10 @@ function openStatTab(cluster: Cluster, key: string) {
   handleTabClick(cluster, cluster.activeTab)
 }
 
+// 上游 Tab = UpstreamList 的 scoped 形态（A 试点同一做法），列表由组件自身按作用域集群加载，
+// 故此处不再预拉上游（与节点不同：节点仍预拉，因为集群卡片节点区要渲染节点数据）。
 const handleTabClick = async (cluster: Cluster, key: string) => {
-  if (key === 'upstreams') {
-    await loadUpstreams(cluster)
-  } else if (key === 'routes') {
+  if (key === 'routes') {
     await loadRoutes(cluster)
   } else if (key === 'nodes') {
     await loadNodes(cluster)
@@ -904,17 +902,6 @@ const onRefresh = () => {
 const { diffDrawerVisible, diffClusterId, diffNodeId, loadNodes } = useClusterNodes({
   clusters,
   onRefresh,
-})
-
-const { loadUpstreams } = useClusterUpstreams({
-  clusters,
-  versionModalVisible,
-  versionModalType,
-  versionModalResourceId,
-  versionModalClusterId,
-  versionModalResourceName,
-  versionModalEdgeUuid,
-  openPublishModal,
 })
 
 const { loadPluginConfigs } = useClusterPluginConfigs({

@@ -1,6 +1,10 @@
 <template>
-  <div class="upstream-list">
-    <PageHeader title="上游管理" description="管理后端上游服务，配置负载均衡和目标节点">
+  <!-- 单实现双形态（shared-core-plan 2026-11-21，A 试点节点之后的上游批）：
+       缺省 = 独立列表页（PageHeader + 分组/集群筛选 + 分组|平铺）；
+       传 scopedClusterId = 统一管理最大化面板的「上游」Tab（隐藏页头/分组与集群筛选/分组切换与集群列，
+       页面级动作改由工具条左侧紧凑钮承载，其余（chips/批量条/表格/分页/列配置）与页面同一份实现）。 -->
+  <div class="upstream-list" :class="{ 'upstream-list-scoped': isScoped }">
+    <PageHeader v-if="!isScoped" title="上游管理" description="管理后端上游服务，配置负载均衡和目标节点">
       <template #stats>
         <PageStatBadges :items="headerStatItems" />
       </template>
@@ -9,25 +13,39 @@
       </template>
     </PageHeader>
 
-    <div ref="cardRef" class="table-container l5-card">
-      <!-- 工具条（list-pages-console-restyle）：共享 TableToolbar，右端簇 = 计数 → 刷新 → 列配置 → 分组|平铺 -->
+    <div ref="cardRef" class="table-container l5-card" :class="{ 'scope-card': isScoped }">
+      <!-- 工具条（list-pages-console-restyle）：共享 TableToolbar，右端簇 = 计数 → 刷新 → 列配置 → 分组|平铺。
+           scoped（面板 Tab）隐藏「分组|平铺」（单集群下无意义，恒平铺）。 -->
       <TableToolbar
         v-model:mode="viewMode"
         :count="totalCount"
         count-unit="个上游"
         :show-count="false"
+        :show-mode="!isScoped"
         :refreshing="loading"
         @refresh="refreshList"
       >
         <template #filters>
+          <!-- scoped：页面级动作（原本在 PageHeader）收敛为工具条左侧紧凑钮（#90 页头动作区规范的 scoped 替代） -->
+          <button
+            v-if="isScoped"
+            class="btn btn-primary btn-sm"
+            data-test="scope-add-upstream"
+            @click="openCreateModal"
+          >
+            <StrokeIcon name="plus" :size="13" /> 添加上游
+          </button>
           <SearchInput
             v-if="searchVisible"
             v-model="searchText"
             placeholder="搜索名称或描述..."
             :width="150"
             @input="onSearch"
+            @search="onSearchSubmit"
           />
+          <!-- 分组/集群筛选仅页面形态（面板恒单集群、恒平铺） -->
           <select
+            v-if="!isScoped"
             v-model="groupFilter"
             :title="groupFilter.startsWith('__') ? '' : groupFilter"
             class="l5-select"
@@ -39,6 +57,7 @@
             <option value="__ung__">未分组</option>
           </select>
           <ClusterSelect
+            v-if="!isScoped"
             v-model="clusterFilter"
             :clusters="filteredClusters"
             allow-all
@@ -86,7 +105,7 @@
         </template>
         <template #mode-extra>
           <button
-            v-if="viewMode === 'group'"
+            v-if="!isScoped && viewMode === 'group'"
             type="button"
             class="tool-btn fold-all-btn"
             data-test="toolbar-fold-all"
@@ -119,10 +138,34 @@
         <span class="t-spacer"></span>
       </div>
 
+      <!-- 批量条（mockup .l5-batchbar，与节点/路由同款解剖）：上游此前完全没有行选择，
+           面板旧「删除上游(N)」入口随 ClusterUpstreams 退场后能力不许丢 →
+           行选择 + 批量删除补进本共享批量条（页面与面板 Tab 同一实现）。
+           动作集只有「批量删除」：上游没有批量动作端点（发布按条走确认弹窗）。 -->
+      <div class="l5-batchbar" :class="{ 'has-sel': selectedUpstreamKeys.length > 0 }">
+        <span class="b-count">已选 {{ selectedUpstreamKeys.length }} 项</span>
+        <span class="b-sep"></span>
+        <button
+          class="btn btn-danger btn-sm need-sel"
+          data-test="batch-delete"
+          :disabled="!selectedUpstreamKeys.length"
+          @click="handleBatchDelete"
+        >
+          <StrokeIcon name="trash" /> 批量删除<span v-if="selectedUpstreamKeys.length"
+            >({{ selectedUpstreamKeys.length }})</span
+          >
+        </button>
+        <span class="b-spacer"></span>
+        <button class="btn btn-secondary btn-sm" :disabled="!selectedUpstreamKeys.length" @click="clearBatchSelection">
+          清除选择
+        </button>
+      </div>
+
       <a-table
         :data-source="displayRows"
         :columns="visibleColumns"
-        :row-key="(record: any) => record.key ?? record.id"
+        :row-key="rowKeyOf"
+        :row-selection="rowSelection"
         :custom-row="upstreamCustomRow"
         :pagination="false"
         :loading="loading"
@@ -259,7 +302,9 @@
       :visible="formModalVisible"
       :editing-upstream="editingUpstream"
       :copying-upstream="copyingUpstream"
-      :clusters="clusters"
+      :clusters="formClusterOptions"
+      :default-cluster-id="scopedClusterId"
+      :lock-cluster="isScoped"
       @close="closeFormModal"
       @saved="onSaved"
       @publish-requested="onFormPublishRequested"
@@ -292,6 +337,15 @@
       :resource-id="previewRecord?.id ?? null"
       :resource-name="previewRecord?.name"
       @publish="onPreviewPublish"
+    />
+
+    <!-- 批量删除进度：与节点批量条同一组件（BatchActionProgressModal），逐项行 = 上游名 -->
+    <BatchActionProgressModal
+      v-model:visible="batchProgressVisible"
+      :title="batchProgressTitle"
+      :items="batchProgressItems"
+      :expanded-ip="batchProgressExpandedIp"
+      @toggle-expand="toggleBatchProgressExpand"
     />
   </div>
 </template>
@@ -334,8 +388,42 @@ import ListPager from '@/components/ListPager.vue'
 import PageStatBadges from '@/components/PageStatBadges.vue'
 import { useRoute } from 'vue-router'
 import SearchInput from '@/components/SearchInput.vue'
+import BatchActionProgressModal from '@/components/BatchActionProgressModal.vue'
+import { createBatchProgressState, type BatchProgressState } from '@/composables/useBatchNodeAction'
+import {
+  runClusterGroupedBatchUpstreamDelete,
+  upstreamBatchSummaryMessage,
+  type ClusterUpstreamBatchGroup,
+} from '@/composables/useBatchUpstreamDelete'
 
 const route = useRoute()
+
+/**
+ * 单实现双形态（docs/refactoring/shared-core-plan-2026-11-21.md，A 试点节点之后的上游批）：
+ * - 不传 `scopedClusterId`：独立列表页（跨集群、分组/平铺、集群列）。
+ * - 传 `scopedClusterId`：统一管理最大化面板的「上游」Tab——只承载该集群：
+ *   隐藏 PageHeader / 集群与分组筛选 / 分组带 / 集群列，视图恒平铺；
+ *   页面级动作（新建上游）改由工具条左侧紧凑钮承载；
+ *   列配置走独立存储键 `upstream_panel`，与页面 `upstream_standalone` 互不污染。
+ */
+const props = withDefaults(defineProps<{ scopedClusterId?: number | null }>(), { scopedClusterId: null })
+const isScoped = computed(() => props.scopedClusterId != null)
+/** 表单弹窗的集群清单：scoped 下只给当前集群（并锁定选择） */
+const formClusterOptions = computed(() => {
+  const id = props.scopedClusterId
+  if (id == null) return clusters.value
+  const c = clusters.value.find((x) => x.id === id)
+  return [{ id, name: c?.name ?? '', display_name: c?.display_name }]
+})
+/** 列表/统计请求的集群过滤：scoped 恒取作用域集群，页面形态取筛选下拉 */
+function effectiveClusterId(): number | undefined {
+  if (props.scopedClusterId != null) return props.scopedClusterId
+  return clusterFilter.value ? Number(clusterFilter.value) : undefined
+}
+/** 分组过滤仅页面形态生效（面板单集群下恒「全部分组」） */
+function effectiveGroupName(): string {
+  return isScoped.value ? '__all__' : groupFilter.value
+}
 
 // 目标节点与健康（方案 A：发布态近似，见 utils/upstreamTargets）
 const targetPercentsOf = (record: { targets?: { target: string; weight: number }[] }) =>
@@ -354,6 +442,8 @@ const clusterFilter = ref<string | number>('')
 const groupFilter = ref('__all__')
 const lbFilter = ref('')
 const publishFilter = ref('')
+/** 最近一次已生效的搜索词（重复触发不重复清选择，见 runSearch） */
+const appliedSearch = ref('')
 
 const groupOptions = computed(() => {
   const names = new Set(clusters.value.map((c) => c.group_name || ''))
@@ -368,13 +458,15 @@ const filteredClusters = computed(() => {
 
 function onGroupChange() {
   clusterFilter.value = ''
+  clearBatchSelection()
   refreshList()
 }
 
 const displayedUpstreams = computed(() => upstreams.value)
 
 // ── 集群分组 + 双模式（list-page-cluster-grouping，共享组合式单点）──
-const viewMode = ref<ListViewMode>('group')
+// scoped（面板 Tab）= 单集群，分组带无意义 → 恒平铺（切换器同时隐藏）
+const viewMode = ref<ListViewMode>(isScoped.value ? 'flat' : 'group')
 /** 组头统计芯片（contract 10.3）：发布状态判定与行内 PublishStatusTag 同源（pending_publish 字段） */
 function upstreamGroupChips(rows: Array<Record<string, unknown>>): ClusterGroupChip[] {
   let published = 0
@@ -400,7 +492,10 @@ const { displayRows, sequenceOf, isRowSelectable, toggleFold, pageHasFolded, tog
 /** 组标记行单元格协议（contract 10.6） */
 function groupHeaderCellProps(record: unknown, isFirst: boolean): Record<string, unknown> {
   if (!isGroupHeaderRow(record)) return {}
-  return isFirst ? { colSpan: visibleColumns.value.length } : { class: 'l5-group-cell-hidden' }
+  // colSpan 额外 +1：组头行的选择列 checkbox（纯视觉噪音，与节点页同款）经 CSS
+  // `.l5-group-row .ant-table-selection-column { display:none }` 隐藏，colSpan 补上该列宽度，
+  // 通栏仍铺满整行（style.css 单点，见 mockup-parity r2）。
+  return isFirst ? { colSpan: visibleColumns.value.length + 1 } : { class: 'l5-group-cell-hidden' }
 }
 function upstreamCustomRow(record: unknown): Record<string, unknown> {
   return isGroupHeaderRow(record) ? { class: 'l5-group-row' } : {}
@@ -433,8 +528,10 @@ const statusCounts = ref<{
 })
 async function loadStatusCounts(): Promise<void> {
   try {
-    const params: Record<string, string | number> = { group_name: groupFilter.value }
-    if (clusterFilter.value) params.cluster_id = clusterFilter.value
+    const params: Record<string, string | number> = { group_name: effectiveGroupName() }
+    // scoped（面板 Tab）恒带当前集群：计数与列表同口径（面板内看不出别的集群的上游）
+    const clusterId = effectiveClusterId()
+    if (clusterId != null) params.cluster_id = clusterId
     if (lbFilter.value) params.load_balance = lbFilter.value
     if (searchText.value) params.search = searchText.value
     const { data } = await getUpstreamStatusCounts(params)
@@ -453,6 +550,7 @@ const statusChips = computed(() => [
 function selectPublishStatus(value: string): void {
   publishFilter.value = value
   page.value = 1
+  clearBatchSelection()
   refreshList()
 }
 /** 刷新语义（design D6）：重拉列表 + 徽标统计；不重置筛选/视图模式。
@@ -487,6 +585,7 @@ const columns: TableColumnsType = [
 ]
 
 // ── 列个性化（column-personalization-rollout）：宽度/顺序持久化 + 拖拽手势共享 composable ──
+// 存储键：页面形态 = `upstream_standalone`，scoped（面板 Tab）= `upstream_panel`（两形态互不污染）
 const {
   popoverVisible: columnPopoverVisible,
   columnsSelected,
@@ -496,7 +595,10 @@ const {
   resetWidths: resetUpstreamColumnWidths,
   columnOrder: upstreamColumnOrder,
   setColumnOrder: setUpstreamColumnOrder,
-} = useColumnConfig({ key: 'upstream_standalone', defaultColumns: columns.map((c) => String(c.key)) })
+} = useColumnConfig({
+  key: isScoped.value ? 'upstream_panel' : 'upstream_standalone',
+  defaultColumns: columns.map((c) => String(c.key)),
+})
 
 // 列顺序：共享 resolveOrderedColumns 单点（未知/重复键剔除，未定位列按设计位落座）
 const orderedColumns = computed(() => resolveOrderedColumns(columns, upstreamColumnOrder.value))
@@ -510,7 +612,8 @@ const cardRef = ref<HTMLElement | null>(null)
 // 集群列已在 columns 定义里（仅平铺可见）；分组态不参与列宽缩放
 const designWidths = () => {
   const base = toDesignWidths(columns)
-  if (viewMode.value === 'flat') return base
+  // 集群列只在「页面形态 + 平铺」参与缩放（分组视图由组头承担；scoped 单集群无此列）
+  if (!isScoped.value && viewMode.value === 'flat') return base
   const { cluster: _cluster, ...rest } = base
   return rest
 }
@@ -522,7 +625,7 @@ const { widths: fittedColumnWidths, minTableWidth } = useFitColumnWidths({
   // 列内容下限（r7-B4；批 7 publish_status 110→220）：目标列为弹性列不设下限；
   // scroll.x 下限之和 = 682 → 窗口 ≥ ~1070 零横向滚动
   minWidths: () => ({
-    ...(viewMode.value === 'flat' ? { cluster: CLUSTER_COLUMN_MIN_WIDTH } : {}),
+    ...(!isScoped.value && viewMode.value === 'flat' ? { cluster: CLUSTER_COLUMN_MIN_WIDTH } : {}),
     index: 40,
     name: 120,
     load_balance: 80,
@@ -538,8 +641,8 @@ const visibleColumns = computed(() => {
   const isVisible = (c: { key?: unknown }) => {
     const k = String(c.key)
     if (k === 'index') return true
-    // 集群列仅平铺视图存在（分组视图由组头承担），不进列配置弹窗
-    if (k === 'cluster') return viewMode.value === 'flat'
+    // 集群列仅「页面形态 + 平铺」存在（分组视图由组头承担；scoped 面板单集群下无意义），不进列配置弹窗
+    if (k === 'cluster') return !isScoped.value && viewMode.value === 'flat'
     return selected.has(k)
   }
   const groupMode = viewMode.value === 'group'
@@ -673,20 +776,40 @@ function onFormPublishRequested(payload: { clusterId: number | string; upstreamI
 
 function onFilterChange() {
   page.value = 1
+  // 筛选结果变化 → 清空勾选（面板既有 D9 语义）：否则隐藏行仍留在批量删除集合里
+  clearBatchSelection()
+  refreshList()
+}
+
+/**
+ * 执行搜索（防抖与回车共用）：同一关键词重复触发不重复清选择。
+ * 2026-11-21 真机/e2e 实测：回车曾**又排一个 300ms 防抖任务**，用户在这 300ms 内勾选的行
+ * 会被迟到回调的 clearBatchSelection 清掉（选择态「自己消失」）。
+ */
+function runSearch(): void {
+  const keyword = searchText.value
+  const changed = keyword !== appliedSearch.value
+  appliedSearch.value = keyword
+  page.value = 1
+  if (changed) clearBatchSelection()
   refreshList()
 }
 
 function onSearch() {
-  onDebouncedSearch(() => {
-    page.value = 1
-    refreshList()
-  })
+  onDebouncedSearch(runSearch)
+}
+
+/** 回车/放大镜：立即检索并取消待触发的防抖任务（SearchInput 的 search 事件） */
+function onSearchSubmit() {
+  cancelSearch()
+  runSearch()
 }
 
 /** 分页条事件（ListPager）：表外独立分页，表格本身 `:pagination="false"`（组标记行不占页容量） */
 function handlePagerChange(nextPage: number, nextPageSize: number) {
   page.value = nextPage
   if (nextPageSize) pageSize.value = nextPageSize
+  clearBatchSelection()
   loadUpstreams()
 }
 
@@ -723,8 +846,10 @@ function handleTableChange(
 async function loadUpstreams() {
   loading.value = true
   try {
-    const params: any = { page: page.value, page_size: pageSize.value, group_name: groupFilter.value }
-    if (clusterFilter.value) params.cluster_id = clusterFilter.value
+    const params: any = { page: page.value, page_size: pageSize.value, group_name: effectiveGroupName() }
+    // scoped（面板 Tab）恒带当前集群；页面形态取筛选下拉
+    const clusterId = effectiveClusterId()
+    if (clusterId != null) params.cluster_id = clusterId
     if (lbFilter.value) params.load_balance = lbFilter.value
     if (publishFilter.value) params.publish_status = publishFilter.value
     if (searchText.value) params.search = searchText.value
@@ -768,6 +893,120 @@ function closeFormModal() {
 function onSaved() {
   refreshList()
   closeFormModal()
+}
+
+// ── 行选择 + 批量删除（上游批量条唯一入口；页面与面板 Tab 同一实现）──────────────
+// 行选择语义照抄节点/路由页（contract 10.6：组标记行不可勾选）。
+// 行身份 = 数据行 id / 组标记行的合成 key。**不能用 `record.key`**：上游的 `key` 是
+// APISIX 一致性哈希键（chash 用，如 'a' / 'remote_addr'），与 id 无关——用它做 row-key 会让
+// 勾选集合存下哈希键，批量删除按 id 匹配时整行静默漏删（2026-11-21 真机实测）。
+const rowKeyOf = (record: any) => (isGroupHeaderRow(record) ? record.key : record.id)
+const selectedUpstreamKeys = ref<number[]>([])
+const rowSelection = computed(() => ({
+  selectedRowKeys: selectedUpstreamKeys.value,
+  preserveSelectedRowKeys: true,
+  columnWidth: 40,
+  onChange: (keys: (string | number)[]) => {
+    selectedUpstreamKeys.value = keys.map((k) => Number(k))
+  },
+  // 组标记行不可勾选（contract 10.6）：antd-vue 的 getCheckboxProps 入参是**记录本身**
+  // （不是 `{ record }` 包裹），故直接交给组合式的 isRowSelectable——写成 `rec.record` 会让
+  // 判定恒为可勾选，组头的合成 key 就会混进选择集。
+  getCheckboxProps: (rec: unknown) => ({ disabled: !isRowSelectable(rec) }),
+}))
+/** 勾选行（仅当前页数据源；筛选/翻页会清空选择，不会出现「隐藏行仍被删」） */
+const batchSelectedUpstreams = computed(() =>
+  upstreams.value.filter((u: { id: number }) => selectedUpstreamKeys.value.includes(u.id)),
+)
+
+function clearBatchSelection() {
+  selectedUpstreamKeys.value = []
+}
+
+/** 勾选行按 cluster_id 分组（批量端点只有集群作用域；跨集群顺序请求，同节点批量条） */
+function groupUpstreamsByCluster(
+  list: Array<{ id: number; name: string; cluster_id: number; cluster_name?: string }>,
+): ClusterUpstreamBatchGroup[] {
+  const groups = new Map<number, ClusterUpstreamBatchGroup>()
+  for (const u of list) {
+    const g = groups.get(u.cluster_id)
+    const row = { id: u.id, name: u.name }
+    if (g) g.upstreams.push(row)
+    else
+      groups.set(u.cluster_id, {
+        clusterId: u.cluster_id,
+        clusterName: u.cluster_name || `集群 ${u.cluster_id}`,
+        upstreams: [row],
+        nodeIds: [],
+      })
+  }
+  return Array.from(groups.values())
+}
+
+// 批量删除进度（与节点批量条同一状态工厂 + 同一渲染组件）
+const batchProgress: BatchProgressState = createBatchProgressState()
+const {
+  visible: batchProgressVisible,
+  title: batchProgressTitle,
+  items: batchProgressItems,
+  expandedIp: batchProgressExpandedIp,
+} = batchProgress
+
+function toggleBatchProgressExpand(ip: string) {
+  batchProgressExpandedIp.value = batchProgressExpandedIp.value === ip ? null : ip
+}
+
+/**
+ * 批量删除上游。
+ *
+ * 危险确认复用单条删除/面板批量删除的同一份告知（showDeleteConfirm，两处已有文案结构）：
+ * 数据库记录 / 可同步删 Edge 已发布配置 / 勾选节点后节点不再承载该上游流量；
+ * 执行走 runClusterGroupedBatchUpstreamDelete（按 cluster_id 分组顺序请求集合端点，
+ * 节点选择逐集群裁剪），进度弹窗与节点批量条同款（BatchActionProgressModal）。
+ */
+async function handleBatchDelete() {
+  const list = batchSelectedUpstreams.value
+  if (list.length === 0) {
+    message.warning('请先勾选要删除的上游')
+    return
+  }
+  const groups = groupUpstreamsByCluster(list)
+  // 确认弹窗的 Edge 节点清单：跨集群时逐节点标注归属集群（showDeleteConfirm 依据 clusterName 去重数自动渲染）
+  const nodeRows: Array<{ id: number; ip: string; management_port: number; status?: number; clusterName?: string }> = []
+  for (const g of groups) {
+    try {
+      const res = await getClusterNodes(g.clusterId)
+      const nodes: Array<{ id: number; ip: string; management_port: number; status?: number }> = res.data?.items || []
+      g.nodeIds = nodes.map((n) => n.id)
+      for (const n of nodes) nodeRows.push(groups.length > 1 ? { ...n, clusterName: g.clusterName } : { ...n })
+    } catch {
+      /* 节点明细不可用：Edge 删除退化为后端全量遍历（nodeIds 不传） */
+    }
+  }
+
+  const names = list.map((u: { name: string }) => u.name)
+  const title =
+    names.length > 3
+      ? `确定要删除选中的 ${names.length} 条上游吗？${names.slice(0, 3).join('、')} 等 ${names.length} 条`
+      : `确定要删除选中的 ${names.length} 条上游吗？${names.join('、')}`
+
+  showDeleteConfirm({
+    title,
+    apiEndpoint: `/clusters/${groups[0].clusterId}/upstreams`,
+    nodes: nodeRows,
+    onOk: async (deleteDb, deleteEdge, nodeIds) => {
+      const summaries = await runClusterGroupedBatchUpstreamDelete(
+        groups,
+        { deleteDb, deleteEdge, nodeIds },
+        { progress: batchProgress },
+      )
+      const { success, failed, text } = upstreamBatchSummaryMessage(summaries)
+      clearBatchSelection()
+      await refreshList()
+      if (failed === 0) message.success(`已删除 ${success} 个上游`)
+      else message.warning(text)
+    },
+  })
 }
 
 async function deleteUpstream(record: any) {
@@ -816,9 +1055,12 @@ function onPublishCancel() {
 }
 
 onMounted(() => {
-  const clusterId = route.query.cluster_id as string | undefined
-  const numeric = Number(clusterId)
-  if (Number.isFinite(numeric)) clusterFilter.value = numeric
+  // 深链集群筛选仅页面形态；scoped（面板 Tab）集群由 props 决定
+  if (!isScoped.value) {
+    const clusterId = route.query.cluster_id as string | undefined
+    const numeric = Number(clusterId)
+    if (Number.isFinite(numeric)) clusterFilter.value = numeric
+  }
   loadClusters()
   refreshList()
 })
@@ -833,6 +1075,17 @@ import type { TableColumnsType } from 'ant-design-vue'
 </script>
 
 <style scoped>
+/* scoped 形态（统一管理最大化面板「上游」Tab）：外层沿用页面卡片类，
+   保证 `.table-container.l5-card .c-idx` / 行内动作钮 / 批量条等全站解剖规则命中，
+   只压掉卡片自身的边框/底色/内距/圆角，使其融入面板 .dbody（不出现卡中卡）。 */
+.scope-card {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+  overflow: visible;
+}
+
 .text-muted {
   color: var(--muted);
 }
