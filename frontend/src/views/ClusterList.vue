@@ -1,6 +1,9 @@
 <template>
   <div class="cl-page">
     <PageHeader title="集群管理" description="管理所有的网关集群，查看集群资源和运行状态">
+      <template #stats>
+        <PageStatBadges :items="headerStatItems" />
+      </template>
       <template #actions>
         <button class="btn btn-secondary" @click="openBackupDownload">
           <StrokeIcon name="download" :size="13" />
@@ -218,6 +221,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'
+import PageStatBadges from '@/components/PageStatBadges.vue'
 import ClusterFormModal from '@/components/ClusterFormModal.vue'
 import ClusterDetailModal from '@/components/ClusterDetailModal.vue'
 import ClusterDriftDrawer from '@/components/ClusterDriftDrawer.vue'
@@ -610,6 +614,13 @@ const renderGroups = computed(() =>
         },
       ],
 )
+
+/** 页头徽标（#86② 补充维度）：分组数 + 节点数；集群总数由状态 chips「全部 N」承担 */
+/** 页头徽标（#86② 补充维度）：分组数 + 节点数；集群总数由状态 chips「全部 N」承担 */
+const headerStatItems = computed(() => [
+  { value: new Set(clusters.value.map((c) => c.group_name || '')).size, label: '分组' },
+  { value: clusters.value.reduce((n, c) => n + (c.node_count || 0), 0), label: '节点' },
+])
 </script>
 
 <style scoped>

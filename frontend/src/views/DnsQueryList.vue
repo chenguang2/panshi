@@ -4,6 +4,9 @@
       title="DNS 代理（HTTP）"
       description="管理 DNS 代理路由（DoH 域名解析转发），基于 dns_upstream 插件实现"
     >
+      <template #stats>
+        <PageStatBadges :items="headerStatItems" />
+      </template>
       <template #actions>
         <!-- AGENTS #88 ⑦：批量管理（secondary）在「新建」（primary）左侧 -->
         <button class="btn btn-secondary" :aria-pressed="batchMode" @click="toggleBatchMode">
@@ -363,6 +366,7 @@ import ClusterSelect from '@/components/ClusterSelect.vue'
 import api from '@/api'
 import { PAGE_SIZE_CARD_GRID } from '@/constants'
 import PageHeader from '@/components/PageHeader.vue'
+import PageStatBadges from '@/components/PageStatBadges.vue'
 import DnsQueryFormModal from '@/components/DnsQueryFormModal.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
@@ -886,6 +890,12 @@ onMounted(async () => {
   await loadClusters()
   loadRoutes()
 })
+
+/** 页头徽标（#86② 补充维度）：涉及集群数 + 域名总数 */
+const headerStatItems = computed(() => [
+  { value: new Set(routes.value.map((r) => r.cluster_id)).size, label: '集群' },
+  { value: routes.value.reduce((n, r) => n + domains(r).length, 0), label: '个域名' },
+])
 </script>
 
 <style scoped>

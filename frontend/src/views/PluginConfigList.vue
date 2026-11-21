@@ -4,6 +4,9 @@
       title="插件组"
       description="管理集群级的插件组配置。插件组是一组可复用的插件配置集合，可被多个路由引用。"
     >
+      <template #stats>
+        <PageStatBadges :items="headerStatItems" />
+      </template>
       <template #actions>
         <!-- AGENTS #88 ⑦：批量管理（secondary）在「新建」（primary）左侧 -->
         <button class="btn btn-secondary" :aria-pressed="batchMode" @click="toggleBatchMode">
@@ -301,6 +304,7 @@ import { listPluginConfigs } from '@/api/pluginConfigs'
 import { listBuiltinPlugins } from '@/api/pluginMetadata'
 import { listClusters, getClusterNodes } from '@/api/clusters'
 import PageHeader from '@/components/PageHeader.vue'
+import PageStatBadges from '@/components/PageStatBadges.vue'
 import PluginEntityFormModal from '@/components/PluginEntityFormModal.vue'
 import PluginConfigViewDrawer from '@/components/PluginConfigViewDrawer.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
@@ -798,6 +802,15 @@ function menuDelete(row: any): void {
 function pluginNames(pc: any): string[] {
   return pc?.plugins ? Object.keys(pc.plugins) : []
 }
+
+/** 页头徽标（#86② 补充维度）：涉及集群数 + 插件项总数 */
+const headerStatItems = computed(() => [
+  { value: new Set(configs.value.map((c) => c.cluster_id)).size, label: '集群' },
+  {
+    value: configs.value.reduce((n, c) => n + (c.plugins ? Object.keys(c.plugins).length : 0), 0),
+    label: '个插件',
+  },
+])
 </script>
 
 <style scoped>

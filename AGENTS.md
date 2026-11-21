@@ -263,6 +263,8 @@ openspec/        # 变更工件；openspec/specs/ = main specs
 
 91. **设计页基线一页一份，过程稿用完即删（2026-11-21 收敛）** — `docs/ui/Live-Artifact-5/proposal-c/` 是设计与 parity 的唯一基线，**每页只有一份定稿**（16 张：概览/集群管理/统一管理/节点/上游/路由/四层/DNS×2/插件组/插件元数据/插件开关/全局规则/静态资源/CA/服务器证书），入口 `docs/ui/Live-Artifact-5/index.html`（目录页），清单与维护约定见同目录 `README.md`。**变体对比稿（`*-v2`/`*-demo`/`*-variants`）只用于单轮裁决，结论落地后删除**，不得留在基线目录；删前在 git 里留痕即可。新增页面复制同形态最接近的定稿起步，命名与资源同名，禁止从历史方案（proposal-a/b、已删过程稿）复制。设计页 ↔ 实现仍按 #90 一一对应。
 
+92. **页头统计徽标只做补充维度，且设计页与实现一一对应（page-header-stat-badges，2026-11-21）** — 页头 `#stats`（`PageStatBadges` / `.ph-lite`）只放状态 chips 之外的维度（分组数/节点数/目标数/域名数/插件数/引用处数/资源总量/证书过期数），**不得重复 chips「全部 N」**；每页至多两枚、首枚 accent；**概览页不放**（数字归页内统计卡）。设计页 `proposal-c/*.html` 页头有 `.ph-inline` 的页面，实现必须有 `PageStatBadges`，反之亦然——守卫 `pageHeaderActions.source.test.ts` 第三段逐页断言（14 对 + 概览反向）。数据取当前已加载数据集或既有聚合端点（如 `status-counts`），缺字段不计入、总量为 0 显示 `—`，禁止编造数值。规范与逐页取值表见 `openspec/changes/page-header-stat-badges/`。
+
 ## 新增功能步骤
 
 1. 在 `backend/app/schemas/` 定义 Pydantic 模型

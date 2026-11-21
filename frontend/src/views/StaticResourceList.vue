@@ -1,6 +1,9 @@
 <template>
   <div class="sr-page">
     <PageHeader title="静态资源" description="管理 ZIP 格式的静态资源文件，上传后通过路由分发">
+      <template #stats>
+        <PageStatBadges :items="headerStatItems" />
+      </template>
       <template #actions>
         <!-- 序与设计页一致（AGENTS #88 ⑦）：批量管理（secondary）在「新建」（primary）左侧 -->
         <button class="btn btn-secondary" :aria-pressed="batchMode" @click="toggleBatchMode">
@@ -430,6 +433,7 @@ import { PAGE_SIZE_CARD_GRID, PAGE_SIZE_DROPDOWN } from '@/constants'
 import api from '@/api'
 import type { Cluster } from '@/types'
 import PageHeader from '@/components/PageHeader.vue'
+import PageStatBadges from '@/components/PageStatBadges.vue'
 import TableToolbar from '@/components/TableToolbar.vue'
 import ClusterBand from '@/components/ClusterBand.vue'
 import StrokeIcon from '@/components/StrokeIcon.vue'
@@ -1030,6 +1034,15 @@ onMounted(() => {
   if (Number.isFinite(numeric)) clusterFilter.value = numeric
   loadClusters()
   loadResources()
+})
+
+/** 页头徽标（#86② 补充维度）：涉及集群数 + 资源总大小 */
+const headerStatItems = computed(() => {
+  const total = resources.value.reduce((n, r) => n + (r.file_size || 0), 0)
+  return [
+    { value: new Set(resources.value.map((r) => r.cluster_id)).size, label: '集群' },
+    { value: total > 0 ? formatFileSize(total) : '—', label: '总量' },
+  ]
 })
 </script>
 

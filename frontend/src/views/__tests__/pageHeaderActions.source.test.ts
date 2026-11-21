@@ -178,3 +178,27 @@ describe('页头动作区守卫 · 设计页与实现一一对应', () => {
     })
   }
 })
+
+describe('页头统计徽标守卫 · 设计页与实现一致', () => {
+  /** 设计页 header 区域（标题 + 描述 + 统计徽标），截到动作区之前 */
+  function designHeader(html: string): string {
+    const at = html.indexOf('class="page-header"')
+    if (at < 0) return ''
+    const seg = html.slice(at, at + 2000)
+    const cut = seg.indexOf('page-header-actions')
+    return cut > 0 ? seg.slice(0, cut) : seg
+  }
+
+  for (const [file, html] of PAGES) {
+    const designHasBadge = designHeader(read(resolve(DESIGN, html))).includes('ph-inline')
+    const implHasBadge = read(resolve(VIEWS, file)).includes('PageStatBadges')
+    it(`${file} ↔ ${html}：页头徽标两侧一致（设计 ${designHasBadge ? '有' : '无'} / 实现 ${implHasBadge ? '有' : '无'}）`, () => {
+      expect(implHasBadge).toBe(designHasBadge)
+    })
+  }
+
+  it('概览页两侧都不放页头徽标（数字已由统计卡承担）', () => {
+    expect(designHeader(read(resolve(DESIGN, 'overview.html')))).not.toContain('ph-inline')
+    expect(read(resolve(VIEWS, 'Dashboard.vue'))).not.toContain('PageStatBadges')
+  })
+})

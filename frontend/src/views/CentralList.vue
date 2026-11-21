@@ -825,7 +825,8 @@ const renderGroups = computed(() =>
 
 // ── 页头补充维度徽标（#86②：总数归 chips「全部 N」，页头只放补充维度）──
 const headerStatItems = computed(() => [
-  { value: clusters.value.length, label: '集群' },
+  // #86② 补充维度：集群总数已由状态 chips「全部 N」承担，页头改显分组数
+  { value: new Set(clusters.value.map((c) => c.group_name || '')).size, label: '分组' },
   { value: clusters.value.reduce((acc, c) => acc + (c.node_count || 0), 0), label: '节点' },
 ])
 

@@ -1,6 +1,9 @@
 <template>
   <div class="gr-page">
     <PageHeader title="全局规则" description="全局规则对所属集群的全部路由生效，修改后需发布才会在 Edge 节点生效">
+      <template #stats>
+        <PageStatBadges :items="headerStatItems" />
+      </template>
       <template #actions>
         <!-- AGENTS #88 ⑦：批量管理（secondary）在「新建」（primary）左侧 -->
         <button class="btn btn-secondary" :aria-pressed="batchMode" @click="toggleBatchMode">
@@ -305,6 +308,7 @@ import { listGlobalRules } from '@/api/globalRules'
 import { listBuiltinPlugins } from '@/api/pluginMetadata'
 import { listClusters, getClusterNodes } from '@/api/clusters'
 import PageHeader from '@/components/PageHeader.vue'
+import PageStatBadges from '@/components/PageStatBadges.vue'
 import PluginEntityFormModal from '@/components/PluginEntityFormModal.vue'
 import GlobalRuleViewDrawer from '@/components/GlobalRuleViewDrawer.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
@@ -804,6 +808,15 @@ function menuDelete(row: any): void {
 function pluginNames(pc: any): string[] {
   return pc?.plugins ? Object.keys(pc.plugins) : []
 }
+
+/** 页头徽标（#86② 补充维度）：涉及集群数 + 发布部分失败规则数 */
+const headerStatItems = computed(() => {
+  const partial = rules.value.filter((r) => r.last_publish_status === 'partial').length
+  return [
+    { value: new Set(rules.value.map((r) => r.cluster_id)).size, label: '集群' },
+    { value: partial, label: '节点同步失败', tone: partial > 0 ? ('bad' as const) : undefined },
+  ]
+})
 </script>
 
 <style scoped>

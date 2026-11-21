@@ -1,6 +1,9 @@
 <template>
   <div class="pml-page">
     <PageHeader title="插件元数据" description="管理集群级的插件元数据配置，定义插件的默认参数和 schema。">
+      <template #stats>
+        <PageStatBadges :items="headerStatItems" />
+      </template>
       <template #actions>
         <!-- AGENTS #88 ⑦：批量管理（secondary）在「新建」（primary）左侧 -->
         <button class="btn btn-secondary" :aria-pressed="batchMode" @click="toggleBatchMode">
@@ -393,6 +396,7 @@ import {
 } from '@/api/pluginMetadata'
 import { listClusters, getClusterNodes } from '@/api/clusters'
 import PageHeader from '@/components/PageHeader.vue'
+import PageStatBadges from '@/components/PageStatBadges.vue'
 import PluginEditorDrawer from '@/components/PluginEditorDrawer.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import PublishConfirmModal from '@/components/PublishConfirmModal.vue'
@@ -1012,6 +1016,12 @@ function menuDelete(item: any): void {
   closeCardMenu()
   deleteItem(item)
 }
+
+/** 页头徽标（#86② 补充维度）：涉及集群数 + 去重插件数 */
+const headerStatItems = computed(() => [
+  { value: new Set(items.value.map((i) => i.cluster_id)).size, label: '集群' },
+  { value: new Set(items.value.map((i) => i.plugin_name)).size, label: '插件' },
+])
 </script>
 
 <style scoped>

@@ -1,6 +1,9 @@
 <template>
   <div class="ssl-page">
     <PageHeader title="服务器证书" description="部署在 Edge 网关上的 TLS 证书 · 由平台发布到节点">
+      <template #stats>
+        <PageStatBadges :items="headerStatItems" />
+      </template>
       <template #actions>
         <button class="btn btn-primary" @click="openGenerateDialog">
           <StrokeIcon name="plus" :size="13" /> 生成证书
@@ -214,6 +217,7 @@ import { useRepublishFailedNodes, noticeTextFromPublishDetail } from '@/composab
 import { PAGE_SIZE_CARD_GRID } from '@/constants'
 import api from '@/api'
 import PageHeader from '@/components/PageHeader.vue'
+import PageStatBadges from '@/components/PageStatBadges.vue'
 import SslCertCard from '@/components/SslCertCard.vue'
 import SslFormDrawer from '@/components/SslFormDrawer.vue'
 import SslViewDrawer from '@/components/SslViewDrawer.vue'
@@ -639,6 +643,15 @@ function openVersionManagement(cert: any) {
 
 onMounted(() => {
   loadClusters().then(() => loadCerts())
+})
+
+/** 页头徽标（#86② 补充维度）：涉及集群数 + 已过期数；总数由状态 chips 承担 */
+const headerStatItems = computed(() => {
+  const expired = certs.value.filter((c: any) => (c.expire_days ?? 0) < 0).length
+  return [
+    { value: new Set(certs.value.map((c: any) => c.cluster_id)).size, label: '集群' },
+    { value: expired, label: '已过期', tone: expired > 0 ? ('bad' as const) : undefined },
+  ]
 })
 </script>
 

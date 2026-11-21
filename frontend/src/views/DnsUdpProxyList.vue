@@ -1,6 +1,9 @@
 <template>
   <div class="sp-page">
     <PageHeader title="DNS 代理（UDP）" description="管理集群级的 DNS 代理规则">
+      <template #stats>
+        <PageStatBadges :items="headerStatItems" />
+      </template>
       <template #actions>
         <!-- 序与设计页一致（AGENTS #88 ⑦）：批量管理（secondary）在「新建」（primary）左侧 -->
         <button class="btn btn-secondary" :aria-pressed="batchMode" @click="toggleBatchMode">
@@ -299,6 +302,7 @@ import type { StreamProxy } from '@/types'
 import ClusterSelect from '@/components/ClusterSelect.vue'
 import api from '@/api'
 import PageHeader from '@/components/PageHeader.vue'
+import PageStatBadges from '@/components/PageStatBadges.vue'
 import StreamProxyFormWizard from '@/components/StreamProxyFormWizard.vue'
 import StreamProxyViewDrawer from '@/components/StreamProxyViewDrawer.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
@@ -821,6 +825,12 @@ function menuDelete(p: any): void {
   closeCardMenu()
   deleteProxy(p)
 }
+
+/** 页头徽标（#86② 补充维度）：涉及集群数 + 域名总数 */
+const headerStatItems = computed(() => [
+  { value: new Set(proxies.value.map((p) => p.cluster_id)).size, label: '集群' },
+  { value: proxies.value.reduce((n, p) => n + dnsDomains(p).length, 0), label: '个域名' },
+])
 </script>
 
 <style scoped>

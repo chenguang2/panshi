@@ -1,6 +1,9 @@
 <template>
   <div class="ssl-page">
     <PageHeader title="CA 根证书" description="平台自建 CA 的信任锚点 · 可放心分发给最终用户安装">
+      <template #stats>
+        <PageStatBadges :items="headerStatItems" />
+      </template>
       <template #actions>
         <button class="btn btn-primary" @click="openCaCreateDialog">
           <StrokeIcon name="plus" :size="13" /> 创建 CA 根证书
@@ -168,6 +171,7 @@ import StrokeIcon from '@/components/StrokeIcon.vue'
 import { useCardClusterGrouping } from '@/composables/useCardClusterGrouping'
 import api from '@/api'
 import PageHeader from '@/components/PageHeader.vue'
+import PageStatBadges from '@/components/PageStatBadges.vue'
 import SslCertCard from '@/components/SslCertCard.vue'
 import SslViewDrawer from '@/components/SslViewDrawer.vue'
 import CaCreateDialog from '@/components/CaCreateDialog.vue'
@@ -389,6 +393,18 @@ async function deleteCert(cert: any) {
 
 onMounted(() => {
   loadClusters().then(() => loadCerts())
+})
+
+/** 页头徽标（#86② 补充维度）：即将过期（≤30 天）+ 已过期；总数由状态 chips 承担 */
+const headerStatItems = computed(() => {
+  const expired = certs.value.filter((c: any) => (c.expire_days ?? 0) < 0).length
+  const expiring = certs.value.filter(
+    (c: any) => c.expire_days !== null && c.expire_days !== undefined && c.expire_days >= 0 && c.expire_days <= 30,
+  ).length
+  return [
+    { value: expiring, label: '即将过期', tone: expiring > 0 ? ('warn' as const) : undefined },
+    { value: expired, label: '已过期', tone: expired > 0 ? ('bad' as const) : undefined },
+  ]
 })
 </script>
 

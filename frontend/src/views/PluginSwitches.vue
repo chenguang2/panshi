@@ -1,6 +1,9 @@
 <template>
   <div class="plugin-switches">
     <PageHeader title="插件开关" description="控制各插件在新配置中的可选性；禁用不影响既有配置">
+      <template #stats>
+        <PageStatBadges :items="headerStatItems" />
+      </template>
       <template #actions>
         <router-link
           v-if="canViewAudit"
@@ -250,6 +253,7 @@ import { message } from 'ant-design-vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import api from '@/api'
 import PageHeader from '@/components/PageHeader.vue'
+import PageStatBadges from '@/components/PageStatBadges.vue'
 import TableToolbar from '@/components/TableToolbar.vue'
 import StrokeIcon from '@/components/StrokeIcon.vue'
 import SearchInput from '@/components/SearchInput.vue'
@@ -609,6 +613,18 @@ async function loadSwitches() {
 onMounted(loadSwitches)
 
 defineExpose({ requestLeave })
+
+/** 页头徽标（#86② 补充维度）：插件分类数 + 引用总处数 */
+const headerStatItems = computed(() => [
+  { value: categoryList.value.length, label: '个分类' },
+  {
+    value: allPlugins.value.reduce(
+      (n, p) => n + (p.refs?.routes ?? 0) + (p.refs?.plugin_configs ?? 0) + (p.refs?.global_rules ?? 0),
+      0,
+    ),
+    label: '处引用',
+  },
+])
 </script>
 
 <style scoped>
