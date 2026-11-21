@@ -182,15 +182,22 @@ describe('PluginConfigList scoped 形态（统一管理面板「插件组」Tab�
     for (const cls of ['.lp-head', '.lp-name', '.lp-body', '.lp-foot']) {
       expect(card.find(cls).exists(), `卡片缺少 ${cls}`).toBe(true)
     }
-    // 卡脚 = 「发布」.op-pub + ⋯ 触发器；菜单三栏（CRUD → 分隔线 → 危险组）
+    // 卡脚 = 「发布」.op-pub + ⋯ 触发器；菜单三栏（#81①：CRUD → 分隔线 → 危险组 → 分隔线 → 动作组）
     expect(card.find('.op-pub').text()).toBe('发布')
     await card.find('.op-btn').trigger('click')
     const menu = card.find('.l5-menu')
     expect(menu.classes()).toContain('open')
     const items = menu.findAll('.mi').map((m) => m.find('.mi-main').text())
-    expect(items).toEqual(['查看', '编辑', '版本管理', '删除'])
-    expect(menu.find('.menu-sep').exists()).toBe(true)
-    expect(menu.find('.mi.danger').text()).toContain('删平台配置，可同步删 Edge 插件组（弹窗可选）')
+    expect(items).toEqual(['查看', '编辑', '删除', '版本管理'])
+    // 两条栏间分隔线（面板 Tab 与独立页同一构建器，逐字一致）
+    expect(menu.findAll('.menu-sep')).toHaveLength(2)
+    const del = menu.findAll('.mi').find((m) => m.find('.mi-main').text() === '删除')!
+    expect(del.classes()).toContain('danger')
+    expect(del.text()).toContain('删平台配置，可同步删 Edge 插件组（弹窗可选）')
+    // 动作组（版本管理）带常驻解释，且不在危险栏
+    const ver = menu.findAll('.mi').find((m) => m.find('.mi-main').text() === '版本管理')!
+    expect(ver.classes()).not.toContain('danger')
+    expect(ver.text()).toContain('历史版本查看与回滚')
   })
 
   it('5 批量管理仍在：进入批量态 → 勾选 → 批量条计数与批量删除；退出清空选择', async () => {

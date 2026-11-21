@@ -386,6 +386,21 @@ describe('GlobalRuleList.vue', () => {
 
   // ── 3.2 删除集群级警示 + 5.1 删除链路节点全量取数 ──
 
+  it('⋯ 菜单三栏结构：CRUD → 分隔线 → 删除(danger+解释) → 分隔线 → 版本管理（AGENTS #81①）', async () => {
+    const w = await mountWithItems(MOCK_DATA.items)
+    const card = cardByName(w, 'global-rate-limit')!
+    const menu = card.find('.l5-menu')
+    expect(menu.findAll('.mi-main').map((b) => b.text())).toEqual(['查看', '编辑', '删除', '版本管理'])
+    expect(menu.findAll('.menu-sep')).toHaveLength(2)
+    const items = menu.findAll('.mi')
+    expect(items[2].classes()).toContain('danger')
+    expect(items[2].find('.mi-sub').text()).toBe('删平台配置，可同步删 Edge 全局规则（弹窗可选）')
+    expect(items[0].classes()).not.toContain('danger')
+    expect(items[3].classes()).not.toContain('danger')
+    expect(items[3].find('.mi-sub').text()).toBe('历史版本查看与回滚')
+    w.unmount()
+  })
+
   it('删除链路：节点取数传 page_size 全量，删除确认携带集群级 extraWarning', async () => {
     const w = await mountWithItems(MOCK_DATA.items)
     const card = cardByName(w, 'global-rate-limit')!

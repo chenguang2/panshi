@@ -186,6 +186,25 @@ describe('PluginConfigList.vue', () => {
     return wrapper.findComponent({ name: 'MockVersionManagementModal' })
   }
 
+  it('⋯ 菜单三栏结构：CRUD → 分隔线 → 删除(danger+解释) → 分隔线 → 版本管理（AGENTS #81①）', async () => {
+    const w = await mountList()
+    const card = w.findAll('.pc-card').find((c: any) => c.text().includes('rate-limit-config'))!
+    const menu = card.find('.l5-menu')
+    // 条目顺序 = 构建器三栏输出顺序（crud → danger → actions）
+    expect(menu.findAll('.mi-main').map((b) => b.text())).toEqual(['查看', '编辑', '删除', '版本管理'])
+    // 栏间分隔线两条（首栏前不画；空栏由构建器剔除）
+    expect(menu.findAll('.menu-sep')).toHaveLength(2)
+    const items = menu.findAll('.mi')
+    // 删除独占危险栏：danger 红语义 + 常驻解释；其余条目无 danger
+    expect(items[2].classes()).toContain('danger')
+    expect(items[2].find('.mi-sub').text()).toBe('删平台配置，可同步删 Edge 插件组（弹窗可选）')
+    expect(items[0].classes()).not.toContain('danger')
+    expect(items[3].classes()).not.toContain('danger')
+    expect(items[3].find('.mi-sub').text()).toBe('历史版本查看与回滚')
+    expect(items[0].find('.mi-sub').exists()).toBe(false)
+    w.unmount()
+  })
+
   it('版本管理弹窗收到 can-publish=true（恢复出口条可见）', async () => {
     const w = await mountList()
     const vmModal = await openVersionModal(w)

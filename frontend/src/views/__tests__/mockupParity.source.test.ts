@@ -855,11 +855,13 @@ describe('mockup-parity · 静态资源卡片页推广（21.9b，2026-11-19）',
 
   it('动作收进 ⋯ 菜单：危险项独立 + 常驻解释 + broken 态收敛（AGENTS #81）', () => {
     expect(s).toContain('class="l5-menu"')
-    expect(s).toContain('class="mi danger"')
+    // 条目不再手写：危险态由条目元数据驱动（:class="{ danger: m.danger }"），构建器统一分组
+    expect(s).toContain(':class="{ danger: m.danger }"')
+    expect(s).not.toContain('class="mi danger"')
     expect(s).toContain('删平台配置，可同步删 Edge 已分发文件（弹窗可选）')
     expect(s).not.toMatch(/@click="\s*closeCardMenu\(\)/)
     // broken 态：只留禁用编辑 + 删除（菜单），发布禁用带指路 title
-    expect(s).toContain("staticResourceState(sr) !== 'broken'")
+    expect(s).toContain("if (staticResourceState(sr) === 'broken')")
     expect(s).toContain('关联路由不存在，请先重建路由')
   })
 

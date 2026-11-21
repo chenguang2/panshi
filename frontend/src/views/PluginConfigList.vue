@@ -248,22 +248,24 @@
                 >
                   <StrokeIcon name="dots" :size="14" />
                 </button>
+                <!-- 三栏结构（#81）：CRUD → 危险 → 动作；条目/顺序/空栏剔除由 utils/resourceActionMenu
+                     统一构建（与表格类页 NodeList/UpstreamList/RouteList 同一构建器），栏间只由 gi 画一条线 -->
                 <div class="l5-menu" :class="{ open: openMenuId === pc.id, 'flip-up': menuFlipUp }">
-                  <button class="mi" @click="menuView(pc)">
-                    <span class="mi-main">查看</span>
-                  </button>
-                  <button class="mi" @click="menuEdit(pc)">
-                    <span class="mi-main">编辑</span>
-                  </button>
-                  <button class="mi" @click="menuVersion(pc)">
-                    <span class="mi-main">版本管理</span>
-                    <span class="mi-sub">历史版本查看与回滚</span>
-                  </button>
-                  <hr class="menu-sep" />
-                  <button class="mi danger" @click="menuDelete(pc)">
-                    <span class="mi-main">删除</span>
-                    <span class="mi-sub">删平台配置，可同步删 Edge 插件组（弹窗可选）</span>
-                  </button>
+                  <template v-for="(group, gi) in PLUGIN_CONFIG_MENU_GROUPS" :key="group.key">
+                    <hr v-if="gi > 0" class="menu-sep" />
+                    <button
+                      v-for="item in group.items"
+                      :key="item.key"
+                      type="button"
+                      class="mi"
+                      :class="{ danger: item.danger }"
+                      :disabled="item.disabled"
+                      @click="handleMenu(item.key, pc)"
+                    >
+                      <span class="mi-main">{{ item.title }}</span>
+                      <span v-if="item.desc" class="mi-sub">{{ item.desc }}</span>
+                    </button>
+                  </template>
                 </div>
               </div>
             </div>
@@ -716,6 +718,7 @@ import { useCardClusterGrouping } from '@/composables/useCardClusterGrouping'
 import StrokeIcon from '@/components/StrokeIcon.vue'
 import ClusterBand from '@/components/ClusterBand.vue'
 import TableToolbar from '@/components/TableToolbar.vue'
+import { buildResourceActionMenu } from '@/utils/resourceActionMenu'
 
 // ── 状态 chips（本页全量拉取，前端聚合）──
 type StatusKey = 'all' | 'unpublished' | 'pending' | 'published' | 'partial'
@@ -850,6 +853,20 @@ const batchDelete = useBatchDelete<any>({
 })
 
 // ── ⋯ 菜单（同屏只开一个；空间不足向上翻转，AGENTS #88 ⑥）──
+/**
+ * 卡片 ⋯ 菜单条目定义（#81 三栏结构）：CRUD → 危险 → 动作。
+ * 分组顺序/空栏剔除由 utils/resourceActionMenu 单一构建（与表格类页共用），
+ * 点击按条目 key 分发回既有 menu* 函数。
+ */
+const PLUGIN_CONFIG_MENU_GROUPS = buildResourceActionMenu({
+  crud: [
+    { key: 'view', title: '查看' },
+    { key: 'edit', title: '编辑' },
+  ],
+  danger: [{ key: 'delete', title: '删除', desc: '删平台配置，可同步删 Edge 插件组（弹窗可选）', danger: true }],
+  actions: [{ key: 'version', title: '版本管理', desc: '历史版本查看与回滚' }],
+})
+
 const openMenuId = ref<number | null>(null)
 const menuFlipUp = ref(false)
 
@@ -906,6 +923,13 @@ function menuVersion(row: any): void {
 function menuDelete(row: any): void {
   closeCardMenu()
   deleteConfig(row)
+}
+/** 菜单条目 key → 既有动作（三栏构建器只负责分组/文案，业务分发留在此处） */
+function handleMenu(key: string, row: any): void {
+  if (key === 'view') menuView(row)
+  else if (key === 'edit') menuEdit(row)
+  else if (key === 'version') menuVersion(row)
+  else if (key === 'delete') menuDelete(row)
 }
 
 function pluginNames(pc: any): string[] {

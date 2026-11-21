@@ -182,10 +182,16 @@ describe('PluginMetadataList scoped 形态（统一管理面板「插件元数�
     await card.find('.op-btn').trigger('click')
     const menu = card.find('.l5-menu')
     expect(menu.classes()).toContain('open')
+    // #81① 三栏：CRUD → 分隔线 → 危险组 → 分隔线 → 动作组（版本管理）
     const items = menu.findAll('.mi').map((m) => m.find('.mi-main').text())
-    expect(items).toEqual(['查看', '编辑', '版本管理', '删除'])
-    expect(menu.find('.menu-sep').exists()).toBe(true)
-    expect(menu.find('.mi.danger').text()).toContain('删平台配置，可同步删 Edge 已发布配置（弹窗可选）')
+    expect(items).toEqual(['查看', '编辑', '删除', '版本管理'])
+    expect(menu.findAll('.menu-sep')).toHaveLength(2)
+    const del = menu.findAll('.mi').find((m) => m.find('.mi-main').text() === '删除')!
+    expect(del.classes()).toContain('danger')
+    expect(del.text()).toContain('删平台配置，可同步删 Edge 已发布配置（弹窗可选）')
+    const ver = menu.findAll('.mi').find((m) => m.find('.mi-main').text() === '版本管理')!
+    expect(ver.classes()).not.toContain('danger')
+    expect(ver.text()).toContain('历史版本查看与回滚')
     w.unmount()
   })
 

@@ -252,40 +252,26 @@
                 >
                   <StrokeIcon name="dots" :size="14" />
                 </button>
+                <!-- 三栏结构（#81）：CRUD → 危险 → 动作；条目由 utils/resourceActionMenu 统一构建
+                     （与表格类页共用同一构建器）。静态资源的查看/上传/版本条目带 per-record 门控
+                     （file_size / 上传中 / current_version / broken），故走按记录构建的 menuGroups(sr)。 -->
                 <div class="l5-menu" :class="{ open: openMenuId === sr.id, 'flip-up': menuFlipUp }">
-                  <template v-if="staticResourceState(sr) !== 'broken'">
+                  <template v-for="(group, gi) in menuGroups(sr)" :key="group.key">
+                    <hr v-if="gi > 0" class="menu-sep" />
                     <button
+                      v-for="m in group.items"
+                      :key="m.key"
+                      type="button"
                       class="mi"
-                      :disabled="!sr.file_size"
-                      :title="!sr.file_size ? '暂未上传 ZIP 文件' : ''"
-                      @click="menuView(sr)"
+                      :class="{ danger: m.danger }"
+                      :disabled="m.disabled"
+                      :title="m.hint || ''"
+                      @click="handleMenu(m.key, sr)"
                     >
-                      <span class="mi-main">查看 ZIP 内容</span>
-                      <span class="mi-sub">只读列出包内文件</span>
-                    </button>
-                    <button class="mi" @click="menuEdit(sr)">
-                      <span class="mi-main">编辑</span>
-                      <span class="mi-sub">改绑路由需重新上传并发布</span>
-                    </button>
-                    <button class="mi" :disabled="srUploading || !sr.id" @click="menuUpload(sr)">
-                      <span class="mi-main">{{ sr.current_version ? '替换 ZIP' : '上传 ZIP' }}</span>
-                    </button>
-                    <button class="mi" :disabled="!sr.current_version" @click="menuVersion(sr)">
-                      <span class="mi-main">版本管理</span>
-                      <span class="mi-sub">历史版本查看与回滚</span>
+                      <span class="mi-main">{{ m.title }}</span>
+                      <span v-if="m.desc" class="mi-sub">{{ m.desc }}</span>
                     </button>
                   </template>
-                  <template v-else>
-                    <button class="mi" disabled>
-                      <span class="mi-main">编辑</span>
-                      <span class="mi-sub">关联路由不存在，请先重建路由</span>
-                    </button>
-                  </template>
-                  <hr class="menu-sep" />
-                  <button class="mi danger" @click="menuDelete(sr)">
-                    <span class="mi-main">删除</span>
-                    <span class="mi-sub">删平台配置，可同步删 Edge 已分发文件（弹窗可选）</span>
-                  </button>
                 </div>
               </div>
             </div>
@@ -354,6 +340,7 @@ import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
 import { formatFileSize, formatDateTime } from '@/utils/format'
 import ClusterSelect from '@/components/ClusterSelect.vue'
 import { staticResourceState } from '@/utils/staticResourceRoute'
+import { buildResourceActionMenu, type ResourceMenuGroup } from '@/utils/resourceActionMenu'
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
@@ -710,6 +697,52 @@ function menuVersion(sr: any): void {
 function menuDelete(sr: any): void {
   closeCardMenu()
   deleteResource(sr)
+}
+/** 菜单条目 key → 既有动作（三栏构建器只负责分组/文案，业务分发留在此处） */
+function handleMenu(key: string, sr: any): void {
+  if (key === 'view') menuView(sr)
+  else if (key === 'edit') menuEdit(sr)
+  else if (key === 'upload') menuUpload(sr)
+  else if (key === 'version') menuVersion(sr)
+  else if (key === 'delete') menuDelete(sr)
+}
+
+/**
+ * 按记录构建 ⋯ 菜单（#81 三栏结构 CRUD → 危险 → 动作）。
+ * 静态资源是唯一带 per-record 门控的卡片页：查看/上传/版本的可用性随 file_size、上传中、
+ * current_version 变化，broken（关联路由不存在）时只剩禁用态「编辑」。分组顺序与空栏剔除
+ * 仍由 utils/resourceActionMenu 统一负责（与表格类页共用构建器）。
+ */
+function menuGroups(sr: any): ResourceMenuGroup[] {
+  const danger = [
+    {
+      key: 'delete',
+      title: '删除',
+      desc: '删平台配置，可同步删 Edge 已分发文件（弹窗可选）',
+      danger: true,
+    },
+  ]
+  if (staticResourceState(sr) === 'broken') {
+    return buildResourceActionMenu({
+      crud: [{ key: 'edit', title: '编辑', desc: '关联路由不存在，请先重建路由', disabled: true }],
+      danger,
+    })
+  }
+  return buildResourceActionMenu({
+    crud: [
+      {
+        key: 'view',
+        title: '查看 ZIP 内容',
+        desc: '只读列出包内文件',
+        disabled: !sr.file_size,
+        hint: !sr.file_size ? '暂未上传 ZIP 文件' : '',
+      },
+      { key: 'edit', title: '编辑', desc: '改绑路由需重新上传并发布' },
+      { key: 'upload', title: sr.current_version ? '替换 ZIP' : '上传 ZIP', disabled: srUploading.value || !sr.id },
+    ],
+    danger,
+    actions: [{ key: 'version', title: '版本管理', desc: '历史版本查看与回滚', disabled: !sr.current_version }],
+  })
 }
 
 /** 分发失败警示文案（failed_nodes 取真实持久化 detail，#43：形状以端点实现为准） */

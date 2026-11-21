@@ -14,6 +14,8 @@ export interface ResourceActionItem {
   desc?: string
   danger?: boolean
   disabled?: boolean
+  /** 悬停提示（HTML title），用于给禁用态条目说明原因（如「暂未上传 ZIP 文件」） */
+  hint?: string
 }
 
 /** 一个栏位（crud / danger / actions 之一；空栏不输出） */

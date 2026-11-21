@@ -404,6 +404,42 @@ describe('StaticResourceList.vue 表单/ZIP 弹窗共用接线（B2a）', () => 
     return card.findAll('.mi').find((b) => b.find('.mi-main').text() === mainText)!
   }
 
+  it('⋯ 菜单三栏结构：CRUD → 分隔线 → 删除(danger+解释) → 分隔线 → 版本管理（AGENTS #81①）', async () => {
+    const wrapper = await mountPage()
+    const card = wrapper.findAll('.sr-card').find((c) => c.text().includes('static-files'))!
+    const menu = card.find('.l5-menu')
+    expect(menu.findAll('.mi-main').map((b) => b.text())).toEqual([
+      '查看 ZIP 内容',
+      '编辑',
+      '替换 ZIP',
+      '删除',
+      '版本管理',
+    ])
+    // 栏间分隔线两条：CRUD（查看/编辑/替换 ZIP）→ 危险（删除）→ 动作（版本管理）
+    expect(menu.findAll('.menu-sep')).toHaveLength(2)
+    const items = menu.findAll('.mi')
+    expect(items[3].classes()).toContain('danger')
+    expect(items[3].find('.mi-sub').text()).toBe('删平台配置，可同步删 Edge 已分发文件（弹窗可选）')
+    expect(items[0].classes()).not.toContain('danger')
+    expect(items[4].classes()).not.toContain('danger')
+    expect(items[4].find('.mi-sub').text()).toBe('历史版本查看与回滚')
+    // 无文件 / 无版本记录的卡片：查看禁用 + 「上传 ZIP」+ 版本管理禁用（门控仍由条目元数据驱动）
+    const docs = wrapper.findAll('.sr-card').find((c) => c.text().includes('docs'))!
+    const docsMenu = docs.find('.l5-menu')
+    expect(docsMenu.findAll('.mi-main').map((b) => b.text())).toEqual([
+      '查看 ZIP 内容',
+      '编辑',
+      '上传 ZIP',
+      '删除',
+      '版本管理',
+    ])
+    const docsItems = docsMenu.findAll('.mi')
+    expect(docsItems[0].attributes('disabled')).toBeDefined()
+    expect(docsItems[0].attributes('title')).toBe('暂未上传 ZIP 文件')
+    expect(docsItems[4].attributes('disabled')).toBeDefined()
+    wrapper.unmount()
+  })
+
   it('页头「添加静态资源」→ 共享表单以新增态打开（集群全量、不锁集群）', async () => {
     const wrapper = await mountPage()
     const form = wrapper.findComponent({ name: 'StaticResourceFormModal' })

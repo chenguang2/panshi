@@ -245,16 +245,22 @@ describe('StaticResourceList scoped 形态（统一管理面板「静态资源�
     expect(logs.join('\n')).toContain('10.0.0.31:9180: 成功（经中继）')
   })
 
-  it('6b ⋯ 菜单：查看 ZIP 内容 / 编辑 / 上传 ZIP / 版本管理 → 分隔线 → 删除（连带删 Edge 已分发文件）', async () => {
+  it('6b ⋯ 菜单：查看 ZIP 内容 / 编辑 / 替换 ZIP → 分隔线 → 删除（连带删 Edge 已分发文件）→ 分隔线 → 版本管理', async () => {
     const w = await mountScoped()
     const card = w.findAll('.sr-card')[0]
     await card.find('.op-btn').trigger('click')
     const menu = card.find('.l5-menu')
     expect(menu.classes()).toContain('open')
+    // #81① 三栏（面板 Tab 与独立页同一构建器，逐字一致）
     const items = menu.findAll('.mi').map((m) => m.find('.mi-main').text())
-    expect(items).toEqual(['查看 ZIP 内容', '编辑', '替换 ZIP', '版本管理', '删除'])
-    expect(menu.find('.menu-sep').exists()).toBe(true)
-    expect(menu.find('.mi.danger').text()).toContain('删平台配置，可同步删 Edge 已分发文件')
+    expect(items).toEqual(['查看 ZIP 内容', '编辑', '替换 ZIP', '删除', '版本管理'])
+    expect(menu.findAll('.menu-sep')).toHaveLength(2)
+    const del = menu.findAll('.mi').find((m) => m.find('.mi-main').text() === '删除')!
+    expect(del.classes()).toContain('danger')
+    expect(del.text()).toContain('删平台配置，可同步删 Edge 已分发文件')
+    const ver = menu.findAll('.mi').find((m) => m.find('.mi-main').text() === '版本管理')!
+    expect(ver.classes()).not.toContain('danger')
+    expect(ver.text()).toContain('历史版本查看与回滚')
   })
 
   it('7 ZIP / 表单弹窗：ZIP 带作用域集群，表单预选并锁定该集群（单元素清单）', async () => {

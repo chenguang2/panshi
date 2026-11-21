@@ -342,6 +342,21 @@ describe('PluginMetadataList.vue 卡片操作 → composable 接线', () => {
     return item!
   }
 
+  it('⋯ 菜单三栏结构：CRUD → 分隔线 → 删除(danger+解释) → 分隔线 → 版本管理（AGENTS #81①）', async () => {
+    const wrapper = await mountPage()
+    const card = wrapper.findAll('.pml-card').find((c) => c.text().includes('jwt-auth'))!
+    const menu = card.find('.l5-menu')
+    expect(menu.findAll('.mi-main').map((b) => b.text())).toEqual(['查看', '编辑', '删除', '版本管理'])
+    expect(menu.findAll('.menu-sep')).toHaveLength(2)
+    const items = menu.findAll('.mi')
+    expect(items[2].classes()).toContain('danger')
+    expect(items[2].find('.mi-sub').text()).toBe('删平台配置，可同步删 Edge 已发布配置（弹窗可选）')
+    expect(items[0].classes()).not.toContain('danger')
+    expect(items[3].classes()).not.toContain('danger')
+    expect(items[3].find('.mi-sub').text()).toBe('历史版本查看与回滚')
+    wrapper.unmount()
+  })
+
   it('编辑按钮 → 打开编辑抽屉并透传插件名 / 格式化配置 / schema', async () => {
     const wrapper = await mountPage()
     await (await cardMenuAction(wrapper, '编辑')).trigger('click')

@@ -273,22 +273,24 @@
                 >
                   <StrokeIcon name="dots" :size="14" />
                 </button>
+                <!-- 三栏结构（#81）：CRUD → 危险 → 动作；条目/顺序/空栏剔除由 utils/resourceActionMenu
+                     统一构建（与表格类页共用同一构建器），栏间只由 gi 画一条线 -->
                 <div class="l5-menu" :class="{ open: openMenuId === item.id, 'flip-up': menuFlipUp }">
-                  <button class="mi" @click="menuView(item)">
-                    <span class="mi-main">查看</span>
-                  </button>
-                  <button class="mi" @click="menuEdit(item)">
-                    <span class="mi-main">编辑</span>
-                  </button>
-                  <button class="mi" @click="menuVersion(item)">
-                    <span class="mi-main">版本管理</span>
-                    <span class="mi-sub">历史版本查看与回滚</span>
-                  </button>
-                  <hr class="menu-sep" />
-                  <button class="mi danger" @click="menuDelete(item)">
-                    <span class="mi-main">删除</span>
-                    <span class="mi-sub">删平台配置，可同步删 Edge 已发布配置（弹窗可选）</span>
-                  </button>
+                  <template v-for="(group, gi) in PLUGIN_METADATA_MENU_GROUPS" :key="group.key">
+                    <hr v-if="gi > 0" class="menu-sep" />
+                    <button
+                      v-for="m in group.items"
+                      :key="m.key"
+                      type="button"
+                      class="mi"
+                      :class="{ danger: m.danger }"
+                      :disabled="m.disabled"
+                      @click="handleMenu(m.key, item)"
+                    >
+                      <span class="mi-main">{{ m.title }}</span>
+                      <span v-if="m.desc" class="mi-sub">{{ m.desc }}</span>
+                    </button>
+                  </template>
                 </div>
               </div>
             </div>
@@ -409,6 +411,7 @@ import ClusterBand from '@/components/ClusterBand.vue'
 import TableToolbar from '@/components/TableToolbar.vue'
 import { useFeaturesStore } from '@/stores/features'
 import { filterMetadataPlugins, metadataPluginLabel } from '@/utils/pluginMetadataCatalog'
+import { buildResourceActionMenu } from '@/utils/resourceActionMenu'
 
 /**
  * 单实现双形态（AGENTS #93 / docs/refactoring/shared-core-plan-2026-11-21.md，A 推广第 3 个卡片类资源）：
@@ -995,6 +998,20 @@ const batchDelete = useBatchDelete<any>({
 })
 
 // ── ⋯ 菜单（同屏只开一个；空间不足向上翻转，AGENTS #88 ⑥）──
+/**
+ * 卡片 ⋯ 菜单条目定义（#81 三栏结构）：CRUD → 危险 → 动作。
+ * 分组顺序/空栏剔除由 utils/resourceActionMenu 单一构建（与表格类页共用），
+ * 点击按条目 key 分发回既有 menu* 函数。
+ */
+const PLUGIN_METADATA_MENU_GROUPS = buildResourceActionMenu({
+  crud: [
+    { key: 'view', title: '查看' },
+    { key: 'edit', title: '编辑' },
+  ],
+  danger: [{ key: 'delete', title: '删除', desc: '删平台配置，可同步删 Edge 已发布配置（弹窗可选）', danger: true }],
+  actions: [{ key: 'version', title: '版本管理', desc: '历史版本查看与回滚' }],
+})
+
 const openMenuId = ref<number | null>(null)
 const menuFlipUp = ref(false)
 
@@ -1051,6 +1068,13 @@ function menuVersion(item: any): void {
 function menuDelete(item: any): void {
   closeCardMenu()
   deleteItem(item)
+}
+/** 菜单条目 key → 既有动作（三栏构建器只负责分组/文案，业务分发留在此处） */
+function handleMenu(key: string, item: any): void {
+  if (key === 'view') menuView(item)
+  else if (key === 'edit') menuEdit(item)
+  else if (key === 'version') menuVersion(item)
+  else if (key === 'delete') menuDelete(item)
 }
 
 /** 页头徽标（#86② 补充维度）：涉及集群数 + 去重插件数 */
