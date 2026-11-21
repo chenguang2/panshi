@@ -233,7 +233,7 @@
 
     <!-- ═══ 状态二：最大化面板（点「统一管理」进入；同屏只展示一个集群；七个 Tab 可切换） ═══ -->
     <div class="max-panel cluster-c1" id="viewMax" style="display:none">
-      <!-- 集群切换条（mini-bar）：点其他集群 = 原地切换、保留当前 Tab；✕ 收起返回网格 -->
+      <!-- 集群切换条（mini-bar）：点其他集群 = 原地切换、保留当前 Tab；✕ 还原还原为网格 -->
       <div class="mini-bar">
         <div class="mini-item active" data-cname="生产集群 A" data-chint="prod-a" data-badge="直连" data-hue="cluster-c1">
           <span class="dot" style="background: var(--success)"></span>
@@ -252,7 +252,7 @@
         </div>
         <span class="mini-scroll-hint" title="集群多时横向滚动">…</span>
         <span class="mini-spacer"></span>
-        <button class="btn btn-ghost" id="maxCollapse" title="返回集群列表">✕ 收起</button>
+        <button class="btn btn-ghost" id="maxCollapse" title="返回集群列表">✕ 还原</button>
       </div>
       <div class="max-name-row">
         <span class="cname" id="maxCname">生产集群 A</span>
@@ -602,7 +602,7 @@
 
       <div style="padding: 0 16px 14px;">
         <div class="table-note">
-          <b>交互模型</b>：点击卡片上的任意<b>统计格</b>（如「上游 12」）或卡脚「统一管理」= 该集群<b>立即最大化</b>（集群网格收起、面板全屏接管空间），且<b>直达统计格对应的 Tab</b>（openStatTab 语义）；✕ 收起返回网格。同屏只展示一个集群；七个 Tab 均为该集群作用域的资源列表，可对全部资源做增删改与发布——
+          <b>交互模型</b>：点击卡片上的任意<b>统计格</b>（如「上游 12」）或卡脚「统一管理」= 该集群<b>立即最大化</b>（集群网格收起、面板全屏接管空间），且<b>直达统计格对应的 Tab</b>（openStatTab 语义）；✕ 还原还原为网格。同屏只展示一个集群；七个 Tab 均为该集群作用域的资源列表，可对全部资源做增删改与发布——
           <b>节点/上游/路由 = 表格</b>（列宽/列序个性化 +「选择显示列」弹窗 + 外置分页条），<b>插件组/插件元数据/全局规则/静态资源 = 迷你卡片</b>（与集群管理 Tab 同款形态）；
           行内/卡内 = 发布（op-pub）+ 状态四态 + 「差异」胶囊（批 7）+ ⋯ 菜单（r5 三栏）；统计格点击直达对应 Tab（openStatTab 语义）。
         </div>

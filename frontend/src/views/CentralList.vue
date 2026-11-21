@@ -147,7 +147,7 @@
       </div>
     </div>
 
-    <!-- 最大化面板（central.html 状态二）：同屏单集群；mini-bar 原地切换保留当前 Tab；✕ 收起返回网格 -->
+    <!-- 最大化面板（central.html 状态二）：同屏单集群；mini-bar 原地切换保留当前 Tab；✕ 还原返回网格 -->
     <div
       v-else-if="maximizedCluster"
       class="max-panel"
@@ -168,7 +168,7 @@
             <span v-if="c.display_name" class="mini-hint">{{ c.name }}</span>
           </div>
         </div>
-        <button class="restore-btn" @click="restoreMaximize">× 收起</button>
+        <button class="restore-btn" title="还原为集群卡片列表" @click="restoreMaximize">✕ 还原</button>
       </div>
       <div class="max-name-row">
         <span class="cname">{{ maximizedCluster.display_name || maximizedCluster.name }}</span>
@@ -667,7 +667,7 @@ const maximizedCluster = computed(() => clusters.value.find((c) => c.id === maxi
 const maximizedRouteBadge = computed(() => (maximizedCluster.value ? routeBadge(maximizedCluster.value) : null))
 
 function maximizeCluster(cluster: Cluster) {
-  // 保留旧行为：最大化即折叠全部分组（收起返回网格时紧凑）
+  // 保留旧行为：最大化即折叠全部分组（还原为网格时紧凑）
   collapseAllGroups()
   cluster.activeTab = cluster.activeTab || 'nodes'
   maximizedClusterId.value = cluster.id
@@ -1838,7 +1838,7 @@ onMounted(async () => {
   opacity: 0.8;
 }
 
-/* 收起按钮（central.html .btn.btn-ghost「× 收起」：透明底 + 无边框，hover 淡 accent） */
+/* 还原按钮（central.html .btn.btn-ghost「✕ 还原」：透明底 + 无边框，hover 淡 accent） */
 .restore-btn {
   display: inline-flex;
   align-items: center;
