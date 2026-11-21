@@ -109,7 +109,8 @@ const configuredNames = ref<Set<string>>(new Set())
 
 const form = reactive({
   cluster_id: '' as number | string,
-  plugin_name: '',
+  // null 而非 ''：antd Select 把空串当作「已选项」渲染成空白，只有 null/undefined 才显示 placeholder
+  plugin_name: null as string | null,
 })
 
 /** 面板形态锁定；仅有一个集群时也无可选项，同样禁用 */
@@ -165,7 +166,7 @@ watch(
   (visible) => {
     if (!visible) return
     form.cluster_id = props.defaultClusterId ?? (props.clusters.length === 1 ? props.clusters[0].id : '')
-    form.plugin_name = ''
+    form.plugin_name = null
     configuredNames.value = new Set()
     // features 清单兜底加载（main.ts 启动已预载；失败静默 = 不限制）
     featuresStore.load().catch(() => {})
@@ -181,7 +182,7 @@ watch(
   () => form.cluster_id,
   (cid) => {
     if (cid === loadedClusterId.value) return
-    form.plugin_name = ''
+    form.plugin_name = null
     void loadConfiguredNames(cid)
   },
 )
@@ -190,7 +191,8 @@ async function handleSubmit(): Promise<void> {
   if (!canSubmit.value) return
   submitting.value = true
   const clusterId = Number(form.cluster_id)
-  const pluginName = form.plugin_name
+  // canSubmit 已保证非空（null 表示未选），此处收窄供 API 与事件使用
+  const pluginName = form.plugin_name ?? ''
   try {
     await addClusterPluginMetadata(clusterId, pluginName)
     emit('saved', { clusterId, pluginName })

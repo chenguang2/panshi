@@ -68,3 +68,12 @@ describe('插件元数据创建入口单源（B2c）', () => {
     expect(util).toMatch(/export function toMetadataPlugins/)
   })
 })
+
+describe('插件元数据创建弹窗 · 插件下拉占位', () => {
+  it('声明 placeholder「请选择插件」，且初值用 null（空串会被 antd 渲染成空白）', () => {
+    const s = src(MODAL)
+    expect(s).toContain('placeholder="请选择插件"')
+    expect(s).toMatch(/plugin_name:\s*null/)
+    expect(s).not.toMatch(/plugin_name:\s*''/)
+  })
+})
