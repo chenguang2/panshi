@@ -2016,8 +2016,9 @@ describe('NodeList.vue 集群分组与双模式（list-pages-console-restyle）'
     const wrapper = await mountPage()
     const vm = wrapper.vm as any
     const header = tableProps(wrapper).dataSource.find((r) => r.__groupHeader)
-    expect(vm.rowSelection.getCheckboxProps({ record: header }).disabled).toBe(true)
-    expect(vm.rowSelection.getCheckboxProps({ record: groupNodes.items[0] }).disabled).toBe(false)
+    // 2026-11-21 修正：antd 传的是记录本身（旧断言按 { record } 传，掩盖了「恒可勾选」的 bug）
+    expect(vm.rowSelection.getCheckboxProps(header).disabled).toBe(true)
+    expect(vm.rowSelection.getCheckboxProps(groupNodes.items[0]).disabled).toBe(false)
     wrapper.unmount()
   })
 

@@ -686,7 +686,9 @@ const rowSelection = computed(() => ({
     selectedNodeKeys.value = keys
   },
   // 组标记行不可勾选（contract 10.6 / 规格 list-page-cluster-grouping）
-  getCheckboxProps: (rec: { record?: unknown }) => ({ disabled: !isRowSelectable(rec?.record) }),
+  // antd 传给 getCheckboxProps 的是**记录本身**（不是 { record }）；旧实现取 rec.record 恒为
+  // undefined → 判定恒可勾选，组头行只因 CSS 隐藏复选框才没暴露（2026-11-21 上游域同款 bug 顺带修正）
+  getCheckboxProps: (rec: unknown) => ({ disabled: !isRowSelectable(rec) }),
 }))
 const batchSelectedNodes = computed(() => nodes.value.filter((n) => selectedNodeKeys.value.includes(n.id)))
 
