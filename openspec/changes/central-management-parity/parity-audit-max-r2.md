@@ -119,3 +119,27 @@ mini-bar（--bg 底 + 上下双线 + 胶囊项 + × 收起）、名称行（16/7
 - 名称 / URI / 描述同样补 `ellipsis`——真实数据里名称常是路径形态，省略后不再压列。
 - 存量用户已保存的列配置仍优先（未勾选的列不会因默认值变化自动出现），符合 #79 口径。
 - 验证：1600 视口两表 `scrollWidth == clientWidth == 1278`（无溢出）；截图 `coladd-nodes.png` / `coladd-routes.png`；`useClusterNodes/useClusterRoutes` + clusters 套 + NodeList/RouteList/CentralList/mockupParity 共 **470 例**绿；`vue-tsc -b` 干净。
+
+## 七、批次 C · 空态规范（2026-11-21，P2-1 落地：面板 7 个 Tab）
+
+**前提**：16 张设计页 grep `empty` 无命中——设计页刻意只画有数据态，故本次不是「还原设计稿」，而是**建立并落定一套空态规范**（口径写入 `docs/ui/Live-Artifact-5/README.md` 维护约定 #6）。
+
+原语与实现：
+
+- 解剖 = `docs/ui/Live-Artifact-5/proposal-c/theme.css:2345-2349` 的 `.empty5`：`flex column / align center / padding 44px 20px`，子元素 `.e-icon`（52px 虚线圆 + 居中图标，`margin-bottom 12px`，边框 `1px dashed oklch(50% 0.018 240 / 40%)`，底 `var(--bg)`）/ `.e-title`（13px 600 前景色）/ `.e-sub`（12px muted）/ `.e-actions`（flex gap 8）。
+- 组件 = `components/EmptyState.vue`：props `title`（必填）/ `description?` / `icon?`（默认 `inbox`，转发 `StrokeIcon`）。**数值不重复声明**——`src/style.css` 的 `.empty5/.e-*` 是该原语唯一实现（独立页 `NodeList`/`UpstreamList`/`RouteList` 已在消费），组件只补组件级差异（占满空态容器 + 图标色 `var(--muted)`），避免样式双源（#78 口径）。
+- 图标：`StrokeIcon` 新增 `inbox`（feather inbox 线稿），并把图标名联合类型提升为模块作用域导出 `StrokeIconName`，供 `EmptyState` 的 `icon` prop 复用类型（不走 `string` 透传、不用 `as any`）。
+- 消费点（7 个 Tab，空态出现条件 `v-if` 一律不变）：
+  | Tab | 形态 | 标题 | 说明 | 动作 |
+  |---|---|---|---|---|
+  | `ClusterNodes` | 表格 `#emptyText` | 暂无节点 | 添加节点后可执行安装、启停与状态查询 | 添加节点 |
+  | `ClusterUpstreams` | 表格 `#emptyText` | 暂无上游 | 添加上游后，路由才能把流量转发到后端 | 添加上游 |
+  | `ClusterRoutes` | 表格 `#emptyText` | 暂无路由 | 添加第一条路由，将流量按规则转发到上游 | 添加路由 |
+  | `ClusterPluginConfigs` | 卡片 | 暂无插件组 | 插件组把一组插件打包，供路由/全局规则复用 | 添加插件组 |
+  | `ClusterGlobalRules` | 卡片 | 暂无全局规则 | 全局规则对所有路由生效，可按条件改写请求/响应 | 添加全局规则 |
+  | `ClusterStaticResources` | 卡片 | 暂无静态资源 | 上传 ZIP 后由 Edge 直接对外提供静态文件 | 添加静态资源 |
+  | `PluginMetadata` | 卡片 ×2 | 未找到可配置的插件 / 暂无插件元数据 | 插件目录中的插件已全部配置，或被特性开关过滤 / 点击左侧可用插件卡片上的「添加」按钮开始配置 | 无（添加入口在左侧插件卡上） |
+- 表格槽名是 `#emptyText`（#57 同族坑：不是 `#empty`）。`ClusterRoutes` 原「暂无路由 — 添加第一条路由…」旧块一并替换，无两套并存。
+- 按钮沿用面板既有 `.ant-btn` 30px 浅底规则（`style.css` `.max-panel .dbody .node-actions .ant-btn` 同口径），无新增按钮样式。
+- 独立列表页（`NodeList`/`UpstreamList`/`RouteList`/`PluginConfigList`/`PluginMetadataList`/`GlobalRuleList`/`StaticResourceList`/`CaCertList`/`ServerCertList`）**未动**，留待后续统一。
+- 验证：`EmptyState.test.ts`（6 例：结构顺序 / 无 description 不出 `.e-sub` / 无插槽不出 `.e-actions` / 空白插槽不出 `.e-actions` / 图标默认与覆盖 / 图标 20px）；`ClusterGlobalRules.test.ts` 空态断言随形态更新（`.empty-hint button` → `.empty5 .e-actions button`，#217）；真机截图见 `/tmp/opencode/parity-max/empty-*.png`。

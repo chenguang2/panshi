@@ -72,9 +72,10 @@
         </div>
       </div>
       <!-- 6.3 空态行动引导（集群子页无筛选器，仅「无数据」分支，清空筛选分支属主页面） -->
-      <div v-if="!cluster.global_rules || cluster.global_rules.length === 0" class="empty-hint">
-        <div class="empty-hint-text">暂无全局规则</div>
-        <a-button size="small" type="primary" @click="openCreateModal">添加全局规则</a-button>
+      <div v-if="!cluster.global_rules || cluster.global_rules.length === 0" style="width: 100%">
+        <EmptyState title="暂无全局规则" description="全局规则对所有路由生效，可按条件改写请求/响应">
+          <a-button size="small" type="primary" @click="openCreateModal">添加全局规则</a-button>
+        </EmptyState>
       </div>
     </div>
 
@@ -148,6 +149,7 @@
 import { computed, ref } from 'vue'
 import type { Cluster, GlobalRule, Plugin } from '@/types'
 import StrokeIcon from '@/components/StrokeIcon.vue'
+import EmptyState from '@/components/EmptyState.vue'
 import PluginEntityFormModal from '@/components/PluginEntityFormModal.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import { useClusterGlobalRules } from '@/composables/useClusterGlobalRules'
@@ -388,17 +390,7 @@ const handleVmPublishRequested = async () => {
   align-items: center;
 }
 
-/* 6.3 空态行动引导 */
-.empty-hint {
-  width: 100%;
-  text-align: center;
-  padding: 40px;
-  color: #999;
-}
-
-.empty-hint-text {
-  margin-bottom: 12px;
-}
+/* 6.3 空态行动引导（解剖 = components/EmptyState.vue，本文件无空态私有样式） */
 
 .loading-state {
   text-align: center;

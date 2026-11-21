@@ -37,6 +37,7 @@
 3. **改完要跑**：`frontend/src/views/__tests__/pageHeaderActions.source.test.ts`（页头动作区与设计页按钮集一致性）+ `mockupParity.source.test.ts`，并按 1600×1000 视口做真机对照（方法见 AGENTS #82）。
 4. **新增页面**：复制**同形态最接近**的设计页起步（列表页抄 nodes/upstreams/routes，卡片页抄 stream-proxies，两态抄 central），不要从历史方案或已删除的过程稿复制。
 5. **命名**：一页一个 kebab-case 文件名，与路由/资源同名（`nodes.html` / `plugin-groups.html` / `ca-certs.html`），`demo`/`v2`/`variant` 一律不许出现在基线目录。
+6. **空态统一用 `components/EmptyState.vue`**：解剖 = 设计原语 `.empty5`（52px 虚线圆图标 + 13px/600 标题 + 12px muted 说明 + 主动作，见 `theme.css:2345-2349`）。设计页**暂不画空态**（各页展示为有数据态），新增页面直接引组件，不要再手写居中灰字或页面私有 `.empty-hint`。
 
 ## 历史
 

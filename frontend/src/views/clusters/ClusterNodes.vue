@@ -143,6 +143,11 @@
           handleNodeSortChange(cluster, sorter)
       "
     >
+      <template #emptyText>
+        <EmptyState title="暂无节点" description="添加节点后可执行安装、启停与状态查询">
+          <a-button size="small" type="primary" @click="showAddNodeModal(cluster)">添加节点</a-button>
+        </EmptyState>
+      </template>
       <template #headerCell="{ column, title }">
         <!-- 序号列：恒展示、不可拖拽（不进列配置） -->
         <span v-if="column.key === 'index'">{{ title }}</span>
@@ -608,6 +613,7 @@ import SearchInput from '@/components/SearchInput.vue'
 import ColumnConfigPopover from '@/components/ColumnConfigPopover.vue'
 import ListPager from '@/components/ListPager.vue'
 import StrokeIcon from '@/components/StrokeIcon.vue'
+import EmptyState from '@/components/EmptyState.vue'
 
 const featuresStore = useFeaturesStore()
 

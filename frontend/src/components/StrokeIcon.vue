@@ -13,9 +13,7 @@
   />
 </template>
 
-<script setup lang="ts">
-import { computed } from 'vue'
-
+<script lang="ts">
 /**
  * 设计稿 stroke 图标单点（mockup-parity-standard）：
  * 内部标记取自 docs/ui/Live-Artifact-5/proposal-c/nodes.html 原始 SVG（12/13px stroke 线稿风）。
@@ -52,6 +50,9 @@ const ICON_PATHS = {
   // 插件开关工具条「全部启用/全部禁用」（设计稿原 path，批 7 bug3）
   check: '<path d="M20 6 9 17l-5-5" />',
   minus: '<line x1="5" y1="12" x2="19" y2="12" />',
+  // 空态图标（components/EmptyState.vue 默认 icon；设计原语 .empty5 的 52px 虚线圆内图形）
+  inbox:
+    '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12" /><path d="M5.45 5.11 2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z" />',
   // 警示三角（四档警示语义：危险 = 实心三角 + 感叹号，设计 .lp-notice .n-ico）
   warning:
     '<path d="M12 3.2 21.4 20H2.6L12 3.2z" fill="currentColor" stroke="none" /><path d="M12 9.4v4M12 16.6v.1" stroke="#fff" stroke-width="2" stroke-linecap="round" />',
@@ -60,9 +61,16 @@ const ICON_PATHS = {
 /** 实心图标集合（fill=currentColor，无描边） */
 const FILLED_ICONS = new Set<string>(['dots'])
 
+/** 图标名联合类型（模块作用域导出：供 EmptyState 等转发 name 的组件复用，避免 string 透传丢类型） */
+export type StrokeIconName = keyof typeof ICON_PATHS
+</script>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+
 const props = withDefaults(
   defineProps<{
-    name: keyof typeof ICON_PATHS
+    name: StrokeIconName
     size?: number
   }>(),
   { size: 12 },

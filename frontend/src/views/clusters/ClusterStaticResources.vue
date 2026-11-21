@@ -117,8 +117,10 @@
           </template>
         </div>
       </div>
-      <div v-if="!cluster.static_resources || cluster.static_resources.length === 0" class="empty-hint">
-        暂无静态资源，点击"添加静态资源"创建
+      <div v-if="!cluster.static_resources || cluster.static_resources.length === 0" style="width: 100%">
+        <EmptyState title="暂无静态资源" description="上传 ZIP 后由 Edge 直接对外提供静态文件">
+          <a-button size="small" type="primary" @click="showAddStaticResource(cluster)">添加静态资源</a-button>
+        </EmptyState>
       </div>
     </div>
 
@@ -261,6 +263,7 @@ import { computed, ref } from 'vue'
 import api from '@/api'
 import type { Cluster } from '@/types'
 import StrokeIcon from '@/components/StrokeIcon.vue'
+import EmptyState from '@/components/EmptyState.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import { useClusterStaticResources } from '@/composables/useClusterStaticResources'
 import type { VersionModalState } from '@/composables/useClusterPluginConfigs'

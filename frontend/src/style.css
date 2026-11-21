@@ -2411,6 +2411,40 @@ body.col-move-dragging * {
   font-size: 12px;
   margin-bottom: 14px;
 }
+
+/* 空态动作按钮 = 面板工具条同口径（30px / 12px 400 / 浅底描边，含 primary——
+   空态里的「添加 X」不是实心强调；实测未加此规则时卡片 Tab 渲染成实心 accent、
+   表格 Tab 渲染成 24px 浅底，同一批次两套观感）。声明值与 `.max-panel .dbody .node-actions .ant-btn` 同源。 */
+.empty5 .e-actions .ant-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  box-shadow: none;
+}
+
+.empty5 .e-actions .ant-btn-primary,
+.empty5 .e-actions .ant-btn-primary:not(:disabled):not(.ant-btn-disabled) {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--fg);
+}
+
+.empty5 .e-actions .ant-btn:hover {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .empty5 .e-actions {
   display: flex;
   gap: 8px;
@@ -3938,4 +3972,31 @@ th.resizable {
 }
 .max-panel .dbody .method-cell .m-tag {
   flex-shrink: 0;
+}
+
+/* ── 面板空态动作按钮（central-management-parity 批次 C）─────────────────────────
+   面板内有两层 legacy 归一化会改写空态按钮，且都用 !important：
+     · CentralList `:deep(.dbody) .ant-btn`（transparent 底 + primary 实心 accent，0,3,0）
+     · `.max-panel .dbody .node-table .ant-table-tbody .ant-btn`（行内动作 24px，0,5,0）
+   实测未加本规则时：卡片 Tab 空态按钮 = 实心 accent 24.8px、表格 Tab = 浅底 24px，同一批次两套观感。
+   本规则与后者特异性相同（0,5,0），故**必须位于其之后**（文件末尾）才能生效——
+   空态按钮口径 = 面板工具条 `.max-panel .dbody .node-actions .ant-btn`（30px / 12px 400 / 浅底描边）。 */
+.max-panel .dbody .empty5 .e-actions .ant-btn,
+.max-panel .dbody .empty5 .e-actions .ant-btn-primary {
+  height: 30px !important;
+  padding: 0 10px !important;
+  font-size: 12px !important;
+  font-weight: 400 !important;
+  line-height: 1 !important;
+  border-radius: var(--radius-sm) !important;
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--fg) !important;
+  box-shadow: none !important;
+}
+
+.max-panel .dbody .empty5 .e-actions .ant-btn:hover {
+  background: var(--accent-bg) !important;
+  border-color: var(--accent) !important;
+  color: var(--accent) !important;
 }

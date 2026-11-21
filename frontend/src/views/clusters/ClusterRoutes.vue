@@ -83,10 +83,9 @@
       @change="(_pag: any, _filters: any, sorter: any) => handleRouteSortChange(cluster, sorter)"
     >
       <template #emptyText>
-        <div class="empty-guide">
-          <p style="margin: 0 0 8px">暂无路由 — 添加第一条路由，将流量按规则转发到上游</p>
+        <EmptyState title="暂无路由" description="添加第一条路由，将流量按规则转发到上游">
           <a-button size="small" type="primary" @click="showAddRouteModal(cluster)">添加路由</a-button>
-        </div>
+        </EmptyState>
       </template>
       <template #headerCell="{ column, title }">
         <!-- 序号列：恒展示、不可拖拽（不进列配置） -->
@@ -418,6 +417,7 @@ import ColumnConfigPopover from '@/components/ColumnConfigPopover.vue'
 import ListPager from '@/components/ListPager.vue'
 import SearchInput from '@/components/SearchInput.vue'
 import StrokeIcon from '@/components/StrokeIcon.vue'
+import EmptyState from '@/components/EmptyState.vue'
 
 const props = defineProps<{
   cluster: Cluster

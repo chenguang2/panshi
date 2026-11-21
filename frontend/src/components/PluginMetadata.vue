@@ -29,7 +29,11 @@
               </div>
             </div>
           </template>
-          <div v-if="pluginGroups.length === 0" class="empty-hint">未找到可配置的插件</div>
+          <EmptyState
+            v-if="pluginGroups.length === 0"
+            title="未找到可配置的插件"
+            description="插件目录中的插件已全部配置，或被特性开关过滤"
+          />
         </div>
       </div>
 
@@ -70,7 +74,9 @@
               <button class="tool-btn" title="版本管理" @click="openVersionManagement(item)">版本管理</button>
             </div>
           </div>
-          <div v-if="configuredPlugins.length === 0" class="empty-hint">点击左侧"添加"按钮配置插件</div>
+          <div v-if="configuredPlugins.length === 0" style="width: 100%">
+            <EmptyState title="暂无插件元数据" description='点击左侧可用插件卡片上的"添加"按钮开始配置' />
+          </div>
         </div>
       </div>
     </div>
@@ -154,6 +160,7 @@ import PublishConfirmModal from './PublishConfirmModal.vue'
 import PublishStatusTag from '@/components/PublishStatusTag.vue'
 import PublishDiffButton from '@/components/PublishDiffButton.vue'
 import PublishPreviewModal from '@/components/PublishPreviewModal.vue'
+import EmptyState from '@/components/EmptyState.vue'
 import { formatDate } from '@/utils/format'
 import type { PluginMetadata } from '@/types'
 import { showDeleteConfirm, executePublish, executeDeleteWithProgress } from '@/composables/useClusterUtils'
@@ -787,12 +794,6 @@ watch(
   gap: 4px;
   margin-top: 8px;
   align-items: center;
-}
-
-.empty-hint {
-  text-align: center;
-  color: var(--muted);
-  padding: 32px;
 }
 
 .config-preview {

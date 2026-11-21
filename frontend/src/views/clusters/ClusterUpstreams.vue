@@ -76,10 +76,9 @@
       @change="(_pag: any, _filters: any, sorter: any) => handleUpstreamSortChange(cluster, sorter)"
     >
       <template #emptyText>
-        <div class="empty-guide">
-          <p style="margin: 0 0 8px">暂无上游 — 添加上游，定义后端服务的负载均衡目标</p>
+        <EmptyState title="暂无上游" description="添加上游后，路由才能把流量转发到后端">
           <a-button size="small" type="primary" @click="showAddUpstreamModal(cluster)">添加上游</a-button>
-        </div>
+        </EmptyState>
       </template>
       <template #headerCell="{ column, title }">
         <!-- 序号列：恒展示、不可拖拽（不进列配置） -->
@@ -563,6 +562,7 @@ import ColumnConfigPopover from '@/components/ColumnConfigPopover.vue'
 import ListPager from '@/components/ListPager.vue'
 import SearchInput from '@/components/SearchInput.vue'
 import StrokeIcon from '@/components/StrokeIcon.vue'
+import EmptyState from '@/components/EmptyState.vue'
 
 const props = defineProps<{
   cluster: Cluster

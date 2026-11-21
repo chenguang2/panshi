@@ -212,7 +212,7 @@ describe('ClusterGlobalRules.vue — 加载失败态与空态（6.2/6.3，A3 共
     const w = await mountTab(reactive(makeCluster([])))
     expect(w.text()).toContain('暂无全局规则')
     expect(w.text()).not.toContain('清空筛选')
-    const action = w.findAll('.empty-hint button').find((b: any) => b.text().includes('添加全局规则'))
+    const action = w.findAll('.empty5 .e-actions button').find((b: any) => b.text().includes('添加全局规则'))
     expect(action).toBeTruthy()
   })
 })

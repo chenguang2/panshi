@@ -71,11 +71,10 @@
           </button>
         </div>
       </div>
-      <div
-        v-if="!cluster.plugin_configs || cluster.plugin_configs.length === 0"
-        style="width: 100%; text-align: center; padding: 40px; color: #999"
-      >
-        暂无插件组，点击"添加插件组"创建
+      <div v-if="!cluster.plugin_configs || cluster.plugin_configs.length === 0" style="width: 100%">
+        <EmptyState title="暂无插件组" description="插件组把一组插件打包，供路由/全局规则复用">
+          <a-button size="small" type="primary" @click="showAddPluginConfig(cluster)">添加插件组</a-button>
+        </EmptyState>
       </div>
     </div>
 
@@ -153,6 +152,7 @@ import { PAGE_SIZE_DROPDOWN } from '@/constants'
 import { toUpstreamSelectOptions } from '@/utils/upstreamOptions'
 import type { Cluster, Plugin } from '@/types'
 import StrokeIcon from '@/components/StrokeIcon.vue'
+import EmptyState from '@/components/EmptyState.vue'
 import PluginSelector from '@/components/PluginSelector.vue'
 import PluginConfigViewDrawer from '@/components/PluginConfigViewDrawer.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
