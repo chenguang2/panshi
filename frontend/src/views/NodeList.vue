@@ -162,6 +162,19 @@
         <button class="btn btn-ghost btn-sm need-sel" :disabled="!selectedNodeKeys.length" @click="handleBatchStatus">
           <StrokeIcon name="pulse" /> 批量状态查询
         </button>
+        <span class="b-sep"></span>
+        <!-- 危险动作独占一段（设计习惯：删除类靠右、与动作组用分隔线隔开）；
+             计数口径 = 已勾选条数，与批量动作同源（未选禁用）。 -->
+        <button
+          class="btn btn-danger btn-sm need-sel"
+          data-test="batch-delete"
+          :disabled="!selectedNodeKeys.length"
+          @click="handleBatchDelete"
+        >
+          <StrokeIcon name="trash" /> 批量删除<span v-if="selectedNodeKeys.length"
+            >({{ selectedNodeKeys.length }})</span
+          >
+        </button>
         <span class="b-spacer"></span>
         <button class="btn btn-secondary btn-sm" :disabled="!selectedNodeKeys.length" @click="clearBatchSelection">
           清除选择
@@ -547,6 +560,7 @@ import {
 import { showNodeDeleteConfirm, executeDeleteWithProgress, showBatchStatusModal } from '@/composables/useClusterUtils'
 import {
   runClusterGroupedBatchAction,
+  runClusterGroupedBatchDelete,
   runBatchNodeStatus,
   formatClusterBatchSummary,
   createBatchProgressState,
@@ -745,6 +759,47 @@ async function handleBatchStatus() {
   showBatchStatusModal('批量状态查询', rows)
   clearBatchSelection()
   await refreshList()
+}
+
+/**
+ * 批量删除（节点批量条唯一入口，页面与统一管理面板 Tab 同一实现）。
+ *
+ * 确认复用节点专用变体 showNodeDeleteConfirm（单一告知：删平台记录、进程不受影响、
+ * 退出发布与中继白名单），执行走 runClusterGroupedBatchDelete（后端只有集群作用域集合端点，
+ * 跨集群勾选按 cluster_id 分组顺序请求，进度弹窗与其他批量动作同款组件）。
+ */
+async function handleBatchDelete() {
+  const list = batchSelectedNodes.value
+  if (list.length === 0) {
+    warnNoNodesSelected()
+    return
+  }
+  showNodeDeleteConfirm({
+    ips: list.map((n) => n.ip),
+    onOk: async () => {
+      const summaries = await runClusterGroupedBatchDelete(groupNodesByCluster(list), {
+        progress: batchProgress,
+      })
+      const total = summaries.reduce((acc, s) => acc + s.total, 0)
+      const success = summaries.reduce((acc, s) => acc + s.success, 0)
+      const failed = total - success
+      clearBatchSelection()
+      await refreshList()
+      if (failed === 0) {
+        message.success(`已删除 ${success} 个节点（仅平台记录，节点机进程不受影响）`)
+      } else {
+        // 集群级失败原因（getApiErrorMessage 提取）并入同一条提示：用户不展开进度弹窗也能看到原因
+        const clusterErrors = summaries
+          .filter((s) => s.clusterError)
+          .map((s) => `集群 ${s.clusterName}：${s.clusterError}`)
+        message.warning(
+          `已删除 ${success} 个节点，${failed} 个失败：${formatClusterBatchSummary(summaries)}${
+            clusterErrors.length ? `（${clusterErrors.join('；')}）` : ''
+          }`,
+        )
+      }
+    },
+  })
 }
 
 // ── 复制节点（batch3 3.1 / D6：预填行配置、IP 清空；预填与清空在共享 NodeFormModal 内，B2b-1）──

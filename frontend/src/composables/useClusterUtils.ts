@@ -514,13 +514,32 @@ export function showDeleteConfirm(opts: {
  * 平台记录不可恢复 → 进程不受影响 → 从下次发布与中继白名单移除。
  * onOk 固定收到 (true, false, [])（保留 showDeleteConfirm 同构签名，调用方零改动映射），
  * 与 executeDeleteWithProgress 的固定载荷对齐。
+ *
+ * 批量形态（2026-11-21，节点批量条）：传 `ips` 而非 `ip`——标题带条数、正文前置选中清单，
+ * 其余后果文案与单条完全一致（同一份告知，不分叉）。
  */
 export function showNodeDeleteConfirm(opts: {
-  ip: string
+  /** 单条删除的节点 IP（批量形态改用 ips） */
+  ip?: string
+  /** 批量删除的节点 IP 列表（>1 时标题/正文按条数与清单表达；与 ip 二选一） */
+  ips?: string[]
   onOk: (deleteDb: boolean, deleteEdge: boolean, nodeIds: number[]) => void
 }) {
   const container = document.createElement('div')
   document.body.appendChild(container)
+
+  const ips = opts.ips && opts.ips.length > 0 ? opts.ips : opts.ip ? [opts.ip] : []
+  const batch = ips.length > 1
+  const title = batch ? `删除节点（${ips.length} 个）` : `删除节点 ${ips[0] ?? ''}`
+  const selectionLine = batch
+    ? h(
+        'div',
+        { style: 'font-size:12px;font-family:var(--font-mono);color:var(--muted);margin-bottom:10px;line-height:1.8;' },
+        `选中节点（${ips.length} 个）：${
+          ips.length > 3 ? `${ips.slice(0, 3).join('、')} 等 ${ips.length} 个` : ips.join('、')
+        }`,
+      )
+    : null
 
   const close = () => {
     render(null, container)
@@ -531,7 +550,7 @@ export function showNodeDeleteConfirm(opts: {
     AppModal,
     {
       open: true,
-      title: `删除节点 ${opts.ip}`,
+      title,
       width: 520,
       okText: '确认删除',
       okDanger: true,
@@ -545,6 +564,7 @@ export function showNodeDeleteConfirm(opts: {
     {
       default: () =>
         h('div', [
+          selectionLine,
           h(
             'div',
             {

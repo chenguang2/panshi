@@ -256,11 +256,12 @@ describe('NodeList.vue scoped 形态（统一管理面板节点 Tab，A 试点�
     wrapper.unmount()
   })
 
-  it('批量条保留（批量启动/停止/重载/状态查询 + 清除选择），未勾选时禁用', async () => {
+  it('批量条保留（批量启动/停止/重载/状态查询/批量删除 + 清除选择），未勾选时禁用', async () => {
     const wrapper = await mountScoped()
     const bar = wrapper.find('.l5-batchbar')
     expect(bar.exists()).toBe(true)
-    for (const label of ['批量启动', '批量停止', '批量重载', '批量状态查询', '清除选择']) {
+    // 批量删除：面板与页面共用同一批量条（A 试点后 ClusterNodes 退场，能力不得缺失）
+    for (const label of ['批量启动', '批量停止', '批量重载', '批量状态查询', '批量删除', '清除选择']) {
       const btn = bar.findAll('button').find((b) => b.text().includes(label))
       expect(btn, `批量条应含「${label}」`).toBeDefined()
       expect(btn!.attributes('disabled')).toBeDefined()

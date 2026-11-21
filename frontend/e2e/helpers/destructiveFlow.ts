@@ -86,9 +86,10 @@ export async function openClusterTab(page: Page, cluster: ClusterRef, statLabel:
   await page.goto('/central-management')
   const card = page.locator('.cl-card').filter({ hasText: cluster.name }).first()
   await expect(card, `集群卡片（${cluster.name}）应渲染`).toBeVisible({ timeout: 15000 })
+  // 统计格解剖（ClusterCard）：.stat-cell + .sl 标签（`.cl-stat-link` 已随卡片统一改造退场）
   const stat = card
-    .locator('.cl-stat-link')
-    .filter({ has: page.locator('.cl-stat-label', { hasText: statLabel }) })
+    .locator('.stat-cell')
+    .filter({ has: page.locator('.sl', { hasText: statLabel }) })
     .first()
   await expect(stat, `集群卡片「${statLabel}」统计格应可见`).toBeVisible({ timeout: 10000 })
   await stat.click()
@@ -220,6 +221,44 @@ export async function interceptBatchDelete(
           [contract.resultNameField]: contract.names.get(id) ?? '',
           status: 'success',
           results: [{ scope: 'database', status: 'success', message: '数据库记录已删除' }],
+        })),
+      }),
+    })
+  })
+  return captured
+}
+
+/**
+ * 拦截节点批量动作端点 POST /clusters/{cid}/nodes/action（NodeList 批量条 →
+ * runClusterGroupedBatchAction 的请求，服务端逐节点执行）：
+ * 记录 node_ids 并按 cluster_nodes.py 批量结果形状 fulfill
+ * （results[]: node_id/ip/status/rc/stdout/stderr/command）。
+ */
+export async function interceptClusterBatchAction(
+  page: Page,
+  clusterId: number,
+  ips: Map<number, string>,
+): Promise<number[]> {
+  const captured: number[] = []
+  await page.route(`**/api/v1/clusters/${clusterId}/nodes/action`, async (route) => {
+    const req = route.request()
+    if (req.method() !== 'POST') return route.fallback()
+    const body = (req.postDataJSON() || {}) as { action?: string; node_ids?: number[] }
+    const ids = body.node_ids || []
+    captured.push(...ids)
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        action: body.action,
+        results: ids.map((id) => ({
+          node_id: id,
+          ip: ips.get(id) ?? '',
+          status: 'success',
+          rc: 0,
+          stdout: 'started',
+          stderr: '',
+          command: 'bin/edge start',
         })),
       }),
     })

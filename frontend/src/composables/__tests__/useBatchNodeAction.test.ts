@@ -3,6 +3,7 @@ import { flushPromises } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
 
 const mockApiPost = vi.fn()
+const mockApiDelete = vi.fn()
 const mockConcurrencyOf = vi.fn((_name: string, defaultVal: number) => defaultVal)
 
 vi.mock('@/api', () => ({
@@ -10,7 +11,7 @@ vi.mock('@/api', () => ({
     get: vi.fn(),
     post: (...args: unknown[]) => mockApiPost(...args),
     put: vi.fn(),
-    delete: vi.fn(),
+    delete: (...args: unknown[]) => mockApiDelete(...args),
   },
 }))
 
@@ -258,6 +259,140 @@ describe('useBatchNodeAction（batch3 1.4 / D4 共享批量核心）', () => {
       expect(progress.items.value[0].status).toBe('success')
       expect(progress.items.value[1].status).toBe('error')
       expect(progress.items.value[1].logs.join('')).toContain('SSH 认证失败')
+      expect(summaries[0]).toEqual({ clusterName: '集群A', total: 2, success: 1, failed: 1 })
+    })
+  })
+
+  // ── runClusterGroupedBatchDelete（节点批量条补入口，2026-11-21）──────────────
+  // mock 形状取自真实后端 cluster_nodes.py::delete_nodes_batch（curl 实测）：
+  // { message, results: [{ node_id, node_ip, status, results: [{ scope, status, message }] }] }
+  describe('runClusterGroupedBatchDelete', () => {
+    const okDelete = (ids: number[], ipOf: (id: number) => string) => ({
+      data: {
+        message: `批量删除完成: ${ids.length} 条节点`,
+        results: ids.map((id) => ({
+          node_id: id,
+          node_ip: ipOf(id),
+          status: 'success',
+          results: [
+            { scope: 'database', status: 'success', message: '数据库记录已删除' },
+            { scope: 'edge', status: 'skipped', message: '节点是 Edge 运行时，无对应的 Edge API 删除操作' },
+          ],
+        })),
+      },
+    })
+
+    it('按 cluster_id 分组顺序调集合端点，语义固定删库不联动 Edge，逐节点成功', async () => {
+      const { runClusterGroupedBatchDelete, createBatchProgressState } = await import('../useBatchNodeAction')
+      const progress = createBatchProgressState()
+      mockApiDelete.mockImplementation((url: string, cfg: { data: { node_ids: number[] } }) => {
+        if (url === '/clusters/1/nodes') return Promise.resolve(okDelete([1, 2], (id) => `10.0.0.${id}`))
+        if (url === '/clusters/2/nodes') return Promise.resolve(okDelete(cfg.data.node_ids, () => '10.0.0.3'))
+        return Promise.reject(new Error('unexpected url: ' + url))
+      })
+
+      const summaries = await runClusterGroupedBatchDelete(
+        [
+          { clusterId: 1, clusterName: '集群A', nodes: makeNodes(1, 2) },
+          { clusterId: 2, clusterName: '集群B', nodes: [makeNodes(3)[0]] },
+        ],
+        { progress },
+      )
+
+      expect(mockApiDelete).toHaveBeenCalledWith('/clusters/1/nodes', {
+        data: { node_ids: [1, 2], delete_db: true, delete_edge: false },
+      })
+      expect(mockApiDelete).toHaveBeenCalledWith('/clusters/2/nodes', {
+        data: { node_ids: [3], delete_db: true, delete_edge: false },
+      })
+      expect(progress.visible.value).toBe(true)
+      expect(progress.title.value).toBe('批量删除节点')
+      expect(progress.items.value.every((i) => i.status === 'success')).toBe(true)
+      expect(progress.items.value[0].logs.join('')).toContain('数据库记录已删除')
+      expect(summaries).toEqual([
+        { clusterName: '集群A', total: 2, success: 2, failed: 0 },
+        { clusterName: '集群B', total: 1, success: 1, failed: 0 },
+      ])
+    })
+
+    it('单条 status=failed → 该项失败并带后端原因，其余条仍成功', async () => {
+      const { runClusterGroupedBatchDelete, createBatchProgressState } = await import('../useBatchNodeAction')
+      const progress = createBatchProgressState()
+      mockApiDelete.mockResolvedValue({
+        data: {
+          message: '批量删除完成: 2 条节点',
+          results: [
+            {
+              node_id: 1,
+              node_ip: '10.0.0.1',
+              status: 'success',
+              results: [{ scope: 'database', status: 'success', message: '数据库记录已删除' }],
+            },
+            { node_id: 2, node_ip: '10.0.0.2', status: 'failed', error: '节点不存在', results: [] },
+          ],
+        },
+      })
+
+      const summaries = await runClusterGroupedBatchDelete(
+        [{ clusterId: 1, clusterName: '集群A', nodes: makeNodes(1, 2) }],
+        { progress },
+      )
+
+      expect(progress.items.value[0].status).toBe('success')
+      expect(progress.items.value[1].status).toBe('error')
+      expect(progress.items.value[1].logs.join('')).toContain('节点不存在')
+      expect(summaries[0]).toEqual({ clusterName: '集群A', total: 2, success: 1, failed: 1 })
+    })
+
+    it('集群级调用失败不中断整体：该项集群全部失败（含 getApiErrorMessage 原因），下一集群继续', async () => {
+      const { runClusterGroupedBatchDelete, createBatchProgressState } = await import('../useBatchNodeAction')
+      const progress = createBatchProgressState()
+      mockApiDelete.mockImplementation((url: string, cfg: { data: { node_ids: number[] } }) => {
+        if (url === '/clusters/1/nodes') return Promise.reject({ response: { data: { detail: '集群不存在' } } })
+        if (url === '/clusters/2/nodes') return Promise.resolve(okDelete(cfg.data.node_ids, () => '10.0.0.3'))
+        return Promise.reject(new Error('unexpected url: ' + url))
+      })
+
+      const summaries = await runClusterGroupedBatchDelete(
+        [
+          { clusterId: 1, clusterName: '集群A', nodes: makeNodes(1, 2) },
+          { clusterId: 2, clusterName: '集群B', nodes: [makeNodes(3)[0]] },
+        ],
+        { progress },
+      )
+
+      expect(progress.items.value[0].status).toBe('error')
+      expect(progress.items.value[1].status).toBe('error')
+      expect(progress.items.value[0].logs.join('')).toContain('集群级失败（集群不存在）')
+      expect(progress.items.value[2].status).toBe('success')
+      expect(summaries[0]).toMatchObject({ clusterName: '集群A', success: 0, failed: 2, clusterError: '集群不存在' })
+      expect(summaries[1]).toMatchObject({ clusterName: '集群B', success: 1, failed: 0 })
+    })
+
+    it('后端漏返回某节点结果 → 该项标失败（不得静默留在 pending）', async () => {
+      const { runClusterGroupedBatchDelete, createBatchProgressState } = await import('../useBatchNodeAction')
+      const progress = createBatchProgressState()
+      mockApiDelete.mockResolvedValue({
+        data: {
+          message: '批量删除完成: 1 条节点',
+          results: [
+            {
+              node_id: 1,
+              node_ip: '10.0.0.1',
+              status: 'success',
+              results: [{ scope: 'database', status: 'success', message: '数据库记录已删除' }],
+            },
+          ],
+        },
+      })
+
+      const summaries = await runClusterGroupedBatchDelete(
+        [{ clusterId: 1, clusterName: '集群A', nodes: makeNodes(1, 2) }],
+        { progress },
+      )
+
+      expect(progress.items.value[1].status).toBe('error')
+      expect(progress.items.value[1].logs.join('')).toContain('后端未返回该节点的删除结果')
       expect(summaries[0]).toEqual({ clusterName: '集群A', total: 2, success: 1, failed: 1 })
     })
   })

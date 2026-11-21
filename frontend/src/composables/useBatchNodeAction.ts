@@ -13,6 +13,7 @@ import api from '@/api'
 import { message } from 'ant-design-vue'
 import { useFeaturesStore } from '@/stores/features'
 import { getApiErrorMessage } from '@/utils/error'
+import { deleteNodesBatch } from '@/api/nodes'
 
 export interface BatchNodeProgressItem {
   ip: string
@@ -303,6 +304,110 @@ export function formatClusterBatchSummary(summaries: ClusterBatchSummary[]): str
   return summaries
     .map((s) => `集群 ${s.clusterName}：${s.success} 成功${s.failed > 0 ? ` ${s.failed} 失败` : ''}`)
     .join('；')
+}
+
+/** 批量删除响应条目（后端 cluster_nodes.py::delete_nodes_batch 形状） */
+interface BatchDeleteNodeResult {
+  node_id?: number
+  node_ip?: string
+  status?: string
+  error?: string
+  results?: Array<{ scope?: string; status?: string; message?: string; error?: string }>
+}
+
+/**
+ * 集群分组批量删除（节点批量条唯一实现）。
+ *
+ * 后端只有集群作用域的集合端点 `DELETE /clusters/{cid}/nodes`（无全局 ids 端点，
+ * 节点也不在 services/batch_delete.py 的 KINDS 内），故按 cluster_id 分组顺序请求；
+ * 单集群调用失败标记该集群全部节点项失败并记「集群级失败（原因）」，继续下一集群。
+ *
+ * 语义固定「删平台记录」：`delete_db=true` / `delete_edge=false`——节点机上的
+ * Edge/OpenResty 进程不受影响（后端 Edge 阶段恒 skipped），故不给 Edge 勾选项。
+ */
+export async function runClusterGroupedBatchDelete(
+  groups: ClusterBatchGroup[],
+  hooks: { progress: BatchProgressState },
+): Promise<ClusterBatchSummary[]> {
+  const { progress } = hooks
+  const all = groups.flatMap((g) => g.nodes)
+  progress.title.value = '批量删除节点'
+  progress.items.value = all.map((n) => ({ ip: n.ip, status: 'pending' as const, logs: [] }))
+  progress.visible.value = true
+
+  const summaries: ClusterBatchSummary[] = []
+  let offset = 0
+  for (const group of groups) {
+    const base = offset
+    offset += group.nodes.length
+    for (let k = 0; k < group.nodes.length; k++) {
+      progress.items.value[base + k].status = 'running'
+      progress.items.value[base + k].logs = [`集群 ${group.clusterName}：开始删除节点 ${group.nodes[k].ip}...`]
+    }
+    try {
+      const res = await deleteNodesBatch(group.clusterId, {
+        node_ids: group.nodes.map((n) => n.id),
+        delete_db: true,
+        delete_edge: false,
+      })
+      const results: BatchDeleteNodeResult[] = res.data?.results || []
+      let success = 0
+      let failed = 0
+      const seen = new Set<number>()
+      for (const r of results) {
+        const nodeId = Number(r.node_id)
+        const k = group.nodes.findIndex((n) => n.id === nodeId)
+        if (k < 0) continue
+        seen.add(nodeId)
+        const i = base + k
+        const ip = r.node_ip || group.nodes[k].ip
+        const sub = r.results || []
+        const logs: string[] = [`集群 ${group.clusterName}：删除节点 ${ip}`]
+        if (r.status === 'success') {
+          const dbSub = sub.find((s) => s.scope === 'database')
+          logs.push(dbSub?.message ? `✅ ${dbSub.message}` : '✅ 平台管理记录已删除')
+          const edgeSub = sub.find((s) => s.scope === 'edge')
+          if (edgeSub?.message) logs.push(`Edge 侧：${edgeSub.message}`)
+          logs.push('节点机上的 Edge/OpenResty 进程不受影响（已脱离平台监控）')
+          progress.items.value[i] = { ip, status: 'success', logs }
+          success++
+        } else {
+          logs.push(`❌ 删除失败${r.error ? `: ${r.error}` : ''}`)
+          progress.items.value[i] = { ip, status: 'error', logs }
+          failed++
+        }
+      }
+      // 后端未返回的节点视为失败（单条失败不阻塞其余条的后端语义，不应静默变成"未处理"）
+      group.nodes.forEach((n, k) => {
+        if (seen.has(n.id)) return
+        progress.items.value[base + k] = {
+          ip: n.ip,
+          status: 'error',
+          logs: [...progress.items.value[base + k].logs, '❌ 后端未返回该节点的删除结果'],
+        }
+        failed++
+      })
+      summaries.push({ clusterName: group.clusterName, total: group.nodes.length, success, failed })
+    } catch (error: unknown) {
+      const detail = getApiErrorMessage(error) || '未知错误'
+      for (let k = 0; k < group.nodes.length; k++) {
+        const i = base + k
+        progress.items.value[i] = {
+          ip: group.nodes[k].ip,
+          status: 'error',
+          logs: [...progress.items.value[i].logs, `❌ 集群级失败（${detail}）`],
+        }
+      }
+      summaries.push({
+        clusterName: group.clusterName,
+        total: group.nodes.length,
+        success: 0,
+        failed: group.nodes.length,
+        clusterError: detail,
+      })
+    }
+  }
+  return summaries
 }
 
 /** 未选中节点的统一提示（供两入口薄适配复用） */

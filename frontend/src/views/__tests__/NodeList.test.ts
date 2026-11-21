@@ -25,6 +25,8 @@ vi.mock('vue-router', () => ({
 // mock antd message：真实 message 容器为模块级缓存 + 异步挂载，全文件连跑时偶发不渲染（batch3 实测）。
 // 其余导出保持原样（AppModal 等组件仍依赖真实 Modal）。
 const mockMessageInfo = vi.fn()
+const mockMessageSuccess = vi.fn()
+const mockMessageWarning = vi.fn()
 vi.mock('ant-design-vue', async (importOriginal) => {
   const actual = await importOriginal<typeof import('ant-design-vue')>()
   return {
@@ -32,6 +34,8 @@ vi.mock('ant-design-vue', async (importOriginal) => {
     message: {
       ...actual.message,
       info: (...args: any[]) => mockMessageInfo(...args),
+      success: (...args: any[]) => mockMessageSuccess(...args),
+      warning: (...args: any[]) => mockMessageWarning(...args),
     },
   }
 })
@@ -1243,6 +1247,199 @@ describe('NodeList.vue batch3 批量动作（工具栏 + 分组执行）', () =>
     expect(mockApiPost.mock.calls.some((c) => String(c[0]).endsWith('/nodes/action'))).toBe(false)
     // 结果表格（共享 showBatchStatusModal 渲染到 body）
     expect(document.body.textContent).toContain('批量状态查询')
+    wrapper.unmount()
+  })
+})
+
+// ── 节点批量删除（批量条补入口，2026-11-21）：面板 Tab 与页面同一实现 ──────────
+// mock 形状取自真实后端（curl 实测）：DELETE /clusters/{cid}/nodes（cluster_nodes.py:338）
+// 返回 { message, results: [{ node_id, node_ip, status, results: [{ scope, status, message }] }] }，
+// Edge 段恒 skipped（节点就是 Edge 运行时）。
+describe('NodeList.vue 批量删除（批量条入口）', () => {
+  const nodes = {
+    total: 3,
+    page: 1,
+    page_size: 500,
+    items: [
+      {
+        id: 1,
+        cluster_id: 1,
+        cluster_name: '生产集群',
+        ip: '10.0.0.1',
+        service_port: 80,
+        management_port: 9180,
+        edge_path: '/e/1',
+        openresty_path: '',
+        status: 1,
+        status_detail: {},
+      },
+      {
+        id: 2,
+        cluster_id: 1,
+        cluster_name: '生产集群',
+        ip: '10.0.0.2',
+        service_port: 80,
+        management_port: 9180,
+        edge_path: '/e/2',
+        openresty_path: '',
+        status: 1,
+        status_detail: {},
+      },
+      {
+        id: 3,
+        cluster_id: 2,
+        cluster_name: '预发集群',
+        ip: '10.0.0.3',
+        service_port: 80,
+        management_port: 9180,
+        edge_path: '/e/3',
+        openresty_path: '',
+        status: 1,
+        status_detail: {},
+      },
+    ],
+  }
+
+  const deleteResponse = (ids: number[]) => ({
+    data: {
+      message: `批量删除完成: ${ids.length} 条节点`,
+      results: ids.map((id) => ({
+        node_id: id,
+        node_ip: nodes.items.find((n) => n.id === id)!.ip,
+        status: 'success',
+        results: [
+          { scope: 'database', status: 'success', message: '数据库记录已删除' },
+          { scope: 'edge', status: 'skipped', message: '节点是 Edge 运行时，无对应的 Edge API 删除操作' },
+        ],
+      })),
+    },
+  })
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    document.body.innerHTML = ''
+    mockApiGet.mockImplementation((url: string) => {
+      if (url === '/nodes') return Promise.resolve({ data: nodes })
+      if (url === '/clusters') return Promise.resolve({ data: { total: 2, items: MOCK_CLUSTERS } })
+      return Promise.reject(new Error('unknown url: ' + url))
+    })
+    mockApiDelete.mockResolvedValue(deleteResponse([]))
+  })
+
+  async function mountList() {
+    const NodeList = (await import('../NodeList.vue')).default
+    const wrapper = mount(NodeList, { global: { stubs } })
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    return wrapper
+  }
+
+  function findButton(text: string): HTMLButtonElement | undefined {
+    return Array.from(document.querySelectorAll('button')).find((b) => (b.textContent || '').includes(text)) as
+      HTMLButtonElement | undefined
+  }
+
+  it('批量条含「批量删除」：未选禁用，选中 N 个后显示 (N) 并启用', async () => {
+    const wrapper = await mountList()
+    const bar = wrapper.find('.l5-batchbar')
+    const del = bar.findAll('button').find((b) => b.text().includes('批量删除'))!
+    expect(del, '批量条需有批量删除按钮').toBeDefined()
+    expect(del.attributes('disabled')).toBeDefined()
+    expect(del.text()).not.toContain('(')
+
+    ;(wrapper.vm as any).selectedNodeKeys = [1, 3]
+    await wrapper.vm.$nextTick()
+    const delAfter = wrapper
+      .find('.l5-batchbar')
+      .findAll('button')
+      .find((b) => b.text().includes('批量删除'))!
+    expect(delAfter.attributes('disabled')).toBeUndefined()
+    expect(delAfter.text()).toContain('(2)')
+    wrapper.unmount()
+  })
+
+  it('点击弹节点删除危险确认（批量标题 + 选中清单 + 三层后果告知）', async () => {
+    const wrapper = await mountList()
+    const vm = wrapper.vm as any
+    vm.selectedNodeKeys = [1, 2]
+    await wrapper.vm.$nextTick()
+    const del = wrapper
+      .find('.l5-batchbar')
+      .findAll('button')
+      .find((b) => b.text().includes('批量删除'))!
+    await del.trigger('click')
+    await wrapper.vm.$nextTick()
+
+    expect(document.body.textContent).toContain('删除节点（2 个）')
+    expect(document.body.textContent).toContain('10.0.0.1、10.0.0.2')
+    expect(document.body.textContent).toContain('平台管理记录将被删除，不可恢复')
+    expect(document.body.textContent).toContain('节点机上的 Edge/OpenResty 进程不受影响')
+    expect(document.body.textContent).toContain('该节点将从下次发布与中继网关白名单中移除')
+    // 尚未确认 → 未发请求
+    expect(mockApiDelete).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('确认后按集群分组调集合端点（delete_db=true/delete_edge=false），清空选择并刷新列表与 chips', async () => {
+    mockApiDelete.mockImplementation((url: string, cfg: { data: { node_ids: number[] } }) => {
+      if (url === '/clusters/1/nodes') return Promise.resolve(deleteResponse([1, 2]))
+      if (url === '/clusters/2/nodes') return Promise.resolve(deleteResponse(cfg.data.node_ids))
+      return Promise.reject(new Error('unexpected url: ' + url))
+    })
+    const wrapper = await mountList()
+    const vm = wrapper.vm as any
+    vm.selectedNodeKeys = [1, 2, 3]
+    await wrapper.vm.$nextTick()
+    const listCallsBefore = mockApiGet.mock.calls.filter((c) => c[0] === '/nodes').length
+
+    vm.handleBatchDelete()
+    await wrapper.vm.$nextTick()
+    const okBtn = findButton('确认删除')!
+    expect(okBtn, '需出现危险确认弹窗').toBeDefined()
+    okBtn.click()
+    await flushPromises()
+    await new Promise((r) => setTimeout(r, 0))
+
+    // 集合端点：按 cluster_id 分组，语义固定删库、不联动 Edge
+    expect(mockApiDelete).toHaveBeenCalledWith('/clusters/1/nodes', {
+      data: { node_ids: [1, 2], delete_db: true, delete_edge: false },
+    })
+    expect(mockApiDelete).toHaveBeenCalledWith('/clusters/2/nodes', {
+      data: { node_ids: [3], delete_db: true, delete_edge: false },
+    })
+    // 进度弹窗逐节点成功
+    expect(vm.batchProgress.visible.value).toBe(true)
+    expect(vm.batchProgress.items.value.map((i: { status: string }) => i.status)).toEqual([
+      'success',
+      'success',
+      'success',
+    ])
+    // 清空选择 + 刷新列表（/nodes 重新拉取，chips 计数同源刷新）
+    expect(vm.selectedNodeKeys).toEqual([])
+    expect(mockApiGet.mock.calls.filter((c) => c[0] === '/nodes').length).toBeGreaterThan(listCallsBefore)
+    expect(String(mockMessageSuccess.mock.calls[0][0])).toContain('已删除 3 个节点')
+    wrapper.unmount()
+  })
+
+  it('失败按 getApiErrorMessage 提示：进度项标失败 + 警告汇总（清空选择仍执行）', async () => {
+    mockApiDelete.mockRejectedValue({ response: { data: { detail: '集群不存在' } } })
+    const wrapper = await mountList()
+    const vm = wrapper.vm as any
+    vm.selectedNodeKeys = [1]
+    await wrapper.vm.$nextTick()
+
+    vm.handleBatchDelete()
+    await wrapper.vm.$nextTick()
+    findButton('确认删除')!.click()
+    await flushPromises()
+    await new Promise((r) => setTimeout(r, 0))
+
+    expect(vm.batchProgress.items.value[0].status).toBe('error')
+    expect(vm.batchProgress.items.value[0].logs.join('')).toContain('集群不存在')
+    expect(String(mockMessageWarning.mock.calls[0][0])).toContain('1 个失败')
+    expect(String(mockMessageWarning.mock.calls[0][0])).toContain('集群不存在')
+    expect(vm.selectedNodeKeys).toEqual([])
     wrapper.unmount()
   })
 })

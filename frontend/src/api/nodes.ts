@@ -85,6 +85,21 @@ export function queryNodeStatus(clusterId: number, nodeId: number, ports?: strin
   return api.post(`/clusters/${clusterId}/nodes/${nodeId}/statistic`, { ports: ports || '9180' })
 }
 
+interface NodeBatchDeletePayload {
+  node_ids: number[]
+  delete_db: boolean
+  delete_edge: boolean
+}
+
+/**
+ * 批量删除同一集群内的多个节点（集合端点 DELETE /clusters/{cluster_id}/nodes）。
+ * 语义固定 `delete_db=true` / `delete_edge=false`：节点是 Edge 运行时，后端 Edge 阶段恒 skipped
+ * （cluster_nodes.py::delete_nodes_batch），故不提供 Edge 勾选项。
+ */
+export function deleteNodesBatch(clusterId: number, payload: NodeBatchDeletePayload) {
+  return api.delete(`/clusters/${clusterId}/nodes`, { data: payload })
+}
+
 export function getClusterNodes(clusterId: number, params: NodeListParams = {}) {
   return api.get(`/clusters/${clusterId}/nodes`, {
     params: {

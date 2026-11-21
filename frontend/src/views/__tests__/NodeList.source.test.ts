@@ -186,3 +186,32 @@ describe('batch1：结果抽屉动作类摘要（3.2 / design D5）', () => {
     expect(s).toMatch(/execDrawerMode\.value = 'action'/)
   })
 })
+
+// ── 节点批量删除（2026-11-21：批量条补入口，面板 Tab 与页面同一实现）────────────
+describe('批量条：批量删除入口（节点）', () => {
+  it('批量条含危险色「批量删除」（未选禁用、选中显示计数、与动作组用分隔线隔开）', () => {
+    const s = src()
+    const bar = s.match(/<div class="l5-batchbar"[\s\S]*?清除选择/)
+    expect(bar, '需存在批量条').toBeTruthy()
+    expect(bar![0]).toContain('data-test="batch-delete"')
+    expect(bar![0]).toContain('handleBatchDelete')
+    expect(bar![0]).toMatch(/批量删除<span v-if="selectedNodeKeys\.length">\(\{\{ selectedNodeKeys\.length \}\}\)/)
+    expect(bar![0]).toContain(':disabled="!selectedNodeKeys.length"')
+    expect(bar![0]).toContain('btn btn-danger btn-sm need-sel')
+    // 危险动作与动作组之间保留分隔线（b-sep），且位于「清除选择」之前（删除类靠右）
+    const sep = bar![0].lastIndexOf('<span class="b-sep"></span>')
+    const del = bar![0].indexOf('data-test="batch-delete"')
+    expect(sep).toBeGreaterThan(-1)
+    expect(del).toBeGreaterThan(sep)
+  })
+
+  it('批量删除不内联请求：api/nodes 薄封装 + 共享分组执行核心 + 节点专用确认', () => {
+    const s = src()
+    expect(s, '视图不得内联 api.delete').not.toContain('api.delete(')
+    expect(s).toContain('runClusterGroupedBatchDelete')
+    expect(s).toContain('showNodeDeleteConfirm')
+    const api = readFileSync(resolve(process.cwd(), 'src/api/nodes.ts'), 'utf-8')
+    expect(api).toContain('export function deleteNodesBatch')
+    expect(api).toMatch(/api\.delete\(`\/clusters\/\$\{clusterId\}\/nodes`/)
+  })
+})
