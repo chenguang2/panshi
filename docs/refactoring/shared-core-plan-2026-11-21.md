@@ -151,3 +151,9 @@
   - [已完成 2026-11-21] **B2b-2** 批量导入合并为 `NodeBatchImportModal`：默认值可编辑 + 预览列并集（含 Nginx 安装目录/状态/原因/移除）+ 弹窗内逐条结果；载荷构造收敛 `useClusterNodes.requestNodeBatchCreate()`；两侧宿主只剩开关 + 刷新；顺手修复已失效的 e2e 导航。
   - [已完成 2026-11-21] **B2c** 插件元数据：抽 `PluginMetadataCreateModal`；可选插件过滤收敛 `utils/pluginMetadataCatalog.filterMetadataPlugins()`（面板树/页面筛选/弹窗三处共用）；**面板移除卡片快捷添加**（按用户裁决），改为工具条「添加插件元数据」；设计页按钮文案同步。
   - [待开始] B3 动作菜单构建器 / B4 单元格接线 / B5 卡片动作条
+
+## 七、待收口：主 spec 与实现漂移（2026-11-21）
+
+- **`openspec/specs/plugin-metadata-management/spec.md`** 的 Scenario「统一管理 Tab 添加入口同清单过滤」仍描述「面板展示可添加插件（目录分类卡片）」。面板已按用户裁决移除该树（commit `98f260d3`），添加入口改为工具条按钮 + 共享创建弹窗。
+- 建议：用一份小变更（MODIFIED 该 Scenario）把表述改为「两处添加入口共用同一创建弹窗；`plugin_metadata_plugins` 清单过滤由弹窗单点承担，面板不承载可选插件清单」，随后 `openspec validate --all` 收口。
+- 状态：**已完成（2026-11-21）**。变更 `panel-plugin-metadata-entry-modal` 已归档（`openspec/changes/archive/2026-11-21-panel-plugin-metadata-entry-modal`），主 spec 的该 Scenario 正文已按实现改写（场景标题保留 + HTML 注释记录裁决来源），`openspec validate --all` → 224 passed / 0 failed。
