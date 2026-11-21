@@ -1,21 +1,23 @@
 <template>
   <div class="tab-content node-tab">
     <div class="node-actions">
-      <a-button size="small" type="primary" @click="showAddNodeModal(cluster)">添加节点</a-button>
+      <a-button size="small" type="primary" @click="showAddNodeModal(cluster)">
+        <StrokeIcon name="plus" :size="13" /> 添加节点
+      </a-button>
       <a-button size="small" @click="editNode(cluster)" :disabled="!singleOpEnabled">编辑节点</a-button>
       <a-button size="small" danger :disabled="!deleteEnabled" @click="handleDeleteClick"
         >删除节点{{ deleteCount > 0 ? `(${deleteCount})` : '' }}</a-button
       >
       <a-divider type="vertical" />
-      <a-button size="small" @click="handleNodeStart" :disabled="!(singleOpEnabled || batchOpEnabled)"
-        >▶ 启动{{ batchCount > 0 ? `(${batchCount})` : '' }}</a-button
-      >
-      <a-button size="small" @click="handleNodeStop" :disabled="!(singleOpEnabled || batchOpEnabled)"
-        >⏹ 停止{{ batchCount > 0 ? `(${batchCount})` : '' }}</a-button
-      >
-      <a-button size="small" @click="handleNodeReload" :disabled="!(singleOpEnabled || batchOpEnabled)"
-        >⟳ 重载{{ batchCount > 0 ? `(${batchCount})` : '' }}</a-button
-      >
+      <a-button size="small" @click="handleNodeStart" :disabled="!(singleOpEnabled || batchOpEnabled)">
+        <StrokeIcon name="play" :size="13" /> 启动{{ batchCount > 0 ? `(${batchCount})` : '' }}
+      </a-button>
+      <a-button size="small" @click="handleNodeStop" :disabled="!(singleOpEnabled || batchOpEnabled)">
+        <StrokeIcon name="pause" :size="13" /> 停止{{ batchCount > 0 ? `(${batchCount})` : '' }}
+      </a-button>
+      <a-button size="small" @click="handleNodeReload" :disabled="!(singleOpEnabled || batchOpEnabled)">
+        <StrokeIcon name="rotate" :size="13" /> 重载{{ batchCount > 0 ? `(${batchCount})` : '' }}
+      </a-button>
       <a-button size="small" @click="handleNodeStatusQuery" :disabled="!(singleOpEnabled || batchOpEnabled)"
         >状态查询{{ batchCount > 0 ? `(${batchCount})` : '' }}</a-button
       >
@@ -23,12 +25,14 @@
         v-if="featuresStore.has('install_openresty') || featuresStore.has('install_edge')"
         :trigger="['click']"
       >
-        <a-button size="small" :disabled="!cluster.selectedNode">安装 <DownOutlined /></a-button>
+        <a-button size="small" :disabled="!cluster.selectedNode">
+          安装 <StrokeIcon name="chevronDown" :size="13" />
+        </a-button>
         <template #overlay>
           <a-menu>
             <a-menu-item
               v-if="featuresStore.has('install_openresty')"
-              @click="handleInstallOpenresty"
+              @click="() => handleInstallOpenresty()"
               :disabled="!cluster.selectedNode"
             >
               <div class="menu-item-stack">
@@ -38,7 +42,7 @@
             </a-menu-item>
             <a-menu-item
               v-if="featuresStore.has('install_edge')"
-              @click="handleInstallEdge"
+              @click="() => handleInstallEdge()"
               :disabled="!cluster.selectedNode"
             >
               <div class="menu-item-stack">
@@ -48,7 +52,7 @@
             </a-menu-item>
             <a-menu-item
               v-if="featuresStore.has('install_edge')"
-              @click="handleAssociateNewOpenresty"
+              @click="() => handleAssociateNewOpenresty()"
               :disabled="!cluster.selectedNode"
             >
               <div class="menu-item-stack">
@@ -58,7 +62,7 @@
             </a-menu-item>
             <a-menu-item
               v-if="featuresStore.has('install_edge')"
-              @click="handleEdgePackManagement"
+              @click="() => handleEdgePackManagement()"
               :disabled="!cluster.selectedNode"
             >
               <div class="menu-item-stack">
@@ -69,19 +73,18 @@
           </a-menu>
         </template>
       </a-dropdown>
-      <ColumnConfigPopover
-        v-model:open="nodeColumnPopoverVisible"
-        :all-columns="allNodeColumns"
-        v-model:columns="nodeColumnsSelected"
-        :all-actions="allNodeActionButtons"
-        v-model:actions="nodeActionsSelected"
-        v-model:search="nodeSearchVisible"
-        width-resettable
-        @reset-widths="handleResetColumnWidths"
-      />
-
       <div class="toolbar-right">
-        <a-button size="small" @click="loadNodes(cluster)"> <ReloadOutlined /> 刷新 </a-button>
+        <ColumnConfigPopover
+          v-model:open="nodeColumnPopoverVisible"
+          :all-columns="allNodeColumns"
+          v-model:columns="nodeColumnsSelected"
+          :all-actions="allNodeActionButtons"
+          v-model:actions="nodeActionsSelected"
+          v-model:search="nodeSearchVisible"
+          width-resettable
+          @reset-widths="handleResetColumnWidths"
+        />
+        <a-button size="small" @click="loadNodes(cluster)"><StrokeIcon name="rotate" :size="13" /> 刷新</a-button>
         <template v-if="nodeSearchVisible">
           <SearchInput
             v-model="cluster.nodesSearch"
@@ -111,12 +114,13 @@
       </div>
     </div>
     <a-table
-      :columns="visibleNodeColumns"
+      :columns="nodeTableColumns"
       :data-source="cluster.nodes || []"
-      :pagination="paginationProps(cluster.nodesPagination)"
+      :pagination="false"
       :row-selection="{
         selectedRowKeys: cluster.selectedNodeKeys || [],
         preserveSelectedRowKeys: true,
+        columnWidth: 40,
         onChange: (keys: unknown, rows: unknown[]) =>
           selectNodes(cluster, keys as number[], rows as import('@/types').Node[]),
       }"
@@ -129,23 +133,33 @@
       "
       :loading="cluster.nodesLoading"
       :showSorterTooltip="false"
-      :scroll="{ x: 'max-content' }"
+      :scroll="{ x: 1076 }"
       :table-layout="'fixed'"
       size="small"
       row-key="id"
       class="node-table grid-table"
       @change="
-        (pag: Record<string, unknown>, _filters: unknown, sorter: Record<string, unknown> | null) =>
-          handleNodeTableChange(cluster, pag, sorter)
+        (_pag: Record<string, unknown>, _filters: unknown, sorter: Record<string, unknown> | null) =>
+          handleNodeSortChange(cluster, sorter)
       "
     >
       <template #headerCell="{ column, title }">
-        <span class="th-resize-wrap" :class="nodeColumnWrapClass(column)" @mousedown="startColumnMove($event, column)">
+        <!-- 序号列：恒展示、不可拖拽（不进列配置） -->
+        <span v-if="column.key === 'index'">{{ title }}</span>
+        <span
+          v-else
+          class="th-resize-wrap"
+          :class="nodeColumnWrapClass(column)"
+          @mousedown="startColumnMove($event, column)"
+        >
           <span>{{ title }}</span>
           <span class="col-resize-handle" @mousedown="startColumnResize($event, column)" />
         </span>
       </template>
-      <template #bodyCell="{ column, record }">
+      <template #bodyCell="{ column, record, index }">
+        <template v-if="column.key === 'index'">
+          <span class="c-idx">{{ rowIndexLabel(cluster, index) }}</span>
+        </template>
         <template v-if="column.key === 'edge_version'">
           {{ record.status_detail?.statistic?.edge_version || '-' }}
         </template>
@@ -169,24 +183,94 @@
           </div>
         </template>
         <template v-if="column.key === 'actions'">
-          <template v-for="btnKey in nodeActionsSelected" :key="btnKey">
-            <a-button size="small" @click="handleNodeActionWithConfirm(cluster, record, btnKey)">
-              {{ getNodeActionButtonTitle(btnKey) }}
-            </a-button>
-          </template>
-          <a-dropdown v-if="moreNodeActions.length > 0">
-            <a-button size="small"> 更多 <DownOutlined /> </a-button>
-            <template #overlay>
-              <a-menu @click="(e: { key: string }) => handleNodeActionWithConfirm(cluster, record, e.key)">
-                <a-menu-item v-for="btn in moreNodeActions" :key="btn.key">
-                  {{ btn.title }}
-                </a-menu-item>
-              </a-menu>
-            </template>
-          </a-dropdown>
+          <!-- 行内动作收敛（parity 批 B / 设计 .ops）：主行动「重载」+ ghost「状态」+ ⋯ 三栏菜单。
+               配置机制保留：⋯ 内只渲染被勾选的动作（status 固定为 ghost、reload 固定为主行动） -->
+          <div class="action-cell">
+            <button type="button" class="op-pub" @click="handleNodeActionWithConfirm(cluster, record, 'reload')">
+              重载
+            </button>
+            <button
+              v-if="nodeActionsSelected.includes('status')"
+              type="button"
+              class="op-pub op-ghost"
+              @click="handleNodeActionWithConfirm(cluster, record, 'status')"
+            >
+              状态
+            </button>
+            <a-dropdown v-if="hasNodeRowMenu" :trigger="['click']">
+              <a-button type="text" size="small" class="action-trigger-btn" title="更多操作" aria-label="更多操作">
+                <StrokeIcon name="dots" />
+              </a-button>
+              <template #overlay>
+                <a-menu class="l5-action-menu">
+                  <a-menu-item
+                    v-for="btn in nodeMenuGroups.crud"
+                    :key="btn.key"
+                    @click="handleNodeActionWithConfirm(cluster, record, btn.key)"
+                    >{{ btn.title }}</a-menu-item
+                  >
+                  <a-menu-divider v-if="nodeMenuGroups.danger.length" />
+                  <a-menu-item
+                    v-for="btn in nodeMenuGroups.danger"
+                    :key="btn.key"
+                    danger
+                    @click="handleNodeActionWithConfirm(cluster, record, btn.key)"
+                  >
+                    <div class="menu-item-stack">
+                      <span>{{ btn.title }}</span>
+                      <small v-if="btn.desc">{{ btn.desc }}</small>
+                    </div>
+                  </a-menu-item>
+                  <a-menu-divider v-if="nodeMenuGroups.action.length" />
+                  <a-menu-item
+                    v-for="btn in nodeMenuGroups.action"
+                    :key="btn.key"
+                    @click="handleNodeActionWithConfirm(cluster, record, btn.key)"
+                    >{{ btn.title }}</a-menu-item
+                  >
+                  <template v-if="featuresStore.has('install_openresty') || featuresStore.has('install_edge')">
+                    <a-menu-divider />
+                    <a-menu-item v-if="featuresStore.has('install_openresty')" @click="handleInstallOpenresty(record)">
+                      <div class="menu-item-stack">
+                        <span>安装 OpenResty</span>
+                        <small>选择安装包在节点上安装 OpenResty</small>
+                      </div>
+                    </a-menu-item>
+                    <a-menu-item v-if="featuresStore.has('install_edge')" @click="handleInstallEdge(record)">
+                      <div class="menu-item-stack">
+                        <span>安装 Edge</span>
+                        <small>在节点 edge_path 部署 Edge 程序</small>
+                      </div>
+                    </a-menu-item>
+                    <a-menu-item v-if="featuresStore.has('install_edge')" @click="handleAssociateNewOpenresty(record)">
+                      <div class="menu-item-stack">
+                        <span>关联新 OpenResty</span>
+                        <small>把本机 Edge 切换关联到新装的 OpenResty</small>
+                      </div>
+                    </a-menu-item>
+                    <a-menu-item v-if="featuresStore.has('install_edge')" @click="handleEdgePackManagement(record)">
+                      <div class="menu-item-stack">
+                        <span>升级 Edge 小版本</span>
+                        <small>版本包管理与 Edge 小版本升级</small>
+                      </div>
+                    </a-menu-item>
+                  </template>
+                </a-menu>
+              </template>
+            </a-dropdown>
+          </div>
         </template>
       </template>
     </a-table>
+
+    <!-- 表外分页条（components/ListPager.vue）：a-table 分页关闭，服务端分页由本组件承担 -->
+    <ListPager
+      :page="cluster.nodesPagination?.page ?? 1"
+      :page-size="cluster.nodesPagination?.pageSize ?? 20"
+      :total="cluster.nodesPagination?.total ?? 0"
+      unit="个节点"
+      @change="onNodePageChange"
+    />
 
     <Teleport to="body">
       <div class="modal-overlay" :style="{ display: nodeModalVisible ? 'flex' : 'none' }">
@@ -486,8 +570,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, onMounted, onUnmounted } from 'vue'
-import { DownOutlined, ReloadOutlined } from '@ant-design/icons-vue'
+import { computed, reactive, ref, onMounted, onUnmounted, toValue } from 'vue'
 import type { Cluster, Node } from '@/types'
 import BadgeStatus from '@/components/BadgeStatus.vue'
 import { formatRelativeTime } from '@/utils/format'
@@ -511,10 +594,11 @@ import { showDangerConfirm } from '@/composables/useOverlayModal'
 import { useColumnDragColumns } from '@/composables/useColumnDragColumns'
 import { message } from 'ant-design-vue'
 import { useInstallStream } from '@/composables/useInstallStream'
-import { paginationProps } from '@/composables/usePagination'
 import { useFeaturesStore } from '@/stores/features'
 import SearchInput from '@/components/SearchInput.vue'
 import ColumnConfigPopover from '@/components/ColumnConfigPopover.vue'
+import ListPager from '@/components/ListPager.vue'
+import StrokeIcon from '@/components/StrokeIcon.vue'
 
 const featuresStore = useFeaturesStore()
 
@@ -549,10 +633,8 @@ const {
   orderedNodeColumns,
   nodeSearchVisible,
   nodeActionsSelected,
-  moreNodeActions,
   visibleNodeColumns,
   validateIP,
-  getNodeActionButtonTitle,
   handleNodeAction,
   handleNodeTableChange,
   loadNodes,
@@ -619,6 +701,38 @@ function handleResetColumnWidths(): void {
   message.success('已恢复默认列宽')
 }
 
+// ── 表格序号列 + 表外分页（central-management-parity 批次 A）─────────────
+// 序号列恒展示、不进列配置勾选项（antd CheckboxGroup 会剔除选项外的已选值），
+// 位于 row-selection 勾选列之后（勾选列由 a-table 自行渲染）。
+const NODE_INDEX_COLUMN = { title: '#', key: 'index', width: 45, align: 'center' as const }
+
+const nodeTableColumns = computed(() => [NODE_INDEX_COLUMN, ...toValue(visibleNodeColumns)])
+
+/** 后端分页序号 = (page-1)*pageSize + 本页行号 + 1（#59 表格解剖） */
+function rowIndexLabel(cluster: Cluster, index: number): number {
+  const pag = cluster.nodesPagination
+  return ((pag?.page || 1) - 1) * (pag?.pageSize || 20) + index + 1
+}
+
+/** ListPager 翻页：写回分页状态 → 清选择 → 复用既有加载函数 */
+function onNodePageChange(page: number, pageSize: number): void {
+  if (!props.cluster.nodesPagination) return
+  props.cluster.nodesPagination.page = page
+  props.cluster.nodesPagination.pageSize = pageSize
+  props.cluster.selectedNodeKeys = []
+  props.cluster.selectedNode = null
+  loadNodes(props.cluster)
+}
+
+/**
+ * 排序回调：`:pagination="false"` 下 antd 的 change 事件 pagination 恒为 `{}`，
+ * 直接透传会把 page/pageSize 写成 undefined —— 这里钉住当前分页值，只让排序分支生效。
+ */
+function handleNodeSortChange(cluster: Cluster, sorter: Record<string, unknown> | null): void {
+  const pag = cluster.nodesPagination
+  handleNodeTableChange(cluster, { current: pag?.page || 1, pageSize: pag?.pageSize || 20 }, sorter)
+}
+
 // ── batch delete selection state ─────────────────────────────
 const batchCount = computed(() => (props.cluster.selectedNodeKeys || []).length)
 const singleOpEnabled = computed(
@@ -635,6 +749,29 @@ function handleDeleteClick() {
     deleteNode(props.cluster)
   }
 }
+
+// ── ⋯ 行内动作菜单（设计 .l5-menu 三栏：CRUD → 危险 → 动作；#81） ──────────────
+// 行内只有「重载」（主行动，非配置项）+「状态」（ghost，勾选 status 才显示）。
+// 菜单 = 恒驻动作（编辑/复制/删除/数据库对比，无其它入口，必须常驻否则不可达）
+//      + 被勾选的「启动/停止」（列配置「行动作按钮集」语义）+ 安装项（特性开关）。
+// 这样既保留配置机制，也不让 复制/数据库对比 因未勾选而彻底失去入口。
+const NODE_MENU_TOGGLEABLE_KEYS = ['start', 'stop']
+const nodeMenuGroups = computed(() => {
+  const selected = new Set(nodeActionsSelected.value)
+  return {
+    crud: allNodeActionButtons.filter(
+      (b) => !b.danger && b.key !== 'status' && !NODE_MENU_TOGGLEABLE_KEYS.includes(b.key),
+    ),
+    danger: allNodeActionButtons.filter((b) => b.danger),
+    action: allNodeActionButtons.filter((b) => NODE_MENU_TOGGLEABLE_KEYS.includes(b.key) && selected.has(b.key)),
+  }
+})
+const hasNodeRowMenu = computed(
+  () =>
+    nodeMenuGroups.value.crud.length + nodeMenuGroups.value.danger.length + nodeMenuGroups.value.action.length > 0 ||
+    featuresStore.has('install_openresty') ||
+    featuresStore.has('install_edge'),
+)
 
 // ── Node batch import helpers ────────────────────────────────
 /** 行实时校验（batch1 4.1）：解析期错误 + 可编辑字段联动（openresty_path 必填，对齐单表单决策） */
@@ -760,7 +897,6 @@ function handleNodeStop() {
 }
 
 function handleNodeReload() {
-  const node = props.cluster.selectedNode
   if (batchCount.value > 0) {
     const ips = selectedNodeIps()
     showDangerConfirm('确认批量重载节点', confirmTitle(batchCount.value, ips), `确认重载(${batchCount.value})`, () =>
@@ -768,13 +904,9 @@ function handleNodeReload() {
     )
     return
   }
+  const node = props.cluster.selectedNode
   if (!node) return
-  showDangerConfirm(
-    '确认重新加载节点',
-    `即将对节点 ${node.ip} 执行"重载"操作，重新加载配置，确认继续？`,
-    '确认重载',
-    () => executeNodeAction(node, 'reload', 'reload'),
-  )
+  handleNodeActionWithConfirm(props.cluster, node, 'reload')
 }
 
 function handleNodeStatusQuery() {
@@ -800,6 +932,13 @@ function handleNodeActionWithConfirm(cluster: Cluster, record: Node, btnKey: str
       `即将对节点 ${record.ip} 执行"停止"操作。停止后该节点上的所有流量将中断，请确认操作无误。`,
       '确认停止',
       () => executeNodeAction(record, 'stop', '停止'),
+    )
+  } else if (btnKey === 'reload') {
+    showDangerConfirm(
+      '确认重新加载节点',
+      `即将对节点 ${record.ip} 执行"重载"操作，重新加载配置，确认继续？`,
+      '确认重载',
+      () => executeNodeAction(record, 'reload', 'reload'),
     )
   } else {
     handleNodeAction(cluster, record, btnKey)
@@ -827,8 +966,9 @@ function clearInstallTimer() {
 // batch3 1.1 / D1：命令构建收敛到 utils/nodeInstallCommand 共享纯函数
 // （原本地实现仍输出批 1 已清理的硬编码绝对路径与硬编码账号，属活缺陷，已修复）
 
-function handleInstallOpenresty() {
-  const node = props.cluster.selectedNode
+/** target 由行内 ⋯ 菜单传入具体节点；工具条入口沿用当前选中节点 */
+function handleInstallOpenresty(target?: Node) {
+  const node = target ?? props.cluster.selectedNode
   if (!node) return
   installTargetNode.value = node
   installDialogVisible.value = true
@@ -881,8 +1021,8 @@ function onInstallConfirm(payload: { node: any; clusterId: number; openrestyFile
   )
 }
 
-function handleInstallEdge() {
-  const node = props.cluster.selectedNode
+function handleInstallEdge(target?: Node) {
+  const node = target ?? props.cluster.selectedNode
   if (!node) return
   showDangerConfirm(
     '\u786e\u8ba4\u5b89\u88c5 Edge',
@@ -944,8 +1084,8 @@ const handleCancelInstall = createCancelNodeInstallHandler({
 
 // ── 关联新 OpenResty ──
 
-function handleAssociateNewOpenresty() {
-  const node = props.cluster.selectedNode
+function handleAssociateNewOpenresty(target?: Node) {
+  const node = target ?? props.cluster.selectedNode
   if (!node) return
   const prefix = node.openresty_path || ''
   showDangerConfirm(
@@ -1001,8 +1141,8 @@ function handleAssociateNewOpenresty() {
 const edgePackDialogVisible = ref(false)
 const edgePackDialogNode = ref<any>(null)
 
-function handleEdgePackManagement() {
-  edgePackDialogNode.value = props.cluster.selectedNode
+function handleEdgePackManagement(target?: Node) {
+  edgePackDialogNode.value = target ?? props.cluster.selectedNode
   edgePackDialogVisible.value = true
 }
 

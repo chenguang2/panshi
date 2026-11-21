@@ -311,3 +311,105 @@ describe('ClusterNodes.vue 列个性化', () => {
     expect(vm.nodeColumnPopoverVisible).toBe(false)
   })
 })
+
+// ── central-management-parity 批 B：行内动作收敛为「重载 + 状态 + ⋯」──
+describe('ClusterNodes.vue 行内动作收敛（parity 批 B）', () => {
+  const rowStubs = {
+    ...stubs,
+    // 本文件 `stubs.ADropdown` 的 `<template #overlay>` 写法在运行时编译会报 codegen 错误，
+    // 行内表渲染 bodyCell 后必须换成直接渲染 overlay 槽的版本
+    ADropdown: { template: '<div class="mock-dropdown"><slot /><slot name="overlay" /></div>' },
+    AMenuItem: {
+      template: '<div class="mock-menuitem" :class="{ danger }" @click="$emit(\'click\')"><slot /></div>',
+      props: { danger: { type: Boolean, default: false } },
+      emits: ['click'],
+    },
+    AMenuDivider: { template: '<hr class="mock-menu-sep" />' },
+    ATable: {
+      name: 'NodeRowTable',
+      template:
+        '<div class="mock-table"><div v-for="r in dataSource" :key="r.id" class="mock-tr"><slot name="bodyCell" :column="{ key: \'actions\' }" :record="r" :index="0" /></div></div>',
+      props: ['rowSelection', 'customRow', 'dataSource', 'columns', 'rowClassName', 'loading'],
+    },
+  }
+
+  const node = { id: 5, ip: '10.0.0.5', cluster_id: 1, status: 1, service_port: 80, management_port: 9180 }
+  const clusterWithNode = () => ({
+    id: 1,
+    name: 'test-cluster',
+    display_name: '测试集群',
+    nodes: [node],
+    nodesPagination: { total: 1, page: 1, pageSize: 20 },
+    selectedNodeKeys: [],
+    selectedNode: null,
+  })
+
+  async function mountTab() {
+    const ClusterNodes = (await import('../ClusterNodes.vue')).default
+    const c = clusterWithNode()
+    const wrapper = mount(ClusterNodes, {
+      props: { cluster: c, clusters: [c], openPublishModal: async () => [] },
+      global: { stubs: rowStubs },
+    })
+    await wrapper.vm.$nextTick()
+    return wrapper
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockApiGet.mockResolvedValue({ data: { items: [] } })
+  })
+
+  it('行内 = 重载（op-pub）+ 状态（ghost）+ ⋯；其余动作进 ⋯ 菜单', async () => {
+    const wrapper = await mountTab()
+    const row = wrapper.find('.mock-tr')
+
+    const pub = row.findAll('button.op-pub')
+    expect(pub.map((b) => b.text())).toEqual(['重载', '状态'])
+    expect(pub[1].classes(), '「状态」为 ghost 变体').toContain('op-ghost')
+    // ⋯ 触发器：唯一 a-button（三圆横排）
+    const triggers = row.findAll('button.mock-btn')
+    expect(triggers.length).toBe(1)
+    expect(triggers[0].classes()).toContain('action-trigger-btn')
+
+    // 默认勾选 start/stop/status：启动/停止进菜单，状态查询固定为 ghost（不重复进菜单）
+    const texts = row.findAll('.mock-menuitem').map((i) => i.text())
+    expect(texts).toContain('编辑')
+    expect(texts).toContain('复制')
+    expect(texts.some((t) => t.startsWith('删除'))).toBe(true)
+    expect(texts).toContain('数据库对比')
+    expect(texts).toContain('启动')
+    expect(texts).toContain('停止')
+    expect(texts).not.toContain('状态查询')
+    expect(texts).not.toContain('重载')
+    // 三栏：CRUD → 危险（红 + 常驻解释）→ 动作
+    expect(row.findAll('.mock-menu-sep').length).toBeGreaterThanOrEqual(2)
+    const del = row.findAll('.mock-menuitem').find((i) => i.classes().includes('danger'))
+    expect(del?.text()).toContain('删平台配置，可同步删 Edge 已发布配置（弹窗可选）')
+    wrapper.unmount()
+  })
+
+  it('重载（主行动）走现有确认链路 showDangerConfirm', async () => {
+    const wrapper = await mountTab()
+    await wrapper.find('.mock-tr').find('button.op-pub').trigger('click')
+    await wrapper.vm.$nextTick()
+    const overlays = [...document.body.querySelectorAll('.modal-overlay')].map((el) => el.textContent || '')
+    expect(overlays.some((t) => t.includes('确认重新加载节点'))).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('菜单项走 handleNodeActionWithConfirm（停止 → 危险确认文案）', async () => {
+    const wrapper = await mountTab()
+    const stopItem = wrapper
+      .find('.mock-tr')
+      .findAll('.mock-menuitem')
+      .find((i) => i.text() === '停止')
+    expect(stopItem).toBeTruthy()
+    await stopItem!.trigger('click')
+    await wrapper.vm.$nextTick()
+    const overlays = [...document.body.querySelectorAll('.modal-overlay')].map((el) => el.textContent || '')
+    expect(overlays.some((t) => t.includes('停止后该节点上的所有流量将中断'))).toBe(true)
+    wrapper.unmount()
+  })
+})

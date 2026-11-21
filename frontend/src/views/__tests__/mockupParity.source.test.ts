@@ -1057,3 +1057,52 @@ describe('mockup-parity：统一管理卡片页同构（central-management-parit
     expect(s, '节点全量拉取（#216）').toContain('fetchAllClusterNodes')
   })
 })
+
+// ── 统一管理 · 最大化面板 Tab 内容解剖（central-management-parity 批次 A 外观对齐）──
+// 作用域必须落在 `.max-panel .dbody`：CentralList.vue 的 scoped `:deep(.dbody)` / `:deep(.node-table)`
+// 段带 !important 且为 3 类选择器，单点在 style.css（4 类选择器压过），改动时同步核这两段。
+describe('central-management-parity 批 A：最大化面板 Tab 解剖单点（style.css）', () => {
+  const section = () => {
+    const i = css.indexOf('统一管理 · 最大化面板 Tab 内容解剖')
+    expect(i, '缺少 maximized-panel Tab 解剖段').toBeGreaterThan(-1)
+    return css.slice(i)
+  }
+
+  it('工具条按钮 = 设计 .tool-btn（30 高 / 12px / 400 / 浅底描边；「添加 X」不再实心 accent）', () => {
+    const s = section()
+    expect(s).toContain('.max-panel .dbody .node-actions .ant-btn {')
+    expect(s).toMatch(/\.max-panel \.dbody \.node-actions \.ant-btn \{[\s\S]*?height: 30px !important;/)
+    expect(s).toMatch(/\.max-panel \.dbody \.node-actions \.ant-btn \{[\s\S]*?background: var\(--surface\) !important;/)
+    // primary 显式回浅底（否则 CentralList 的 .ant-btn-primary 实心 accent 生效）
+    expect(s).toContain('.max-panel .dbody .node-actions .ant-btn-primary {')
+    expect(s).toMatch(
+      /\.max-panel \.dbody \.node-actions \.ant-btn-primary \{[\s\S]*?background: var\(--surface\) !important;/,
+    )
+  })
+
+  it('表头 = 设计 .l5-table thead th（--bg 灰底 / 去大写 / 9px 12px / 11px 600）', () => {
+    const s = section()
+    expect(s).toMatch(
+      /\.max-panel \.dbody \.node-table \.ant-table-thead > tr > th \{[\s\S]*?background: var\(--bg\) !important;[\s\S]*?text-transform: none !important;[\s\S]*?padding: 9px 12px !important;/,
+    )
+    // 竖线：表头 ::before 关闭 + grid-table 竖线在面板内豁免
+    expect(s).toContain('.max-panel .dbody .node-table .ant-table-thead > tr > th::before {')
+    expect(s).toContain('.max-panel .dbody .node-table.grid-table .ant-table-cell {')
+  })
+
+  it('单元格与行内按钮尺寸 + 分页条无上边框', () => {
+    const s = section()
+    // 设计 .l5-table tbody td 实测 10px 12px（表头保持 9px 12px）
+    expect(s).toMatch(
+      /\.max-panel \.dbody \.node-table \.ant-table-tbody > tr > td \{[\s\S]*?padding: 10px 12px !important;/,
+    )
+    expect(s).toMatch(/\.max-panel \.dbody \.node-table \.ant-table-tbody \.ant-btn \{[\s\S]*?height: 24px !important;/)
+    // 行内动作容器 + ⋯ 锚点（parity 批 B：与列表页 .action-cell / .action-trigger-btn 同构）
+    expect(s).toContain('.max-panel .dbody .node-table .action-cell {')
+    expect(s).toMatch(
+      /\.max-panel \.dbody \.node-table \.ant-table-tbody \.action-trigger-btn \{[\s\S]*?width: 26px !important;[\s\S]*?background: transparent !important;/,
+    )
+    expect(s).toContain('.max-panel .dbody .l5-pager {')
+    expect(s).toMatch(/\.max-panel \.dbody \.l5-pager \{[\s\S]*?border-top: none;/)
+  })
+})

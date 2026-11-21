@@ -1,48 +1,28 @@
 <template>
   <div class="tab-content">
-    <!-- Toolbar -->
+    <!-- Toolbar：设计工具栏只留「添加路由」+ 右端「列配置」；批量删除在行内动作收敛到 ⋯ 菜单后
+         仍需要工具条入口（多选场景），单条复制/编辑/发布/版本管理只在行内 -->
     <div class="node-actions">
-      <a-button size="small" type="primary" @click="showAddRouteModal(cluster)">添加路由</a-button>
-      <!-- 7.9（Tab 对齐）：选中 DNS 行时受限操作禁用 + tooltip 指路（与独立页同文案） -->
-      <a-tooltip :title="dnsSelected ? DNS_ROUTE_HINT : undefined" placement="top">
-        <a-button size="small" @click="copyRoute(cluster)" :disabled="!singleOpEnabled || dnsSelected"
-          >复制路由</a-button
-        >
-      </a-tooltip>
-      <a-tooltip :title="dnsSelected ? DNS_ROUTE_HINT : undefined" placement="top">
-        <a-button size="small" @click="editRoute(cluster)" :disabled="!singleOpEnabled || dnsSelected"
-          >编辑路由</a-button
-        >
-      </a-tooltip>
-      <a-tooltip :title="dnsSelected ? DNS_ROUTE_HINT : undefined" placement="top">
-        <a-button size="small" danger :disabled="!deleteEnabled || dnsSelected" @click="handleDeleteClick"
+      <a-button size="small" type="primary" @click="showAddRouteModal(cluster)">
+        <StrokeIcon name="plus" :size="13" /> 添加路由
+      </a-button>
+      <a-tooltip :title="dnsInSelection ? DNS_ROUTE_HINT : undefined" placement="top">
+        <a-button size="small" danger :disabled="!deleteEnabled" @click="handleDeleteClick"
           >删除路由{{ deleteCount > 0 ? `(${deleteCount})` : '' }}</a-button
         >
       </a-tooltip>
-      <a-divider type="vertical" />
-      <a-tooltip :title="dnsSelected ? DNS_ROUTE_HINT : undefined" placement="top">
-        <a-button size="small" @click="publishRoute(cluster)" :disabled="!singleOpEnabled || dnsSelected"
-          >发布</a-button
-        >
-      </a-tooltip>
-      <a-tooltip :title="dnsSelected ? DNS_ROUTE_HINT : undefined" placement="top">
-        <a-button size="small" @click="openRouteVersionManagement(cluster)" :disabled="!singleOpEnabled || dnsSelected"
-          >版本管理</a-button
-        >
-      </a-tooltip>
-      <a-divider type="vertical" />
-      <ColumnConfigPopover
-        v-model:open="routeColumnPopoverVisible"
-        :all-columns="allRouteColumns"
-        v-model:columns="routeColumnsSelected"
-        :all-actions="allActionButtons"
-        v-model:actions="routeActionsSelected"
-        v-model:search="routeSearchVisible"
-        width-resettable
-        @reset-widths="handleResetRouteColumnWidths"
-      />
 
       <div class="toolbar-right">
+        <ColumnConfigPopover
+          v-model:open="routeColumnPopoverVisible"
+          :all-columns="allRouteColumns"
+          v-model:columns="routeColumnsSelected"
+          :all-actions="allActionButtons"
+          v-model:actions="routeActionsSelected"
+          v-model:search="routeSearchVisible"
+          width-resettable
+          @reset-widths="handleResetRouteColumnWidths"
+        />
         <template v-if="routeSearchVisible">
           <SearchInput
             v-model="cluster.routesSearch"
@@ -75,13 +55,14 @@
 
     <!-- Route table -->
     <a-table
-      :columns="visibleRouteColumns"
+      :columns="routeTableColumns"
       :data-source="cluster.routes || []"
-      :pagination="paginationProps(cluster.routesPagination)"
+      :pagination="false"
       :loading="cluster.routesLoading"
       :row-selection="{
         selectedRowKeys: cluster.selectedRouteKeys || [],
         preserveSelectedRowKeys: true,
+        columnWidth: 40,
         getCheckboxProps: (record: any) => ({ disabled: isDnsRoute(record) }),
         onChange: (keys: any, rows: any) => selectRoutes(cluster, keys, rows),
       }"
@@ -94,12 +75,12 @@
       "
       :row-class-name="routeRowClassName"
       :showSorterTooltip="false"
-      :scroll="{ x: 'max-content' }"
+      :scroll="{ x: 1036 }"
       :table-layout="'fixed'"
       size="small"
       row-key="id"
       class="node-table route-table grid-table"
-      @change="(pag: any, _filters: any, sorter: any) => handleRouteTableChange(cluster, pag, sorter)"
+      @change="(_pag: any, _filters: any, sorter: any) => handleRouteSortChange(cluster, sorter)"
     >
       <template #emptyText>
         <div class="empty-guide">
@@ -108,12 +89,22 @@
         </div>
       </template>
       <template #headerCell="{ column, title }">
-        <span class="th-resize-wrap" :class="routeColumnWrapClass(column)" @mousedown="startColumnMove($event, column)">
+        <!-- 序号列：恒展示、不可拖拽（不进列配置） -->
+        <span v-if="column.key === 'index'">{{ title }}</span>
+        <span
+          v-else
+          class="th-resize-wrap"
+          :class="routeColumnWrapClass(column)"
+          @mousedown="startColumnMove($event, column)"
+        >
           <span>{{ title }}</span>
           <span class="col-resize-handle" @mousedown="startColumnResize($event, column)" />
         </span>
       </template>
-      <template #bodyCell="{ column, record }">
+      <template #bodyCell="{ column, record, index }">
+        <template v-if="column.key === 'index'">
+          <span class="c-idx">{{ rowIndexLabel(cluster, index) }}</span>
+        </template>
         <template v-if="column.key === 'upstream_id'">
           {{ getUpstreamName(cluster, record.upstream_id) }}
         </template>
@@ -145,18 +136,80 @@
           </span>
         </template>
         <template v-if="column.key === 'actions'">
-          <template v-for="btnKey in routeActionsSelected" :key="btnKey">
-            <a-divider type="vertical" v-if="btnKey === 'publish'" />
-            <!-- 7.9（Tab 对齐）：DNS 行行内操作禁用 + tooltip 指路 -->
-            <a-tooltip :title="isDnsRoute(record) ? DNS_ROUTE_HINT : undefined" placement="top">
-              <a-button size="small" :disabled="isDnsRoute(record)" @click="handleRouteAction(cluster, record, btnKey)">
-                {{ getActionButtonTitle(btnKey) }}
-              </a-button>
-            </a-tooltip>
-          </template>
+          <!-- 行内动作收敛（parity 批 B / 设计 .ops）：主行动「发布」+ ⋯ 三栏菜单；
+               7.9 DNS 行：发布与菜单一并禁用 + tooltip 指路 -->
+          <div class="action-cell">
+            <template v-if="isDnsRoute(record)">
+              <a-tooltip :title="DNS_ROUTE_HINT" placement="top">
+                <button type="button" class="op-pub" disabled>发布</button>
+              </a-tooltip>
+              <a-tooltip :title="DNS_ROUTE_HINT" placement="top">
+                <a-button type="text" size="small" class="action-trigger-btn" title="更多操作" disabled>
+                  <StrokeIcon name="dots" />
+                </a-button>
+              </a-tooltip>
+            </template>
+            <template v-else>
+              <button
+                v-if="routeActionsSelected.includes('publish')"
+                type="button"
+                class="op-pub"
+                @click="handleRouteAction(cluster, record, 'publish')"
+              >
+                发布
+              </button>
+              <a-dropdown v-if="routeMenuGroups.all.length > 0" :trigger="['click']">
+                <a-button type="text" size="small" class="action-trigger-btn" title="更多操作" aria-label="更多操作">
+                  <StrokeIcon name="dots" />
+                </a-button>
+                <template #overlay>
+                  <a-menu class="l5-action-menu">
+                    <a-menu-item
+                      v-for="btn in routeMenuGroups.crud"
+                      :key="btn.key"
+                      @click="handleRouteAction(cluster, record, btn.key)"
+                      >{{ btn.title }}</a-menu-item
+                    >
+                    <a-menu-divider v-if="routeMenuGroups.danger.length" />
+                    <a-menu-item
+                      v-for="btn in routeMenuGroups.danger"
+                      :key="btn.key"
+                      danger
+                      @click="handleRouteAction(cluster, record, btn.key)"
+                    >
+                      <div class="menu-item-stack">
+                        <span>{{ btn.title }}</span>
+                        <small>{{ btn.desc }}</small>
+                      </div>
+                    </a-menu-item>
+                    <a-menu-divider v-if="routeMenuGroups.action.length" />
+                    <a-menu-item
+                      v-for="btn in routeMenuGroups.action"
+                      :key="btn.key"
+                      @click="handleRouteAction(cluster, record, btn.key)"
+                    >
+                      <div class="menu-item-stack">
+                        <span>{{ btn.title }}</span>
+                        <small>{{ btn.desc }}</small>
+                      </div>
+                    </a-menu-item>
+                  </a-menu>
+                </template>
+              </a-dropdown>
+            </template>
+          </div>
         </template>
       </template>
     </a-table>
+
+    <!-- 表外分页条（components/ListPager.vue）：a-table 分页关闭，服务端分页由本组件承担 -->
+    <ListPager
+      :page="cluster.routesPagination?.page ?? 1"
+      :page-size="cluster.routesPagination?.pageSize ?? 20"
+      :total="cluster.routesPagination?.total ?? 0"
+      unit="条路由"
+      @change="onRoutePageChange"
+    />
 
     <!-- Route add/edit modal -->
     <Teleport to="body">
@@ -341,13 +394,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, h, type Ref } from 'vue'
+import { ref, computed, h, toValue, type Ref } from 'vue'
 import { WarningOutlined } from '@ant-design/icons-vue'
 import type { Cluster, Route } from '@/types'
 import { useClusterRoutes } from '@/composables/useClusterRoutes'
 import { useColumnDragColumns } from '@/composables/useColumnDragColumns'
 import { message } from 'ant-design-vue'
-import { paginationProps } from '@/composables/usePagination'
 import BadgeStatus from '@/components/BadgeStatus.vue'
 import PublishStatusTag from '@/components/PublishStatusTag.vue'
 import PublishDiffButton from '@/components/PublishDiffButton.vue'
@@ -358,7 +410,9 @@ import PluginMetadata from '@/components/PluginMetadata.vue'
 import PluginSelector from '@/components/PluginSelector.vue'
 import { toUpstreamSelectOptions } from '@/utils/upstreamOptions'
 import ColumnConfigPopover from '@/components/ColumnConfigPopover.vue'
+import ListPager from '@/components/ListPager.vue'
 import SearchInput from '@/components/SearchInput.vue'
+import StrokeIcon from '@/components/StrokeIcon.vue'
 
 const props = defineProps<{
   cluster: Cluster
@@ -429,7 +483,6 @@ const {
   viewPluginConfigDetail,
   getClusterUpstreams,
   getUpstreamName,
-  getActionButtonTitle,
   handleRouteAction,
   selectRoute,
   selectRoutes,
@@ -437,14 +490,10 @@ const {
   loadRoutes,
   handleRouteTableChange,
   showAddRouteModal,
-  editRoute,
-  copyRoute,
   handleRouteSubmit,
   deleteRoute,
   deleteRoutes,
-  publishRoute,
   publishRouteByRecord,
-  openRouteVersionManagement,
   hasPluginGroupsPermission,
 } = useClusterRoutes({
   clusters: computed(() => props.clusters),
@@ -485,19 +534,77 @@ function handleResetRouteColumnWidths(): void {
 // ── Upstream options for traffic_split plugin dropdown ────────────
 const upstreamOptions = computed(() => toUpstreamSelectOptions(getClusterUpstreams()))
 
-// ── batch delete selection state ───────────────────────────────────
-const batchCount = computed(() => (props.cluster.selectedRouteKeys || []).length)
-const singleOpEnabled = computed(
-  () => batchCount.value <= 1 && (!!props.cluster.selectedRoute || batchCount.value === 1),
-)
-const deleteCount = computed(() => (batchCount.value > 0 ? batchCount.value : props.cluster.selectedRoute ? 1 : 0))
-const deleteEnabled = computed(() => deleteCount.value > 0)
+// ── 表格序号列 + 表外分页（central-management-parity 批次 A）─────────────
+// 序号列恒展示、不进列配置勾选项（antd CheckboxGroup 会剔除选项外的已选值），
+// 位于 row-selection 勾选列之后（勾选列由 a-table 自行渲染）。
+const ROUTE_INDEX_COLUMN = { title: '#', key: 'index', width: 45, align: 'center' as const }
+
+const routeTableColumns = computed(() => [ROUTE_INDEX_COLUMN, ...toValue(visibleRouteColumns)])
+
+/** 后端分页序号 = (page-1)*pageSize + 本页行号 + 1（#59 表格解剖） */
+function rowIndexLabel(cluster: Cluster, index: number): number {
+  const pag = cluster.routesPagination
+  return ((pag?.page || 1) - 1) * (pag?.pageSize || 20) + index + 1
+}
+
+/** ListPager 翻页：写回分页状态 → 清选择 → 复用既有加载函数 */
+function onRoutePageChange(page: number, pageSize: number): void {
+  if (!props.cluster.routesPagination) return
+  props.cluster.routesPagination.page = page
+  props.cluster.routesPagination.pageSize = pageSize
+  props.cluster.selectedRouteKeys = []
+  props.cluster.selectedRoute = null
+  loadRoutes(props.cluster)
+}
+
+/**
+ * 排序回调：`:pagination="false"` 下 antd 的 change 事件 pagination 恒为 `{}`，
+ * 直接透传会把 page/pageSize 写成 undefined —— 这里钉住当前分页值，只让排序分支生效。
+ */
+function handleRouteSortChange(cluster: Cluster, sorter: Record<string, unknown> | null): void {
+  const pag = cluster.routesPagination
+  handleRouteTableChange(cluster, { current: pag?.page || 1, pageSize: pag?.pageSize || 20 }, sorter)
+}
 
 // ── 7.9（Tab 对齐独立页）：DNS 行操作禁用 + tooltip 指路 ──
-// 行内按钮与工具栏对「DNS 行 / 选中 DNS 项」禁用（删除 toast 守卫保留兜底）；
-// 文案与独立页 RouteList 同源，指路目标是左侧菜单「DNS 代理」页。
+// 行内按钮对「DNS 行」禁用（删除 toast 守卫保留兜底）；文案与独立页 RouteList 同源，
+// 指路目标是左侧菜单「DNS 代理」页。工具栏只保留批量删除（多选场景的唯一入口）。
 const DNS_ROUTE_HINT = 'DNS 路由请在「DNS 代理」页管理'
-const dnsSelected = computed(() => (props.cluster.selectedRoute ? isDnsRoute(props.cluster.selectedRoute) : false))
+
+// ── batch delete selection state（行内动作收敛到 ⋯ 菜单后，批量删除回到工具条） ─────
+const batchCount = computed(() => (props.cluster.selectedRouteKeys || []).length)
+const deleteCount = computed(() => (batchCount.value > 0 ? batchCount.value : props.cluster.selectedRoute ? 1 : 0))
+/** 选中项含 DNS 路由时禁用删除（与旧工具栏语义一致；composable 的 toast 守卫仍兜底） */
+const dnsInSelection = computed(() => {
+  const keys = props.cluster.selectedRouteKeys || []
+  const rows = (props.cluster.routes || []).filter((r) => keys.includes(r.id))
+  if (rows.some((r) => isDnsRoute(r))) return true
+  return props.cluster.selectedRoute ? isDnsRoute(props.cluster.selectedRoute) : false
+})
+const deleteEnabled = computed(() => deleteCount.value > 0 && !dnsInSelection.value)
+
+function handleDeleteClick() {
+  if (batchCount.value > 0) {
+    deleteRoutes(props.cluster)
+  } else {
+    deleteRoute(props.cluster)
+  }
+}
+
+// ── ⋯ 动作菜单（设计 .l5-menu 三栏：CRUD → 危险 → 动作；#81） ──────────────
+// 每项仍受列配置「行动作按钮集」勾选态控制：未勾选的动作不渲染
+const routeMenuGroups = computed(() => {
+  const selected = new Set(routeActionsSelected.value)
+  const crud = [
+    { key: 'copy', title: '复制路由', desc: '' },
+    { key: 'edit', title: '编辑', desc: '' },
+  ].filter((b) => selected.has(b.key))
+  const danger = [{ key: 'delete', title: '删除', desc: '删平台配置，可同步删 Edge 已发布配置（弹窗可选）' }].filter(
+    (b) => selected.has(b.key),
+  )
+  const action = [{ key: 'version', title: '版本管理', desc: '历史版本查看与回滚' }].filter((b) => selected.has(b.key))
+  return { crud, danger, action, all: [...crud, ...danger, ...action] }
+})
 
 // ── 行点击选中（batch1 组5 5.3，A7 对齐 ClusterUpstreams 4.1/D8）──
 // 行点选与复选框共用同一选中载体：selectedRoute（单选操作/高亮依据）+
@@ -516,14 +623,6 @@ function toggleRouteSelection(record: Route) {
 
 // 选中行高亮：跟随 selectedRoute，行点选与勾选（selectMany 单选时同步该载体）均生效
 const routeRowClassName = (record: Route) => (props.cluster.selectedRoute?.id === record.id ? 'row-selected' : '')
-
-function handleDeleteClick() {
-  if (batchCount.value > 0) {
-    deleteRoutes(props.cluster)
-  } else {
-    deleteRoute(props.cluster)
-  }
-}
 
 // ── Version published callback ──────────────────────────────────────
 function onVersionPublished() {

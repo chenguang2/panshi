@@ -1,29 +1,25 @@
 <template>
   <div class="tab-content">
     <div class="node-actions">
-      <a-button size="small" type="primary" @click="showAddUpstreamModal(cluster)">添加上游</a-button>
-      <a-button size="small" @click="editUpstream(cluster)" :disabled="!singleOpEnabled">编辑上游</a-button>
+      <a-button size="small" type="primary" @click="showAddUpstreamModal(cluster)">
+        <StrokeIcon name="plus" :size="13" /> 添加上游
+      </a-button>
+      <!-- 批量删除：行内动作收敛到 ⋯ 菜单后，多选删除的唯一入口（与节点 Tab 同款形态） -->
       <a-button size="small" danger :disabled="!deleteEnabled" @click="handleDeleteClick"
         >删除上游{{ deleteCount > 0 ? `(${deleteCount})` : '' }}</a-button
       >
-      <a-divider type="vertical" />
-      <a-button size="small" @click="publishUpstream(cluster)" :disabled="!singleOpEnabled">发布</a-button>
-      <a-button size="small" @click="openUpstreamVersionManagement(cluster)" :disabled="!singleOpEnabled"
-        >版本管理</a-button
-      >
-      <a-divider type="vertical" />
-      <ColumnConfigPopover
-        v-model:open="upstreamColumnPopoverVisible"
-        :all-columns="allUpstreamColumns"
-        v-model:columns="upstreamColumnsSelected"
-        :all-actions="allUpstreamActionButtons"
-        v-model:actions="upstreamActionsSelected"
-        v-model:search="upstreamSearchVisible"
-        width-resettable
-        @reset-widths="handleResetUpstreamResetWidths"
-      />
 
       <div class="toolbar-right">
+        <ColumnConfigPopover
+          v-model:open="upstreamColumnPopoverVisible"
+          :all-columns="allUpstreamColumns"
+          v-model:columns="upstreamColumnsSelected"
+          :all-actions="allUpstreamActionButtons"
+          v-model:actions="upstreamActionsSelected"
+          v-model:search="upstreamSearchVisible"
+          width-resettable
+          @reset-widths="handleResetUpstreamResetWidths"
+        />
         <template v-if="upstreamSearchVisible">
           <SearchInput
             v-model="cluster.upstreamsSearch"
@@ -53,13 +49,14 @@
       </div>
     </div>
     <a-table
-      :columns="visibleUpstreamColumns"
+      :columns="upstreamTableColumns"
       :data-source="cluster.upstreams || []"
-      :pagination="paginationProps(cluster.upstreamsPagination)"
+      :pagination="false"
       :loading="cluster.upstreamsLoading"
       :row-selection="{
         selectedRowKeys: cluster.selectedUpstreamKeys || [],
         preserveSelectedRowKeys: true,
+        columnWidth: 40,
         onChange: (keys: any, rows: any) => selectUpstreams(cluster, keys, rows),
       }"
       :custom-row="
@@ -71,12 +68,12 @@
       "
       :row-class-name="upstreamRowClassName"
       :showSorterTooltip="false"
-      :scroll="{ x: 'max-content' }"
+      :scroll="{ x: 1054 }"
       :table-layout="'fixed'"
       size="small"
       row-key="id"
       class="node-table upstream-table grid-table"
-      @change="(pag: any, _filters: any, sorter: any) => handleUpstreamTableChange(cluster, pag, sorter)"
+      @change="(_pag: any, _filters: any, sorter: any) => handleUpstreamSortChange(cluster, sorter)"
     >
       <template #emptyText>
         <div class="empty-guide">
@@ -85,7 +82,10 @@
         </div>
       </template>
       <template #headerCell="{ column, title }">
+        <!-- 序号列：恒展示、不可拖拽（不进列配置） -->
+        <span v-if="column.key === 'index'">{{ title }}</span>
         <span
+          v-else
           class="th-resize-wrap"
           :class="upstreamColumnWrapClass(column)"
           @mousedown="startColumnMove($event, column)"
@@ -94,7 +94,10 @@
           <span class="col-resize-handle" @mousedown="startColumnResize($event, column)" />
         </span>
       </template>
-      <template #bodyCell="{ column, record }">
+      <template #bodyCell="{ column, record, index }">
+        <template v-if="column.key === 'index'">
+          <span class="c-idx">{{ rowIndexLabel(cluster, index) }}</span>
+        </template>
         <template v-if="column.key === 'targets'">
           <div v-if="record.targets && record.targets.length > 0" class="target-list">
             <span v-for="t in previewTargets(record)" :key="t.target" class="target-tag">
@@ -121,15 +124,67 @@
           </span>
         </template>
         <template v-else-if="column.key === 'actions'">
-          <template v-for="btnKey in upstreamActionsSelected" :key="btnKey">
-            <a-divider type="vertical" v-if="btnKey === 'publish'" />
-            <a-button size="small" @click="handleUpstreamAction(cluster, record, btnKey)">
-              {{ getUpstreamActionButtonTitle(btnKey) }}
-            </a-button>
-          </template>
+          <!-- 行内动作收敛（parity 批 B / 设计 .ops）：主行动「发布」+ ⋯ 三栏菜单 -->
+          <div class="action-cell">
+            <button
+              v-if="upstreamActionsSelected.includes('publish')"
+              type="button"
+              class="op-pub"
+              @click="handleUpstreamAction(cluster, record, 'publish')"
+            >
+              发布
+            </button>
+            <a-dropdown v-if="upstreamMenuGroups.all.length > 0" :trigger="['click']">
+              <a-button type="text" size="small" class="action-trigger-btn" title="更多操作" aria-label="更多操作">
+                <StrokeIcon name="dots" />
+              </a-button>
+              <template #overlay>
+                <a-menu class="l5-action-menu">
+                  <a-menu-item
+                    v-for="btn in upstreamMenuGroups.crud"
+                    :key="btn.key"
+                    @click="handleUpstreamAction(cluster, record, btn.key)"
+                    >{{ btn.title }}</a-menu-item
+                  >
+                  <a-menu-divider v-if="upstreamMenuGroups.danger.length" />
+                  <a-menu-item
+                    v-for="btn in upstreamMenuGroups.danger"
+                    :key="btn.key"
+                    danger
+                    @click="handleUpstreamAction(cluster, record, btn.key)"
+                  >
+                    <div class="menu-item-stack">
+                      <span>{{ btn.title }}</span>
+                      <small>{{ btn.desc }}</small>
+                    </div>
+                  </a-menu-item>
+                  <a-menu-divider v-if="upstreamMenuGroups.action.length" />
+                  <a-menu-item
+                    v-for="btn in upstreamMenuGroups.action"
+                    :key="btn.key"
+                    @click="handleUpstreamAction(cluster, record, btn.key)"
+                  >
+                    <div class="menu-item-stack">
+                      <span>{{ btn.title }}</span>
+                      <small>{{ btn.desc }}</small>
+                    </div>
+                  </a-menu-item>
+                </a-menu>
+              </template>
+            </a-dropdown>
+          </div>
         </template>
       </template>
     </a-table>
+
+    <!-- 表外分页条（components/ListPager.vue）：a-table 分页关闭，服务端分页由本组件承担 -->
+    <ListPager
+      :page="cluster.upstreamsPagination?.page ?? 1"
+      :page-size="cluster.upstreamsPagination?.pageSize ?? 20"
+      :total="cluster.upstreamsPagination?.total ?? 0"
+      unit="个上游"
+      @change="onUpstreamPageChange"
+    />
 
     <Teleport to="body">
       <div class="modal-overlay" :style="{ display: upstreamModalVisible ? 'flex' : 'none' }">
@@ -493,7 +548,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, toValue } from 'vue'
 import type { Cluster, Upstream } from '@/types'
 import { PlusOutlined, WarningOutlined } from '@ant-design/icons-vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
@@ -504,9 +559,10 @@ import HealthCheckForm from '@/components/HealthCheckForm.vue'
 import { useClusterUpstreams } from '@/composables/useClusterUpstreams'
 import { useColumnDragColumns } from '@/composables/useColumnDragColumns'
 import { message } from 'ant-design-vue'
-import { paginationProps } from '@/composables/usePagination'
 import ColumnConfigPopover from '@/components/ColumnConfigPopover.vue'
+import ListPager from '@/components/ListPager.vue'
 import SearchInput from '@/components/SearchInput.vue'
+import StrokeIcon from '@/components/StrokeIcon.vue'
 
 const props = defineProps<{
   cluster: Cluster
@@ -549,17 +605,13 @@ const {
   selectUpstream,
   selectUpstreams,
   showAddUpstreamModal,
-  editUpstream,
   handleUpstreamSubmit,
   closeUpstreamModal,
   deleteUpstream,
   deleteUpstreams,
-  publishUpstream,
   publishUpstreamByRecord,
-  openUpstreamVersionManagement,
   addUpstreamTarget,
   removeUpstreamTarget,
-  getUpstreamActionButtonTitle,
   handleUpstreamAction,
   toggleChecks,
   toggleTimeout,
@@ -602,13 +654,65 @@ function handleResetUpstreamResetWidths(): void {
   message.success('已恢复默认列宽')
 }
 
-// ── batch delete selection state ───────────────────────────────────
+// ── batch delete selection state（行内动作收敛到 ⋯ 菜单后，批量删除回到工具条） ─────
 const batchCount = computed(() => (props.cluster.selectedUpstreamKeys || []).length)
-// 单选操作要求单选态真实存在：勾选 1 行但 rows[0] 缺失（跨页勾选）时不放行，
-// 避免点了「编辑/发布」误报「请先选择一个上游」（4.1/D8）
-const singleOpEnabled = computed(() => batchCount.value <= 1 && !!props.cluster.selectedUpstream)
 const deleteCount = computed(() => (batchCount.value > 0 ? batchCount.value : props.cluster.selectedUpstream ? 1 : 0))
 const deleteEnabled = computed(() => deleteCount.value > 0)
+
+function handleDeleteClick() {
+  if (batchCount.value > 0) {
+    deleteUpstreams(props.cluster)
+  } else {
+    deleteUpstream(props.cluster)
+  }
+}
+
+// ── ⋯ 动作菜单（设计 .l5-menu 三栏：CRUD → 危险 → 动作；#81） ──────────────
+// 每项仍受列配置「行动作按钮集」勾选态控制：未勾选的动作不渲染（不改变原有配置语义）
+const upstreamMenuGroups = computed(() => {
+  const selected = new Set(upstreamActionsSelected.value)
+  const crud = [
+    { key: 'copy', title: '复制', desc: '' },
+    { key: 'edit', title: '编辑', desc: '' },
+  ].filter((b) => selected.has(b.key))
+  const danger = [{ key: 'delete', title: '删除', desc: '删平台配置，可同步删 Edge 已发布配置（弹窗可选）' }].filter(
+    (b) => selected.has(b.key),
+  )
+  const action = [{ key: 'version', title: '版本管理', desc: '历史版本查看与回滚' }].filter((b) => selected.has(b.key))
+  return { crud, danger, action, all: [...crud, ...danger, ...action] }
+})
+
+// ── 表格序号列 + 表外分页（central-management-parity 批次 A）─────────────
+// 序号列恒展示、不进列配置勾选项（antd CheckboxGroup 会剔除选项外的已选值），
+// 位于 row-selection 勾选列之后（勾选列由 a-table 自行渲染）。
+const UPSTREAM_INDEX_COLUMN = { title: '#', key: 'index', width: 45, align: 'center' as const }
+
+const upstreamTableColumns = computed(() => [UPSTREAM_INDEX_COLUMN, ...toValue(visibleUpstreamColumns)])
+
+/** 后端分页序号 = (page-1)*pageSize + 本页行号 + 1（#59 表格解剖） */
+function rowIndexLabel(cluster: Cluster, index: number): number {
+  const pag = cluster.upstreamsPagination
+  return ((pag?.page || 1) - 1) * (pag?.pageSize || 20) + index + 1
+}
+
+/** ListPager 翻页：写回分页状态 → 清选择 → 复用既有加载函数 */
+function onUpstreamPageChange(page: number, pageSize: number): void {
+  if (!props.cluster.upstreamsPagination) return
+  props.cluster.upstreamsPagination.page = page
+  props.cluster.upstreamsPagination.pageSize = pageSize
+  props.cluster.selectedUpstreamKeys = []
+  props.cluster.selectedUpstream = null
+  loadUpstreams(props.cluster)
+}
+
+/**
+ * 排序回调：`:pagination="false"` 下 antd 的 change 事件 pagination 恒为 `{}`，
+ * 直接透传会把 page/pageSize 写成 undefined —— 这里钉住当前分页值，只让排序分支生效。
+ */
+function handleUpstreamSortChange(cluster: Cluster, sorter: Record<string, unknown> | null): void {
+  const pag = cluster.upstreamsPagination
+  handleUpstreamTableChange(cluster, { current: pag?.page || 1, pageSize: pag?.pageSize || 20 }, sorter)
+}
 
 // 发布差异预览（publish-diff-preview）：预览弹窗自持拉取；「去发布」接既有发布流程
 const previewVisible = ref(false)
@@ -623,14 +727,6 @@ function onPreviewPublish() {
   const record = previewRecord.value
   previewVisible.value = false
   if (record) publishUpstreamByRecord(props.cluster, record)
-}
-
-function handleDeleteClick() {
-  if (batchCount.value > 0) {
-    deleteUpstreams(props.cluster)
-  } else {
-    deleteUpstream(props.cluster)
-  }
 }
 
 // 选中行高亮：跟随 selectedUpstream，无论来源是行点选还是勾选（4.1/D8）

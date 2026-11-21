@@ -46,7 +46,8 @@ const allRouteColumns = [
   },
   { title: '高级匹配', dataIndex: 'advanced_match_enabled', key: 'advanced_match_enabled', width: 110 },
   { title: '描述', dataIndex: 'description', key: 'description', width: 200 },
-  { title: '操作', key: 'actions', width: 340 },
+  // 操作列只承载「发布 + ⋯」两颗控件（parity 批 B 行内动作收敛），宽度回设计值 110
+  { title: '操作', key: 'actions', width: 110 },
 ]
 
 const allActionButtons = [

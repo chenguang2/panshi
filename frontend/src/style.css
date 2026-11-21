@@ -1963,6 +1963,19 @@ body.col-move-dragging * {
   cursor: not-allowed;
 }
 
+/* 主行动旁的 ghost 次要动作（设计 .op-pub 的透明变体，如节点行内「状态」）。
+   选择器带 .op-pub 前缀：文件后段另有一份 .op-pub 规则会覆盖同名单类选择器 */
+.op-pub.op-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+}
+.op-pub.op-ghost:hover {
+  background: var(--accent-bg);
+  border-color: oklch(56% 0.16 210 / 30%);
+  color: var(--accent);
+}
+
 /* 目标汇总行的「待验证」分支（设计：warning 600，数字更深） */
 .tg-sum-pending,
 .tg-sum-pending b {
@@ -3675,4 +3688,179 @@ th.resizable {
   background: oklch(55% 0.18 28 / 8%);
   border-color: oklch(55% 0.18 28 / 20%);
   color: var(--danger);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   统一管理 · 最大化面板 Tab 内容解剖（central-management-parity 批次 A 外观对齐）
+   基线：docs/ui/Live-Artifact-5/proposal-c/central.html 状态二（`.max-panel` 内 `.dbody.tab-body`）
+   作用域 = `.max-panel .dbody`，不影响面板外同名类（Tab 卡片的样式另有任务）。
+   级联裁决：CentralList.vue 的 scoped `:deep(.dbody)`（3 类）/ `:deep(.node-table)`（3 类）段
+   带 !important，本段一律 4 类选择器（`.max-panel .dbody .<node-actions|node-table>`）压过，
+   冲突属性同时带 !important，避免与构建顺序耦合。
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+.max-panel .dbody {
+  padding: 14px 16px 16px !important;
+}
+
+/* ── 工具条 = 设计 .tab-toolbar / .tool-btn ── */
+.max-panel .dbody .node-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+/* 设计 .tool-btn：高 30、12px/400、浅底 + 1px 边（含「添加 X」——不是实心 accent） */
+.max-panel .dbody .node-actions .ant-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  height: 30px !important;
+  padding: 0 10px !important;
+  font-size: 12px !important;
+  font-weight: 400 !important;
+  line-height: 1 !important;
+  border-radius: var(--radius-sm) !important;
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--fg) !important;
+  box-shadow: none !important;
+}
+.max-panel .dbody .node-actions .ant-btn-primary {
+  background: var(--surface) !important;
+  border-color: var(--border) !important;
+  color: var(--fg) !important;
+}
+/* 设计 .tool-btn:hover：边框/文字转 accent + 淡 accent 底（压过 .ant-btn-primary:hover 的实心） */
+.max-panel .dbody .node-actions .ant-btn:hover {
+  background: var(--accent-bg) !important;
+  border-color: var(--accent) !important;
+  color: var(--accent) !important;
+}
+.max-panel .dbody .node-actions .ant-btn-dangerous {
+  color: var(--danger) !important;
+}
+.max-panel .dbody .node-actions .ant-btn-dangerous:hover {
+  background: oklch(55% 0.18 28 / 8%) !important;
+  border-color: var(--danger) !important;
+  color: var(--danger) !important;
+}
+.max-panel .dbody .node-actions .ant-btn:disabled {
+  opacity: 0.45 !important;
+  cursor: not-allowed !important;
+}
+.max-panel .dbody .node-actions .ant-divider-vertical {
+  border-color: var(--border) !important;
+  height: 18px !important;
+  margin: 0 4px !important;
+}
+.max-panel .dbody .node-actions .toolbar-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ── 表格解剖 = 设计 .l5-table ── */
+.max-panel .dbody .node-table {
+  margin-top: 0;
+}
+/* 表头：--bg 灰底、去大写、9×12 内距、11px/600 muted（设计 .l5-table thead th） */
+.max-panel .dbody .node-table .ant-table-thead > tr > th {
+  background: var(--bg) !important;
+  text-transform: none !important;
+  padding: 9px 12px !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.05em;
+  color: var(--muted) !important;
+  border-bottom: 1px solid var(--border) !important;
+  white-space: nowrap;
+}
+/* 设计无表头竖线（列拖拽把手右缘短线保留，见 .col-resize-handle） */
+.max-panel .dbody .node-table .ant-table-thead > tr > th::before {
+  display: none !important;
+}
+/* 单元格：10×12 内距（设计 .l5-table tbody td 实测 10px 12px）、13px/1.5、行下边线 */
+.max-panel .dbody .node-table .ant-table-tbody > tr > td {
+  padding: 10px 12px !important;
+  font-size: 13px;
+  line-height: 1.5;
+  background: transparent !important;
+  border-bottom: 1px solid var(--border) !important;
+}
+.max-panel .dbody .node-table .ant-table-tbody > tr:last-child > td {
+  border-bottom: none !important;
+}
+/* 行悬停 accent 4%（设计 .l5-table tbody tr:hover td） */
+.max-panel .dbody .node-table .ant-table-tbody > tr:hover > td {
+  background: oklch(56% 0.16 210 / 4%) !important;
+}
+/* 选择列 40px（设计 tab-body 表无勾选列，此处按设计 # 列/勾选列并列的总宽配额收窄） */
+.max-panel .dbody .node-table .ant-table-selection-column {
+  width: 40px;
+}
+/* 单元格内按钮：设计行内动作高 24（.op-pub / .op-btn） */
+.max-panel .dbody .node-table .ant-table-tbody .ant-btn {
+  height: 24px !important;
+  padding: 0 8px !important;
+  font-size: 12px !important;
+  border-radius: var(--radius-sm) !important;
+}
+/* 行内动作容器 = 设计 .ops（主行动 + ⋯ 锚点，gap 2）。列表页同名类作用域在
+   `.table-container.l5-card`，面板内需在此独立声明，保持与独立页同构的标记结构 */
+.max-panel .dbody .node-table .action-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+/* ⋯ 触发器（设计 .menu-anchor .op-btn）：无边框透明 26×24 锚点 + 12px 三圆横排。
+   须 6 类选择器 + !important 压过上面的 `.ant-table-tbody .ant-btn` 与 CentralList 的
+   `:deep(.dbody) .ant-btn`（带 !important 的 3 类） */
+.max-panel .dbody .node-table .ant-table-tbody .action-trigger-btn {
+  width: 26px !important;
+  min-width: 26px !important;
+  height: 24px !important;
+  padding: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border: 1px solid transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--muted) !important;
+  border-radius: var(--radius-sm) !important;
+}
+.max-panel .dbody .node-table .ant-table-tbody .action-trigger-btn:hover {
+  background: var(--accent-bg) !important;
+  color: var(--accent) !important;
+  border-color: oklch(56% 0.16 210 / 30%) !important;
+}
+
+/* ── 分页条（components/ListPager.vue）：设计 tab-body 内嵌形态，无上边框 ── */
+.max-panel .dbody .l5-pager {
+  border-top: none;
+  padding: 12px 0 0;
+}
+
+/* 设计无单元格竖线（三条形内）：grid-table 的全站竖线在面板内豁免，列拖拽握把线
+   （.col-resize-handle::after）保留为设计 .resizable::after 的等价物 */
+.max-panel .dbody .node-table.grid-table .ant-table-cell {
+  border-right: none !important;
+}
+/* 表头行高回设计值（设计 th 35–38）：选择列表头的 antd 复选框行盒（22px）会把 9px 内距的
+   表头撑到 41px——同列表页 r5-④-4.4 的修法，块级 flex + 19px 去掉 inline 行盒基线附加值 */
+.max-panel .dbody .node-table .ant-table-thead .ant-checkbox-wrapper {
+  line-height: 1;
+  font-size: 0;
+  display: flex;
+  align-items: center;
+}
+.max-panel .dbody .node-table .ant-table-thead .ant-table-selection {
+  display: flex;
+  align-items: center;
+  height: 19px;
+  line-height: 0;
 }

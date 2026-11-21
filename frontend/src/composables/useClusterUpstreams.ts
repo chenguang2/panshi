@@ -376,7 +376,7 @@ export function useClusterUpstreams(options: {
           lastPublishStatus: (record.last_publish_status as string | null | undefined) ?? null,
         }),
     },
-    { title: '操作', key: 'actions', width: 340 },
+    { title: '操作', key: 'actions', width: 120 },
   ]
 
   const upstreamCfg = useColumnConfig({

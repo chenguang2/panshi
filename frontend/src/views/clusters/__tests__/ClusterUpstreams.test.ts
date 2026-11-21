@@ -9,6 +9,8 @@ const mockDeleteUpstreams = vi.fn()
 const mockSelectUpstreams = vi.fn()
 const mockCloseUpstreamModal = vi.fn()
 const mockPublishUpstreamByRecord = vi.fn()
+// 列配置「行动作按钮集」可变持有者 + 行内动作统一入口（parity 批 B：行内收敛为「发布 + ⋯」）
+const mockUpstreamState = vi.hoisted(() => ({ actions: [] as string[], handleAction: vi.fn() }))
 
 // 共享 ref，测试可导入修改以驱动模板标题
 export const mockCopyingUpstream = ref(false)
@@ -45,7 +47,7 @@ vi.mock('@/composables/useClusterUpstreams', () => ({
     upstreamColumnsSelected: ref(['name', 'load_balance', 'targets', 'version', 'actions']),
     upstreamSearchVisible: ref(true),
     allUpstreamActionButtons: [],
-    upstreamActionsSelected: ref([]),
+    upstreamActionsSelected: ref(mockUpstreamState.actions),
     visibleUpstreamColumns: [
       { title: '名称', dataIndex: 'name', key: 'name' },
       { title: '目标节点', key: 'targets' },
@@ -67,7 +69,7 @@ vi.mock('@/composables/useClusterUpstreams', () => ({
     addUpstreamTarget: vi.fn(),
     removeUpstreamTarget: vi.fn(),
     getUpstreamActionButtonTitle: (k: string) => k,
-    handleUpstreamAction: vi.fn(),
+    handleUpstreamAction: mockUpstreamState.handleAction,
     toggleChecks: vi.fn(),
     toggleTimeout: vi.fn(),
     togglePool: vi.fn(),
@@ -157,7 +159,7 @@ function makeCluster(overrides: Partial<Cluster> = {}): Cluster {
   } as Cluster
 }
 
-async function mountClusterUpstreams(cluster: Cluster) {
+async function mountClusterUpstreams(cluster: Cluster, customStubs: Record<string, unknown> = stubs) {
   const ClusterUpstreams = (await import('../ClusterUpstreams.vue')).default
   return mount(ClusterUpstreams, {
     props: {
@@ -165,7 +167,7 @@ async function mountClusterUpstreams(cluster: Cluster) {
       clusters: [cluster],
       openPublishModal: async () => [],
     },
-    global: { stubs },
+    global: { stubs: customStubs },
   })
 }
 
@@ -195,46 +197,35 @@ describe('ClusterUpstreams.vue batch delete', () => {
     expect(cluster.selectedUpstream).toBe(record)
   })
 
-  it('shows 删除上游(N) and calls deleteUpstreams when batch keys present', async () => {
-    const cluster = makeCluster({ selectedUpstreamKeys: [1, 2], selectedUpstream: null })
+  // 批 A/B（central-management-parity）：工具栏只留「添加上游」+「删除上游(N)」批量入口 +「列配置」；
+  // 复制/编辑/删除/发布/版本管理收进行内「发布 + ⋯」菜单（#217 断言反转）。
+  it('工具栏只留「添加上游」+ 批量删除 + 列配置：行内重复动作按钮已下线（批 A/B）', async () => {
+    const cluster = makeCluster({ selectedUpstreamKeys: [1, 2], selectedUpstream: makeUpstream({ id: 1 }) })
     const wrapper = await mountClusterUpstreams(cluster)
-    const buttons = wrapper.findAll('.mock-btn')
-    const deleteBtn = buttons.find((b) => b.text().includes('删除'))
-    expect(deleteBtn?.text()).toContain('删除')
-    expect(deleteBtn?.text()).toContain('2')
-    await deleteBtn?.trigger('click')
-    expect(mockDeleteUpstreams).toHaveBeenCalledWith(cluster)
+    const toolbar = wrapper.find('.node-actions')
+    expect(toolbar.exists()).toBe(true)
+    const labels = toolbar.findAll('button.mock-btn').map((b) => b.text())
+    expect(labels).toEqual(['添加上游', '删除上游(2)', '列配置'])
+    for (const gone of ['编辑上游', '删除上游', '发布', '版本管理']) {
+      expect(labels, `工具栏不应再有「${gone}」`).not.toContain(gone)
+    }
+    // 未点击前不触发删除
+    expect(mockDeleteUpstreams).not.toHaveBeenCalled()
+    expect(mockDeleteUpstream).not.toHaveBeenCalled()
   })
 
-  it('calls deleteUpstream (single) when no batch keys', async () => {
-    const cluster = makeCluster({ selectedUpstreamKeys: [], selectedUpstream: makeUpstream({ id: 1 }) })
-    const wrapper = await mountClusterUpstreams(cluster)
-    const buttons = wrapper.findAll('.mock-btn')
-    const deleteBtn = buttons.find((b) => b.text().includes('删除'))
-    await deleteBtn?.trigger('click')
-    expect(mockDeleteUpstream).toHaveBeenCalledWith(cluster)
-  })
+  it('批量删除按钮：选中多条 → deleteUpstreams；未选禁用', async () => {
+    const multi = makeCluster({ selectedUpstreamKeys: [1, 2] })
+    const w1 = await mountClusterUpstreams(multi)
+    const btn = w1.find('.node-actions').findAll('button.mock-btn')[1]
+    expect(btn.attributes('disabled')).toBeUndefined()
+    await btn.trigger('click')
+    expect(mockDeleteUpstreams).toHaveBeenCalledWith(multi)
+    w1.unmount()
 
-  it('disables single-selection buttons when 2+ rows checked (P2)', async () => {
-    const cluster = makeCluster({
-      selectedUpstreamKeys: [1, 2],
-      selectedUpstream: makeUpstream({ id: 1 }),
-    })
-    const wrapper = await mountClusterUpstreams(cluster)
-    const buttons = wrapper.findAll('.mock-btn')
-    const editBtn = buttons.find((b) => b.text().includes('编辑'))
-    expect(editBtn?.attributes('disabled')).toBeDefined()
-  })
-
-  it('keeps single-selection buttons enabled when 1 row checked', async () => {
-    const cluster = makeCluster({
-      selectedUpstreamKeys: [1],
-      selectedUpstream: makeUpstream({ id: 1 }),
-    })
-    const wrapper = await mountClusterUpstreams(cluster)
-    const buttons = wrapper.findAll('.mock-btn')
-    const editBtn = buttons.find((b) => b.text().includes('编辑'))
-    expect(editBtn?.attributes('disabled')).toBeUndefined()
+    const none = makeCluster({ selectedUpstreamKeys: [] })
+    const w2 = await mountClusterUpstreams(none)
+    expect(w2.find('.node-actions').findAll('button.mock-btn')[1].attributes('disabled')).toBeDefined()
   })
 })
 
@@ -287,22 +278,20 @@ describe('ClusterUpstreams.vue 勾选同步与行高亮 (4.1)', () => {
   const getToolbarBtn = (wrapper: any, label: string) =>
     wrapper.findAll('.mock-btn').find((b: any) => b.text().includes(label))
 
-  it('勾选 1 行且单选已同步：编辑/发布/版本管理可用', async () => {
-    const cluster = makeCluster({
-      selectedUpstreamKeys: [1],
-      selectedUpstream: makeUpstream({ id: 1 }),
-    })
-    const wrapper = await mountClusterUpstreams(cluster)
-    for (const label of ['编辑', '发布', '版本管理']) {
-      expect(getToolbarBtn(wrapper, label)?.attributes('disabled')).toBeUndefined()
-    }
-  })
-
-  it('勾选 1 行但单选缺失（跨页勾选 rows 缺行）：单选按钮维持禁用', async () => {
-    const cluster = makeCluster({ selectedUpstreamKeys: [9], selectedUpstream: null })
-    const wrapper = await mountClusterUpstreams(cluster)
-    for (const label of ['编辑', '发布', '版本管理']) {
-      expect(getToolbarBtn(wrapper, label)?.attributes('disabled')).toBeDefined()
+  // 批 A：工具栏不再有编辑/发布/版本管理按钮（原「单选用/跨页勾选仍禁用」用例失去被测对象，
+  // 断言反转为「这些按钮不存在」——勾选态仍由 row-selection 与行内动作承接）。
+  it('勾选态不再驱动任何工具栏动作按钮（按钮已下线）', async () => {
+    const cases = [
+      { selectedUpstreamKeys: [1], selectedUpstream: makeUpstream({ id: 1 }) },
+      { selectedUpstreamKeys: [9], selectedUpstream: null },
+    ]
+    for (const overrides of cases) {
+      const cluster = makeCluster(overrides)
+      const wrapper = await mountClusterUpstreams(cluster)
+      for (const label of ['编辑', '发布', '版本管理']) {
+        expect(getToolbarBtn(wrapper, label), `工具栏不应再有「${label}」`).toBeUndefined()
+      }
+      wrapper.unmount()
     }
   })
 
@@ -462,5 +451,79 @@ describe('ClusterUpstreams.vue 表单误关保护与保存按钮 (4.4/4.8)', () 
       (b) => b.textContent === '创建',
     )
     expect(createBtn).toBeUndefined()
+  })
+})
+
+// ── central-management-parity 批 B：行内动作收敛为「主行动 + ⋯」三栏菜单 ──
+describe('ClusterUpstreams.vue 行内动作收敛（parity 批 B）', () => {
+  const rowStubs = {
+    ...stubs,
+    ADropdown: { template: '<div class="mock-dropdown"><slot /><slot name="overlay" /></div>' },
+    AMenu: { template: '<div class="mock-menu"><slot /></div>' },
+    AMenuItem: {
+      template: '<div class="mock-menu-item" :class="{ danger }" @click="$emit(\'click\', $event)"><slot /></div>',
+      props: { danger: { type: Boolean, default: false } },
+      emits: ['click'],
+    },
+    AMenuDivider: { template: '<hr class="mock-menu-sep" />' },
+    ATable: {
+      name: 'MenuTable',
+      template:
+        '<div class="mock-table"><div v-for="r in dataSource" :key="r.id" class="mock-tr"><slot name="bodyCell" :column="{ key: \'actions\' }" :record="r" :index="0" /></div></div>',
+      props: ['rowSelection', 'customRow', 'dataSource', 'columns', 'rowClassName'],
+    },
+  }
+
+  const record = makeUpstream({ id: 9, name: 'u9' })
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockUpstreamState.actions = ['copy', 'edit', 'publish', 'version', 'delete']
+  })
+
+  it('行内只有「发布」（op-pub）+「⋯」；复制/编辑/删除/版本管理进菜单三栏', async () => {
+    const cluster = makeCluster({ upstreams: [record] })
+    const wrapper = await mountClusterUpstreams(cluster, rowStubs)
+    const row = wrapper.find('.mock-tr')
+
+    expect(row.find('button.op-pub').text()).toBe('发布')
+    const triggers = row.findAll('button.mock-btn')
+    expect(triggers.length, '行内不再平铺多颗按钮').toBe(1)
+    expect(triggers[0].classes()).toContain('action-trigger-btn')
+
+    const items = row.findAll('.mock-menu-item')
+    expect(
+      items.map((i) => {
+        const main = i.find('span')
+        return main.exists() ? main.text() : i.text()
+      }),
+    ).toEqual(['复制', '编辑', '删除', '版本管理'])
+    expect(row.findAll('.mock-menu-sep').length).toBe(2)
+    expect(items[2].classes()).toContain('danger')
+    expect(items[2].text()).toContain('删平台配置，可同步删 Edge 已发布配置（弹窗可选）')
+    expect(items[3].text()).toContain('历史版本查看与回滚')
+  })
+
+  it('点击动作走既有 handleUpstreamAction（record 级入口）', async () => {
+    const cluster = makeCluster({ upstreams: [record] })
+    const wrapper = await mountClusterUpstreams(cluster, rowStubs)
+    const row = wrapper.find('.mock-tr')
+
+    await row.find('button.op-pub').trigger('click')
+    expect(mockUpstreamState.handleAction).toHaveBeenCalledWith(cluster, record, 'publish')
+    const items = row.findAll('.mock-menu-item')
+    await items[0].trigger('click')
+    expect(mockUpstreamState.handleAction).toHaveBeenLastCalledWith(cluster, record, 'copy')
+  })
+
+  it('列配置未勾选的动作不进菜单（配置语义保留）', async () => {
+    mockUpstreamState.actions = ['publish']
+    const cluster = makeCluster({ upstreams: [record] })
+    const wrapper = await mountClusterUpstreams(cluster, rowStubs)
+    const row = wrapper.find('.mock-tr')
+    expect(row.find('button.op-pub').exists()).toBe(true)
+    expect(row.findAll('.mock-menu-item').length).toBe(0)
+    expect(row.findAll('button.mock-btn').length).toBe(0)
   })
 })

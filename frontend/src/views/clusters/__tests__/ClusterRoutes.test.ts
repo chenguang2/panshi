@@ -19,6 +19,7 @@ const mockPublishRouteByRecord = vi.fn()
 const mockState = vi.hoisted(() => ({
   visibleRouteColumns: [{ title: '名称', dataIndex: 'name', key: 'name' }] as Array<Record<string, unknown>>,
   routeActionsSelected: [] as string[],
+  handleRouteAction: vi.fn(),
 }))
 
 vi.mock('@/composables/useClusterRoutes', () => ({
@@ -46,7 +47,7 @@ vi.mock('@/composables/useClusterRoutes', () => ({
     getClusterUpstreams: () => [],
     getUpstreamName: () => '',
     getActionButtonTitle: (k: string) => k,
-    handleRouteAction: vi.fn(),
+    handleRouteAction: mockState.handleRouteAction,
     selectRoute: vi.fn(),
     selectRoutes: (cluster: any, keys: any, rows: any) => mockSelectRoutes(cluster, keys, rows),
     isDnsRoute: (r: any) => mockIsDnsRoute(r),
@@ -171,7 +172,7 @@ describe('ClusterRoutes.vue batch delete', () => {
     expect(rs.getCheckboxProps(cluster.routes[1]).disabled).toBe(false)
   })
 
-  it('row click toggles selection: 首点选中（keys 同步+计数 1+行高亮），再点取消（batch1 组5 5.3）', async () => {
+  it('row click toggles selection: 首点选中（keys 同步 + 行高亮），再点取消（batch1 组5 5.3）', async () => {
     const record = { id: 1, edge_uuid: 'e1', cluster_id: 1, name: 'r1', uri: '/a', priority: 0, status: 1, plugins: [] }
     const cluster = makeCluster({ routes: [record] })
     const wrapper = await mountClusterRoutes(cluster)
@@ -179,14 +180,12 @@ describe('ClusterRoutes.vue batch delete', () => {
     const customRow = table.props('customRow') as any
     const rowClassName = table.props('rowClassName') as (r: unknown) => string
 
-    // 首点：选中（单选载体 + 多选 keys 同步，工具栏计数联动）
+    // 首点：选中（单选载体 + 多选 keys 同步）
     customRow(record).onClick()
     await wrapper.vm.$nextTick()
     expect(cluster.selectedRoute).toBe(record)
     expect(cluster.selectedRouteKeys).toEqual([1])
     expect(rowClassName(record)).toBe('row-selected')
-    const deleteBtn = wrapper.findAll('.mock-btn').find((b) => b.text().includes('删除'))
-    expect(deleteBtn?.text()).toContain('1')
 
     // 再点同一行：取消选中
     customRow(record).onClick()
@@ -219,26 +218,40 @@ describe('ClusterRoutes.vue batch delete', () => {
     expect(rowClassName(record)).toBe('')
   })
 
-  it('shows 删除(N) and calls deleteRoutes when batch keys present', async () => {
-    const cluster = makeCluster({ selectedRouteKeys: [1, 2], selectedRoute: null })
-    const wrapper = await mountClusterRoutes(cluster)
-    const buttons = wrapper.findAll('.mock-btn')
-    const deleteBtn = buttons.find((b) => b.text().includes('删除'))
-    expect(deleteBtn?.text()).toContain('删除')
-    expect(deleteBtn?.text()).toContain('2')
-    await deleteBtn?.trigger('click')
-    expect(mockDeleteRoutes).toHaveBeenCalledWith(cluster)
-  })
-
-  it('disables single-selection buttons when 2+ rows checked (P2)', async () => {
+  // 批 A/B（central-management-parity）：工具栏只留「添加路由」+「删除路由(N)」批量入口 +「列配置」；
+  // 复制/编辑/删除/发布/版本管理收进行内「发布 + ⋯」菜单（#217 断言反转）。
+  it('工具栏只留「添加路由」+ 批量删除 + 列配置：行内重复动作按钮已下线（批 A/B）', async () => {
     const cluster = makeCluster({
       selectedRouteKeys: [1, 2],
       selectedRoute: { id: 1, edge_uuid: 'e1', cluster_id: 1, name: 'r1', uri: '/a', priority: 0, status: 1 },
     })
     const wrapper = await mountClusterRoutes(cluster)
-    const buttons = wrapper.findAll('.mock-btn')
-    const editBtn = buttons.find((b) => b.text().includes('编辑'))
-    expect(editBtn?.attributes('disabled')).toBeDefined()
+    const toolbar = wrapper.find('.node-actions')
+    expect(toolbar.exists()).toBe(true)
+    const labels = toolbar.findAll('button.mock-btn').map((b) => b.text())
+    expect(labels).toEqual(['添加路由', '删除路由(2)', '列配置'])
+    for (const gone of ['复制路由', '编辑路由', '发布', '版本管理']) {
+      expect(labels, `工具栏不应再有「${gone}」`).not.toContain(gone)
+    }
+    // 未点击前不触发删除
+    expect(mockDeleteRoutes).not.toHaveBeenCalled()
+    expect(mockDeleteRoute).not.toHaveBeenCalled()
+  })
+
+  it('批量删除按钮：选中多条 → deleteRoutes；未选禁用', async () => {
+    const multi = makeCluster({ selectedRouteKeys: [1, 2] })
+    const w1 = await mountClusterRoutes(multi)
+    const btn = w1.find('.node-actions').findAll('button.mock-btn')[1]
+    expect(btn.attributes('disabled')).toBeUndefined()
+    await btn.trigger('click')
+    expect(mockDeleteRoutes).toHaveBeenCalledWith(multi)
+    expect(mockDeleteRoute).not.toHaveBeenCalled()
+    w1.unmount()
+
+    const none = makeCluster({ selectedRouteKeys: [] })
+    const w2 = await mountClusterRoutes(none)
+    const btn2 = w2.find('.node-actions').findAll('button.mock-btn')[1]
+    expect(btn2.attributes('disabled')).toBeDefined()
   })
 })
 
@@ -458,21 +471,28 @@ describe('ClusterRoutes.vue DNS 行操作禁用与指路（batch1 7.9 Tab 对齐
     const rows = wrapper.findAll('.mock-tr')
     expect(rows.length).toBe(2)
 
+    // DNS 行 = 发布（原生 .op-pub，禁用）+ ⋯ 触发器（a-button 桩，禁用），两枚都带指路 tooltip
+    const dnsPublish = rows[0].find('button.op-pub')
+    expect(dnsPublish.exists()).toBe(true)
+    expect(dnsPublish.attributes('disabled'), 'DNS 行「发布」应禁用').toBeDefined()
     const dnsBtns = rows[0].findAll('button.mock-btn')
-    expect(dnsBtns.length).toBeGreaterThan(0)
+    expect(dnsBtns.length).toBe(1)
     for (const b of dnsBtns) {
-      expect(b.attributes('disabled'), 'DNS 行按钮应禁用').toBeDefined()
+      expect(b.attributes('disabled'), 'DNS 行「⋯」应禁用').toBeDefined()
     }
-    expect(rows[0].findAll('.mock-tooltip[title="' + DNS_HINT + '"]').length).toBe(dnsBtns.length)
+    expect(rows[0].findAll('.mock-tooltip[title="' + DNS_HINT + '"]').length).toBe(2)
 
-    const normalBtns = rows[1].findAll('button.mock-btn')
-    for (const b of normalBtns) {
+    // 非 DNS 行：发布可用、⋯ 可用、无指路 tooltip
+    const normalPublish = rows[1].find('button.op-pub')
+    expect(normalPublish.exists()).toBe(true)
+    expect(normalPublish.attributes('disabled'), '非 DNS 行「发布」应可用').toBeUndefined()
+    for (const b of rows[1].findAll('button.mock-btn')) {
       expect(b.attributes('disabled'), '非 DNS 行按钮应可用').toBeUndefined()
     }
     expect(rows[1].findAll('.mock-tooltip[title="' + DNS_HINT + '"]').length).toBe(0)
   })
 
-  it('工具栏：选中 DNS 行后 复制/编辑/发布/版本管理/删除路由 禁用 + tooltip 指路（添加路由不受限）', async () => {
+  it('工具栏：批量删除保留（DNS 选中时禁用 + 指路）', async () => {
     const dnsRoute = makeRoute({ id: 1, plugins: [{ plugin_name: 'dns_upstream' }] })
     const cluster = makeCluster({ routes: [dnsRoute], selectedRoute: dnsRoute, selectedRouteKeys: [1] })
     const wrapper = await mountClusterRoutes(cluster, dnsStubs)
@@ -480,15 +500,94 @@ describe('ClusterRoutes.vue DNS 行操作禁用与指路（batch1 7.9 Tab 对齐
 
     const toolbar = wrapper.find('.node-actions')
     expect(toolbar.exists()).toBe(true)
-
-    const btn = (label: string) => toolbar.findAll('button.mock-btn').find((b) => b.text() === label)
-    const labels = ['复制路由', '编辑路由', '发布', '版本管理', '删除路由(1)']
-    for (const label of labels) {
-      expect(btn(label), `工具栏应有「${label}」按钮`).toBeDefined()
-      expect(btn(label)!.attributes('disabled'), `${label} 选中 DNS 行时应禁用`).toBeDefined()
+    const labels = toolbar.findAll('button.mock-btn').map((b) => b.text())
+    expect(labels).toEqual(['添加路由', '删除路由(1)', '列配置'])
+    for (const gone of ['复制路由', '编辑路由', '发布', '版本管理']) {
+      expect(labels, `工具栏不应再有「${gone}」`).not.toContain(gone)
     }
-    // 5 个受限按钮全部带指路 tooltip；添加路由不受限
-    expect(toolbar.findAll('.mock-tooltip[title="' + DNS_HINT + '"]').length).toBe(labels.length)
-    expect(btn('添加路由')!.attributes('disabled')).toBeUndefined()
+    // DNS 选中时批量删除禁用并带指路 tooltip（删除 toast 守卫仍兜底）
+    const delBtn = toolbar.findAll('button.mock-btn')[1]
+    expect(delBtn.attributes('disabled')).toBeDefined()
+    expect(toolbar.findAll('.mock-tooltip[title="' + DNS_HINT + '"]').length).toBe(1)
+  })
+})
+
+// ── central-management-parity 批 B：行内动作收敛为「主行动 + ⋯」三栏菜单 ──
+describe('ClusterRoutes.vue 行内动作收敛（parity 批 B）', () => {
+  const rowStubs = {
+    ...stubs,
+    ADropdown: { template: '<div class="mock-dropdown"><slot /><slot name="overlay" /></div>' },
+    AMenu: { template: '<div class="mock-menu"><slot /></div>' },
+    AMenuItem: {
+      template: '<div class="mock-menu-item" :class="{ danger }" @click="$emit(\'click\', $event)"><slot /></div>',
+      props: { danger: { type: Boolean, default: false } },
+      emits: ['click'],
+    },
+    AMenuDivider: { template: '<hr class="mock-menu-sep" />' },
+    ATable: {
+      name: 'MenuTable',
+      template:
+        '<div class="mock-table"><div v-for="r in dataSource" :key="r.id" class="mock-tr"><slot name="bodyCell" :column="{ key: \'actions\' }" :record="r" :index="0" /></div></div>',
+      props: ['rowSelection', 'customRow', 'dataSource', 'rowClassName'],
+    },
+  }
+
+  const record = { id: 7, edge_uuid: 'e7', cluster_id: 1, name: 'r7', uri: '/a', priority: 0, status: 1, plugins: [] }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockState.routeActionsSelected = ['copy', 'edit', 'publish', 'version', 'delete']
+  })
+
+  it('行内只有「发布」（op-pub）+「⋯」；复制/编辑/删除/版本管理进菜单三栏', async () => {
+    const cluster = makeCluster({ routes: [record] })
+    const wrapper = await mountClusterRoutes(cluster, rowStubs)
+    const row = wrapper.find('.mock-tr')
+
+    expect(row.find('button.op-pub').text()).toBe('发布')
+    const triggers = row.findAll('button.mock-btn')
+    expect(triggers.length, '行内不再平铺多颗按钮').toBe(1)
+    expect(triggers[0].classes(), '⋯ 用 action-trigger-btn 无边框锚点').toContain('action-trigger-btn')
+
+    const items = row.findAll('.mock-menu-item')
+    expect(
+      items.map((i) => {
+        const main = i.find('span')
+        return main.exists() ? main.text() : i.text()
+      }),
+    ).toEqual(['复制路由', '编辑', '删除', '版本管理'])
+    // 三栏：CRUD → 危险（红 + 常驻解释）→ 动作
+    expect(row.findAll('.mock-menu-sep').length).toBe(2)
+    expect(items[2].classes()).toContain('danger')
+    expect(items[2].text()).toContain('删平台配置，可同步删 Edge 已发布配置（弹窗可选）')
+    expect(items[3].text()).toContain('历史版本查看与回滚')
+  })
+
+  it('点击动作走既有 handleRouteAction（record 级入口，未改业务语义）', async () => {
+    const cluster = makeCluster({ routes: [record] })
+    const wrapper = await mountClusterRoutes(cluster, rowStubs)
+    const row = wrapper.find('.mock-tr')
+
+    await row.find('button.op-pub').trigger('click')
+    expect(mockState.handleRouteAction).toHaveBeenCalledWith(cluster, record, 'publish')
+
+    const items = row.findAll('.mock-menu-item')
+    await items[0].trigger('click')
+    expect(mockState.handleRouteAction).toHaveBeenLastCalledWith(cluster, record, 'copy')
+    await items[2].trigger('click')
+    expect(mockState.handleRouteAction).toHaveBeenLastCalledWith(cluster, record, 'delete')
+    await items[3].trigger('click')
+    expect(mockState.handleRouteAction).toHaveBeenLastCalledWith(cluster, record, 'version')
+  })
+
+  it('列配置未勾选的动作不进菜单（配置语义保留）', async () => {
+    mockState.routeActionsSelected = ['publish']
+    const cluster = makeCluster({ routes: [record] })
+    const wrapper = await mountClusterRoutes(cluster, rowStubs)
+    const row = wrapper.find('.mock-tr')
+    expect(row.find('button.op-pub').exists()).toBe(true)
+    expect(row.findAll('.mock-menu-item').length).toBe(0)
+    expect(row.findAll('button.mock-btn').length).toBe(0)
   })
 })

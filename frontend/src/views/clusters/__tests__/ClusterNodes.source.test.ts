@@ -40,10 +40,12 @@ describe('ClusterNodes 措辞守卫（batch2 1.4 / D9）', () => {
 
 // ── 列个性化守卫（cluster-tab-column-personalization 2.2/2.3）──
 describe('ClusterNodes 列个性化接入守卫', () => {
-  it('表体解剖与独立列表页同构：共享竖线类 + 横向滚动 + 固定布局', () => {
+  it('表体解剖与独立列表页同构：共享竖线类 + 数值最小宽横向滚动 + 固定布局', () => {
     const s = src()
     expect(s).toContain('class="node-table grid-table"')
-    expect(s).toContain(':scroll="{ x: \'max-content\' }"')
+    // #83：禁止 x:'max-content'（窄窗口必溢），改数值最小总宽（设计 1076）
+    expect(s).toContain(':scroll="{ x: 1076 }"')
+    expect(s).not.toContain("x: 'max-content'")
     expect(s).toContain(':table-layout="\'fixed\'"')
   })
 
@@ -66,5 +68,88 @@ describe('ClusterNodes 列个性化接入守卫', () => {
     expect(s).toContain('@reset-widths="handleResetColumnWidths"')
     expect(s).toContain('width-resettable')
     expect(s).toContain('resetNodeColumnWidths()')
+  })
+})
+
+// ── central-management-parity 批次 A（最大化面板 Tab 外观对齐）──
+describe('ClusterNodes 最大化面板 Tab 解剖守卫（parity 批 A）', () => {
+  it('首列 # 序号（勾选列之后、恒展示、不进列配置勾选项）', () => {
+    const s = src()
+    expect(s).toContain("{ title: '#', key: 'index', width: 45, align: 'center' as const }")
+    expect(s).toContain('...toValue(visibleNodeColumns)')
+    // 序号列不进列配置的 all-columns / columns 勾选项
+    expect(s).not.toMatch(/allNodeColumns\s*=\s*\[[\s\S]*key: 'index'/)
+  })
+
+  it('序号公式 = 后端分页跨页连续 (page-1)*pageSize + index + 1', () => {
+    const s = src()
+    expect(s).toContain('((pag?.page || 1) - 1) * (pag?.pageSize || 20) + index + 1')
+    expect(s).toContain('<span class="c-idx">{{ rowIndexLabel(cluster, index) }}</span>')
+  })
+
+  it('分页改表外 ListPager（a-table :pagination="false"），单位「个节点」', () => {
+    const s = src()
+    expect(s).toContain(':pagination="false"')
+    expect(s).not.toContain('paginationProps(cluster.nodesPagination)')
+    expect(s).toContain('<ListPager')
+    expect(s).toContain('unit="个节点"')
+    expect(s).toContain('@change="onNodePageChange"')
+  })
+
+  it('排序仍走 handleNodeTableChange，且分页值钉住（pagination=false 时 antd 传 {}）', () => {
+    const s = src()
+    expect(s).toContain('handleNodeSortChange(cluster, sorter)')
+    expect(s).toContain('handleNodeTableChange(')
+  })
+
+  it('列配置触发器移入 .toolbar-right（靠右，与设计一致）', () => {
+    const s = src()
+    const rightIdx = s.indexOf('<div class="toolbar-right">')
+    const popIdx = s.indexOf('<ColumnConfigPopover', rightIdx)
+    expect(rightIdx).toBeGreaterThan(-1)
+    expect(popIdx, '列配置应在 .toolbar-right 内（靠右）').toBeGreaterThan(rightIdx)
+  })
+})
+
+// ── central-management-parity 批 B：工具条图标 + 行内动作收敛 ──
+describe('ClusterNodes 工具条图标与行内动作收敛（parity 批 B）', () => {
+  it('添加节点带 plus 图标；启动/停止/重载换 StrokeIcon，▶⏹⟳ 字符退场', () => {
+    const s = src()
+    expect(s).toContain('<StrokeIcon name="plus" :size="13" /> 添加节点')
+    expect(s).toContain('<StrokeIcon name="play" :size="13" /> 启动')
+    expect(s).toContain('<StrokeIcon name="pause" :size="13" /> 停止')
+    expect(s).toContain('<StrokeIcon name="rotate" :size="13" /> 重载')
+    for (const glyph of ['▶', '⏹', '⟳']) {
+      expect(s, `工具条不应再用「${glyph}」字符`).not.toContain(glyph)
+    }
+    // 安装下拉图标与全站 StrokeIcon 同源（不再混用 antd DownOutlined）
+    expect(s).toContain('<StrokeIcon name="chevronDown" :size="13" />')
+    expect(s).not.toContain('<DownOutlined />')
+  })
+
+  it('行内动作收敛为「重载（主行动）+ 状态（ghost）+ ⋯」', () => {
+    const s = src()
+    expect(s).toContain("handleNodeActionWithConfirm(cluster, record, 'reload')")
+    expect(s).toContain('class="op-pub op-ghost"')
+    expect(s).toContain("handleNodeActionWithConfirm(cluster, record, 'status')")
+    expect(s).toContain('class="action-trigger-btn"')
+    expect(s).toContain('<StrokeIcon name="dots" />')
+    // 旧「更多 ▾」文字触发器退场
+    expect(s).not.toContain('更多 <DownOutlined />')
+    expect(s).not.toContain('moreNodeActions')
+  })
+
+  it('⋯ 菜单：三栏分组 + 配置驱动启动/停止 + 安装项按特性开关（配置机制保留）', () => {
+    const s = src()
+    // 恒驻 CRUD（编辑/复制/删除/数据库对比）保证可达性；启动/停止跟随「行动作按钮集」勾选
+    expect(s).toContain("const NODE_MENU_TOGGLEABLE_KEYS = ['start', 'stop']")
+    expect(s).toContain('NODE_MENU_TOGGLEABLE_KEYS.includes(b.key) && selected.has(b.key)')
+    expect(s).toContain("nodeActionsSelected.includes('status')")
+    expect(s).toContain('class="l5-action-menu"')
+    expect(s).toContain('<a-menu-divider v-if="nodeMenuGroups.danger.length" />')
+    expect(s).toContain('<a-menu-divider v-if="nodeMenuGroups.action.length" />')
+    // 行内 ⋯ 安装项直接作用于本行节点（toolbar 入口仍用当前选中节点）
+    expect(s).toContain('@click="handleInstallOpenresty(record)"')
+    expect(s).toContain('@click="() => handleInstallOpenresty()"')
   })
 })
