@@ -358,15 +358,12 @@
           <div v-if="maximizedCluster.activeTab === 'upstreams'" class="tab-content">
             <UpstreamList :scoped-cluster-id="maximizedCluster.id" @refresh="loadClusters" />
           </div>
-          <ClusterRoutes
-            v-else-if="maximizedCluster.activeTab === 'routes'"
-            :cluster="maximizedCluster"
-            :clusters="clusters"
-            :open-publish-modal="openPublishModal"
-            :show-delete-confirm="showDeleteConfirm"
-            :load-plugin-configs="loadPluginConfigs"
-            @refresh="loadClusters"
-          />
+          <div v-if="maximizedCluster.activeTab === 'routes'" class="tab-content">
+            <!-- 路由 Tab = 路由管理页组件的「单集群作用域」形态（同节点/上游做法：一份实现两处挂载）：
+                 隐藏页头/集群与分组筛选/分组切换/集群列，页面级动作「添加路由」改由工具条左侧紧凑钮；
+                 chips / 批量条（含批量删除）/ 表格 / 分页 / 列配置与页面同一份实现。 -->
+            <RouteList :scoped-cluster-id="maximizedCluster.id" @refresh="loadClusters" />
+          </div>
           <ClusterPluginConfigs
             v-else-if="maximizedCluster.activeTab === 'pluginConfigs'"
             :cluster="maximizedCluster"
@@ -536,7 +533,7 @@ import { useClusterStaticResources } from '@/composables/useClusterStaticResourc
 import { PAGE_SIZE_CARD_GRID } from '@/constants'
 import NodeList from '@/views/NodeList.vue'
 import UpstreamList from '@/views/UpstreamList.vue'
-import ClusterRoutes from '@/views/clusters/ClusterRoutes.vue'
+import RouteList from '@/views/RouteList.vue'
 import ClusterPluginConfigs from '@/views/clusters/ClusterPluginConfigs.vue'
 import ClusterGlobalRules from '@/views/clusters/ClusterGlobalRules.vue'
 import ClusterStaticResources from '@/views/clusters/ClusterStaticResources.vue'
@@ -737,12 +734,11 @@ function openStatTab(cluster: Cluster, key: string) {
   handleTabClick(cluster, cluster.activeTab)
 }
 
-// 上游 Tab = UpstreamList 的 scoped 形态（A 试点同一做法），列表由组件自身按作用域集群加载，
-// 故此处不再预拉上游（与节点不同：节点仍预拉，因为集群卡片节点区要渲染节点数据）。
+// 上游/路由 Tab = UpstreamList / RouteList 的 scoped 形态（同一做法），列表由组件自身按作用域集群加载，
+// 故此处不再预拉上游/路由（与节点不同：节点仍预拉，因为集群卡片节点区要渲染节点数据）。
+// 注：useClusterRoutes 仍保留——静态资源 Tab 的路由选择清单（loadRoutes 填充 cluster.routes）仍消费它。
 const handleTabClick = async (cluster: Cluster, key: string) => {
-  if (key === 'routes') {
-    await loadRoutes(cluster)
-  } else if (key === 'nodes') {
+  if (key === 'nodes') {
     await loadNodes(cluster)
   } else if (key === 'pluginConfigs') {
     await loadPluginConfigs(cluster)

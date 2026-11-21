@@ -1,6 +1,10 @@
 <template>
-  <div class="route-list">
-    <PageHeader title="路由管理" description="管理 API 路由规则，配置请求匹配、转发目标和插件">
+  <!-- 单实现双形态（shared-core-plan 2026-11-21，节点/上游试点之后的路由批）：
+       缺省 = 独立列表页（PageHeader + 分组/集群筛选 + 分组|平铺）；
+       传 scopedClusterId = 统一管理最大化面板的「路由」Tab（隐藏页头/分组与集群筛选/分组切换与集群列，
+       页面级动作改由工具条左侧紧凑钮承载，其余（chips/批量条/表格/分页/列配置）与页面同一份实现）。 -->
+  <div class="route-list" :class="{ 'route-list-scoped': isScoped }">
+    <PageHeader v-if="!isScoped" title="路由管理" description="管理 API 路由规则，配置请求匹配、转发目标和插件">
       <template #stats>
         <PageStatBadges :items="headerStatItems" />
       </template>
@@ -9,26 +13,35 @@
       </template>
     </PageHeader>
 
-    <div ref="cardRef" class="table-container l5-card">
+    <div ref="cardRef" class="table-container l5-card" :class="{ 'scope-card': isScoped }">
       <!-- 双行工具条（filter-architecture 方案甲）：第一行 = 下拉筛选（分组/集群/上游/插件/方法）；
-           第二行 = 发布状态 chips（带权威计数，可点即筛）。方法回归下拉单入口，状态不适合藏在下拉里。 -->
+           第二行 = 发布状态 chips（带权威计数，可点即筛）。方法回归下拉单入口，状态不适合藏在下拉里。
+           scoped（面板 Tab）隐藏「分组|平铺」（单集群下无意义，恒平铺）。 -->
       <TableToolbar
         v-model:mode="viewMode"
         :count="totalCount"
         count-unit="条路由"
         :show-count="false"
+        :show-mode="!isScoped"
         :refreshing="loading"
         @refresh="refreshList"
       >
         <template #filters>
+          <!-- scoped：页面级动作（原本在 PageHeader）收敛为工具条左侧紧凑钮（#90 页头动作区规范的 scoped 替代） -->
+          <button v-if="isScoped" class="btn btn-primary btn-sm" data-test="scope-add-route" @click="openCreateModal">
+            <StrokeIcon name="plus" :size="13" /> 添加路由
+          </button>
           <SearchInput
             v-if="searchVisible"
             v-model="searchText"
             placeholder="搜索名称、URI、描述、域名..."
             :width="150"
             @input="onSearch"
+            @search="onSearchSubmit"
           />
+          <!-- 分组/集群筛选仅页面形态（面板恒单集群、恒平铺） -->
           <select
+            v-if="!isScoped"
             v-model="groupFilter"
             :title="groupFilter.startsWith('__') ? '' : groupFilter"
             class="l5-select"
@@ -40,6 +53,7 @@
             <option value="__ung__">未分组</option>
           </select>
           <ClusterSelect
+            v-if="!isScoped"
             v-model="clusterFilter"
             :clusters="filteredClusters"
             allow-all
@@ -52,7 +66,7 @@
             class="l5-select"
             style="width: 104px"
             @change="onFilterChange"
-            :disabled="!upstreams.length && !clusterFilter"
+            :disabled="!upstreams.length && !effectiveClusterId()"
           >
             <option value="">全部上游</option>
             <option v-for="u in upstreams" :key="u.id" :value="u.id">{{ u.name }}</option>
@@ -112,7 +126,7 @@
         </template>
         <template #mode-extra>
           <button
-            v-if="viewMode === 'group'"
+            v-if="!isScoped && viewMode === 'group'"
             type="button"
             class="tool-btn fold-all-btn"
             data-test="toolbar-fold-all"
@@ -145,10 +159,33 @@
         <span class="t-spacer"></span>
       </div>
 
+      <!-- 批量条（mockup .l5-batchbar，与节点/上游同款解剖）：面板旧「删除路由(N)」入口随
+           ClusterRoutes 退场后能力不许丢 → 行选择 + 批量删除补进本共享批量条
+           （页面与面板 Tab 同一实现）。动作集只有「批量删除」：路由没有集合级发布端点。 -->
+      <div class="l5-batchbar" :class="{ 'has-sel': selectedRouteKeys.length > 0 }">
+        <span class="b-count">已选 {{ selectedRouteKeys.length }} 项</span>
+        <span class="b-sep"></span>
+        <button
+          class="btn btn-danger btn-sm need-sel"
+          data-test="batch-delete"
+          :disabled="!selectedRouteKeys.length"
+          @click="handleBatchDelete"
+        >
+          <StrokeIcon name="trash" /> 批量删除<span v-if="selectedRouteKeys.length"
+            >({{ selectedRouteKeys.length }})</span
+          >
+        </button>
+        <span class="b-spacer"></span>
+        <button class="btn btn-secondary btn-sm" :disabled="!selectedRouteKeys.length" @click="clearBatchSelection">
+          清除选择
+        </button>
+      </div>
+
       <a-table
         :data-source="displayRows"
         :columns="visibleColumns"
-        :row-key="(record: any) => record.key ?? record.id"
+        :row-key="rowKeyOf"
+        :row-selection="rowSelection"
         :custom-row="routeCustomRow"
         :pagination="false"
         :loading="loading"
@@ -322,8 +359,9 @@
       :visible="formModalVisible"
       :editing-route="editingRoute"
       :copying-route="isCopy"
-      :clusters="clusters"
-      :default-cluster-id="defaultClusterId"
+      :clusters="formClusterOptions"
+      :default-cluster-id="isScoped ? scopedClusterId : defaultClusterId"
+      :lock-cluster="isScoped"
       @close="closeFormModal"
       @saved="onSaved"
       @publish-requested="onFormPublishRequested"
@@ -354,6 +392,15 @@
       :resource-id="previewRecord?.id ?? null"
       :resource-name="previewRecord?.name"
       @publish="onPreviewPublish"
+    />
+
+    <!-- 批量删除进度：与节点/上游批量条同一组件（BatchActionProgressModal），逐项行 = 路由名 -->
+    <BatchActionProgressModal
+      v-model:visible="batchProgressVisible"
+      :title="batchProgressTitle"
+      :items="batchProgressItems"
+      :expanded-ip="batchProgressExpandedIp"
+      @toggle-expand="toggleBatchProgressExpand"
     />
   </div>
 </template>
@@ -401,16 +448,53 @@ import PageStatBadges from '@/components/PageStatBadges.vue'
 import { useRoute } from 'vue-router'
 import SearchInput from '@/components/SearchInput.vue'
 import { buildResourceActionMenu } from '@/utils/resourceActionMenu'
+import BatchActionProgressModal from '@/components/BatchActionProgressModal.vue'
+import { createBatchProgressState, type BatchProgressState } from '@/composables/useBatchNodeAction'
+import {
+  runClusterGroupedBatchRouteDelete,
+  routeBatchSummaryMessage,
+  type ClusterRouteBatchGroup,
+} from '@/composables/useBatchRouteDelete'
 
 const route = useRoute()
+
+/**
+ * 单实现双形态（docs/refactoring/shared-core-plan-2026-11-21.md，节点/上游试点之后的路由批）：
+ * - 不传 `scopedClusterId`：独立列表页（跨集群、分组/平铺、集群列）。
+ * - 传 `scopedClusterId`：统一管理最大化面板的「路由」Tab——只承载该集群：
+ *   隐藏 PageHeader / 集群与分组筛选 / 分组带 / 集群列，视图恒平铺；
+ *   页面级动作（新建路由）改由工具条左侧紧凑钮承载；
+ *   列配置走独立存储键 `route_panel`，与页面 `route_standalone` 互不污染。
+ */
+const props = withDefaults(defineProps<{ scopedClusterId?: number | null }>(), { scopedClusterId: null })
+const isScoped = computed(() => props.scopedClusterId != null)
+/** 列表/计数请求的集群过滤：scoped 恒取作用域集群，页面形态取筛选下拉 */
+function effectiveClusterId(): number | undefined {
+  if (props.scopedClusterId != null) return props.scopedClusterId
+  return clusterFilter.value ? Number(clusterFilter.value) : undefined
+}
+/** 分组过滤仅页面形态生效（面板单集群下恒「全部分组」） */
+function effectiveGroupName(): string {
+  return isScoped.value ? '__all__' : groupFilter.value
+}
+
 const loading = ref(false)
 const routes = ref<any[]>([])
 const clusters = ref<any[]>([])
 const upstreams = ref<any[]>([])
+/** 表单弹窗的集群清单：scoped 下只给当前集群（并锁定选择） */
+const formClusterOptions = computed(() => {
+  const id = props.scopedClusterId
+  if (id == null) return clusters.value
+  const c = clusters.value.find((x) => x.id === id)
+  return [{ id, name: c?.name ?? '', display_name: c?.display_name }]
+})
 const totalCount = ref(0)
 const page = ref(1)
 const pageSize = ref(PAGE_SIZE_TABLE)
 const { searchText, onSearch: onDebouncedSearch, cancelSearch } = useDebouncedSearch()
+/** 最近一次已生效的搜索词（重复触发不重复清选择，见 runSearch） */
+const appliedSearch = ref('')
 const clusterFilter = ref<string | number>('')
 const groupFilter = ref('__all__')
 const upstreamFilter = ref('')
@@ -428,13 +512,15 @@ const filteredClusters = computed(() => {
 
 function onGroupChange() {
   clusterFilter.value = ''
+  clearBatchSelection()
   onClusterChange()
 }
 
 const displayedRoutes = computed(() => routes.value)
 
 // ── 集群分组 + 双模式（list-page-cluster-grouping，共享组合式单点）──
-const viewMode = ref<ListViewMode>('group')
+// scoped（面板 Tab）= 单集群，分组带无意义 → 恒平铺（切换器同时隐藏）
+const viewMode = ref<ListViewMode>(isScoped.value ? 'flat' : 'group')
 /** 发布状态判定（contract 10.3：与行内 PublishStatusTag 同源同序——未发布 → 待发布 → partial → 已发布，
  *  字段 current_version/pending_publish/last_publish_status 即该组件入参，禁止另造口径） */
 function routePublishState(r: Record<string, unknown>): 'unpublished' | 'pending' | 'partial' | 'published' {
@@ -460,7 +546,7 @@ function routeGroupChips(rows: Array<Record<string, unknown>>): ClusterGroupChip
   if (partial) chips.push({ label: `${partial} 部分失败`, tone: 'bad' })
   return chips
 }
-const { displayRows, sequenceOf, toggleFold, pageHasFolded, toggleFoldAll } = useListClusterGrouping({
+const { displayRows, sequenceOf, isRowSelectable, toggleFold, pageHasFolded, toggleFoldAll } = useListClusterGrouping({
   rows: () => displayedRoutes.value,
   unit: '路由',
   mode: viewMode,
@@ -478,7 +564,10 @@ watch(viewMode, () => {
 /** 组标记行单元格协议（contract 10.6） */
 function groupHeaderCellProps(record: unknown, isFirst: boolean): Record<string, unknown> {
   if (!isGroupHeaderRow(record)) return {}
-  return isFirst ? { colSpan: visibleColumns.value.length } : { class: 'l5-group-cell-hidden' }
+  // colSpan 额外 +1：组头行的选择列 checkbox（纯视觉噪音，与节点/上游页同款）经 CSS
+  // `.l5-group-row .ant-table-selection-column { display:none }` 隐藏，colSpan 补上该列宽度，
+  // 通栏仍铺满整行（style.css 单点，见 mockup-parity r2）。
+  return isFirst ? { colSpan: visibleColumns.value.length + 1 } : { class: 'l5-group-cell-hidden' }
 }
 function routeCustomRow(record: unknown): Record<string, unknown> {
   return isGroupHeaderRow(record) ? { class: 'l5-group-row' } : {}
@@ -515,8 +604,10 @@ const statusCounts = ref<{
 })
 async function loadStatusCounts(): Promise<void> {
   try {
-    const params: Record<string, string | number> = { group_name: groupFilter.value }
-    if (clusterFilter.value) params.cluster_id = clusterFilter.value
+    const params: Record<string, string | number> = { group_name: effectiveGroupName() }
+    // scoped（面板 Tab）恒带当前集群：chips 计数与列表同口径（面板内看不出别的集群的路由）
+    const clusterId = effectiveClusterId()
+    if (clusterId != null) params.cluster_id = clusterId
     if (upstreamFilter.value) params.upstream_id = upstreamFilter.value
     if (activeMethod.value) params.method = activeMethod.value
     if (pluginFilter.value) params.plugin = pluginFilter.value
@@ -537,6 +628,8 @@ const statusChips = computed(() => [
  *  （计数不带 publish_status，故切换状态不会改变各 chip 数字，但筛选其它维度会）。 */
 function selectPublishStatus(value: string): void {
   publishFilter.value = value
+  page.value = 1
+  clearBatchSelection()
   refreshList()
 }
 /** 刷新语义（design D6）：重拉列表 + 徽标统计；不重置筛选/排序键/视图模式。
@@ -610,7 +703,8 @@ const {
   columnOrder: routeColumnOrder,
   setColumnOrder: setRouteColumnOrder,
 } = useColumnConfig({
-  key: 'route_standalone',
+  // 存储键：页面形态 = `route_standalone`，scoped（面板 Tab）= `route_panel`（两形态互不污染）
+  key: isScoped.value ? 'route_panel' : 'route_standalone',
   // 全量列键含被合并列吞并的 methods（独立勾选/存储键，contract 10.1；#79 清洗按全量清单）
   defaultColumns: [...ALL_COLUMN_KEYS],
   allColumns: [...ALL_COLUMN_KEYS],
@@ -636,7 +730,8 @@ const cardRef = ref<HTMLElement | null>(null)
 // 集群列已在 columns 定义里（仅平铺可见）；分组态不参与列宽缩放
 const designWidths = () => {
   const base = toDesignWidths(columns)
-  if (viewMode.value === 'flat') return base
+  // 集群列只在「页面形态 + 平铺」参与缩放（分组视图由组头承担；scoped 单集群无此列）
+  if (!isScoped.value && viewMode.value === 'flat') return base
   const { cluster: _cluster, ...rest } = base
   return rest
 }
@@ -648,7 +743,7 @@ const { widths: fittedColumnWidths, minTableWidth } = useFitColumnWidths({
   // 列内容下限（r7-B4；批 7 publish_status 110→220）：请求匹配（uri）为弹性列不设下限；
   // scroll.x 下限之和 = 762 → 窗口 ≥ ~1150 零横向滚动
   minWidths: () => ({
-    ...(viewMode.value === 'flat' ? { cluster: CLUSTER_COLUMN_MIN_WIDTH } : {}),
+    ...(!isScoped.value && viewMode.value === 'flat' ? { cluster: CLUSTER_COLUMN_MIN_WIDTH } : {}),
     index: 40,
     name: 110,
     upstream: 100,
@@ -666,8 +761,8 @@ const visibleColumns = computed(() => {
   const isVisible = (c: { key?: unknown }) => {
     const k = String(c.key)
     if (k === 'index') return true
-    // 集群列仅平铺视图存在（分组视图由组头承担），不进列配置弹窗
-    if (k === 'cluster') return viewMode.value === 'flat'
+    // 集群列仅「页面形态 + 平铺」存在（分组视图由组头承担；scoped 面板单集群下无意义），不进列配置弹窗
+    if (k === 'cluster') return !isScoped.value && viewMode.value === 'flat'
     if (k === 'uri') return selected.has('uri') || selected.has('methods')
     return selected.has(k)
   }
@@ -752,19 +847,39 @@ function clearFilters() {
   sortBy.value = ''
   sortOrder.value = ''
   page.value = 1
+  clearBatchSelection()
   loadRoutes()
 }
 
 function onFilterChange() {
   page.value = 1
+  // 筛选结果变化 → 清空勾选（D9 语义）：否则隐藏行仍留在批量删除集合里
+  clearBatchSelection()
+  refreshList()
+}
+
+/**
+ * 执行搜索（防抖与回车共用）：同一关键词重复触发不重复清选择。
+ * 2026-11-21 上游批实测：回车曾**又排一个 300ms 防抖任务**，用户在这 300ms 内勾选的行
+ * 会被迟到回调的 clearBatchSelection 清掉（选择态「自己消失」）。
+ */
+function runSearch(): void {
+  const keyword = searchText.value
+  const changed = keyword !== appliedSearch.value
+  appliedSearch.value = keyword
+  page.value = 1
+  if (changed) clearBatchSelection()
   refreshList()
 }
 
 function onSearch() {
-  onDebouncedSearch(() => {
-    page.value = 1
-    refreshList()
-  })
+  onDebouncedSearch(runSearch)
+}
+
+/** 回车/放大镜：立即检索并取消待触发的防抖任务（SearchInput 的 search 事件） */
+function onSearchSubmit() {
+  cancelSearch()
+  runSearch()
 }
 
 // ── 服务端排序（batch1 组5 5.1）──
@@ -785,6 +900,7 @@ interface TableSorterEvent {
 function handlePagerChange(nextPage: number, nextPageSize: number) {
   page.value = nextPage
   if (nextPageSize) pageSize.value = nextPageSize
+  clearBatchSelection()
   loadRoutes()
 }
 
@@ -812,8 +928,10 @@ function handleTableChange(
 async function loadRoutes() {
   loading.value = true
   try {
-    const params: any = { page: page.value, page_size: pageSize.value, group_name: groupFilter.value }
-    if (clusterFilter.value) params.cluster_id = clusterFilter.value
+    const params: any = { page: page.value, page_size: pageSize.value, group_name: effectiveGroupName() }
+    // scoped（面板 Tab）恒带当前集群；页面形态取筛选下拉
+    const clusterId = effectiveClusterId()
+    if (clusterId != null) params.cluster_id = clusterId
     if (upstreamFilter.value) params.upstream_id = upstreamFilter.value
     if (activeMethod.value) params.method = activeMethod.value
     if (publishFilter.value) params.publish_status = publishFilter.value
@@ -862,6 +980,7 @@ async function loadUpstreams(cid?: number) {
 function onClusterChange() {
   upstreamFilter.value = ''
   page.value = 1
+  clearBatchSelection()
   loadUpstreams(Number(clusterFilter.value) || undefined)
   refreshList()
 }
@@ -999,6 +1118,119 @@ async function deleteRoute(r: any) {
   })
 }
 
+// ── 行选择 + 批量删除（路由批量条唯一入口；页面与面板 Tab 同一实现）──────────────
+// 行选择语义照抄节点/上游页（contract 10.6：组标记行不可勾选）：
+// rowKey = 数据行 id / 组标记行的合成 key。
+// DNS 路由（含 dns_upstream 插件）**不可勾选**：它们是「DNS 代理」页的管理对象，整行动作
+// 在设计页（routes.html）已钉为禁用；可勾选会让批量删除绕过该守护（面板旧实现同语义）。
+const rowKeyOf = (record: any) => (isGroupHeaderRow(record) ? record.key : record.id)
+const selectedRouteKeys = ref<number[]>([])
+const rowSelection = computed(() => ({
+  selectedRowKeys: selectedRouteKeys.value,
+  preserveSelectedRowKeys: true,
+  columnWidth: 40,
+  onChange: (keys: (string | number)[]) => {
+    selectedRouteKeys.value = keys.map((k) => Number(k))
+  },
+  // 组标记行不可勾选（contract 10.6）：antd-vue 的 getCheckboxProps 入参是**记录本身**
+  // （不是 `{ record }` 包裹），故直接交给组合式的 isRowSelectable。
+  getCheckboxProps: (rec: any) => ({ disabled: !isRowSelectable(rec) || hasDnsPlugin(rec) }),
+}))
+/** 勾选行（仅当前页数据源；筛选/翻页会清空选择，不会出现「隐藏行仍被删」） */
+const batchSelectedRoutes = computed(() =>
+  routes.value.filter((r: { id: number }) => selectedRouteKeys.value.includes(r.id)),
+)
+
+function clearBatchSelection() {
+  selectedRouteKeys.value = []
+}
+
+/** 勾选行按 cluster_id 分组（批量端点只有集群作用域；跨集群顺序请求，同节点/上游批量条） */
+function groupRoutesByCluster(
+  list: Array<{ id: number; name: string; cluster_id: number; cluster_name?: string }>,
+): ClusterRouteBatchGroup[] {
+  const groups = new Map<number, ClusterRouteBatchGroup>()
+  for (const r of list) {
+    const g = groups.get(r.cluster_id)
+    const row = { id: r.id, name: r.name }
+    if (g) g.routes.push(row)
+    else
+      groups.set(r.cluster_id, {
+        clusterId: r.cluster_id,
+        clusterName: r.cluster_name || `集群 ${r.cluster_id}`,
+        routes: [row],
+        nodeIds: [],
+      })
+  }
+  return Array.from(groups.values())
+}
+
+// 批量删除进度（与节点/上游批量条同一状态工厂 + 同一渲染组件）
+const batchProgress: BatchProgressState = createBatchProgressState()
+const {
+  visible: batchProgressVisible,
+  title: batchProgressTitle,
+  items: batchProgressItems,
+  expandedIp: batchProgressExpandedIp,
+} = batchProgress
+
+function toggleBatchProgressExpand(ip: string) {
+  batchProgressExpandedIp.value = batchProgressExpandedIp.value === ip ? null : ip
+}
+
+/**
+ * 批量删除路由。
+ *
+ * 危险确认复用单条删除的同一份告知（showDeleteConfirm：数据库记录 / 可同步删 Edge 已发布配置 /
+ * 勾选节点后节点不再承载该路由）；执行走 runClusterGroupedBatchRouteDelete（按 cluster_id 分组
+ * 顺序请求集合端点，节点选择逐集群裁剪），进度弹窗与节点/上游批量条同款（BatchActionProgressModal）。
+ */
+async function handleBatchDelete() {
+  const list = batchSelectedRoutes.value
+  if (list.length === 0) {
+    message.warning('请先勾选要删除的路由')
+    return
+  }
+  const groups = groupRoutesByCluster(list)
+  // 确认弹窗的 Edge 节点清单：跨集群时逐节点标注归属集群（showDeleteConfirm 依据 clusterName 去重数自动渲染）
+  const nodeRows: Array<{ id: number; ip: string; management_port: number; status?: number; clusterName?: string }> = []
+  for (const g of groups) {
+    try {
+      const nodes = await fetchAllClusterNodes<{ id: number; ip: string; management_port: number; status?: number }>(
+        g.clusterId,
+      )
+      g.nodeIds = nodes.map((n) => n.id)
+      for (const n of nodes) nodeRows.push(groups.length > 1 ? { ...n, clusterName: g.clusterName } : { ...n })
+    } catch {
+      /* 节点明细不可用：Edge 删除退化为后端全量遍历（nodeIds 不传） */
+    }
+  }
+
+  const names = list.map((r: { name: string }) => r.name)
+  const title =
+    names.length > 3
+      ? `确定要删除选中的 ${names.length} 条路由吗？${names.slice(0, 3).join('、')} 等 ${names.length} 条`
+      : `确定要删除选中的 ${names.length} 条路由吗？${names.join('、')}`
+
+  showDeleteConfirm({
+    title,
+    apiEndpoint: `/clusters/${groups[0].clusterId}/routes`,
+    nodes: nodeRows,
+    onOk: async (deleteDb, deleteEdge, nodeIds) => {
+      const summaries = await runClusterGroupedBatchRouteDelete(
+        groups,
+        { deleteDb, deleteEdge, nodeIds },
+        { progress: batchProgress },
+      )
+      const { success, failed, text } = routeBatchSummaryMessage(summaries)
+      clearBatchSelection()
+      await refreshList()
+      if (failed === 0) message.success(`已删除 ${success} 条路由`)
+      else message.warning(text)
+    },
+  })
+}
+
 function openVersionManagement(r: any) {
   vmId.value = r.id
   vmClusterId.value = r.cluster_id
@@ -1050,7 +1282,8 @@ function resolveDeepLinkClusterId(): number | null {
 }
 
 onMounted(() => {
-  const clusterId = route.query.cluster_id as string | undefined
+  // 深链集群筛选仅页面形态；scoped（面板 Tab）集群由 props 决定
+  const clusterId = isScoped.value ? undefined : (route.query.cluster_id as string | undefined)
   if (clusterId) {
     const numeric = Number(clusterId)
     if (Number.isFinite(numeric)) {
@@ -1058,6 +1291,9 @@ onMounted(() => {
       // 深链进入：上游下拉选项随深链集群加载（正常路径由 onClusterChange 触发）
       loadUpstreams(numeric)
     }
+  } else if (props.scopedClusterId != null) {
+    // scoped：上游筛选下拉的选项来自作用域集群（否则该下拉恒禁用）
+    loadUpstreams(props.scopedClusterId)
   }
   // plugin-switches-ux-review-fixes 批 2：「查看引用」深链——/routes?search=<plugin_name>
   // 预填搜索框，随首屏请求过滤（useDebouncedSearch 初始值随 loadRoutes 带 search 参数）
@@ -1085,6 +1321,17 @@ defineExpose({ viewMode })
 </script>
 
 <style scoped>
+/* scoped 形态（统一管理最大化面板「路由」Tab）：外层沿用页面卡片类，
+   保证 `.table-container.l5-card .c-idx` / 行内动作钮 / 批量条等全站解剖规则命中，
+   只压掉卡片自身的边框/底色/内距/圆角，使其融入面板 .dbody（不出现卡中卡）。 */
+.scope-card {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+  overflow: visible;
+}
+
 .text-muted {
   color: var(--muted);
 }

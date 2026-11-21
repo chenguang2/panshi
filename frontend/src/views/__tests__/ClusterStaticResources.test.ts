@@ -310,7 +310,7 @@ describe('ClusterStaticResources.vue（Tab）· 版本弹窗「立即发布恢�
     expect(vmm.props('canPublish')).toBe(true)
   })
 
-  it('publish-requested → 先关版本弹窗，发布链路返回后重开（ClusterRoutes Tab 同款）', async () => {
+  it('publish-requested → 先关版本弹窗，发布链路返回后重开（路由 Tab 同款）', async () => {
     const { wrapper, openPublishModal } = await mountTabWithPublishSpy()
     // 点 portal 卡片「版本管理」→ 弹窗 resource 上下文就位
     const card = wrapper.findAll('.plugin-config-card').find((c) => c.text().includes('portal'))!

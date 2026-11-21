@@ -165,6 +165,15 @@
     - 能力补齐（用户裁决：能力不能丢）：页面新增**行选择 + 共享批量条**（只有「批量删除」+「清除选择」）；确认复用既有 `showDeleteConfirm`（数据库 / Edge 节点可勾选 + 平台-only 提示），执行走 `composables/useBatchUpstreamDelete.ts`（`DELETE /clusters/{cid}/upstreams`，跨集群按 `cluster_id` 分组顺序请求、节点选择逐集群裁剪），进度弹窗与节点批量条同组件 `BatchActionProgressModal`。筛选/搜索/翻页清空选择（沿用面板 D9 语义）。
     - 面板不再预拉上游（`useClusterUpstreams` 调用从 `CentralList` 移除），上游列表由 scoped 组件自持加载。
     - 设计页未同步（按约定先报告）：`proposal-c/central.html` 上游 Tab 仍是 `.tab-toolbar` + 精简 targets/描述列/无行选择旧形态。
+  - [已完成 2026-11-22] **A 试点（路由）**：同一做法——面板「路由」Tab 改渲染 `views/RouteList.vue` 的 scoped 形态，`views/clusters/ClusterRoutes.vue` 及其 2 个测试文件删除（路由表格只剩一份实现）。
+    - props 契约同上：`scopedClusterId?: number | null`；scoped 隐藏 `PageHeader`/分组与集群筛选/`分组|平铺`/集群列/分组带/全部收起，动作「新建路由」→ 工具条紧凑钮 `scope-add-route`（文案「添加路由」）。
+    - 列集**以页面为准**：`#/名称(内嵌描述)/请求匹配(方法+URI 合并列，methods 仅作列配置勾选键)/上游/优先级(mono P{n})/发布状态/创建时间/操作`；面板旧独立「方法/状态/高级匹配/描述」列随之退场（分组带与合并列承担）。
+    - 计数：沿用后端聚合端点 `/routes/status-counts`（**本就支持 `cluster_id`**），scoped 下带 `cluster_id` 与 `group_name=__all__`；列表 `GET /routes?page=1&page_size=20&group_name=__all__&cluster_id={id}`（1596 条规模下仍是服务端分页 20/页，不做全量拉取）。
+    - 能力补齐（能力不能丢）：页面新增**行选择 + 共享批量条**（只有「批量删除」+「清除选择」）；确认复用既有 `showDeleteConfirm`，执行走 `composables/useBatchRouteDelete.ts`（`DELETE /clusters/{cid}/routes`，body `{route_ids, delete_db, delete_edge, node_ids?}`，跨集群按 `cluster_id` 分组顺序请求、节点选择逐集群裁剪），进度弹窗与节点/上游批量条同组件 `BatchActionProgressModal`。筛选/搜索/翻页/状态 chip 清空选择（沿用面板 D9 语义）。
+    - **DNS 行不可勾选**：`hasDnsPlugin` 行 `getCheckboxProps.disabled`（与设计页 `routes.html` 的「DNS 行禁用」一致），避免批量删除绕过「DNS 路由去 DNS 代理页管理」的守护；发布/⋯ 按钮的既有禁用与 tooltip 指路不变。
+    - 面板不再预拉路由（`handleTabClick` 的 `loadRoutes` 移除）；`useClusterRoutes` 仍保留在 `CentralList`——静态资源 Tab 的路由选择清单（`cluster.routes`）仍消费它。
+    - 附带修复（共享 CSS，非组件实现）：`style.css` 的面板 ⋯ 触发器规则由 `.node-table` 扩到 `.route-table` / `.upstream-table`——CentralList 的 `:deep(.dbody) .ant-btn{padding:3px 10px}` 曾把 26px 宽触发器内容区压到 4px、svg 被 flex 收缩成 4×12（面板里 ⋯ 看起来是空框，上游 Tab 同样存在）。
+    - 设计页未同步（按约定先报告）：`proposal-c/central.html` 路由 Tab 仍是 `.tab-toolbar` 旧形态；`routes.html` 尚无行选择列与 `.l5-batchbar`。
   - [待开始] B4 单元格接线 / B5 卡片动作条
 
 ## 七、待收口：主 spec 与实现漂移（2026-11-21）

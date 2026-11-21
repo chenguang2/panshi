@@ -549,7 +549,7 @@ describe('CentralList.vue 刷新保状态与延迟加载（central-management-ux
 
   it('Tab @refresh 后保持当前 Tab（不再重置回首签）', async () => {
     const CentralList = (await import('@/views/CentralList.vue')).default
-    const routesMod = await import('@/views/clusters/ClusterRoutes.vue')
+    const routesMod = await import('@/views/RouteList.vue')
     const wrapper = mount(CentralList, { global: { plugins: [newRouter()] } })
     await flushPromises()
     await flushPromises()
@@ -563,7 +563,7 @@ describe('CentralList.vue 刷新保状态与延迟加载（central-management-ux
     await wrapper.vm.$nextTick()
     expect(wrapper.find('.dt.active').text()).toContain('路由')
 
-    // 面板内真实刷新路径：ClusterRoutes emit('refresh') → loadClusters 重建对象
+    // 面板内真实刷新路径：RouteList（scoped 形态）emit('refresh') → loadClusters 重建对象
     mockApiGet.mockClear()
     const routesComp = wrapper.findComponent(routesMod.default)
     expect(routesComp.exists()).toBe(true)

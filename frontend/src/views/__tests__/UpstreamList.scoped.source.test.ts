@@ -21,7 +21,7 @@ describe('上游表格单一实现（面板 Tab = UpstreamList scoped 形态）'
   it('ClusterUpstreams.vue 不得回流（唯一实现 = views/UpstreamList.vue）', () => {
     expect(() => read('src/views/clusters/ClusterUpstreams.vue')).toThrow()
     // 全仓只允许 UpstreamList 定义上游表格（class="upstream-table grid-table"）
-    const files = ['src/views/UpstreamList.vue', 'src/views/CentralList.vue', 'src/views/clusters/ClusterRoutes.vue']
+    const files = ['src/views/UpstreamList.vue', 'src/views/CentralList.vue', 'src/views/RouteList.vue']
     const owners = files.filter((f) => read(f).includes('class="upstream-table grid-table"'))
     expect(owners).toEqual(['src/views/UpstreamList.vue'])
   })

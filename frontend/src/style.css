@@ -3905,7 +3905,13 @@ th.resizable {
 }
 /* ⋯ 触发器（设计 .menu-anchor .op-btn）：无边框透明 26×24 锚点 + 12px 三圆横排。
    须 6 类选择器 + !important 压过上面的 `.ant-table-tbody .ant-btn` 与 CentralList 的
-   `:deep(.dbody) .ant-btn`（带 !important 的 3 类） */
+   `:deep(.dbody) .ant-btn`（带 !important 的 3 类）。
+   2026-11-22（路由 Tab 接管批）：选择器覆盖面板内全部数据表——CentralList 的
+   `:deep(.dbody) .ant-btn { padding: 3px 10px !important }` 曾把 26px 宽触发器的内容区
+   压到 4px，flex 再把 svg 收缩成 4×12（三圆叠成一条竖线 ≈ 看着是空框）；上游/路由 Tab
+   实测同款，故按表类名并列声明而不是只留给节点表。`.node-table` 保持末位（守卫正则锚点）。 */
+.max-panel .dbody .route-table .ant-table-tbody .action-trigger-btn,
+.max-panel .dbody .upstream-table .ant-table-tbody .action-trigger-btn,
 .max-panel .dbody .node-table .ant-table-tbody .action-trigger-btn {
   width: 26px !important;
   min-width: 26px !important;
@@ -3921,6 +3927,8 @@ th.resizable {
   color: var(--muted) !important;
   border-radius: var(--radius-sm) !important;
 }
+.max-panel .dbody .route-table .ant-table-tbody .action-trigger-btn:hover,
+.max-panel .dbody .upstream-table .ant-table-tbody .action-trigger-btn:hover,
 .max-panel .dbody .node-table .ant-table-tbody .action-trigger-btn:hover {
   background: var(--accent-bg) !important;
   color: var(--accent) !important;

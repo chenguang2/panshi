@@ -72,7 +72,7 @@ describe('统一管理·最大化面板切换动效（方案 A）', () => {
     // 七个 Tab 分支原样搬入包裹层（结构未丢）；节点/上游 Tab = NodeList / UpstreamList 的 scoped 形态（A 试点）
     for (const comp of [
       'UpstreamList',
-      'ClusterRoutes',
+      'RouteList',
       'ClusterPluginConfigs',
       'ClusterGlobalRules',
       'ClusterStaticResources',

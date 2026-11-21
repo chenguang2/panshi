@@ -575,16 +575,13 @@ describe('mockup-parity r11（筛选行与状态行之间的分隔线）', () =>
 })
 
 describe('mockup-parity r12（平铺视图集群标识 / 优先级 mono）', () => {
-  it('r12-① 三页「集群」列定义在 columns 里，且仅平铺可见、不进列配置弹窗（节点页另加 scoped 判定：面板单集群无此列）', () => {
+  it('r12-① 三页「集群」列定义在 columns 里，且仅平铺可见、不进列配置弹窗（三页均带 scoped 判定：面板单集群无此列）', () => {
     for (const f of ['NodeList.vue', 'UpstreamList.vue', 'RouteList.vue']) {
       const s = page(f)
       expect(s, f).toContain("key: 'cluster'")
-      // 分组态过滤：isVisible 里按 viewMode 判定；节点/上游页另有 isScoped
-      // （A 试点：面板 Tab 恒无集群列，NodeList/UpstreamList 各一处）
-      const expected =
-        f === 'NodeList.vue' || f === 'UpstreamList.vue'
-          ? /if \(k === 'cluster'\) return !isScoped\.value && viewMode\.value === 'flat'/
-          : /if \(k === 'cluster'\) return viewMode\.value === 'flat'/
+      // 分组态过滤：isVisible 里按 viewMode 判定；三页均另有 isScoped
+      // （A 试点 + 上游批 + 路由批：面板 Tab 恒无集群列，各一处）
+      const expected = /if \(k === 'cluster'\) return !isScoped\.value && viewMode\.value === 'flat'/
       expect(s, f).toMatch(expected)
       // 列配置弹窗不含集群列
       expect(s, f).toMatch(/key === 'cluster'\) continue|!== 'cluster'/)
