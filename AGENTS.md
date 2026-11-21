@@ -265,6 +265,8 @@ openspec/        # 变更工件；openspec/specs/ = main specs
 
 92. **页头统计徽标只做补充维度，且设计页与实现一一对应（page-header-stat-badges，2026-11-21）** — 页头 `#stats`（`PageStatBadges` / `.ph-lite`）只放状态 chips 之外的维度（分组数/节点数/目标数/域名数/插件数/引用处数/资源总量/证书过期数），**不得重复 chips「全部 N」**；每页至多两枚、首枚 accent；**概览页不放**（数字归页内统计卡）。设计页 `proposal-c/*.html` 页头有 `.ph-inline` 的页面，实现必须有 `PageStatBadges`，反之亦然——守卫 `pageHeaderActions.source.test.ts` 第三段逐页断言（14 对 + 概览反向）。数据取当前已加载数据集或既有聚合端点（如 `status-counts`），缺字段不计入、总量为 0 显示 `—`，禁止编造数值。规范与逐页取值表见 `openspec/changes/page-header-stat-badges/`。
 
+93. **统一管理面板的 Tab = 对应独立页组件的 scoped 单实现（A 推广，2026-11-21 起）** — 面板 7 个 Tab 逐步改为**直接渲染**对应独立页组件（`NodeList` / `UpstreamList` / `RouteList` / `GlobalRuleList` / `PluginConfigList` / `PluginMetadataList` / `StaticResourceList`，props `scopedClusterId`），`views/clusters/Cluster*.vue` 逐批删除，**不得再写第二份 Tab 组件**。scoped 契约：隐藏 PageHeader / 分组下拉 / 集群筛选 / 分组·平铺 / 分组带 / 「集群」列 / 卡片集群徽标；页头动作收敛为工具条左侧紧凑按钮；保留状态 chips / 批量条 / 表格或卡片网格 / 分页；列配置存储键 `<res>_panel` 与 `<res>_standalone` 分立；深链参数仅页面形态生效。**已踩过的坑（全部真机实测）**：① **Tab 分支必须显式 `v-if`**，裸 `v-else` 会挂到末位 `v-else-if` 上 → 其它 Tab 下方叠渲染整块节点表（`CentralList.source.test.ts` 已加守卫）；② antd `rowSelection.getCheckboxProps` 收的是**记录本身**而非 `{ record }`，取错字段等于「恒可勾选」，组头行只因 CSS 隐藏复选框才没暴露；③ `rowKey` **不能用业务字段 `key`**（上游有 APISIX 一致性哈希 `key`）→ 一律按 `id`，否则批量操作按 id 匹配会静默漏行；④ 卡片内绝对定位 `.l5-menu` 会被面板 `overflow:hidden` 祖先裁到 4px → 弹层翻转判定按「最近 `overflow != visible` 祖先的底边」，不是视口底边；⑤ 面板 `:deep(.dbody) .ant-btn { padding: 3px 10px }` 会把 26px 的 ⋯ 触发器内容区压成 4×12（图标消失）→ 触发器规则需显式覆盖 padding 或按表格类名列入白名单。
+
 ## 新增功能步骤
 
 1. 在 `backend/app/schemas/` 定义 Pydantic 模型
