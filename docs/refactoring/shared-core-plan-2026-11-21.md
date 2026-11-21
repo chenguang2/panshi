@@ -248,3 +248,23 @@
 **CSS**：`style.css` 删面板专属 `.max-panel .dbody .node-actions*` 9 条（模板零匹配，真机实测 0 元素）；`.max-panel .dbody .empty5 .e-actions .ant-btn` **保留**（当前亦零匹配——面板空态已是各页原生 `gr-empty`/`.empty5` 图标+标题形态；DOM 注入探针实测该规则仍产出 30px/12px 400/浅底描边，非遗留可删但建议另批评估）。
 
 **保留**：`useClusterResource.ts`（`useClusterListCore` 仍被 `useClusterNodes` 消费）、`useClusterResourceCore.ts` / `useClusterPluginEntity.ts`（#24 架构单点，`globalRuleDeleteWarning` 仍在用）。
+
+## 九、A 推广收口（2026-11-22）
+
+| 批次 | 状态 | 提交要点 |
+|---|---|---|
+| 节点 | ✅ | 面板节点 Tab 渲染 `NodeList` scoped；`ClusterNodes.vue` 删除 |
+| 上游 | ✅ | `UpstreamList` scoped + 行选择 + 批量删除；`ClusterUpstreams.vue` 删除 |
+| 路由 | ✅ | `RouteList` scoped + 行选择 + 批量删除 + DNS 行不可勾；`ClusterRoutes.vue` 删除 |
+| 全局规则 | ✅ | `GlobalRuleList` scoped（首个卡片类）；`ClusterGlobalRules.vue` 删除 |
+| 插件组 | ✅ | `PluginConfigList` scoped；`ClusterPluginConfigs.vue` 删除 |
+| 插件元数据 | ✅ | `PluginMetadataList` scoped；`components/PluginMetadata.vue` 删除 |
+| 静态资源 | ✅ | `StaticResourceList` scoped；`ClusterStaticResources.vue` 删除 + 面板壳死代码链清理 |
+| 设计页回填 | ✅ | `central.html` 七 Tab 全部新解剖 + `.tab-card` 容器；日期/菜单文案对齐实现 |
+| 卡片菜单三栏 | ✅ | 四页改 `buildResourceActionMenu`；全站消费方 6 处 |
+| 死代码清理 | ✅ | −4,017 行：4 个面板 composable + B0 适配层 + 类型字段 + 死 CSS |
+| refresh 事件 | ✅ | 七个 scoped 页写成功后 `emit('refresh')`，面板徽标即时更新 |
+| e2e 深链 | ✅ | `gotoResourcePage` 改深链口径；8 个 spec 恢复；失效锚点清扫 |
+| spec 漂移 | ✅ | `panel-scoped-spec-sync` 归档，`openspec validate --all` 224/0 |
+
+**遗留候选（未做）**：`useClusterResource`（分页资源工厂）零消费待评估；`.max-panel .dbody .empty5 .e-actions .ant-btn` 规则当前零命中但级联有效；`aggressive` ladder：`useClusterListCore` 若干成员仅测试覆盖。
