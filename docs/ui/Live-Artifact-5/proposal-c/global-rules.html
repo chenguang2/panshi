@@ -150,7 +150,7 @@
               </div>
               <div class="lp-status">
                 <span class="ps-tag ps-pub">v12</span>
-                <span class="ps-date">11-17 15:02</span>
+                <span class="ps-date" title="发布时间: 2026/11/17 15:02:00">2026/11/17 15:02:00</span>
               </div>
             </div>
             <div class="lp-body">
@@ -258,7 +258,7 @@
               </div>
               <div class="lp-status">
                 <span class="ps-tag ps-pub">v1</span>
-                <span class="ps-date">11-13 11:26</span>
+                <span class="ps-date" title="发布时间: 2026/11/13 11:26:00">2026/11/13 11:26:00</span>
               </div>
             </div>
             <div class="lp-body">
@@ -374,37 +374,6 @@
 </div>
 
 <div class="l5-prop-tag">方案 C · <b>卡片型</b> · 全局规则</div>
-
-<script>
-(function () {
-  'use strict';
-  // 菜单开合；data-demo-open 的菜单常驻展开（供评审看菜单解剖）
-  function closeAll() {
-    document.querySelectorAll('.l5-menu.open').forEach(function (m) {
-      if (!m.dataset.demoOpen) m.classList.remove('open');
-    });
-  }
-  document.querySelectorAll('[data-menu-btn]').forEach(function (btn) {
-    btn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      var menu = document.getElementById(btn.getAttribute('data-menu-btn'));
-      if (!menu) return;
-      var was = menu.classList.contains('open');
-      closeAll();
-      if (!was) menu.classList.add('open');
-    });
-  });
-  document.addEventListener('click', closeAll);
-  document.querySelectorAll('.l5-chiprow .f-chip').forEach(function (chip) {
-    chip.addEventListener('click', function () {
-      var row = chip.closest('.f-chips');
-      row.querySelectorAll('.f-chip').forEach(function (c) { c.classList.remove('active'); });
-      chip.classList.add('active');
-    });
-  });
-  document.querySelectorAll('a[href="#"]').forEach(function (a) { a.addEventListener('click', function (e) { e.preventDefault(); }); });
-})();
-</script>
 
 <script>
 (function () {
@@ -547,8 +516,11 @@
   }
 
   // ── 更多菜单 ──
+  // data-demo-open 的菜单常驻展开（供评审看菜单解剖），不参与关闭
   function closeAll() {
-    document.querySelectorAll('.l5-menu.open').forEach(function (m) { m.classList.remove('open'); });
+    document.querySelectorAll('.l5-menu.open').forEach(function (m) {
+      if (!m.dataset.demoOpen) m.classList.remove('open');
+    });
   }
   document.querySelectorAll('[data-menu-btn]').forEach(function (btn) {
     btn.addEventListener('click', function (e) {

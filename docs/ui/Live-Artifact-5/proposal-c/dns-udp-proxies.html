@@ -370,34 +370,6 @@
 <script>
 (function () {
   'use strict';
-  function closeAll() {
-    document.querySelectorAll('.l5-menu.open').forEach(function (m) { m.classList.remove('open'); });
-  }
-  document.querySelectorAll('[data-menu-btn]').forEach(function (btn) {
-    btn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      var menu = document.getElementById(btn.getAttribute('data-menu-btn'));
-      if (!menu) return;
-      var was = menu.classList.contains('open');
-      closeAll();
-      if (!was) menu.classList.add('open');
-    });
-  });
-  document.addEventListener('click', closeAll);
-  document.querySelectorAll('.l5-chiprow .f-chip').forEach(function (chip) {
-    chip.addEventListener('click', function () {
-      var row = chip.closest('.f-chips');
-      row.querySelectorAll('.f-chip').forEach(function (c) { c.classList.remove('active'); });
-      chip.classList.add('active');
-    });
-  });
-  document.querySelectorAll('a[href="#"]').forEach(function (a) { a.addEventListener('click', function (e) { e.preventDefault(); }); });
-})();
-</script>
-
-<script>
-(function () {
-  'use strict';
   var card = document.getElementById('l5card');
   var FOLD_ALL = document.querySelector('.fold-all-btn');
   var CHEV_EXPANDED = '<polyline points="7 4 12 9 17 4"/><polyline points="7 20 12 15 17 20"/>';

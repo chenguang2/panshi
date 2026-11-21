@@ -146,7 +146,7 @@
               </div>
               <div class="lp-status">
                 <span class="ps-tag ps-pub">v4</span>
-                <span class="ps-date">11-17 10:12</span>
+                <span class="ps-date" title="发布时间: 2026/11/17 10:12:00">2026/11/17 10:12:00</span>
               </div>
             </div>
             <div class="lp-body">
@@ -227,7 +227,7 @@
               </div>
               <div class="lp-status">
                 <span class="ps-tag ps-pub">v2</span>
-                <span class="ps-date">11-14 16:40</span>
+                <span class="ps-date" title="发布时间: 2026/11/14 16:40:00">2026/11/14 16:40:00</span>
               </div>
             </div>
             <div class="lp-body">
@@ -259,7 +259,7 @@
               </div>
               <div class="lp-status">
                 <span class="ps-tag ps-pub">v7</span>
-                <span class="ps-date">11-18 09:41</span>
+                <span class="ps-date" title="发布时间: 2026/11/18 09:41:00">2026/11/18 09:41:00</span>
               </div>
             </div>
             <div class="lp-body">
@@ -336,7 +336,7 @@
               </div>
               <div class="lp-status">
                 <span class="ps-tag ps-pub">v1</span>
-                <span class="ps-date">11-12 09:05</span>
+                <span class="ps-date" title="发布时间: 2026/11/12 09:05:00">2026/11/12 09:05:00</span>
               </div>
             </div>
             <div class="lp-body">
@@ -372,33 +372,6 @@
 
 <div class="l5-prop-tag">方案 C · <b>卡片型</b> · 插件元数据</div>
 
-<script>
-(function () {
-  'use strict';
-  function closeAll() {
-    document.querySelectorAll('.l5-menu.open').forEach(function (m) { m.classList.remove('open'); });
-  }
-  document.querySelectorAll('[data-menu-btn]').forEach(function (btn) {
-    btn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      var menu = document.getElementById(btn.getAttribute('data-menu-btn'));
-      if (!menu) return;
-      var was = menu.classList.contains('open');
-      closeAll();
-      if (!was) menu.classList.add('open');
-    });
-  });
-  document.addEventListener('click', closeAll);
-  document.querySelectorAll('.l5-chiprow .f-chip').forEach(function (chip) {
-    chip.addEventListener('click', function () {
-      var row = chip.closest('.f-chips');
-      row.querySelectorAll('.f-chip').forEach(function (c) { c.classList.remove('active'); });
-      chip.classList.add('active');
-    });
-  });
-  document.querySelectorAll('a[href="#"]').forEach(function (a) { a.addEventListener('click', function (e) { e.preventDefault(); }); });
-})();
-</script>
 <script>
 (function () {
   'use strict';

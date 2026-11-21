@@ -144,7 +144,7 @@
             <div class="lp-body">
               <div class="lp-row"><span class="lp-k">路径</span><span class="lp-v mono" title="/static/portal/">/static/portal/</span></div>
               <div class="lp-row group-only"><span class="lp-k">绑定</span><span class="lp-v">门户首页 <span class="c-dim">/</span></span></div>
-              <div class="lp-row"><span class="lp-k">上传</span><span class="lp-v mono dim" title="2026-11-14 09:20">2026-11-14 09:20</span></div>
+              <div class="lp-row"><span class="lp-k">上传</span><span class="lp-v mono dim" title="2026/11/14 09:20:00">2026/11/14 09:20:00</span></div>
             </div>
             <div class="lp-foot">
               <button class="op-pub">发布</button>
@@ -209,7 +209,7 @@
             <div class="lp-body">
               <div class="lp-row"><span class="lp-k">路径</span><span class="lp-v mono" title="/static/fonts/">/static/fonts/</span></div>
               <div class="lp-row group-only"><span class="lp-k">绑定</span><span class="lp-v">门户首页 <span class="c-dim">/</span></span></div>
-              <div class="lp-row"><span class="lp-k">上传</span><span class="lp-v mono dim" title="2026-11-09 10:32">2026-11-09 10:32</span></div>
+              <div class="lp-row"><span class="lp-k">上传</span><span class="lp-v mono dim" title="2026/11/09 10:32:00">2026/11/09 10:32:00</span></div>
             </div>
             <div class="lp-foot">
               <button class="op-pub">发布</button>
@@ -249,7 +249,7 @@
             <div class="lp-body">
               <div class="lp-row"><span class="lp-k">路径</span><span class="lp-v mono" title="/static/admin/">/static/admin/</span></div>
               <div class="lp-row group-only"><span class="lp-k">绑定</span><span class="lp-v">管理后台 <span class="c-dim">/console/*</span></span></div>
-              <div class="lp-row"><span class="lp-k">上传</span><span class="lp-v mono dim" title="2026-11-17 16:05">2026-11-17 16:05</span></div>
+              <div class="lp-row"><span class="lp-k">上传</span><span class="lp-v mono dim" title="2026/11/17 16:05:00">2026/11/17 16:05:00</span></div>
             </div>
             <div class="lp-foot">
               <button class="op-pub">发布</button>
@@ -279,7 +279,7 @@
             <div class="lp-body">
               <div class="lp-row"><span class="lp-k">路径</span><span class="lp-v mono" title="/static/charts/">/static/charts/</span></div>
               <div class="lp-row group-only"><span class="lp-k">绑定</span><span class="lp-v">预发分析页 <span class="c-dim">/analytics/*</span></span></div>
-              <div class="lp-row"><span class="lp-k">上传</span><span class="lp-v mono dim" title="2026-11-12 14:48">2026-11-12 14:48</span></div>
+              <div class="lp-row"><span class="lp-k">上传</span><span class="lp-v mono dim" title="2026/11/12 14:48:00">2026/11/12 14:48:00</span></div>
             </div>
             <div class="lp-foot">
               <button class="op-pub">发布</button>
@@ -347,33 +347,6 @@
 
 <div class="l5-prop-tag">方案 C · <b>卡片型</b> · 静态资源</div>
 
-<script>
-(function () {
-  'use strict';
-  function closeAll() {
-    document.querySelectorAll('.l5-menu.open').forEach(function (m) { m.classList.remove('open'); });
-  }
-  document.querySelectorAll('[data-menu-btn]').forEach(function (btn) {
-    btn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      var menu = document.getElementById(btn.getAttribute('data-menu-btn'));
-      if (!menu) return;
-      var was = menu.classList.contains('open');
-      closeAll();
-      if (!was) menu.classList.add('open');
-    });
-  });
-  document.addEventListener('click', closeAll);
-  document.querySelectorAll('.l5-chiprow .f-chip').forEach(function (chip) {
-    chip.addEventListener('click', function () {
-      var row = chip.closest('.f-chips');
-      row.querySelectorAll('.f-chip').forEach(function (c) { c.classList.remove('active'); });
-      chip.classList.add('active');
-    });
-  });
-  document.querySelectorAll('a[href="#"]').forEach(function (a) { a.addEventListener('click', function (e) { e.preventDefault(); }); });
-})();
-</script>
 <script>
 (function () {
   'use strict';
