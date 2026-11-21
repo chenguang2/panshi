@@ -3920,3 +3920,14 @@ th.resizable {
   border-color: var(--accent) !important;
   color: var(--accent) !important;
 }
+
+/* 方法列（批次 B 补列）：固定列宽下单行展示（前 2 枚 + `+N`），不折行、不溢出 */
+.max-panel .dbody .method-cell {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px;
+  overflow: hidden;
+}
+.max-panel .dbody .method-cell .m-tag {
+  flex-shrink: 0;
+}

@@ -1109,10 +1109,12 @@ describe('useClusterNodes 列顺序与列宽', () => {
       'edge_version',
       'service_port',
       'management_port',
+      'edge_path',
       'status',
       'actions',
     ])
-    expect(visibleNodeColumns.value.find((c: any) => c.key === 'edge_path')).toBeUndefined()
+    // 设计页默认含 Edge安装路径列（批次 B 补列），列宽沿用列定义 220
+    expect(visibleNodeColumns.value.find((c: any) => c.key === 'edge_path')!.width).toBe(220)
     expect(visibleNodeColumns.value.find((c: any) => c.key === 'ip')!.width).toBe(140)
   })
 
@@ -1126,6 +1128,7 @@ describe('useClusterNodes 列顺序与列宽', () => {
       'edge_version',
       'service_port',
       'management_port',
+      'edge_path',
     ])
   })
 

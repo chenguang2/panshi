@@ -108,6 +108,12 @@
         <template v-if="column.key === 'upstream_id'">
           {{ getUpstreamName(cluster, record.upstream_id) }}
         </template>
+        <template v-if="column.key === 'methods'">
+          <span class="method-cell" :title="methodTitle(record.methods)">
+            <span v-for="m in methodPreview(record.methods)" :key="m" class="m-tag" :class="m">{{ m }}</span>
+            <span v-if="methodList(record.methods).length === 0" class="dim">—</span>
+          </span>
+        </template>
         <template v-if="column.key === 'advanced_match_enabled'">
           <a-tag :color="record.advanced_match_enabled ? 'green' : 'default'">
             {{ record.advanced_match_enabled ? '是' : '否' }}
@@ -641,6 +647,24 @@ async function handleVmPublishRequested() {
   if (!item) return
   await publishRouteByRecord(props.cluster, item)
   versionModalVisible.value = true
+}
+
+/**
+ * 请求方法（Edge 侧为逗号分隔字符串）→ 胶囊渲染，复用列表页全局 `.m-tag` 色阶。
+ * 列宽固定（设计 110）：单行只展示前 2 枚 + `+N`（title 给全量），避免折行撑高行
+ * 与溢出压到「优先级」列（批次 B 实测）。
+ */
+function methodList(methods?: string | null): string[] {
+  return (methods || '')
+    .split(',')
+    .map((m) => m.trim().toUpperCase())
+    .filter(Boolean)
+}
+function methodPreview(methods?: string | null): string[] {
+  return methodList(methods).slice(0, 2)
+}
+function methodTitle(methods?: string | null): string {
+  return methodList(methods).join('、')
 }
 </script>
 

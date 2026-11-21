@@ -30,8 +30,8 @@ function getFieldName(name: string): string {
 // 默认列宽档（cluster-tab-column-personalization D6）：fixed 布局下无宽列被剩余空间均分，
 // 长内容列（URI/描述）会压到不可读，故逐列给档；用户拖拽宽度经 applyColumnWidths 覆盖。
 const allRouteColumns = [
-  { title: '名称', dataIndex: 'name', key: 'name', width: 160, sorter: true },
-  { title: 'URI', dataIndex: 'uri', key: 'uri', width: 200, sorter: true },
+  { title: '名称', dataIndex: 'name', key: 'name', width: 160, sorter: true, ellipsis: true },
+  { title: 'URI', dataIndex: 'uri', key: 'uri', width: 200, sorter: true, ellipsis: true },
   { title: '方法', dataIndex: 'methods', key: 'methods', width: 110 },
   { title: '上游', dataIndex: 'upstream_id', key: 'upstream_id', width: 140 },
   { title: '优先级', dataIndex: 'priority', key: 'priority', width: 90, sorter: true },
@@ -45,7 +45,7 @@ const allRouteColumns = [
       publishStatusRender(record.current_version ?? null, record.published_at ?? null),
   },
   { title: '高级匹配', dataIndex: 'advanced_match_enabled', key: 'advanced_match_enabled', width: 110 },
-  { title: '描述', dataIndex: 'description', key: 'description', width: 200 },
+  { title: '描述', dataIndex: 'description', key: 'description', width: 200, ellipsis: true },
   // 操作列只承载「发布 + ⋯」两颗控件（parity 批 B 行内动作收敛），宽度回设计值 110
   { title: '操作', key: 'actions', width: 110 },
 ]
@@ -198,7 +198,8 @@ export function useClusterRoutes(deps: RouteComposableDeps) {
 
   const routeCfg = useColumnConfig({
     key: 'route',
-    defaultColumns: ['name', 'uri', 'publish_status', 'priority', 'actions'],
+    // 设计页（central.html 路由列）默认含 方法 / 描述：与节点页同口径，列配置可取消勾选
+    defaultColumns: ['name', 'uri', 'methods', 'priority', 'publish_status', 'description', 'actions'],
     allColumns: allRouteColumns.map((c) => String(c.key)),
     defaultSearchVisible: true,
     defaultActions: ['copy', 'edit', 'delete', 'publish', 'version'],

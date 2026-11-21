@@ -45,7 +45,8 @@ export const allNodeColumns = [
   { title: 'Edge版本', key: 'edge_version', width: 110 },
   { title: '服务端口', dataIndex: 'service_port', key: 'service_port', width: 100, sorter: true },
   { title: '管理端口', dataIndex: 'management_port', key: 'management_port', width: 100, sorter: true },
-  { title: 'Edge安装路径', dataIndex: 'edge_path', key: 'edge_path', width: 220, sorter: true },
+  // ellipsis：路径常长于列宽，无省略时溢出压到「状态」列（批次 B 实测）
+  { title: 'Edge安装路径', dataIndex: 'edge_path', key: 'edge_path', width: 220, sorter: true, ellipsis: true },
   { title: '状态', key: 'status', width: 160, sorter: true },
   { title: '操作', key: 'actions', width: 280 },
 ]
@@ -293,7 +294,8 @@ export function useClusterNodes(options: { clusters: Ref<Cluster[]>; onRefresh?:
 
   const nodeCfg = useColumnConfig({
     key: 'node',
-    defaultColumns: ['ip', 'edge_version', 'service_port', 'management_port', 'status', 'actions'],
+    // 设计页（central.html 节点列）默认含 Edge安装路径：web 卡片/表格均需可见该列
+    defaultColumns: ['ip', 'edge_version', 'service_port', 'management_port', 'edge_path', 'status', 'actions'],
     allColumns: allNodeColumns.map((c) => String(c.key)),
     defaultSearchVisible: true,
     defaultActions: ['start', 'stop', 'status'],

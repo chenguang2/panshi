@@ -109,3 +109,13 @@ mini-bar（--bg 底 + 上下双线 + 胶囊项 + × 收起）、名称行（16/7
 - 卡脚「添 加」antd 自动空格问题（`PluginMetadata` 卡内）已包 `<span>` 修掉；`ClusterRoutes` 死 import 清理。
 
 验证：`clusters` 组件套 + `CentralList` + `mockupParity` + `pageHeaderActions` + 独立页两套 **619 例**绿；`vue-tsc -b` 干净；真机 1600/1280 两档截图（`/tmp/opencode/parity-max/fixer{2,3}-*.png`、`menu-*.png`）。
+
+## 六、批次 B（补列）记录（2026-11-21）
+
+用户裁决「只补列」，故 P0-3 落地、P1-3（状态双胶囊）与 P2-1（空态卡片）仍留批次 C。
+
+- 集群节点：默认列新增「Edge安装路径」（宽 220，`ellipsis`——实测无省略时路径溢出压到「状态」列）。
+- 路由：默认列新增「方法」（宽 110，`.m-tag` 胶囊，单行取前 2 枚、`title` 给全量方法；4 枚时折行会撑高行、加 `+N` 会挤压列宽，均已试过并弃用）与「描述」（宽 200，`ellipsis`）；默认列序 = 名称 / URI / 方法 / 优先级 / 发布状态 / 描述 / 操作，与设计一致。
+- 名称 / URI / 描述同样补 `ellipsis`——真实数据里名称常是路径形态，省略后不再压列。
+- 存量用户已保存的列配置仍优先（未勾选的列不会因默认值变化自动出现），符合 #79 口径。
+- 验证：1600 视口两表 `scrollWidth == clientWidth == 1278`（无溢出）；截图 `coladd-nodes.png` / `coladd-routes.png`；`useClusterNodes/useClusterRoutes` + clusters 套 + NodeList/RouteList/CentralList/mockupParity 共 **470 例**绿；`vue-tsc -b` 干净。
