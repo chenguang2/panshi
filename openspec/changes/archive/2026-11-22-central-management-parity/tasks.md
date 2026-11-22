@@ -33,7 +33,7 @@
 ## 5. 收口归档
 
 - [x] 5.1 手册截图核对：`manual-screenshots.mjs` SHOTS 清单无统一管理（/central-management）条目——无既有截图需重拍（新增手册章节属范围外，未立项）
-- [ ] 5.2 `openspec validate --all` 0 error 收口（✅ 222 通过 0 失败，2026-11-20 实测）；等待用户验收后归档（sync specs + archive）
+- [x] 5.2 `openspec validate --all` 0 error 收口（✅ 222 通过 0 失败，2026-11-20 实测）；2026-11-22 用户验收后归档（sync specs + archive）
 
 ## 6. 设计页差异修复（parity 审计 r1，2026-11-21）
 
