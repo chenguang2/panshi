@@ -585,6 +585,8 @@ describe('UpstreamList.vue scoped 形态（统一管理面板上游 Tab）', () 
         routes: [
           { route_id: 5, route_name: 'route-a' },
           { route_id: 6, route_name: 'route-b' },
+          { route_id: 7, route_name: 'route-c' },
+          { route_id: 8, route_name: 'route-d' },
         ],
       },
     ])
@@ -612,9 +614,10 @@ describe('UpstreamList.vue scoped 形态（统一管理面板上游 Tab）', () 
     expect(opts.title).toContain('1 条上游')
     expect(opts.title).toContain('order-service')
     expect(opts.title).not.toContain('user-service')
-    // 跳过项明示：名称 + 引用条数
+    // 跳过项明示：名称 + 引用路由名（每上游最多 3 条，超出折「等 N 条」）
     expect(opts.extraWarning).toContain('已跳过 1 条被路由引用的上游')
-    expect(opts.extraWarning).toContain('user-service（2 条路由）')
+    expect(opts.extraWarning).toContain('user-service（引用路由：route-a、route-b、route-c 等 4 条）')
+    expect(opts.extraWarning).toContain('请先解除引用后再删除')
 
     await opts.onOk(true, false, [])
     await flushPromises()
@@ -625,7 +628,10 @@ describe('UpstreamList.vue scoped 形态（统一管理面板上游 Tab）', () 
     wrapper.unmount()
   })
 
-  it('全部被引用：只弹 warning，不弹确认框、不发 DELETE', async () => {
+  // 2026-11-22（upstream-delete-reference-block-modal，对齐插件组 PLG-07 决策 A）：
+  // 全部被引用由「toast 提示」改为「阻断弹窗」——标题/正文列出被阻断的上游与其引用路由名，
+  // 仅「我知道了」一个按钮，不弹确认框、不发 DELETE。
+  it('全部被引用：阻断弹窗列出上游与引用路由名，无删除入口、不弹确认框、不发 DELETE', async () => {
     const warn = vi.spyOn(message, 'warning').mockImplementation(() => undefined as never)
     mockReferences([
       {
@@ -640,6 +646,7 @@ describe('UpstreamList.vue scoped 形态（统一管理面板上游 Tab）', () 
           { route_id: 6, route_name: 'route-b' },
           { route_id: 7, route_name: 'route-c' },
           { route_id: 8, route_name: 'route-d' },
+          { route_id: 9, route_name: 'route-e' },
         ],
       },
     ])
@@ -650,14 +657,38 @@ describe('UpstreamList.vue scoped 形态（统一管理面板上游 Tab）', () 
     await wrapper.find('[data-test="batch-delete"]').trigger('click')
     await flushPromises()
 
+    // 阻断弹窗渲染进 document.body（showOverlayModal）
+    const overlay = document.querySelector('.modal-overlay') as HTMLElement | null
+    expect(overlay, '应出现阻断弹窗').toBeTruthy()
+    const text = overlay!.textContent || ''
+    expect(text).toContain('无法删除：上游仍被路由引用')
+    expect(text).toContain('均被路由引用')
+    // 逐条列出被阻断上游 + 其引用路由名（每上游最多 3 条，超出折「等 N 条路由」）
+    expect(text).toContain('user-service')
+    expect(text).toContain('route-a')
+    expect(text).toContain('order-service')
+    expect(text).toContain('route-b')
+    expect(text).toContain('route-d')
+    expect(text).toContain('等 4 条路由')
+    // 无删除入口：只有「我知道了」，无取消按钮、无确认删除标题
+    const buttons = Array.from(overlay!.querySelectorAll('button')).map((b) => b.textContent?.trim() || '')
+    expect(buttons).toContain('我知道了')
+    expect(buttons).not.toContain('确定')
+    expect(buttons).not.toContain('删除')
+    expect(text).not.toContain('确定要删除选中的')
+    // 不弹确认框、不发 DELETE，也不再走 toast
     expect(showDeleteConfirm).not.toHaveBeenCalled()
     expect(mockApiDelete).not.toHaveBeenCalled()
-    expect(warn).toHaveBeenCalledTimes(1)
-    const text = String(warn.mock.calls[0][0])
-    expect(text).toContain('均被路由引用')
-    expect(text).toContain('请先解除引用')
-    expect(text).toContain('user-service（1 条路由）')
-    expect(text).toContain('order-service（3 条路由）')
+    expect(warn).not.toHaveBeenCalled()
+
+    // 点击「我知道了」关闭弹窗，全程零删除请求
+    const okBtn = Array.from(overlay!.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('我知道了'),
+    ) as HTMLButtonElement
+    okBtn.click()
+    await flushPromises()
+    expect(document.querySelector('.modal-overlay')).toBeNull()
+    expect(mockApiDelete).not.toHaveBeenCalled()
     // 勾选不被清空（用户可先去解引用再回来删）
     expect(wrapper.find('.l5-batchbar').text()).toContain('已选 2 项')
     warn.mockRestore()
@@ -726,7 +757,7 @@ describe('UpstreamList.vue scoped 形态（统一管理面板上游 Tab）', () 
       extraWarning?: string
       onOk: (db: boolean, edge: boolean, nodeIds: number[]) => Promise<void>
     }
-    expect(opts.extraWarning).toContain('prod-service（1 条路由）')
+    expect(opts.extraWarning).toContain('prod-service（引用路由：prod-route）')
     await opts.onOk(true, false, [])
     await flushPromises()
     // 只对集群 2 发删除（集群 1 的唯一勾选行被跳过）

@@ -351,7 +351,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, h, onMounted, onUnmounted } from 'vue'
 import { useDebouncedSearch } from '@/composables/useDebouncedSearch'
 import { useColumnConfig, resolveOrderedColumns, applyColumnWidths } from '@/composables/useColumnConfig'
 import { useColumnDragColumns } from '@/composables/useColumnDragColumns'
@@ -371,6 +371,7 @@ import PublishDiffButton from '@/components/PublishDiffButton.vue'
 import PublishPreviewModal from '@/components/PublishPreviewModal.vue'
 import { executePublish } from '@/composables/useClusterUtils'
 import { showDeleteConfirm, executeDeleteWithProgress } from '@/composables/useClusterUtils'
+import { showOverlayModal } from '@/composables/useOverlayModal'
 import {
   useListClusterGrouping,
   isGroupHeaderRow,
@@ -962,10 +963,57 @@ const deletableUpstreams = computed(() =>
   batchSelectedUpstreams.value.filter((u: { id: number }) => referencedRouteNamesOf(u.id).length === 0),
 )
 
-/** 被引用行的提示片段：「A（3 条路由）」，最多 3 个，其余折成「等 N 条」 */
+/** 被引用行的提示片段：「A（引用路由：/a、/b 等 N 条）」，每上游最多 3 条路由，其余折成「等 N 条」 */
 function referencedUpstreamsHint(rows: Array<{ id: number; name: string }>, limit = 3): string {
-  const parts = rows.slice(0, limit).map((u) => `${u.name}（${referencedRouteNamesOf(u.id).length} 条路由）`)
-  return rows.length > limit ? `${parts.join('、')} 等 ${rows.length} 条` : parts.join('、')
+  const parts = rows.slice(0, limit).map((u) => {
+    const names = referencedRouteNamesOf(u.id)
+    const shown = names.slice(0, 3).join('、')
+    return `${u.name}（引用路由：${names.length > 3 ? `${shown} 等 ${names.length} 条` : shown}）`
+  })
+  // 行级折叠用「个上游」而非「条」，与每条内部的「等 N 条（路由）」区分（2026-11-22 裁决）
+  return rows.length > limit ? `${parts.join('、')} 等 ${rows.length} 个上游` : parts.join('、')
+}
+
+/**
+ * 全部被引用阻断弹窗（upstream-delete-reference-block-modal，对齐插件组
+ * `useClusterUtils.showReferencedDeleteBlock`）：逐条列出上游与其引用路由名（每上游最多 3 条，
+ * 超出折成「等 N 条」），无任何删除入口、不打开确认框、不发 DELETE。
+ * 多条上游时列表区滚动（max-height），避免弹窗过高。
+ */
+function showReferencedDeleteBlock(rows: Array<{ id: number; name: string }>): void {
+  const items = rows.map((u) => {
+    const names = referencedRouteNamesOf(u.id)
+    const total = names.length
+    return h('div', { style: 'margin-bottom:8px;' }, [
+      h('div', { style: 'color:var(--fg);font-weight:600;' }, u.name),
+      h(
+        'ul',
+        { style: 'margin:2px 0 0;padding-left:20px;color:var(--fg);' },
+        names.slice(0, 3).map((n) => h('li', n)),
+      ),
+      total > 3 ? h('div', { style: 'color:var(--muted);' }, `等 ${total} 条路由`) : null,
+    ])
+  })
+  const content = h('div', { style: 'font-size:13px;line-height:1.7;' }, [
+    h(
+      'div',
+      { style: 'color:var(--danger);font-weight:500;margin-bottom:8px;' },
+      `选中的 ${rows.length} 条上游均被路由引用，需先解除引用后才能删除：`,
+    ),
+    h('div', { style: 'max-height:260px;overflow-y:auto;' }, items),
+    h(
+      'div',
+      { style: 'color:var(--muted);margin-top:8px;' },
+      '需先在路由中解除对该上游的引用（删除路由或改绑上游）后再删除。',
+    ),
+  ])
+  showOverlayModal({
+    title: '无法删除：上游仍被路由引用',
+    content,
+    width: 480,
+    okText: '我知道了',
+    showCancel: false,
+  })
 }
 
 /**
@@ -1038,8 +1086,8 @@ function toggleBatchProgressExpand(label: string) {
  * 执行走 runClusterGroupedBatchUpstreamDelete（按 cluster_id 分组顺序请求集合端点，
  * 节点选择逐集群裁剪），进度弹窗与节点批量条同款（BatchActionProgressModal）。
  *
- * 前置「被路由引用」预检（批次 B2）：全部被引用只提示不弹确认，部分被引用先跳过并在
- * 确认弹窗里列出跳过项（见 precheckUpstreamReferences）。
+ * 前置「被路由引用」预检（批次 B2）：全部被引用 → 阻断弹窗（无删除入口），部分被引用先跳过并在
+ * 确认弹窗里列出跳过项及其引用路由名（见 precheckUpstreamReferences / showReferencedDeleteBlock）。
  */
 async function handleBatchDelete() {
   const list = batchSelectedUpstreams.value
@@ -1050,12 +1098,13 @@ async function handleBatchDelete() {
 
   // 「被路由引用」预检（批次 B2）：后端批量端点对引用上游逐条拦截（该上游已被路由引用，
   // 请先删除引用路由）。这里在确认弹窗**之前**问一次引用端点，避免用户点了删除才发现一堆失败：
-  // 全部被引用 → 只弹 warning（不发 DELETE、不弹确认）；部分被引用 → 跳过并在弹窗里明示。
+  // 全部被引用 → 阻断弹窗（对齐插件组，无删除入口，不发 DELETE、不弹确认）；
+  // 部分被引用 → 跳过并在弹窗警示行里列出被跳过项及其引用路由名。
   const allGroups = groupUpstreamsByCluster(list)
   await precheckUpstreamReferences(allGroups)
   const referenced = list.filter((u: { id: number }) => referencedRouteNamesOf(u.id).length > 0)
   if (referenced.length === list.length) {
-    message.warning(`选中的 ${list.length} 条上游均被路由引用，请先解除引用：${referencedUpstreamsHint(referenced)}`)
+    showReferencedDeleteBlock(referenced)
     return
   }
 
