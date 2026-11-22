@@ -74,17 +74,80 @@ describe('CaCertList 分发页（ssl-cert-management）', () => {
     expect(banner.text()).toContain('服务器证书')
   })
 
-  it('安装指引含 Chrome 段（浏览器内导入）且不含 Firefox', async () => {
+  it('安装指引：四张平台卡（Windows/macOS/Chrome·Edge/Linux），不含 Firefox', async () => {
     const w = await mountPage()
     const guide = w.find('.install-guide')
     expect(guide.exists()).toBe(true)
+    const cards = guide.findAll('.p-card')
+    expect(cards.length).toBe(4)
+    expect(cards.map((c) => c.find('.p-name').text())).toEqual(['Windows', 'macOS', 'Chrome / Edge 浏览器', 'Linux'])
     const text = guide.text()
-    expect(text).toContain('Chrome 浏览器')
+    // Chrome/Edge 独立卡：双浏览器地址入口 + 导入路径 + 信任勾选
+    expect(text).toContain('chrome://settings/security')
+    expect(text).toContain('edge://settings/privacy')
     expect(text).toContain('证书颁发机构')
+    expect(text).toContain('信任此 CA 标识网站')
+    // Windows 卡安装卡点（UAC）与存储位置
+    expect(text).toContain('本地计算机')
+    expect(text).toContain('受信任的根证书颁发机构')
+    expect(text).toContain('UAC')
+    // Linux 双命令 + RHEL/CentOS 兼容提示
+    expect(text).toContain('sudo cp')
+    expect(text).toContain('sudo update-ca-certificates')
+    expect(text).toContain('update-ca-trust')
+    // Firefox 维持移除（ssl-cert-management 既定裁决，2026-11-22 重申）
     expect(text).not.toContain('Firefox')
-    expect(text).toContain('Windows')
-    expect(text).toContain('macOS')
-    expect(text).toContain('Linux')
+  })
+
+  it('验证条：安装成功判断 + 失败排查', async () => {
+    const w = await mountPage()
+    const strip = w.find('.verify-strip')
+    expect(strip.exists()).toBe(true)
+    const t = strip.text()
+    expect(t).toContain('如何确认安装成功')
+    expect(t).toContain('您的连接不是专用连接')
+    expect(t).toContain('完全退出后重开')
+  })
+
+  it('summary 行 V1 开合可发现性：chev 块 + 「点此展开」提示', async () => {
+    const w = await mountPage()
+    const summary = w.find('.install-guide summary')
+    expect(summary.find('.chev').exists()).toBe(true)
+    expect(summary.text()).toContain('点此展开')
+    expect(summary.text()).toContain('复制全部文本')
+  })
+
+  it('复制全部文本：程序性展开面板后取正文纯文本写剪贴板', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    const w = await mountPage()
+    const guide = w.find('.install-guide')
+    expect((guide.element as HTMLDetailsElement).open).toBe(false)
+    const btn = w.findAll('button').find((b) => b.text() === '复制全部文本')
+    await btn!.trigger('click')
+    await flushPromises()
+    expect(writeText).toHaveBeenCalledTimes(1)
+    const copied = writeText.mock.calls[0][0] as string
+    expect(copied).toContain('受信任的根证书颁发机构')
+    expect(copied).toContain('chrome://settings/security')
+    expect(copied).toContain('如何确认安装成功')
+    // 不含 summary 自身文案（按钮/提示语不进复制产物）
+    expect(copied).not.toContain('复制全部文本')
+    expect(copied).not.toContain('点此展开')
+    const { message } = await import('ant-design-vue')
+    expect(message.success).toHaveBeenCalled()
+  })
+
+  it('Linux 单条命令复制：两条 copy-cmd 分别写入对应命令', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    const w = await mountPage()
+    const btns = w.findAll('.copy-cmd')
+    expect(btns.length).toBe(2)
+    await btns[0].trigger('click')
+    expect(writeText).toHaveBeenCalledWith('sudo cp <证书名>.crt /usr/local/share/ca-certificates/')
+    await btns[1].trigger('click')
+    expect(writeText).toHaveBeenCalledWith('sudo update-ca-certificates')
   })
 
   it('空态「暂无 CA 根证书」+ 创建引导；计数文案为「N 个 CA 根证书」', async () => {

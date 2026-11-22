@@ -24,44 +24,186 @@
       </div>
     </div>
 
-    <!-- 用户安装指引（折叠面板，四段：Windows/macOS/Chrome/Linux） -->
-    <details class="install-guide">
-      <summary>📥 用户安装指引（发给用户时请附带对应系统的步骤）</summary>
+    <!-- 用户安装指引（折叠面板，四平台步骤卡：Windows/macOS/Chrome·Edge/Linux + 通用验证条；
+         ca-install-guide-restyle 2026-11-22：Chrome/Edge 独立成卡、验证段、复制能力；
+         Firefox 段维持移除（ssl-cert-management 既定裁决）） -->
+    <details ref="guideRef" class="install-guide">
+      <summary>
+        <span class="chev">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 12 12"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M4 2.5l4 3.5-4 3.5" />
+          </svg>
+        </span>
+        <span class="guide-title">📥 用户安装指引</span>
+        <span class="summary-hint">四个安装环境 + 通用验证 · 点此展开</span>
+        <button class="link-btn" data-test="guide-copy-all" @click.prevent="copyGuideAll">复制全部文本</button>
+      </summary>
       <div class="guide-body">
-        <div class="guide-col">
-          <h4>Windows</h4>
-          <ol>
-            <li>双击下载的 <code>.crt</code> 文件</li>
-            <li>点击「安装证书」</li>
-            <li>存储位置选「本地计算机」</li>
-            <li>选「将所有的证书都放入下列存储」→ 浏览选择「<b>受信任的根证书颁发机构</b>」</li>
-            <li>完成，重启浏览器生效</li>
-          </ol>
+        <div class="p-card">
+          <div class="p-head">
+            <span class="p-ico">🪟</span>
+            <span class="p-name">Windows</span>
+            <span class="p-scope">系统级安装</span>
+          </div>
+          <div class="p-body">
+            <div class="guide-step">
+              <span class="step-no">1</span>
+              <div class="step-main">
+                <div class="step-title">双击下载的 <b>.crt</b> 文件 → 点「安装证书」</div>
+              </div>
+            </div>
+            <div class="guide-step">
+              <span class="step-no">2</span>
+              <div class="step-main">
+                <div class="step-title">存储位置选「<b>本地计算机</b>」→ 下一步</div>
+                <div class="step-sub">用户账户控制（UAC）弹窗选「是」</div>
+              </div>
+            </div>
+            <div class="guide-step">
+              <span class="step-no">3</span>
+              <div class="step-main">
+                <div class="step-title">
+                  选「将所有的证书都放入下列存储」→ 浏览 →「<b>受信任的根证书颁发机构</b>」→ 完成
+                </div>
+              </div>
+            </div>
+            <div class="guide-step">
+              <span class="step-no">4</span>
+              <div class="step-main"><div class="step-title">重启浏览器生效</div></div>
+            </div>
+            <div class="note-row">
+              <span class="n-ico">ℹ</span>
+              <div>
+                本卡为<b>系统级安装</b>：装完后 Chrome / Edge 及其它内网软件即已信任。如需在浏览器内单独导入，见「Chrome
+                / Edge 浏览器」卡。
+              </div>
+            </div>
+          </div>
         </div>
-        <div class="guide-col">
-          <h4>macOS</h4>
-          <ol>
-            <li>双击 <code>.crt</code> 打开「钥匙串访问」</li>
-            <li>添加到「系统」钥匙串</li>
-            <li>双击该证书 → 信任 → 设为「<b>始终信任</b>」</li>
-          </ol>
+
+        <div class="p-card">
+          <div class="p-head">
+            <span class="p-ico">🍎</span>
+            <span class="p-name">macOS</span>
+            <span class="p-scope">钥匙串 · 含 Safari</span>
+          </div>
+          <div class="p-body">
+            <div class="guide-step">
+              <span class="step-no">1</span>
+              <div class="step-main">
+                <div class="step-title">双击 <b>.crt</b> 打开「钥匙串访问」→ 选「<b>系统</b>」钥匙串 → 添加</div>
+              </div>
+            </div>
+            <div class="guide-step">
+              <span class="step-no">2</span>
+              <div class="step-main">
+                <div class="step-title">双击该证书 → 展开「信任」→ 选「<b>始终信任</b>」</div>
+              </div>
+            </div>
+            <div class="guide-step">
+              <span class="step-no">3</span>
+              <div class="step-main"><div class="step-title">关闭设置窗口，输入开机密码确认</div></div>
+            </div>
+            <div class="note-row">
+              <span class="n-ico">ℹ</span>
+              <div>Safari 及系统级应用导入即生效。</div>
+            </div>
+          </div>
         </div>
-        <div class="guide-col">
-          <h4>Chrome 浏览器</h4>
-          <ol>
-            <li>打开 Chrome，地址栏输入 <code>chrome://settings/security</code>（或 设置 → 隐私与安全 → 安全）</li>
-            <li>滚动到「高级」→ 点击「<b>管理证书</b>」</li>
-            <li>切换到「证书颁发机构」→ 点击「<b>导入</b>」选择 <code>.crt</code> 文件</li>
-            <li>勾选「<b>信任此 CA 标识网站</b>」→ 确定，重启 Chrome 生效</li>
-            <li>Windows 下会打开系统导入向导（按上方 Windows 步骤操作即可）</li>
-          </ol>
+
+        <div class="p-card">
+          <div class="p-head">
+            <span class="p-ico">🌐</span>
+            <span class="p-name">Chrome / Edge 浏览器</span>
+            <span class="p-scope">全平台 · 浏览器内导入</span>
+          </div>
+          <div class="p-body">
+            <div class="guide-step">
+              <span class="step-no">1</span>
+              <div class="step-main">
+                <div class="step-title">
+                  地址栏输入 <b>chrome://settings/security</b>（Edge 为 <b>edge://settings/privacy</b>）
+                </div>
+                <div class="step-sub">或菜单：设置 → 隐私与安全 → 安全</div>
+              </div>
+            </div>
+            <div class="guide-step">
+              <span class="step-no">2</span>
+              <div class="step-main"><div class="step-title">滚动到「高级」→ 点「<b>管理证书</b>」</div></div>
+            </div>
+            <div class="guide-step">
+              <span class="step-no">3</span>
+              <div class="step-main">
+                <div class="step-title">切到「<b>证书颁发机构</b>」→ 点「导入」选择 .crt 文件</div>
+              </div>
+            </div>
+            <div class="guide-step">
+              <span class="step-no">4</span>
+              <div class="step-main">
+                <div class="step-title">勾选「<b>信任此 CA 标识网站</b>」→ 确定，重启浏览器生效</div>
+              </div>
+            </div>
+            <div class="note-row">
+              <span class="n-ico">ℹ</span>
+              <div>
+                Windows
+                下点「导入」会打开系统导入向导，按「Windows」卡步骤操作即可；已完成系统级安装的，浏览器通常已自动信任，本卡用于需<b>在浏览器内单独管理证书</b>的场景。
+              </div>
+            </div>
+          </div>
         </div>
-        <div class="guide-col">
-          <h4>Linux (Debian/Ubuntu)</h4>
-          <ol>
-            <li><code>sudo cp xxx.crt /usr/local/share/ca-certificates/</code></li>
-            <li><code>sudo update-ca-certificates</code></li>
-          </ol>
+
+        <div class="p-card">
+          <div class="p-head">
+            <span class="p-ico">🐧</span>
+            <span class="p-name">Linux</span>
+            <span class="p-scope">Debian / Ubuntu · RHEL 兼容</span>
+          </div>
+          <div class="p-body">
+            <div class="guide-step">
+              <span class="step-no">1</span>
+              <div class="step-main">
+                <div class="step-title">复制证书到系统 CA 目录</div>
+                <div class="code-row">
+                  <span class="cmd">{{ LINUX_CMD_CP }}</span>
+                  <button class="copy-cmd" @click="copyGuideCommand(LINUX_CMD_CP)">复制</button>
+                </div>
+              </div>
+            </div>
+            <div class="guide-step">
+              <span class="step-no">2</span>
+              <div class="step-main">
+                <div class="step-title">更新系统证书索引</div>
+                <div class="code-row">
+                  <span class="cmd">{{ LINUX_CMD_UPDATE }}</span>
+                  <button class="copy-cmd" @click="copyGuideCommand(LINUX_CMD_UPDATE)">复制</button>
+                </div>
+              </div>
+            </div>
+            <div class="note-row">
+              <span class="n-ico">ℹ</span>
+              <div>
+                RHEL / CentOS：复制到 <b>/etc/pki/ca-trust/source/anchors/</b> 后执行 <b>sudo update-ca-trust</b>。
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="verify-strip">
+        <span class="v-ico">✓</span>
+        <div class="v-body">
+          <b>如何确认安装成功（通用）：</b>访问任一内部 HTTPS 系统（如统一管理入口），地址栏出现 🔒
+          且不再出现「您的连接不是专用连接」警告。若仍告警：确认装入的是「<b>受信任的根证书颁发机构</b>」而非「个人」存储；浏览器完全退出后重开再试。
         </div>
       </div>
     </details>
@@ -161,7 +303,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, nextTick, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { PAGE_SIZE_CARD_GRID } from '@/constants'
 import ClusterSelect from '@/components/ClusterSelect.vue'
@@ -352,6 +494,45 @@ function downloadCa(cert: any) {
   }
   downloadCertFile(cert.cert, buildCertFileName(clusterLabelOf(cert), cert.name))
   message.success('已下载。可直接分发给用户安装（单文件、不含私钥）；证书更新后请重新下载分发', 6)
+}
+
+// ── 用户安装指引（ca-install-guide-restyle）────────────────────────────
+const guideRef = ref<HTMLDetailsElement | null>(null)
+const LINUX_CMD_CP = 'sudo cp <证书名>.crt /usr/local/share/ca-certificates/'
+const LINUX_CMD_UPDATE = 'sudo update-ca-certificates'
+
+/** 剪贴板写入：安全上下文走 clipboard API，失败（http 内网等）返回 false 交调用方提示手动复制 */
+async function writeClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function copyGuideCommand(cmd: string) {
+  if (await writeClipboard(cmd)) {
+    message.success('已复制到剪贴板')
+  } else {
+    message.warning('复制失败，请手动选中命令复制')
+  }
+}
+
+/** 复制全部文本：程序性展开面板后取正文（不含 summary 文案）纯文本，供管理员粘贴 IM 发用户 */
+async function copyGuideAll() {
+  if (guideRef.value) guideRef.value.open = true
+  await nextTick()
+  const root = guideRef.value
+  const parts = root ? root.querySelectorAll('.guide-body, .verify-strip') : []
+  const text = Array.from(parts)
+    .map((el) => ((el as HTMLElement).innerText ?? el.textContent ?? '').replace(/\n{3,}/g, '\n\n').trim())
+    .join('\n\n')
+  if (await writeClipboard(text)) {
+    message.success('已复制指引全文（纯文本），可粘贴发给用户')
+  } else {
+    message.warning('复制失败，请展开指引后手动选择文本复制')
+  }
 }
 
 async function deleteCert(cert: any) {

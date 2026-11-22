@@ -122,36 +122,211 @@
 .install-guide > summary::-webkit-details-marker {
   display: none;
 }
-.install-guide > summary::before {
-  content: '▸';
-  transition: transform 0.15s;
-  font-size: 11px;
+.install-guide > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 11px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  user-select: none;
+  transition: background 0.12s;
 }
-.install-guide[open] > summary::before {
+.install-guide > summary:hover {
+  background: var(--bg);
+}
+.install-guide > summary::-webkit-details-marker {
+  display: none;
+}
+/* V1 开合可发现性（ca-install-guide-restyle D8）：28px 浅底圆角块内 14px chevron，
+   展开旋转 90°；整行 hover 灰底。原生 details/summary 自带 button 语义。 */
+.install-guide > summary .chev {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
+  background: var(--accent-bg);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.install-guide > summary .chev svg {
+  transition: transform 0.15s;
+}
+.install-guide[open] > summary .chev svg {
   transform: rotate(90deg);
+}
+.summary-hint {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 400;
+  margin-left: auto;
 }
 .guide-body {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 14px;
-  padding: 4px 16px 16px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  padding: 14px 16px 16px;
 }
-.guide-col h4 {
-  font-size: 12px;
-  margin-bottom: 6px;
+.p-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--surface);
 }
-.guide-col ol {
-  padding-left: 16px;
-  font-size: 12px;
+.p-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--bg);
+  background: var(--bg);
+}
+.p-ico {
+  font-size: 14px;
+}
+.p-name {
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.p-scope {
+  margin-left: auto;
+  font-size: 10.5px;
   color: var(--muted);
-  line-height: 1.7;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 8px;
 }
-.guide-col code {
+.p-body {
+  padding: 8px 12px 10px;
+}
+.guide-step {
+  display: flex;
+  gap: 10px;
+  padding: 7px 0;
+}
+.guide-step + .guide-step {
+  border-top: 1px dashed var(--bg);
+}
+.step-no {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+}
+.step-main {
+  flex: 1;
+}
+.step-title {
+  font-size: 12.5px;
+  color: var(--fg);
+  line-height: 1.55;
+}
+.step-title b {
+  font-weight: 600;
+}
+.step-sub {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 1px;
+}
+.code-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   background: var(--bg);
   border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 5px 9px;
+  margin-top: 5px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+.code-row .cmd {
+  flex: 1;
+  user-select: all;
+  word-break: break-all;
+}
+.copy-cmd {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 10.5px;
   border-radius: 4px;
-  padding: 0 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.copy-cmd:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.note-row {
+  display: flex;
+  gap: 7px;
+  align-items: flex-start;
+  background: var(--accent-bg);
+  border-radius: var(--radius-md);
+  padding: 7px 9px;
+  margin-top: 8px;
   font-size: 11px;
+  color: var(--muted);
+}
+.note-row .n-ico {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+.note-row b {
+  color: var(--fg);
+  font-weight: 600;
+}
+.verify-strip {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  border-top: 1px solid var(--border);
+  background: var(--success-bg);
+  padding: 12px 16px;
+  font-size: 12px;
+}
+.verify-strip .v-ico {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--success);
+  color: #fff;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+}
+.verify-strip .v-body {
+  color: var(--muted);
+}
+.verify-strip .v-body b {
+  color: var(--fg);
+  font-weight: 600;
+}
+@media (max-width: 1200px) {
+  .guide-body {
+    grid-template-columns: 1fr;
+  }
 }
 .text-sm {
   font-size: 12px;
@@ -161,9 +336,6 @@
 }
 @media (max-width: 768px) {
   .ssl-grid {
-    grid-template-columns: 1fr;
-  }
-  .guide-body {
     grid-template-columns: 1fr;
   }
 }

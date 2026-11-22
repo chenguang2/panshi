@@ -1,0 +1,14 @@
+PASS  指引面板存在
+PASS  V1 chev 块存在
+PASS  提示语含「点此展开」
+PASS  收起态为默认
+PASS  点击 summary 展开
+PASS  四张平台卡顺序正确  [["Windows","macOS","Chrome / Edge 浏览器","Linux"]]
+PASS  Chrome 入口 + Edge 入口
+PASS  UAC / RHEL 卡点
+PASS  验证条
+PASS  无 Firefox
+PASS  剪贴板为指引纯文本
+PASS  成功 toast
+PASS  Linux 两条复制按钮
+PASS  单条命令进剪贴板
