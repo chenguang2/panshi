@@ -12,7 +12,7 @@
 | **B3** | Vue Router `No match found` 首访时序告警（`/edge-client`、`/database-management`、`/edge-import`） | 噪声/排障干扰 | ✅ 完成（静态 catch-all 占位 + `reenterIfPlaceholder`，warn 6→0；顺带补 404 视图） |
 | **B4** | e2e 隔离库流程固化为 `scripts/e2e-isolated.sh`（本轮为手工搭建，且曾出现「以为隔离了其实没隔离」） | 流程/基建 | ✅ 完成（`bash scripts/e2e-isolated.sh [--spec <正则>] [--workers N] [--keep]`；隔离断言 + 真实库指纹 + `.port` 原状还原三防错已反向验证） |
 | **B5** | 三份批量删除核心收敛（`useBatchNodeAction` / `useBatchUpstreamDelete` / `useBatchRouteDelete`） | 重复代码 | ✅ 完成（通用核心 `useClusterGroupedBatchDelete`，三域薄适配，净 −220 行，既有测试零改动） |
-| **B6** | 中继（relay）域 e2e 覆盖（SSE 长流 + ansible，目前仅后端单测） | 覆盖缺口 | 待办 |
+| **B6** | 中继（relay）域 e2e 覆盖（SSE 长流 + ansible，目前仅后端单测） | 覆盖缺口 | ✅ 完成（UI 级 e2e 20 例 + SSE 桩 helper；ansible 零出网；全量 104 passed/3 skipped） |
 | **B7** | 上游删除「全部被引用」改为阻断弹窗（对齐插件组），部分跳过提示补引用路由名 | 体验一致性 | ✅ 完成（openspec `upstream-delete-reference-block-modal` 已归档） |
 
 ## 不在本轮（已裁决保留 / 记录在案）
