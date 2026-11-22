@@ -41,6 +41,18 @@ enabled_plugins:
   - monitor
   - dns_upstream
   - redirect
+# 品牌信息（branding-configuration）：登录页主品牌/页脚、侧边栏文案与版本徽标、
+# 浏览器标签页标题均消费此处配置；mtime 热加载，改完切回页面即生效。
+# 未配置整个命名空间或单个 key 时回落内置默认值（= 下方示例值，现状行为）。
+branding:
+  system_name: 磐石                    # 系统短名：浏览器标签页标题
+  brand_name: 磐石 Gateway             # 品牌名：登录页主品牌 + 侧边栏文案
+  product_name: Panshi Gateway Admin   # 产品英文全名：登录页页脚前缀
+  version: v1.0                        # 版本号：登录页页脚后缀 + 侧边栏徽标
+  # system_name: Bedrock                    # 系统短名：浏览器标签页标题
+  # brand_name: Bedrock Gateway             # 品牌名：登录页主品牌 + 侧边栏文案
+  # product_name: Bedrock Gateway Admin   # 产品英文全名：登录页页脚前缀
+  # version: v3.1                        # 版本号：登录页页脚后缀 + 侧边栏徽标  
 # 全局规则两入口可用插件清单（与 enabled_plugins 同级；空/未配置 = 不限制，
 # 目录全量可选）。后续调整只改本清单，mtime 热加载、免改代码免重启。
 global_rule_plugins:

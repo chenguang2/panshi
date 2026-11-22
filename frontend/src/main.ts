@@ -58,6 +58,13 @@ async function bootstrap() {
     message.error('系统功能配置加载失败，请刷新重试')
   }
 
+  // branding-configuration D3：标签页重新可见时强制重拉 features（后端 mtime 热加载
+  // 的最后一公里——改完 features.yaml 切回页面即刷新品牌/版本/功能开关，免重启免手动
+  // 刷新浏览器；reload 失败静默保留旧值）。加载失败也注册：reload 兼作一次补拉。
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') void featuresStore.reload()
+  })
+
   // Register feature-gated routes now that we know what's available.
   setupDynamicRoutes(router)
 

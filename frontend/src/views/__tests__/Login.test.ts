@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import Login from '../Login.vue'
+import { useFeaturesStore } from '@/stores/features'
 
 // 模块级 spy：组件内 useRouter() 与测试断言共享同一实例
 const routerPush = vi.fn()
@@ -116,6 +117,32 @@ describe('Login.vue 忘记密码链接（L 批次遗留缺陷：死锚点无响�
     expect(evt.defaultPrevented).toBe(true)
 
     wrapper.unmount()
+  })
+})
+
+describe('Login.vue 品牌配置化（branding-configuration）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  it('未加载/未配置时展示内置默认值（页脚 = product_name + 空格 + version）', () => {
+    const wrapper = mount(Login, { global: { stubs: loginStubs } })
+    expect(wrapper.find('.login-brand-name').text()).toBe('磐石 Gateway')
+    expect(wrapper.find('.login-footer-version').text()).toBe('Panshi Gateway Admin v1.0')
+  })
+
+  it('branding 配置值驱动主品牌与页脚（features.yaml 命名空间透出）', async () => {
+    useFeaturesStore().$patch({
+      branding: {
+        system_name: '星门',
+        brand_name: '星门 Gateway',
+        product_name: 'Xingmen Gateway Admin',
+        version: 'v2.1',
+      },
+    })
+    const wrapper = mount(Login, { global: { stubs: loginStubs } })
+    expect(wrapper.find('.login-brand-name').text()).toBe('星门 Gateway')
+    expect(wrapper.find('.login-footer-version').text()).toBe('Xingmen Gateway Admin v2.1')
   })
 })
 

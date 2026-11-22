@@ -3,8 +3,8 @@
     <!-- Brand Logo -->
     <div class="sidebar-logo">
       <img :src="logoIcon" class="sidebar-logo-icon" />
-      <span v-show="!collapsed" class="sidebar-logo-text">磐石 Admin</span>
-      <span v-show="!collapsed" class="sidebar-logo-version">v1.0</span>
+      <span v-show="!collapsed" class="sidebar-logo-text">{{ featuresStore.branding.brand_name }}</span>
+      <span v-show="!collapsed" class="sidebar-logo-version">{{ featuresStore.branding.version }}</span>
     </div>
 
     <!-- Navigation -->

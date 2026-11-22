@@ -35,12 +35,16 @@ class TestFeaturesModule:
 
     def test_features_not_exists_returns_defaults(self, tmp_path: Path):
         """When features.yaml does not exist, should return default config (all enabled)."""
-        from app.core.features import load_features
+        from app.core.features import BRANDING_DEFAULTS, load_features
 
         nonexistent = tmp_path / "nonexistent.yaml"
         result = load_features(str(nonexistent))
 
-        assert result == {"features": {}, "enabled_plugins": []}
+        assert result == {
+            "features": {},
+            "enabled_plugins": [],
+            "branding": dict(BRANDING_DEFAULTS),
+        }
 
     # ── Valid YAML ───────────────────────────────────────
 
@@ -345,6 +349,125 @@ class TestFeaturesModule:
         st = cfg.stat()
         os.utime(cfg, (st.st_atime + 10, st.st_mtime + 10))
         assert feature_enabled("tools") is False
+
+
+class TestBrandingConfig:
+    """branding 命名空间：品牌/版本配置化（branding-configuration）。
+
+    与 concurrency 同构的顶层命名空间：严格校验（未知 key / 类型错误 → 报错
+    退出）、未配置回落内置默认值（行为与硬编码现状一致）、mtime 热加载。
+    展示面（登录页/侧边栏/标签页标题）经 GET /system/features 的 branding
+    对象消费；默认值下各展示面逐字符不变（侧边栏磐石 Admin → 磐石 Gateway
+    为 D2 有意统一的唯一例外）。
+    """
+
+    DEFAULTS = {
+        "system_name": "磐石",
+        "brand_name": "磐石 Gateway",
+        "product_name": "Panshi Gateway Admin",
+        "version": "v1.0",
+    }
+
+    # ── 未配置回落默认值 ─────────────────────────────────
+
+    def test_branding_defaults_when_namespace_missing(self, tmp_path: Path, monkeypatch):
+        """branding 命名空间缺失时，get_branding() 返回内置默认值。"""
+        from app.core.features import get_branding
+
+        cfg = tmp_path / "features.yaml"
+        cfg.write_text(yaml.dump({"features": {}}))
+        _point_features_at(monkeypatch, cfg)
+        assert get_branding() == self.DEFAULTS
+
+    def test_branding_configured_values(self, tmp_path: Path, monkeypatch):
+        """显式配置时 get_branding() 返回配置值。"""
+        from app.core.features import get_branding
+
+        configured = {
+            "system_name": "星门",
+            "brand_name": "星门 Gateway",
+            "product_name": "Xingmen Gateway Admin",
+            "version": "v2.1",
+        }
+        cfg = tmp_path / "features.yaml"
+        cfg.write_text(yaml.dump({"features": {}, "branding": configured}))
+        _point_features_at(monkeypatch, cfg)
+        assert get_branding() == configured
+
+    def test_branding_partial_config_merges_defaults(self, tmp_path: Path, monkeypatch):
+        """部分 key 缺失时，缺失 key 回落默认值（合并而非整组覆盖）。"""
+        from app.core.features import get_branding
+
+        cfg = tmp_path / "features.yaml"
+        cfg.write_text(yaml.dump({"features": {}, "branding": {"brand_name": "星门 Gateway"}}))
+        _point_features_at(monkeypatch, cfg)
+        branding = get_branding()
+        assert branding["brand_name"] == "星门 Gateway"
+        assert branding["system_name"] == self.DEFAULTS["system_name"]
+        assert branding["product_name"] == self.DEFAULTS["product_name"]
+        assert branding["version"] == self.DEFAULTS["version"]
+
+    # ── 校验报错退出 ─────────────────────────────────────
+
+    def test_branding_not_dict_raises_systemexit(self, tmp_path: Path):
+        """branding 不是映射（如字符串/列表）应 SystemExit。"""
+        from app.core.features import load_features
+
+        cfg = tmp_path / "features.yaml"
+        cfg.write_text(yaml.dump({"features": {}, "branding": "not-a-mapping"}))
+
+        with pytest.raises(SystemExit):
+            load_features(str(cfg))
+
+    def test_branding_unknown_key_raises_systemexit(self, tmp_path: Path):
+        """未知 branding key（如 brandname 拼写错误）应 SystemExit。"""
+        from app.core.features import load_features
+
+        cfg = tmp_path / "features.yaml"
+        cfg.write_text(yaml.dump({"features": {}, "branding": {"brandname": "星门"}}))
+
+        with pytest.raises(SystemExit):
+            load_features(str(cfg))
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            pytest.param(123, id="int"),
+            pytest.param(True, id="bool"),
+            pytest.param(["v1.0"], id="list"),
+        ],
+    )
+    def test_branding_non_string_value_raises_systemexit(self, tmp_path: Path, value):
+        """branding 值不是字符串应 SystemExit。"""
+        from app.core.features import load_features
+
+        cfg = tmp_path / "features.yaml"
+        cfg.write_text(yaml.dump({"features": {}, "branding": {"version": value}}))
+
+        with pytest.raises(SystemExit):
+            load_features(str(cfg))
+
+    # ── mtime 热加载 ─────────────────────────────────────
+
+    def test_branding_reloads_on_file_change(self, tmp_path: Path, monkeypatch):
+        """修改 branding 后 get_branding() 应感知 mtime 变化并重载。"""
+        import os
+
+        import app.core.features as fmod
+        from app.core.features import get_branding
+
+        cfg = tmp_path / "features.yaml"
+        cfg.write_text(yaml.dump({"features": {}, "branding": {"version": "v1.0"}}))
+        _point_features_at(monkeypatch, cfg)
+        assert get_branding()["version"] == "v1.0"
+
+        cfg.write_text(yaml.dump({"features": {}, "branding": {"version": "v2.0"}}))
+        st = cfg.stat()
+        os.utime(cfg, (st.st_atime + 10, st.st_mtime + 10))
+        assert get_branding()["version"] == "v2.0"
+
+        # 热加载不残留 monkeypatch 状态
+        assert fmod._features is not None
 
 
 class TestNoSaveFeedbackFeatureSwitch:

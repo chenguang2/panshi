@@ -172,3 +172,102 @@ describe('features store', () => {
     expect(store.concurrencyOf('batch_action', 5)).toBe(5)
   })
 })
+
+describe('features store branding（branding-configuration）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+  })
+
+  it('load() parses branding from response', async () => {
+    mockFeaturesGet({
+      features: {},
+      enabled_plugins: [],
+      branding: {
+        system_name: '星门',
+        brand_name: '星门 Gateway',
+        product_name: 'Xingmen Gateway Admin',
+        version: 'v2.1',
+      },
+    })
+
+    const store = useFeaturesStore()
+    await store.load()
+
+    expect(store.branding).toEqual({
+      system_name: '星门',
+      brand_name: '星门 Gateway',
+      product_name: 'Xingmen Gateway Admin',
+      version: 'v2.1',
+    })
+  })
+
+  it('branding 缺失时回落内置默认值（未配置 = 现状文案，向后兼容）', async () => {
+    mockFeaturesGet({ features: {}, enabled_plugins: [] })
+
+    const store = useFeaturesStore()
+    await store.load()
+
+    expect(store.branding).toEqual({
+      system_name: '磐石',
+      brand_name: '磐石 Gateway',
+      product_name: 'Panshi Gateway Admin',
+      version: 'v1.0',
+    })
+  })
+
+  it('branding 未加载前即为默认值（fail-open：加载失败时登录页仍有品牌文案）', () => {
+    const store = useFeaturesStore()
+    expect(store.branding.brand_name).toBe('磐石 Gateway')
+    expect(store.branding.version).toBe('v1.0')
+  })
+
+  it('branding 部分缺失时缺失 key 回落默认值（合并而非整组覆盖）', async () => {
+    mockFeaturesGet({ features: {}, enabled_plugins: [], branding: { brand_name: '星门 Gateway' } })
+
+    const store = useFeaturesStore()
+    await store.load()
+
+    expect(store.branding.brand_name).toBe('星门 Gateway')
+    expect(store.branding.system_name).toBe('磐石')
+    expect(store.branding.version).toBe('v1.0')
+  })
+
+  it('load() 后 document.title 跟随 branding.system_name（D4 标签页标题）', async () => {
+    mockFeaturesGet({
+      features: {},
+      enabled_plugins: [],
+      branding: { system_name: '星门', brand_name: '星门 Gateway', product_name: 'X', version: 'v9' },
+    })
+
+    await useFeaturesStore().load()
+
+    expect(document.title).toBe('星门')
+  })
+
+  it('reload() 绕过 loaded 守卫重拉配置并更新 branding（D3 visibilitychange 数据面）', async () => {
+    mockFeaturesGet({ features: {}, enabled_plugins: [], branding: { version: 'v1.0' } })
+    const store = useFeaturesStore()
+    await store.load()
+    expect(store.branding.version).toBe('v1.0')
+
+    // 模拟 features.yaml 热修改后的新响应（mockImplementation 覆盖旧注册）
+    mockFeaturesGet({ features: {}, enabled_plugins: [], branding: { version: 'v2.0' } })
+    await store.reload()
+
+    expect(vi.mocked(api.get).mock.calls.length).toBe(2)
+    expect(store.branding.version).toBe('v2.0')
+  })
+
+  it('reload() 失败时静默保留旧值（网络抖动不打扰）', async () => {
+    mockFeaturesGet({ features: {}, enabled_plugins: [], branding: { version: 'v1.0' } })
+    const store = useFeaturesStore()
+    await store.load()
+
+    mockFeaturesGet(new Error('network error'))
+    await expect(store.reload()).resolves.toBeUndefined()
+
+    expect(store.branding.version).toBe('v1.0')
+    expect(store.loaded).toBe(true)
+  })
+})

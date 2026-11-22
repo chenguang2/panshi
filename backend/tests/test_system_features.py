@@ -57,6 +57,19 @@ class TestSystemFeaturesEndpoint:
         # Verify it's the real endpoint, not a redirect to login
         assert "/api/v1/system/features" in str(resp.url)
 
+    def test_system_features_includes_branding_defaults(self, isolated_app):
+        """夹具 yaml 未配置 branding → 响应仍含完整 branding 4 key（默认值兜底）。
+
+        branding-configuration：后端校验层在加载时补齐默认值，端点零改动即透出；
+        登录页（认证前）据此渲染品牌信息，故响应契约要求 4 key 齐全。
+        """
+        resp = isolated_app.get("/api/v1/system/features")
+        branding = resp.json()["branding"]
+        assert branding["system_name"] == "磐石"
+        assert branding["brand_name"] == "磐石 Gateway"
+        assert branding["product_name"] == "Panshi Gateway Admin"
+        assert branding["version"] == "v1.0"
+
 
 class TestFeatureRoutersDict:
     """Unit tests for the feature_routers dict."""

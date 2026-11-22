@@ -10,7 +10,7 @@
       <!-- 品牌区域：保留原生 HTML，不是表单行为，不需要 Ant Design -->
       <div class="login-brand">
         <img :src="logoIcon" class="login-brand-icon" />
-        <span class="login-brand-name">磐石 Gateway</span>
+        <span class="login-brand-name">{{ featuresStore.branding.brand_name }}</span>
         <span class="login-brand-sub">统一接入平台</span>
         <div class="login-divider"></div>
       </div>
@@ -80,7 +80,9 @@
       </div>
 
       <div class="login-footer">
-        <div class="login-footer-version">Panshi Gateway Admin v1.0</div>
+        <div class="login-footer-version">
+          {{ featuresStore.branding.product_name }} {{ featuresStore.branding.version }}
+        </div>
         <div class="login-footer-copy">&copy; 2011~2026 EmbraceSource</div>
       </div>
     </div>
@@ -94,6 +96,7 @@
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useFeaturesStore } from '@/stores/features'
 import { showOverlayModal } from '@/composables/useOverlayModal'
 import ForceChangePasswordDialog from '@/components/ForceChangePasswordDialog.vue'
 import type { ChangePasswordResponse } from '@/types'
@@ -101,6 +104,8 @@ import logoIcon from '@/assets/icon.png'
 
 const router = useRouter()
 const authStore = useAuthStore()
+// branding-configuration：主品牌/页脚文案由 features.yaml branding 命名空间驱动
+const featuresStore = useFeaturesStore()
 
 const submitting = ref(false)
 const errorMsg = ref('')

@@ -49,6 +49,25 @@ KNOWN_CONCURRENCY_KEYS: frozenset[str] = frozenset({
     "batch_action",
 })
 
+# Branding namespace (branding-configuration): deployment-level display name
+# and version consumed by the login page, sidebar and browser tab title via
+# GET /system/features.  Same contract as `concurrency`: unknown keys are a
+# startup error; missing namespace / keys fall back to the built-in defaults
+# (which reproduce the historical hardcoded strings verbatim).
+KNOWN_BRANDING_KEYS: frozenset[str] = frozenset({
+    "system_name",
+    "brand_name",
+    "product_name",
+    "version",
+})
+
+BRANDING_DEFAULTS: dict[str, str] = {
+    "system_name": "磐石",
+    "brand_name": "磐石 Gateway",
+    "product_name": "Panshi Gateway Admin",
+    "version": "v1.0",
+}
+
 # ── Module-level cache with mtime-based invalidation ──────────────────
 _features: dict | None = None
 _features_mtime: float = 0.0
@@ -122,6 +141,11 @@ def get_concurrency(name: str, default: int) -> int:
     return get_features().get("concurrency", {}).get(name, default)
 
 
+def get_branding() -> dict[str, str]:
+    """Return the branding dict with all 4 keys (defaults filled in at load time)."""
+    return get_features().get("branding") or dict(BRANDING_DEFAULTS)
+
+
 # ── Loading & validation ──────────────────────────────────────────────
 
 
@@ -137,7 +161,11 @@ def load_features(path: str = "features.yaml") -> dict:
     p = Path(path)
 
     if not p.exists():
-        _features = {"features": {}, "enabled_plugins": []}
+        _features = {
+            "features": {},
+            "enabled_plugins": [],
+            "branding": dict(BRANDING_DEFAULTS),
+        }
         _features_mtime = 0.0
         return _features
 
@@ -149,6 +177,7 @@ def load_features(path: str = "features.yaml") -> dict:
 
     _validate(raw)
     _validate_concurrency(raw)
+    _validate_branding(raw)
     _features = raw  # type: ignore[assignment]
     try:
         _features_mtime = p.stat().st_mtime
@@ -240,3 +269,46 @@ def _validate_concurrency(config: dict) -> None:
                 file=sys.stderr,
             )
             sys.exit(1)
+
+
+def _validate_branding(config: dict) -> None:
+    """Validate the ``branding`` namespace; prints error and exits on failure.
+
+    branding-configuration：未配置 → 整组回落内置默认值（行为与历史硬编码一致）；
+    部分配置 → 缺失 key 补默认值（合并语义）；未知 key / 值非字符串 → 报错退出，
+    防止拼写错误导致配置静默失效（对齐 KNOWN_FEATURES / KNOWN_CONCURRENCY_KEYS 哲学）。
+    校验通过后将合并结果写回 config，GET /system/features 由此透出完整 4 key。
+    """
+    branding = config.get("branding")
+    if branding is None:
+        config["branding"] = dict(BRANDING_DEFAULTS)
+        return
+    if not isinstance(branding, dict):
+        print(
+            "错误: features.yaml 中 'branding' 必须是映射（字典），"
+            f" 当前值: {branding} (类型: {type(branding).__name__})",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    unknown = [k for k in branding if k not in KNOWN_BRANDING_KEYS]
+    if unknown:
+        print(
+            f"错误: features.yaml 包含未知品牌配置项 {unknown}。"
+            f" 允许的配置项: {sorted(KNOWN_BRANDING_KEYS)}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    for key, val in branding.items():
+        if not isinstance(val, str):
+            print(
+                f"错误: features.yaml 中 'branding.{key}' 必须是字符串，"
+                f" 当前值: {val} (类型: {type(val).__name__})",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+    merged = dict(BRANDING_DEFAULTS)
+    merged.update(branding)
+    config["branding"] = merged

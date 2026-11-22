@@ -411,6 +411,49 @@ describe('AppSidebar 证书管理分组（ssl-cert-management）', () => {
   })
 })
 
+// ── 品牌配置化（branding-configuration D2）：侧边栏文案并入 brand_name ────────
+
+describe('AppSidebar 品牌配置化（branding-configuration）', () => {
+  function makeRouter() {
+    return createRouter({
+      history: createWebHistory(),
+      routes: [{ path: '/', name: 'Dashboard', component: { template: '<div />' } }],
+    })
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    mockLocalStorage()
+    localStorage.setItem('user', JSON.stringify({ id: 1, username: 'admin', role: 'admin' }))
+    useFeaturesStore().$patch({ loaded: true })
+    Element.prototype.scrollIntoView = vi.fn((_options?: ScrollIntoViewOptions) => {})
+  })
+
+  it('默认值下侧边栏显示「磐石 Gateway」+「v1.0」（D2：磐石 Admin → 磐石 Gateway 有意统一）', async () => {
+    const r = makeRouter()
+    const wrapper = mount(AppSidebar, { global: { plugins: [r] } })
+    await r.isReady()
+    expect(wrapper.find('.sidebar-logo-text').text()).toBe('磐石 Gateway')
+    expect(wrapper.find('.sidebar-logo-version').text()).toBe('v1.0')
+  })
+
+  it('branding 配置值驱动侧边栏品牌文案与版本徽标', async () => {
+    useFeaturesStore().$patch({
+      branding: {
+        system_name: '星门',
+        brand_name: '星门 Gateway',
+        product_name: 'Xingmen Gateway Admin',
+        version: 'v2.1',
+      },
+    })
+    const r = makeRouter()
+    const wrapper = mount(AppSidebar, { global: { plugins: [r] } })
+    await r.isReady()
+    expect(wrapper.find('.sidebar-logo-text').text()).toBe('星门 Gateway')
+    expect(wrapper.find('.sidebar-logo-version').text()).toBe('v2.1')
+  })
+})
+
 // ── central-management-ux-review-fixes 批 9：菜单信息架构重组 ────────────────
 // 综合（杂物抽屉）解散：统一管理→核心功能（概览后），指标总览/查询/ClickHouse 配置→新「监控」组；
 // 中继区域管理→运维管理（运行时拓扑运维非平台管理）；系统管理与运维管理对调（管理面收尾）。
