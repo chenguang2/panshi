@@ -113,7 +113,10 @@ defineExpose({ open })
 .gs-overlay {
   position: fixed;
   inset: 0;
-  z-index: 1100;
+  /* 全站命令面板（Ctrl+K）：全屏浮层，语义上必须压过 antd 弹窗/抽屉（2000）与自绘遮罩，
+     又不能压过 toast（3000）→ 取阶梯的弹层档 2100（面板内只有原生 input/button，
+     无 antd 下拉/日期等弹层，与同档无冲突）。阶梯见 src/style.css「浮层层级阶梯」。 */
+  z-index: 2100;
   background: oklch(0% 0 0 / 40%);
   display: flex;
   justify-content: center;

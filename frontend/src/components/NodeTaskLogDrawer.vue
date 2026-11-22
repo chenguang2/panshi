@@ -156,6 +156,8 @@ async function download() {
 .ntd-drawer-mask {
   position: fixed;
   inset: 0;
+  /* 自绘嵌套层（节点任务日志抽屉）：压过页面与自绘遮罩基础档(1000)，被 antd 基础浮层
+     (2000)/弹层(2100) 压过 → 落于阶梯的 1000–1999 区间。见 src/style.css「浮层层级阶梯」。 */
   z-index: 1200;
   display: flex;
   justify-content: flex-end;

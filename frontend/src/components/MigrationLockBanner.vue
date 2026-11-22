@@ -60,10 +60,7 @@ const metaText = computed(() => {
 /** 拉起后一次性拉取 running-tasks + 连接列表填充源→目标与开始时间（不做轮询）。 */
 async function enrich(): Promise<void> {
   try {
-    const [tasksRes, connRes] = await Promise.all([
-      getRunningTasks(),
-      listConnections().catch(() => null),
-    ])
+    const [tasksRes, connRes] = await Promise.all([getRunningTasks(), listConnections().catch(() => null)])
     migration.value = tasksRes.data.migration
     if (connRes) connections.value = connRes.data
   } catch {
@@ -107,7 +104,11 @@ onBeforeUnmount(() => {
   top: 0;
   left: 0;
   right: 0;
-  z-index: 1050; /* 页面头部(1000)之上、GlobalSearch(1100)/弹窗(2000)之下 */
+  /* 层级语义例外（不参与「浮层层级阶梯」的 2000/2100 档）：迁移锁横幅是**非交互顶条**，
+     语义上必须被弹窗/抽屉/命令面板整块压住，只在页面头部（DefaultLayout 50）之上。
+     1050 落于阶梯的 1000–1999 区间：压过头部与自绘遮罩基础档(1000)，被 antd 基础浮层
+     (2000)/弹层(2100)/toast(3000) 压过。守卫 `toastOverlayZIndex.source.test.ts` 白名单。 */
+  z-index: 1050;
   display: flex;
   align-items: center;
   gap: 10px;

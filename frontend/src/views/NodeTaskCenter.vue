@@ -248,6 +248,9 @@
         class="modal-overlay"
         :style="{
           display: pendingFilesModalVisible ? 'flex' : 'none',
+          // 自绘嵌套层：选择模式由「新建任务」模态（自绘基础档 1000）内触发，需压在其上；
+          // 1100 落于阶梯的 1000–1999 区间（只压自绘遮罩，被 antd 基础浮层 2000 压过）。
+          // 阶梯见 src/style.css「浮层层级阶梯」；守卫 toastOverlayZIndex.source.test.ts 白名单。
           zIndex: pendingFilesSelectMode ? 1100 : undefined,
         }"
       >

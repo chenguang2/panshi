@@ -617,6 +617,8 @@ select.form-input {
 
 /* ===========================
    Custom Modal Overlay (used by createProgressModal and all custom modals)
+   基础档 1000 = 页面元素之上的自绘遮罩；需要压过 antd 弹窗的调用点用内联
+   `z-index: 2000`（同 antd 基础浮层档）。四档阶梯见文件内「浮层层级阶梯」块。
    =========================== */
 .modal-overlay {
   position: fixed !important;
@@ -959,6 +961,65 @@ select.form-input {
 }
 .ant-drawer-body .ant-descriptions-item-content {
   color: var(--fg) !important;
+}
+
+/* ===========================
+   浮层层级阶梯（Single source of truth，2026-11-22 z-index-ladder）
+   ===========================
+   档位（低 → 高），全站浮层只允许落在这四档：
+
+     1000–1999  底层（页面元素 + 自绘嵌套层）：自绘 `.modal-overlay` 基础档 1000；
+                自绘嵌套层留在本区间（节点任务「选择暂存文件」1100、
+                节点任务日志抽屉 1200）——只压自绘遮罩，不压 antd 弹窗。
+     2000       antd 基础浮层：`.ant-modal-wrap` / `.ant-modal-mask` /
+                `.ant-drawer`（抽屉的层级上下文根）/ `.ant-drawer-content-wrapper` /
+                `.ant-drawer-mask`；
+                自绘 `.modal-overlay` 的内联 2000 调用点（`useOverlayModal`、
+                `BatchActionProgressModal`、NodeTaskCenter 程序化弹窗）同档。
+     2100       antd 弹层：下拉 / 菜单 / 气泡 / 日期面板 / 提示气泡。
+                必须恒压过 2000 档，否则「自绘 2000 弹窗里的 antd 下拉/日期/气泡」
+                会被遮罩整块盖住（用户报告的本轮缺陷）。
+     3000       antd message / notification（见下方 Toast 块，f028967d）。
+
+   为什么必须 `!important`：两种形态都要压过 ——
+     · `.ant-modal-wrap` / `.ant-modal-mask` / `.ant-drawer-content-wrapper` 的
+       z-index 由 vc-dialog / drawer 以**内联 style** 写入（`es/vc-dialog/Dialog.js`
+       的 `{ zIndex }`、`es/drawer/index.js` 的 `wrapperStyle`）；
+     · `.ant-select-dropdown` / `.ant-dropdown` / `.ant-popover` /
+       `.ant-picker-dropdown` / `.ant-tooltip` 由 cssinjs 以类规则注入（各自 token
+       `zIndexPopup = zIndexPopupBase + 50/70`）。
+     内联非 !important 小于样式表 !important，故此处单点即可覆盖全部组件。
+
+   为什么不用 token 覆盖：`themeConfig.token.zIndexPopupBase` 改了会让内联/类规则一起
+   微调（modal = base、弹出层 = base + 50），拿不到 2000/2100 的固定阶梯，且各组件
+   `zIndex` prop 仍可再覆盖；CSS 一处锁定，改阶梯只动本块。
+
+   维护规则：antd 浮层由本块接管，**不得为单个组件再写 z-index**；自绘浮层沿用
+   `.modal-overlay`（1000/2000）或登记进本阶梯注释；需要超过 2100 的浮层先改本阶梯
+   （3000 已属 toast/notification 专档）。
+*/
+.ant-modal-wrap,
+.ant-modal-mask,
+/* 抽屉的**层级上下文根**是 `.ant-drawer`（fixed + z-index，由 cssinjs 按 token 写入 1000），
+   `.ant-drawer-content-wrapper` / `.ant-drawer-mask` 是它的 absolute 子元素——只抬子元素
+   无效（仍被父级 1000 上下文框住，2026-11-22 实测：注入的 1000 自绘遮罩压住了抽屉）。
+   故根与子一并登记。 */
+.ant-drawer,
+.ant-drawer-content-wrapper,
+.ant-drawer-mask {
+  z-index: 2000 !important;
+}
+
+.ant-select-dropdown,
+.ant-dropdown,
+.ant-popover,
+.ant-picker-dropdown,
+.ant-picker-panel-container,
+.ant-tooltip,
+.ant-tabs-dropdown,
+.ant-mentions-dropdown,
+.ant-cascader-dropdown {
+  z-index: 2100 !important;
 }
 
 /* Toast / Notification 层级（单点）
