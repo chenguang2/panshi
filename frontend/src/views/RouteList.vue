@@ -441,7 +441,7 @@ import {
 import { compareRoutePriority } from '@/utils/listGroupSorters'
 import { clusterHueClass, CLUSTER_COLUMN_MIN_WIDTH, CLUSTER_COLUMN_WIDTH } from '@/utils/clusterHue'
 import TableToolbar from '@/components/TableToolbar.vue'
-import { useFitColumnWidths, toDesignWidths } from '@/composables/useFitColumnWidths'
+import { useFitColumnWidths, toDesignWidths, SELECTION_COLUMN_WIDTH } from '@/composables/useFitColumnWidths'
 import ClusterGroupRow from '@/components/ClusterGroupRow.vue'
 import ListPager from '@/components/ListPager.vue'
 import PageStatBadges from '@/components/PageStatBadges.vue'
@@ -756,6 +756,9 @@ const { widths: fittedColumnWidths, minTableWidth } = useFitColumnWidths({
   designWidths,
   containerRef: cardRef,
   overrides: () => routeColumnWidths.value,
+  // 选择列 40px 不参与 designWidths 缩放，必须从可用宽里扣除；
+  // 漏传会让「适配后总宽」恒比容器多 40px → 1440/1366/1280 出现 40px 行内横向滚动（2026-11-22 实测）
+  reserved: () => SELECTION_COLUMN_WIDTH,
   flexKey: 'uri',
   // 列内容下限（r7-B4；批 7 publish_status 110→220）：请求匹配（uri）为弹性列不设下限；
   // scroll.x 下限之和 = 762 → 窗口 ≥ ~1150 零横向滚动

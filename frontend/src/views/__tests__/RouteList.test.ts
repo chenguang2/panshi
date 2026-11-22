@@ -1535,7 +1535,9 @@ describe('RouteList 列个性化（column-personalization-rollout）', () => {
     await wrapper.vm.$nextTick()
     const table = wrapper.findComponent({ name: 'ColDragTableStub' })
     // 平铺态多一列「集群」（设计宽 116 / 缩放下限 96，分组视图无此列）→ 最小宽 762 + 96 = 858（批 7 publish_status 110→220）
-    expect(table.props('scroll')).toEqual({ x: 858 })
+    // 2026-11-22：scroll.x = 各列下限之和 + SELECTION_COLUMN_WIDTH(40)。
+    // 漏算选择列会让适配后总宽恒比容器多 40px → 1440/1366/1280 出现 40px 行内滚动（已修）
+    expect(table.props('scroll')).toEqual({ x: 898 })
     expect(table.props('tableLayout')).toBe('fixed')
     const cols = table.props('columns') as Array<{ key: unknown; width?: number; fixed?: string }>
     const byKey = Object.fromEntries(cols.map((c) => [String(c.key), c]))
