@@ -208,13 +208,10 @@ describe('批量条：批量删除入口（节点）', () => {
     expect(del).toBeGreaterThan(sep)
   })
 
-  it('批量删除不内联请求：api/nodes 薄封装 + 共享分组执行核心 + 节点专用确认', () => {
+  it('批量删除不内联请求：共享分组执行核心 + 节点专用确认（2026-11-22 清理：批量删除已走 useClusterGroupedBatchDelete，该薄封装不再存在）', () => {
     const s = src()
     expect(s, '视图不得内联 api.delete').not.toContain('api.delete(')
     expect(s).toContain('runClusterGroupedBatchDelete')
     expect(s).toContain('showNodeDeleteConfirm')
-    const api = readFileSync(resolve(process.cwd(), 'src/api/nodes.ts'), 'utf-8')
-    expect(api).toContain('export function deleteNodesBatch')
-    expect(api).toMatch(/api\.delete\(`\/clusters\/\$\{clusterId\}\/nodes`/)
   })
 })

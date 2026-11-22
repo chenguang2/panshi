@@ -23,7 +23,8 @@
 - `overview.html` 的「更新于 11/20 19:18」短格式：设计页策展元数据，实现无对应元素。
 - 上游 `name` 为时间戳数字串：数据治理（重命名上游），非代码缺陷。
 - 节点页菜单仍由 `useClusterNodes` 配置驱动（未接 `buildResourceActionMenu`）：可接受的历史形态。
-- 零消费候选待评估：`useClusterResource`、`useClusterListCore` 若干成员、`.max-panel .dbody .empty5 .e-actions .ant-btn` 规则（当前零命中但级联有效）。
+- 零消费清理已完成（2026-11-22）：`useClusterResource` 工厂、`.empty5 .e-actions .ant-btn*`（通用与面板两组）、`api/nodes.ts::deleteNodesBatch` 及其绑定断言均已删除，守卫 `zeroConsumerCleanup.source.test.ts` 钉住不回流。
+- **仍保留（有意）**：`useClusterListCore` 的 `handleTableChange/selectOne/selectMany/requireSelected/getActionButtonTitle` 目前无生产消费方（唯一消费方 `useClusterNodes` 只取 `load`）——按 AGENTS #24 视为共享骨架保留，若未来确不需要再整体收敛。
 - `docs/other/prompt-2.txt` 为用户自维护的 prompt 台账，持续处于未提交状态，不入库。
 
 ## 每批次验收口径（统一）

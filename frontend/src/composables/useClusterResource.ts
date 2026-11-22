@@ -1,14 +1,16 @@
 import { message } from 'ant-design-vue'
 import api from '@/api'
 import type { Cluster } from '@/types'
-import {
-  useClusterResourceCore,
-  type VersionModalState,
-  type VersionResourceType,
-  type ResourceCoreDeps,
-} from './useClusterResourceCore'
 
-/** 版本弹窗状态（兼容旧导出名，与 useClusterPluginEntity.VersionModalState 同构） */
+/**
+ * 集群子表列表的共享骨架（useClusterListCore）。
+ *
+ * 2026-11-22：本文件原还提供一个分页资源的通用 CRUD 工厂，面板七个 Tab 改为直接渲染独立页组件
+ * （AGENTS #93）后它失去全部生产消费方，已随零消费清理删除——**本文件如今只提供 useClusterListCore
+ * 这一共享骨架**（节点子表等分页列表消费）；按 AGENTS #24 它保持独立文件，不向别处合并。
+ * 删除/发布/版本十件套的单一实现在 useClusterResourceCore.ts（插件实体等工厂共用），不在本文件。
+ */
+
 /** 资源在 Cluster 对象上的状态键名 */
 interface ResourceStateKeys {
   items: string
@@ -22,35 +24,6 @@ interface ResourceStateKeys {
   selectedKeys: string
   count?: string
 }
-
-interface ClusterResourceConfig<T extends { id: number; name: string }> {
-  /** 资源中文名，如 '路由' / '上游'（用于所有提示与确认文案） */
-  noun: string
-  /** API 端点段，如 'routes' / 'upstreams' */
-  endpoint: string
-  /** 版本管理弹窗的 resource_type */
-  versionType: VersionResourceType
-  /** Cluster 上的状态键名 */
-  keys: ResourceStateKeys
-  /** 表格排序字段映射（列 key → 后端 sort_by） */
-  sortFieldMap?: Record<string, string>
-  /**
-   * 单条删除前置守卫：返回提示文案则阻止删除（如 DNS 路由、被路由引用的上游）。
-   * 可为 async（如上游需先拉取路由列表）。
-   */
-  deleteGuard?: (cluster: Cluster, item: T) => Promise<string | null> | string | null
-  /** 守卫提示的消息级别（routes 的 DNS 守卫用 warning，upstream 的引用守卫用 error） */
-  deleteGuardLevel?: 'warning' | 'error'
-  /**
-   * 批量删除过滤：返回参与删除的子集；返回 null 表示整体中止。
-   * 警告文案由过滤器自行 message 提示。
-   */
-  batchFilter?: (cluster: Cluster, items: T[]) => Promise<T[] | null> | T[] | null
-  /** 批量删除的 resourceKey 参数 */
-  batchResourceKey: { field: string; label: string; nameField: string }
-}
-
-type ClusterResourceDeps = ResourceCoreDeps
 
 // Cluster 状态键为动态名，通过受控访问器读写（避免散落的类型断言）
 function getState<T>(c: Cluster, key: string): T | undefined {
@@ -74,9 +47,9 @@ interface ClusterListCoreConfig {
 /**
  * 集群子表分页列表的共享胶水：加载(搜索/排序/分页/同参去重)、表格翻页排序、单选/多选。
  *
- * useClusterResource（上游/路由等分页资源）与 useClusterNodes（节点子表）共用，
- * 仅以 noun/endpoint/keys/sortFieldMap 参数化；lastQuery 去重与「翻页保勾选、
- * 搜索/排序变化清勾选」语义在此单点实现。参数形状取自 ant table @change 事件。
+ * 由 useClusterNodes（节点子表）消费，仅以 noun/endpoint/keys/sortFieldMap 参数化；
+ * lastQuery 去重与「翻页保勾选、搜索/排序变化清勾选」语义在此单点实现。参数形状取自
+ * ant table @change 事件。
  */
 export function useClusterListCore<T>(config: ClusterListCoreConfig) {
   const { noun, endpoint, keys } = config
@@ -186,63 +159,3 @@ export function useClusterListCore<T>(config: ClusterListCoreConfig) {
     getActionButtonTitle,
   }
 }
-
-/**
- * 集群子资源的通用 CRUD 骨架：加载(搜索/排序/分页)、选择、删除(单条/批量)、发布、版本管理。
- *
- * 各资源 composable 保留表单模型、校验、编辑/复制表单填充等真实差异，
- * 列表骨架（load/翻页/选择）委托 useClusterListCore 共享实现，
- * 删除/发布/版本十件套由 useClusterResourceCore 共享实现（Phase 4 合并）。
- * 导出函数名在各资源内保持原名，视图层零改动。
- */
-export function useClusterResource<T extends { id: number; name: string; edge_uuid?: string }>(
-  config: ClusterResourceConfig<T>,
-  deps: ClusterResourceDeps,
-) {
-  const { noun, endpoint, versionType, keys } = config
-
-  const list = useClusterListCore<T>({
-    noun,
-    endpoint,
-    keys,
-    sortFieldMap: config.sortFieldMap,
-  })
-
-  const core = useClusterResourceCore(
-    {
-      noun,
-      endpoint,
-      versionType,
-      getSelected: (c) => getState<T>(c, keys.selected) ?? null,
-      setSelected: (c, item) => setState(c, keys.selected, item),
-      getSelectedKeys: (c) => getState<number[]>(c, keys.selectedKeys) || [],
-      setSelectedKeys: (c, k) => setState(c, keys.selectedKeys, k),
-      refresh: (c) => list.load(c),
-      batchResourceKey: config.batchResourceKey,
-      batchItems: (c) => getState<T[]>(c, keys.items) || [],
-      deleteGuard: config.deleteGuard,
-      deleteGuardLevel: config.deleteGuardLevel,
-      batchFilter: config.batchFilter,
-    },
-    deps,
-  )
-
-  return {
-    load: list.load,
-    handleTableChange: list.handleTableChange,
-    selectOne: list.selectOne,
-    selectMany: list.selectMany,
-    requireSelected: list.requireSelected,
-    getActionButtonTitle: list.getActionButtonTitle,
-    deleteSelected: core.deleteSelected,
-    deleteByRecord: core.deleteByRecord,
-    deleteMany: core.deleteMany,
-    publishSelected: core.publishSelected,
-    publishByRecord: core.publishByRecord,
-    openVersionManagement: core.openVersionManagement,
-    openVersionManagementByRecord: core.openVersionManagementByRecord,
-  }
-}
-
-// 兼容旧导入路径的类型重导出
-export type { VersionModalState } from './useClusterResourceCore'

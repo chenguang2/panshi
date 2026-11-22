@@ -6,7 +6,7 @@ import { executePublish, executeDeleteWithProgress } from './useClusterUtils'
 /** 版本管理弹窗可用的资源类型 */
 export type VersionResourceType = 'upstream' | 'route' | 'plugin_config' | 'global_rule' | 'static_resource'
 
-/** 版本管理弹窗共享状态（useClusterResource 与 useClusterPluginEntity 共用） */
+/** 版本管理弹窗共享状态（各资源工厂与 useClusterPluginEntity 共用） */
 export interface VersionModalState {
   type: Ref<VersionResourceType>
   visible: Ref<boolean>
@@ -76,7 +76,7 @@ interface ResourceCoreConfig<
 /**
  * 集群子资源的共享删除/发布/版本骨架（Phase 4 合并）。
  *
- * useClusterResource（分页资源）与 useClusterPluginEntity（插件实体）的
+ * 各资源工厂（分页资源）与 useClusterPluginEntity（插件实体）的
  * 十件套中，删除/发布/版本管理完全同构，仅状态位置不同——通过 selection
  * 访问器参数化收敛为单一实现；各工厂保留负载/表单/抽屉等真实差异。
  */
