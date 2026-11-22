@@ -6,7 +6,7 @@ import {
   cleanupRoutesByPrefix,
   expectAntModal,
   interceptPublish,
-  skipIfNoCluster,
+  skipIfNoClusterWithOnlineNode,
   uniqueName,
   type ClusterRef,
 } from './helpers/destructiveFlow'
@@ -17,7 +17,7 @@ test.describe('Route Publish E2E（publish 拦截：build_publish_response 真�
   test('publish shows per-node result rows with relay/direct labels', async ({ page, request }) => {
     // demo 库路由 >1500 条：造数/搜索/发布全链路在 30s 默认线上偶发超时（upstream 同款 60s）
     test.setTimeout(60000)
-    const cluster = (await skipIfNoCluster(request)) as ClusterRef
+    const cluster = (await skipIfNoClusterWithOnlineNode(request)) as ClusterRef
     if (!cluster) return
     const headers = await apiHeaders(request)
     const name = uniqueName('e2e-pub-r')

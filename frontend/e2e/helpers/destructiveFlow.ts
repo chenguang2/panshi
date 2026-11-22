@@ -79,6 +79,43 @@ export async function skipIfNoCluster(request: APIRequestContext): Promise<Clust
   return cluster
 }
 
+/**
+ * 发布链路专用环境守卫：取「至少含 1 个在线节点」的集群。
+ *
+ * 为什么需要：`PublishConfirmModal` 的「全选」只勾在线节点（离线行 checkbox `:disabled`，
+ * 计数文案亦为「N 个在线节点」），故无在线节点的集群上「确认发布」恒 disabled——
+ * 这是数据前提而非回归（2026-11-22 隔离库实测：集群 1 `test-dns` 19 节点全离线 →
+ * 全量 e2e 的 route/upstream 发布用例恒卡在禁用态确认键）。
+ * 优先集群 1（演示库常驻），不满足则遍历列表；全部不满足 → skip 并注明原因。
+ */
+export async function skipIfNoClusterWithOnlineNode(request: APIRequestContext): Promise<ClusterRef | null> {
+  const headers = await apiHeaders(request)
+  const list = await apiJson<{ items: Array<{ id: number; name: string }> }>(
+    request,
+    'GET',
+    '/clusters?page=1&page_size=200',
+    undefined,
+    headers,
+  )
+  const items = [...(list.items ?? [])].sort((a, b) => (a.id === 1 ? -1 : b.id === 1 ? 1 : 0))
+  for (const c of items) {
+    const nodes = await apiJson<{ items: Array<{ status: number }> }>(
+      request,
+      'GET',
+      `/clusters/${c.id}/nodes?page=1&page_size=200`,
+      undefined,
+      headers,
+    )
+    if ((nodes.items ?? []).some((n) => n.status === 1)) return { id: c.id, name: c.name }
+  }
+  if (items.length === 0) {
+    test.skip(true, 'skipIfNoData：环境中无任何集群（API 探测确认），无法造数')
+    return null
+  }
+  test.skip(true, '环境中无「含在线节点」的集群（发布弹窗全选仅勾在线节点），跳过发布链路用例')
+  return null
+}
+
 // ── UI 导航（等待失败 = 真实失败，不用 catch 吞错） ─────────────────────
 
 /** 展开集群卡片对应资源 Tab（统计格：节点/路由/上游）；返回表格 tbody locator */

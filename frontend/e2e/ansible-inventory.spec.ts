@@ -1,14 +1,28 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
 
-const BASE = 'http://localhost:12345'
-const API_BASE = `${BASE}/api/v1`
+// 一律用相对路径 → 走 playwright.config 的 baseURL（9100，vite 代理到被测后端）。
+// 历史实现硬编码 http://localhost:12345：会绕过隔离后端直连开发库/开发前端
+// （2026-11-22 隔离 e2e 实测发现，且本文件读写的清单文件是仓库共享状态）。
+const API_BASE = '/api/v1'
 
-async function login(page: import('@playwright/test').Page) {
-  await page.goto(`${BASE}/login`)
+/** 等清单行数稳定：异步 GET 回填 + 本地草稿行可能分两批渲染，必须先稳定再计数 */
+async function settleRowCount(page: Page): Promise<number> {
+  let prev = -1
+  for (let i = 0; i < 40; i++) {
+    const cur = await page.locator('tr[data-row-key]').count()
+    if (cur > 0 && cur === prev) return cur
+    prev = cur
+    await page.waitForTimeout(150)
+  }
+  return prev
+}
+
+async function login(page: Page) {
+  await page.goto('/login')
   await page.locator('#username').fill('admin')
   await page.locator('#password').fill('panshi123')
   await page.locator('#password').press('Enter')
-  await page.waitForURL('**/')
+  await page.waitForURL((url) => url.pathname === '/')
 }
 
 /** 读取清单原文（只读，用于落盘守卫；绝不写回） */
@@ -36,26 +50,19 @@ test.describe('Ansible 主机清单 — 链路验证', () => {
     const rawBefore = await readRawInventory(page)
 
     // 导航到 Ansible 主机清单页
-    await page.goto(`${BASE}/ansible-inventory`)
+    await page.goto('/ansible-inventory')
     await page.waitForSelector('.inventory-page', { timeout: 10000 })
 
     // 1. 底部虚线按钮存在
     const addBtn = page.locator('.add-row-dashed')
     await expect(addBtn).toBeVisible()
 
-    // 等待表格数据加载稳定（异步加载，避免计数时序问题）
-    await page
-      .waitForFunction(
-        () => {
-          const rows = document.querySelectorAll('tr[data-row-key]')
-          return rows.length > 0
-        },
-        { timeout: 10000 },
-      )
-      .catch(() => {})
+    // 等待表格数据加载稳定后再计数（异步加载：早期实现只等「首行出现」，
+    // 会把只剩草稿行的中间态当成基线 → 后续 toHaveCount 恒失败，2026-11-22 隔离 e2e 实测）
+    const initialCount = await settleRowCount(page)
+    expect(initialCount, '清单页应至少渲染 1 行（草稿行或既有主机）').toBeGreaterThan(0)
 
     // 2. 点击添加按钮新增一行
-    const initialCount = await page.locator('tr[data-row-key]').count()
     await addBtn.click()
     await expect(page.locator('tr[data-row-key]')).toHaveCount(initialCount + 1)
 
@@ -93,10 +100,11 @@ test.describe('Ansible 主机清单 — 链路验证', () => {
     // 两条新行追加（10.0.0.1 和 10.0.0.2）
     await expect(page.locator('tr[data-row-key]')).toHaveCount(countBeforeImport + 2)
 
-    // 9. 重复 IP 导入 → 覆盖提示
+    // 9. 重复 IP 导入 → 覆盖提示（批 2 双摘要：`.bulk-hint` 只报「文本内重复合并」，
+    //    与既有行冲突走 `.bulk-summary`「将覆盖 M 条现有主机凭据」）
     await bulkBtn.click()
     await textarea.fill('10.0.0.1 newuser newpass')
-    await expect(page.locator('.bulk-hint')).toContainText('覆盖')
+    await expect(page.locator('.bulk-summary')).toContainText('覆盖')
     await okBtn.click()
 
     // 10. 底部「自定义字段」列已移除

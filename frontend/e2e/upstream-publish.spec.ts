@@ -6,7 +6,7 @@ import {
   cleanupUpstreamsByPrefix,
   expectAntModal,
   interceptPublish,
-  skipIfNoCluster,
+  skipIfNoClusterWithOnlineNode,
   uniqueName,
   type ClusterRef,
 } from './helpers/destructiveFlow'
@@ -15,7 +15,7 @@ import {
 // 经中继/直连 标注。拦截方案不再对真实 edge 节点发起发布，成功/失败不再环境相关。
 test.describe('Upstream Publish E2E（publish 拦截：build_publish_response 真实形状）', () => {
   test('publish upstream shows per-node result rows with relay/direct labels', async ({ page, request }) => {
-    const cluster = (await skipIfNoCluster(request)) as ClusterRef
+    const cluster = (await skipIfNoClusterWithOnlineNode(request)) as ClusterRef
     if (!cluster) return
     const headers = await apiHeaders(request)
     const name = uniqueName('e2e-pub-u')

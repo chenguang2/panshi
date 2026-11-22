@@ -21,7 +21,8 @@ test.describe('Database Management', () => {
 
   test('页面渲染：标题、连接列表、数据迁移卡片', async ({ page }) => {
     await gotoDatabasePage(page)
-    await expect(page.locator('button:has-text("添加连接")').first()).toBeVisible()
+    // 页头动作区规范（AGENTS #90）：创建类主操作文案为「新建连接」（原「添加连接」已退场）
+    await expect(page.locator('button:has-text("新建连接")').first()).toBeVisible()
     await expect(page.locator('.ant-table')).toBeVisible()
     await expect(page.locator('.card-header', { hasText: '数据迁移' })).toBeVisible()
     // 当前数据库状态卡片显示本地 SQLite
@@ -29,10 +30,10 @@ test.describe('Database Management', () => {
     await expect(page.locator('.status-body')).toContainText('SQLite')
   })
 
-  test('添加 PostgreSQL 连接：草稿测试提示 → 保存成功 → 表格出现新行', async ({ page }) => {
+  test('添加 PostgreSQL 连接：保存成功 → 表格出现新行', async ({ page }) => {
     await gotoDatabasePage(page)
-    await page.locator('button:has-text("添加连接")').first().click()
-    const modal = page.locator('.modal-overlay').filter({ hasText: '添加连接' })
+    await page.locator('button:has-text("新建连接")').first().click()
+    const modal = page.locator('.modal-overlay').filter({ hasText: '新建连接' })
     await expect(modal).toBeVisible()
 
     // 类型切换为 PostgreSQL（原生 select）
@@ -42,18 +43,15 @@ test.describe('Database Management', () => {
     await typeSelect.selectOption({ index: pgIndex >= 0 ? pgIndex : 1 })
 
     // 填写连接字段（fill 原生自动等待，无需固定 sleep）
-    await modal.locator('input[placeholder="连接名称"]').fill(CONN_NAME)
+    await modal.locator('input[placeholder="如：生产 PG / 本机 SQLite"]').fill(CONN_NAME)
     await modal.locator('input[placeholder="localhost"]').fill('127.0.0.1')
     await modal.locator('input[placeholder="5432"]').fill('5432')
     await modal.locator('input[placeholder="panshi"]').fill('panshi_e2e')
     await modal.locator('input[placeholder="postgres"]').fill('postgres')
     await modal.locator('input[placeholder="如需修改请输入"]').fill('secret123')
 
-    // 未保存前点击「测试连接」→ 提示先保存
-    await modal.locator('button:has-text("测试连接")').click()
-    await expect(page.locator('.ant-message')).toContainText('请先保存连接')
-
-    // 保存成功
+    // 弹窗内无「测试连接」按钮（database-mgmt-ux-review-fixes 5d2811ab 裁决：移除弹窗假测试按钮，
+    // 测试入口统一到列表行内 `.test-conn-btn`），故直接保存
     await modal.locator('.save-conn-btn').click()
     await expect(page.locator('.ant-message')).toContainText('连接已添加')
     await expect(modal).toBeHidden()
@@ -81,8 +79,9 @@ test.describe('Database Management', () => {
     await summaryEntry.click()
     await expect(page).toHaveURL(/\/db-migration$/)
     await expect(page.locator('.migrate-btn')).toBeVisible()
-    // 现行 UI：需先勾选「我了解将清空目标库」按钮才可用
-    await page.locator('.checkbox-label', { hasText: '我了解将清空目标库' }).click()
+    // 现行 UI（db-migration-ux-optimization c977ed01）：清空确认勾选框已由高危确认弹窗替代，
+    // 「开始迁移」先做源/目标校验；本用例恰好已造出 PG 连接（2 个连接 → 按钮可用）。
+    await expect(page.locator('.migrate-btn')).toBeEnabled()
     await page.locator('.migrate-btn').click()
     await expect(page.locator('.ant-message')).toContainText('请选择源数据库与目标数据库')
   })
