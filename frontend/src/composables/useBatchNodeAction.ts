@@ -13,7 +13,17 @@ import api from '@/api'
 import { message } from 'ant-design-vue'
 import { useFeaturesStore } from '@/stores/features'
 import { getApiErrorMessage } from '@/utils/error'
-import { deleteNodesBatch } from '@/api/nodes'
+import {
+  formatClusterBatchSummary,
+  runClusterGroupedBatchDelete as runClusterGroupedBatchDeleteCore,
+  type ClusterBatchDeleteEntry,
+  type ClusterBatchSummary,
+} from '@/composables/useClusterGroupedBatchDelete'
+
+// 批量删除共享核心（B5）：ClusterBatchSummary 与汇总 formatter 定义在 useClusterGroupedBatchDelete，
+// 本文件是外部唯一入口（上游/路由适配层与视图仍从本文件 import），故原样再导出。
+export { formatClusterBatchSummary }
+export type { ClusterBatchSummary }
 
 export interface BatchProgressItem {
   /** 逐项身份标签：节点域为节点 IP，上游/路由域为资源名称（不是地址） */
@@ -202,15 +212,6 @@ export interface ClusterBatchGroup {
   nodes: Array<{ id: number; ip: string }>
 }
 
-export interface ClusterBatchSummary {
-  clusterName: string
-  total: number
-  success: number
-  failed: number
-  /** 集群级调用失败原因（F4：不中断整体，失败记入该项） */
-  clusterError?: string
-}
-
 /**
  * 集群分组批量执行（D5 / F1：动作类按 cluster_id 分组逐集群调批量端点，跨集群顺序执行；
  * 单集群调用失败标记该集群全部节点项失败并记「集群级失败（原因）」，继续下一集群）。
@@ -300,24 +301,20 @@ export async function runClusterGroupedBatchAction(
   return summaries
 }
 
-/** 汇总文案（spec：「集群 A：2 成功 1 失败；集群 B：3 成功」） */
-export function formatClusterBatchSummary(summaries: ClusterBatchSummary[]): string {
-  return summaries
-    .map((s) => `集群 ${s.clusterName}：${s.success} 成功${s.failed > 0 ? ` ${s.failed} 失败` : ''}`)
-    .join('；')
-}
-
-/** 批量删除响应条目（后端 cluster_nodes.py::delete_nodes_batch 形状） */
-interface BatchDeleteNodeResult {
-  node_id?: number
-  node_ip?: string
-  status?: string
-  error?: string
-  results?: Array<{ scope?: string; status?: string; message?: string; error?: string }>
+/** 节点删除成功项的明细日志（数据库子作用域 message + Edge 说明 + 进程不受影响） */
+function nodeDeleteDetailLogs(entry: ClusterBatchDeleteEntry, ok: boolean): string[] {
+  if (!ok) return []
+  const sub = entry.results || []
+  const dbSub = sub.find((s) => s.scope === 'database')
+  const edgeSub = sub.find((s) => s.scope === 'edge')
+  const logs = [dbSub?.message ? `✅ ${dbSub.message}` : '✅ 平台管理记录已删除']
+  if (edgeSub?.message) logs.push(`Edge 侧：${edgeSub.message}`)
+  logs.push('节点机上的 Edge/OpenResty 进程不受影响（已脱离平台监控）')
+  return logs
 }
 
 /**
- * 集群分组批量删除（节点批量条唯一实现）。
+ * 集群分组批量删除（节点批量条薄适配层；B5 起请求循环收敛到 useClusterGroupedBatchDelete）。
  *
  * 后端只有集群作用域的集合端点 `DELETE /clusters/{cid}/nodes`（无全局 ids 端点，
  * 节点也不在 services/batch_delete.py 的 KINDS 内），故按 cluster_id 分组顺序请求；
@@ -330,85 +327,25 @@ export async function runClusterGroupedBatchDelete(
   groups: ClusterBatchGroup[],
   hooks: { progress: BatchProgressState },
 ): Promise<ClusterBatchSummary[]> {
-  const { progress } = hooks
-  const all = groups.flatMap((g) => g.nodes)
-  progress.title.value = '批量删除节点'
-  progress.items.value = all.map((n) => ({ label: n.ip, status: 'pending' as const, logs: [] }))
-  progress.visible.value = true
-
-  const summaries: ClusterBatchSummary[] = []
-  let offset = 0
-  for (const group of groups) {
-    const base = offset
-    offset += group.nodes.length
-    for (let k = 0; k < group.nodes.length; k++) {
-      progress.items.value[base + k].status = 'running'
-      progress.items.value[base + k].logs = [`集群 ${group.clusterName}：开始删除节点 ${group.nodes[k].ip}...`]
-    }
-    try {
-      const res = await deleteNodesBatch(group.clusterId, {
-        node_ids: group.nodes.map((n) => n.id),
-        delete_db: true,
-        delete_edge: false,
-      })
-      const results: BatchDeleteNodeResult[] = res.data?.results || []
-      let success = 0
-      let failed = 0
-      const seen = new Set<number>()
-      for (const r of results) {
-        const nodeId = Number(r.node_id)
-        const k = group.nodes.findIndex((n) => n.id === nodeId)
-        if (k < 0) continue
-        seen.add(nodeId)
-        const i = base + k
-        const nodeIp = r.node_ip || group.nodes[k].ip
-        const sub = r.results || []
-        const logs: string[] = [`集群 ${group.clusterName}：删除节点 ${nodeIp}`]
-        if (r.status === 'success') {
-          const dbSub = sub.find((s) => s.scope === 'database')
-          logs.push(dbSub?.message ? `✅ ${dbSub.message}` : '✅ 平台管理记录已删除')
-          const edgeSub = sub.find((s) => s.scope === 'edge')
-          if (edgeSub?.message) logs.push(`Edge 侧：${edgeSub.message}`)
-          logs.push('节点机上的 Edge/OpenResty 进程不受影响（已脱离平台监控）')
-          progress.items.value[i] = { label: nodeIp, status: 'success', logs }
-          success++
-        } else {
-          logs.push(`❌ 删除失败${r.error ? `: ${r.error}` : ''}`)
-          progress.items.value[i] = { label: nodeIp, status: 'error', logs }
-          failed++
-        }
-      }
-      // 后端未返回的节点视为失败（单条失败不阻塞其余条的后端语义，不应静默变成"未处理"）
-      group.nodes.forEach((n, k) => {
-        if (seen.has(n.id)) return
-        progress.items.value[base + k] = {
-          label: n.ip,
-          status: 'error',
-          logs: [...progress.items.value[base + k].logs, '❌ 后端未返回该节点的删除结果'],
-        }
-        failed++
-      })
-      summaries.push({ clusterName: group.clusterName, total: group.nodes.length, success, failed })
-    } catch (error: unknown) {
-      const detail = getApiErrorMessage(error) || '未知错误'
-      for (let k = 0; k < group.nodes.length; k++) {
-        const i = base + k
-        progress.items.value[i] = {
-          label: group.nodes[k].ip,
-          status: 'error',
-          logs: [...progress.items.value[i].logs, `❌ 集群级失败（${detail}）`],
-        }
-      }
-      summaries.push({
-        clusterName: group.clusterName,
-        total: group.nodes.length,
-        success: 0,
-        failed: group.nodes.length,
-        clusterError: detail,
-      })
-    }
-  }
-  return summaries
+  return runClusterGroupedBatchDeleteCore(
+    groups.map((group) => ({
+      clusterId: group.clusterId,
+      clusterName: group.clusterName,
+      items: group.nodes.map((n) => ({ id: n.id, label: n.ip })),
+    })),
+    {
+      title: '批量删除节点',
+      entity: '节点',
+      endpoint: (group) => `/clusters/${group.clusterId}/nodes`,
+      idsField: 'node_ids',
+      idField: 'node_id',
+      nameField: 'node_ip',
+      deleteDb: true,
+      deleteEdge: false,
+      detailLogs: nodeDeleteDetailLogs,
+    },
+    hooks,
+  )
 }
 
 /** 未选中节点的统一提示（供两入口薄适配复用） */
