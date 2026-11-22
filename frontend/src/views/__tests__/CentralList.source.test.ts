@@ -153,33 +153,35 @@ describe('统一管理·最大化面板切换动效（方案 A）', () => {
     expect(a).toContain('@keyframes maxTabFade')
     expect(a).toContain('@keyframes maxHueFade')
     expect(a).toContain('@keyframes maxIdent')
-    // 2026-11-22 加强：切集群 320ms 位移 40px、同缓动；切 Tab 仍 140ms；方向类按 dir-next / dir-prev 区分
+    // 2026-11-22 加强：切集群 400ms（二次加强，原 320ms）位移 40px、同缓动；切 Tab 仍 140ms；方向类按 dir-next / dir-prev 区分
     expect(a).toMatch(
-      /\.max-swap\.fx-cluster\.dir-next \{[\s\S]*?animation: maxInNext 320ms cubic-bezier\(0\.22, 1, 0\.36, 1\)/,
+      /\.max-swap\.fx-cluster\.dir-next \{[\s\S]*?animation: maxInNext 400ms cubic-bezier\(0\.22, 1, 0\.36, 1\)/,
     )
     expect(a).toMatch(
-      /\.max-swap\.fx-cluster\.dir-prev \{[\s\S]*?animation: maxInPrev 320ms cubic-bezier\(0\.22, 1, 0\.36, 1\)/,
+      /\.max-swap\.fx-cluster\.dir-prev \{[\s\S]*?animation: maxInPrev 400ms cubic-bezier\(0\.22, 1, 0\.36, 1\)/,
     )
     expect(a).toMatch(/\.max-swap\.fx-tab \{[\s\S]*?animation: maxTabFade 140ms/)
     expect(a).toMatch(/@keyframes maxInNext \{\s*from \{[^}]*translate3d\(40px, 0, 0\)/)
     expect(a).toMatch(/@keyframes maxInPrev \{\s*from \{[^}]*translate3d\(-40px, 0, 0\)/)
   })
 
-  it('切集群时内容区色相短暂过渡（maxHueFade：--cc 10% → surface，不常驻着色）', () => {
+  it('切集群时内容区色相短暂过渡（maxHueFade：--cc 16% → surface，不常驻着色）', () => {
     const a = animSection()
     // 色相过渡挂在 .tab-content 上（内容区），取自 .max-panel 注入的 --cc（集群色相）并回落 surface
-    expect(a).toMatch(/\.max-swap\.fx-cluster \.tab-content \{[\s\S]*?animation: maxHueFade 320ms/)
+    // 2026-11-22 二次加强：混比 10% → 16%、时长 320ms → 400ms（用户裁决加强一档）
+    expect(a).toMatch(/\.max-swap\.fx-cluster \.tab-content \{[\s\S]*?animation: maxHueFade 400ms/)
     // 混色空间必须是 oklab：in oklch 时白底 hue powerless，8 个集群色相全塌成同一浅粉（2026-11-22 真机裁决）
     expect(a).toMatch(
-      /@keyframes maxHueFade \{\s*from \{[^}]*color-mix\(in oklab, var\(--cc, var\(--accent\)\) 10%, var\(--surface\)\)/,
+      /@keyframes maxHueFade \{\s*from \{[^}]*color-mix\(in oklab, var\(--cc, var\(--accent\)\) 16%, var\(--surface\)\)/,
     )
     expect(a).not.toMatch(/color-mix\(in oklch/)
     expect(a).toMatch(/@keyframes maxHueFade \{[^@]*?to \{\s*background-color: var\(--surface\)/)
   })
 
-  it('清类时机 ≥ 最长动画时长（320ms → SWAP_CLEAR_MS 340ms，防动画截断）', () => {
+  it('清类时机 ≥ 最长动画时长（400ms → SWAP_CLEAR_MS 420ms，防动画截断）', () => {
     const text = s()
-    expect(text).toContain('const SWAP_CLEAR_MS = 340')
+    // 2026-11-22 二次加强：最长动画 320ms → 400ms，清类常量随之上调 340 → 420（必须 ≥ 400，否则动画被截断）
+    expect(text).toContain('const SWAP_CLEAR_MS = 420')
     expect(text).toMatch(/\}, SWAP_CLEAR_MS\)/)
   })
 

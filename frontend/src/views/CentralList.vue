@@ -350,7 +350,7 @@
       </div>
       <div class="dbody">
         <!-- 切换动效包裹层：绝不给本层加 :key（否则 7 个 Tab 子组件整体重挂载，丢滚动/选中态并重复拉取）；
-             重播靠 swapClass（fx-cluster dir-next|prev / fx-tab），340ms 后清类避免 transform 长期残留。
+             重播靠 swapClass（fx-cluster dir-next|prev / fx-tab），420ms 后清类避免 transform 长期残留。
              切集群的内容刷新靠**子组件上的 :key="maximizedCluster.id"**（七个 scoped 页只读 props、
              不 watch scopedClusterId，无 key 时 Vue 复用实例 → 挂载期加载逻辑不再执行、内容停在旧集群）。 -->
         <div ref="swapEl" class="max-swap" :class="swapClass">
@@ -574,8 +574,9 @@ const maximizedRouteBadge = computed(() => (maximizedCluster.value ? routeBadge(
 // ── 面板切换动效（方案 A）：切集群 = 方向滑入 + 内容区色相过渡；只切 Tab = 纯淡入（不位移，避免误以为换了集群）──
 // 重播机制：swapOn 先 false → nextTick + 读一次 offsetWidth 强制重排 → true；SWAP_CLEAR_MS 后清类，
 // 避免 transform 长期残留在 .max-swap 上（会成为 position: fixed 后代的包含块）。
-// 清类时长必须 ≥ 最长动画时长（切集群 320ms），否则动画被截断 —— 改动画时长时同步改这个常量。
-const SWAP_CLEAR_MS = 340
+// 清类时长必须 ≥ 最长动画时长 400ms（切集群 = 滑入 400ms / 色相回落 400ms），否则动画被截断
+// —— 改动画时长时同步改这个常量（2026-11-22 二次加强：320ms → 400ms，故 340 → 420）。
+const SWAP_CLEAR_MS = 420
 type SwapKind = 'cluster' | 'tab'
 type SwapDir = 'next' | 'prev'
 const swapKind = ref<SwapKind>('cluster')
@@ -1275,21 +1276,23 @@ onMounted(async () => {
 /* ── 切换动效（方案 A；2026-11-22 加强）──
    .max-swap 是 Tab 内容的包裹层，切换时由 swapClass 挂 fx-cluster / fx-tab：
    切集群 = 方向滑入（内容从目标方向推入 40px）+ 淡入 + 内容区背景色相短暂过渡；只切 Tab = 纯淡入不位移。
-   类在 SWAP_CLEAR_MS（340ms，见 playSwap）后清除，避免 transform 长期残留成为 position: fixed 后代的包含块；
-   清类时长必须 ≥ 最长动画时长（切集群 320ms），否则动画被截断。 */
+   类在 SWAP_CLEAR_MS（420ms，见 playSwap）后清除，避免 transform 长期残留成为 position: fixed 后代的包含块；
+   清类时长必须 ≥ 最长动画时长 400ms（切集群 = 滑入 400ms / 色相回落 400ms），否则动画被截断。
+   2026-11-22 二次加强（用户裁决）：色相混比 10% → 16%、时长 320ms → 400ms；位移 40px 与缓动不变。 */
 .max-swap {
   position: relative;
 }
 .max-swap.fx-cluster.dir-next {
-  animation: maxInNext 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: maxInNext 400ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 .max-swap.fx-cluster.dir-prev {
-  animation: maxInPrev 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: maxInPrev 400ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
-/* 内容区色相过渡：从目标集群色相（.max-panel 注入的 --cc）10% 淡回表面色，只做短暂过渡、不常驻着色。
-   与滑入同长（320ms）+ both：动画结束后停在 var(--surface)，与常态一致。 */
+/* 内容区色相过渡：从目标集群色相（.max-panel 注入的 --cc）16% 淡回表面色，只做短暂过渡、不常驻着色。
+   与滑入同长（400ms）+ both：动画结束后停在 var(--surface)，与常态一致。
+   2026-11-22 二次加强（用户裁决）：混比 10% → 16%、时长 320ms → 400ms（色相更可辨、过渡更从容）。 */
 .max-swap.fx-cluster .tab-content {
-  animation: maxHueFade 320ms ease-out both;
+  animation: maxHueFade 400ms ease-out both;
 }
 .max-swap.fx-tab {
   animation: maxTabFade 140ms ease-out both;
@@ -1318,7 +1321,7 @@ onMounted(async () => {
   from {
     /* 混色空间必须是 oklab（2026-11-22 真机裁决）：in oklch 时白底 hue 为 powerless，
        8 个集群色相全部塌到同一个浅粉（实测 oklch(0.955 0.014 345…14)），集群色相丢失。 */
-    background-color: color-mix(in oklab, var(--cc, var(--accent)) 10%, var(--surface));
+    background-color: color-mix(in oklab, var(--cc, var(--accent)) 16%, var(--surface));
   }
   to {
     background-color: var(--surface);
