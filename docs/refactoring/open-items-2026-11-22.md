@@ -10,7 +10,7 @@
 | **B1** | `BatchActionProgressModal` 首列字段 `ip` → `label`（上游/路由/插件组当前把名称塞进 `ip`） | 缺陷（字段语义错位） | ✅ 完成 |
 | **B2** | 上游批量删除补「被路由引用」前端预检（旧面板有 `batchFilter`，现靠后端逐条失败） | 体验回退 | ✅ 完成（spec 回归修复 + 新增只读端点 `GET .../upstreams/references`） |
 | **B3** | Vue Router `No match found` 首访时序告警（`/edge-client`、`/database-management`、`/edge-import`） | 噪声/排障干扰 | ✅ 完成（静态 catch-all 占位 + `reenterIfPlaceholder`，warn 6→0；顺带补 404 视图） |
-| **B4** | e2e 隔离库流程固化为 `scripts/e2e-isolated.sh`（本轮为手工搭建，且曾出现「以为隔离了其实没隔离」） | 流程/基建 | 进行中 |
+| **B4** | e2e 隔离库流程固化为 `scripts/e2e-isolated.sh`（本轮为手工搭建，且曾出现「以为隔离了其实没隔离」） | 流程/基建 | ✅ 完成（`bash scripts/e2e-isolated.sh [--spec <正则>] [--workers N] [--keep]`；隔离断言 + 真实库指纹 + `.port` 原状还原三防错已反向验证） |
 | **B5** | 三份批量删除核心收敛（`useBatchNodeAction` / `useBatchUpstreamDelete` / `useBatchRouteDelete`） | 重复代码 | 待办 |
 | **B6** | 中继（relay）域 e2e 覆盖（SSE 长流 + ansible，目前仅后端单测） | 覆盖缺口 | 待办 |
 
@@ -31,3 +31,30 @@
 2. 后端改动（如有）按 TDD 先写失败用例，并跑 `TEST_DB_BACKEND=pg ... tests/test_pg_dialect_smoke.py`（AGENTS #31/规则 #103）；
 3. 真机验证（`localhost:12345`，admin/panshi123，勿启停服务）给出前后对照与截图；
 4. 涉及共享实现语义变化时先出断言反转清单（AGENTS #217）。
+
+## e2e 隔离跑法（B4 落地）
+
+跑前端 e2e 一律走快照隔离，不要直接 `npx playwright test`（会写真实活动库）：
+
+```bash
+# 全量（workers=1，失败保留临时目录）
+bash scripts/e2e-isolated.sh
+
+# 只跑子集（位置参数按正则过滤 e2e/ 相对路径）
+bash scripts/e2e-isolated.sh --spec "e2e/login.spec.ts|e2e/validation.spec.ts"
+
+# 成功也保留临时目录（排查后端日志用）
+bash scripts/e2e-isolated.sh --spec e2e/login.spec.ts --keep
+```
+
+三个防错（均已反向验证：注入错误路径 / 伪造「绑真实库」输出 → 脚本 abort 且真实库零写入）：
+
+1. **隔离硬断言**：启动器在 `uvicorn.run` 之前改写 `db_config`/`database` 的 `CONFIG_PATH` 并重建引擎，打印 `db_url` 后 `assert` 指向临时库；脚本再 grep 该行复核（不含临时库 / 含真实库路径即 abort）。原因：`app/core/__init__.py` 导入期已按值绑定 `database` 常量，只设 `DATABASE_URL` 无效。
+2. **真实库零写入校验**：开始前记录活动库（含 `-wal`/`-shm`）的 mtime+大小指纹，收尾复核；变化即非零退出（常驻后端 12344 并发写也会触发，需人工判读）。
+3. **`.port` 原状还原**：记录「原本不存在（开发默认 12344）」与「原本是 N」两种情形，`trap cleanup EXIT/INT/TERM` 保证异常退出也还原；收尾复核内容一致并检查 12344/12345 健康。
+
+副作用边界：临时 `db_config.json` 只写临时目录（`backend/db_config.json` 不动）；ansible 目录用「符号链接 + inventory 实拷贝」重定向，`inventory/host`、`inventory/gateways`、artifacts、静态资源、脚本上传、task-log 全部落临时目录；备份调度器在隔离进程内停用（避免副本库里的远端备份配置被误触发）。
+
+### 关于真实库指纹复核的噪声（B4 实施备注）
+
+WAL 模式下**真实写入发生在 `-wal`**，主 db 文件在 checkpoint 前可能完全不变；因此指纹复核必须以 `db + -wal + -shm` 三者组合判定（脚本当前即如此）。代价：常驻后端 12344 的并发写也会让 `-wal` 变化 → 脚本按「变化即非零退出 + 保留临时目录」处理，需人工判读。若要在活跃开发机上降低误报，建议跑 e2e 前短暂避免手工操作，或把 e2e 安排到 CI 的干净环境。
