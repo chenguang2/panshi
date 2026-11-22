@@ -9,8 +9,8 @@
 |---|---|---|---|
 | **B1** | `BatchActionProgressModal` 首列字段 `ip` → `label`（上游/路由/插件组当前把名称塞进 `ip`） | 缺陷（字段语义错位） | ✅ 完成 |
 | **B2** | 上游批量删除补「被路由引用」前端预检（旧面板有 `batchFilter`，现靠后端逐条失败） | 体验回退 | ✅ 完成（spec 回归修复 + 新增只读端点 `GET .../upstreams/references`） |
-| **B3** | Vue Router `No match found` 首访时序告警（`/edge-client`、`/database-management`、`/edge-import`） | 噪声/排障干扰 | 进行中 |
-| **B4** | e2e 隔离库流程固化为 `scripts/e2e-isolated.sh`（本轮为手工搭建，且曾出现「以为隔离了其实没隔离」） | 流程/基建 | 待办 |
+| **B3** | Vue Router `No match found` 首访时序告警（`/edge-client`、`/database-management`、`/edge-import`） | 噪声/排障干扰 | ✅ 完成（静态 catch-all 占位 + `reenterIfPlaceholder`，warn 6→0；顺带补 404 视图） |
+| **B4** | e2e 隔离库流程固化为 `scripts/e2e-isolated.sh`（本轮为手工搭建，且曾出现「以为隔离了其实没隔离」） | 流程/基建 | 进行中 |
 | **B5** | 三份批量删除核心收敛（`useBatchNodeAction` / `useBatchUpstreamDelete` / `useBatchRouteDelete`） | 重复代码 | 待办 |
 | **B6** | 中继（relay）域 e2e 覆盖（SSE 长流 + ansible，目前仅后端单测） | 覆盖缺口 | 待办 |
 

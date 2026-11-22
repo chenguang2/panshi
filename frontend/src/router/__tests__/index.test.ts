@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
 import { useAuthStore } from '@/stores/auth'
 import { useFeaturesStore } from '@/stores/features'
@@ -202,5 +202,120 @@ describe('beforeEach 权限拦截的 task_center 二阶提示（node-task-ux-rev
 
     expect(router.currentRoute.value.path).toBe('/')
     expect(mockMessage.warning).not.toHaveBeenCalled()
+  })
+})
+
+// ── B3：catch-all 占位路由（消除首访 No match found 告警）────────────────
+// 说明：以下用例刻意放在文件末尾——它们会调用 setupDynamicRoutes 往模块级
+// router 实例上挂动态路由，放在前面会污染「静态表不含 X」类断言。
+describe('catch-all 占位路由（B3）', () => {
+  it('静态路由表注册 name=BootstrapPlaceholder 的 catch-all', async () => {
+    const mod = await import('../index')
+    const placeholder = mod.default.getRoutes().find((r) => r.name === mod.BOOTSTRAP_PLACEHOLDER_NAME)
+    expect(placeholder).toBeDefined()
+    expect(placeholder?.path).toBe('/:pathMatch(.*)*')
+    // 顶层路由（不套 Layout 壳），解析不存在的路径不再报 No match found
+    const resolved = mod.default.resolve('/no-such-page')
+    expect(resolved.name).toBe('BootstrapPlaceholder')
+    expect(resolved.matched.length).toBe(1)
+  })
+
+  it('静态路由与深链（含 query）优先于 catch-all', async () => {
+    const router = (await import('../index')).default
+    const home = router.resolve('/')
+    // '/' 命中 Layout 下的默认子路由（Dashboard），两者都不应是占位
+    expect(home.matched[0].name).toBe('Layout')
+    expect(home.name).toBe('Dashboard')
+    expect(home.matched.some((r) => r.name === 'BootstrapPlaceholder')).toBe(false)
+    expect(router.resolve('/login').name).toBe('Login')
+    expect(router.resolve('/plugin-metadata').name).toBe('PluginMetadataList')
+    expect(router.resolve('/nodes').name).toBe('NodeList')
+    const deep = router.resolve('/routes?cluster_id=4')
+    expect(deep.name).toBe('RouteList')
+    expect(deep.query.cluster_id).toBe('4')
+    expect(deep.matched.some((r) => r.name === 'BootstrapPlaceholder')).toBe(false)
+  })
+
+  it('setupDynamicRoutes 之后 feature-gated 深链优先于 catch-all', async () => {
+    setActivePinia(createPinia())
+    localStorage.setItem('token', 'test-token')
+    const featuresStore = useFeaturesStore()
+    featuresStore.loaded = true
+    // features.yaml 语义：未列出的特性视为启用（store.has 的内部判断），
+    // 因此空对象即「全部特性开启」，与真实部署的最全路由表一致。
+    featuresStore.features = {}
+
+    const mod = await import('../index')
+    mod.setupDynamicRoutes(mod.default)
+
+    const cases: Array<[string, string]> = [
+      ['/edge-client', 'EdgeClient'],
+      ['/database-management', 'DatabaseManagement'],
+      ['/edge-import', 'EdgeImport'],
+      ['/tools', 'Tools'],
+    ]
+    for (const [path, name] of cases) {
+      expect(mod.default.resolve(path).name, path).toBe(name)
+    }
+    // 仍然兜住未知路径
+    expect(mod.default.resolve('/no-such-page').name).toBe(mod.BOOTSTRAP_PLACEHOLDER_NAME)
+  })
+})
+
+describe('reenterIfPlaceholder（动态路由注册后的首次导航补做）', () => {
+  const stub = { template: '<div />' }
+
+  /** 最小内存路由：真实路由 + 与生产同名的 catch-all 占位 */
+  async function makeMemoryRouter() {
+    const { BOOTSTRAP_PLACEHOLDER_NAME } = await import('../index')
+    return createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/', name: 'Home', component: stub },
+        { path: '/deep', name: 'Deep', component: stub },
+        { path: '/:pathMatch(.*)*', name: BOOTSTRAP_PLACEHOLDER_NAME, component: stub },
+      ],
+    })
+  }
+
+  it('尚未落地任何路由（name 为空）视为占位 → 按原地址重导航', async () => {
+    const { isOnBootstrapPlaceholder, reenterIfPlaceholder } = await import('../index')
+    const router = await makeMemoryRouter()
+    expect(isOnBootstrapPlaceholder(router)).toBe(true)
+
+    expect(await reenterIfPlaceholder(router, '/deep')).toBe(true)
+    expect(router.currentRoute.value.name).toBe('Deep')
+  })
+
+  it('首次导航被 catch-all 接住 → 动态路由注册后重导航落到真实页面', async () => {
+    const { BOOTSTRAP_PLACEHOLDER_NAME, reenterIfPlaceholder } = await import('../index')
+    const router = await makeMemoryRouter()
+
+    // 模拟「首次导航时 /edge-client 还没注册」
+    await router.push('/edge-client')
+    expect(router.currentRoute.value.name).toBe(BOOTSTRAP_PLACEHOLDER_NAME)
+
+    // 模拟 setupDynamicRoutes 补注册
+    router.addRoute({ path: '/edge-client', name: 'EdgeClient', component: stub })
+    expect(await reenterIfPlaceholder(router, '/edge-client')).toBe(true)
+    expect(router.currentRoute.value.name).toBe('EdgeClient')
+  })
+
+  it('已在真实路由上 → 不重导航', async () => {
+    const { reenterIfPlaceholder } = await import('../index')
+    const router = await makeMemoryRouter()
+    await router.push('/deep')
+
+    expect(await reenterIfPlaceholder(router, '/deep')).toBe(false)
+    expect(router.currentRoute.value.name).toBe('Deep')
+  })
+
+  it('真 404：重导航后仍停在占位路由（视图据此渲染空态）', async () => {
+    const { BOOTSTRAP_PLACEHOLDER_NAME, reenterIfPlaceholder } = await import('../index')
+    const router = await makeMemoryRouter()
+    await router.push('/no-such-page')
+
+    expect(await reenterIfPlaceholder(router, '/no-such-page')).toBe(true)
+    expect(router.currentRoute.value.name).toBe(BOOTSTRAP_PLACEHOLDER_NAME)
   })
 })

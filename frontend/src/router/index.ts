@@ -159,6 +159,19 @@ export const featureRouteMap: Record<string, RouteRecordRaw | RouteRecordRaw[]> 
 
 // ── Static routes (always registered) ─────────────────────────────────
 
+/**
+ * catch-all 占位路由的名字（B3）。
+ *
+ * 存在两个用途：① 未知路径给 404 空态（此前无 catch-all，访问错地址会得到
+ * 空白页）；② bootstrap 阶段 feature-gated 深链的**暂定**落点——`app.mount()`
+ * 即触发首次导航，而动态路由要等 features 拉取完成后才 `addRoute`，没有
+ * catch-all 时 vue-router 会打 `No match found for location with path "..."`。
+ *
+ * `main.ts` 在 `setupDynamicRoutes` 之后用 `reenterIfPlaceholder` 判断「当前是否
+ * 停在占位路由」并补做一次导航，故这里的名字是 bootstrap 收口的判据之一。
+ */
+export const BOOTSTRAP_PLACEHOLDER_NAME = 'BootstrapPlaceholder'
+
 const coreRoutes: RouteRecordRaw[] = [
   {
     path: '/login',
@@ -229,6 +242,14 @@ const coreRoutes: RouteRecordRaw[] = [
       },
     ],
   },
+  // 兜底路由必须留在静态表末尾：vue-router 按路径 score 排序（catch-all 恒最低），
+  // 故任何静态/动态注册的具名路由都优先于它。此处的存在同时消除了首访
+  // feature-gated 深链时 `No match found for location with path` 的告警。
+  {
+    path: '/:pathMatch(.*)*',
+    name: BOOTSTRAP_PLACEHOLDER_NAME,
+    component: () => import('@/views/NotFoundView.vue'),
+  },
 ]
 
 const router: Router = createRouter({
@@ -277,6 +298,30 @@ export function setupDynamicRoutes(router: Router): void {
       }
     }
   }
+}
+
+// ── Bootstrap 收口：首次导航补做（B3）─────────────────────────────────
+
+/**
+ * 当前是否停在 catch-all 占位路由上。
+ *
+ * 两种情形都算「首次导航没有真正落地」：
+ * ① 首次导航被占位路由接住（feature-gated 深链，动态路由尚未注册）；
+ * ② 首次导航确实解析失败（`currentRoute.name` 为空，如守卫生效前的 START 状态）。
+ */
+export function isOnBootstrapPlaceholder(router: Router): boolean {
+  const current = router.currentRoute.value
+  return !current.name || current.name === BOOTSTRAP_PLACEHOLDER_NAME
+}
+
+/**
+ * 动态路由注册完成后，若仍停在占位路由则按原地址重导航一次。
+ * 返回是否真的发起了重导航（已在真实路由上则不动，避免多余导航）。
+ */
+export async function reenterIfPlaceholder(router: Router, fullPath: string): Promise<boolean> {
+  if (!isOnBootstrapPlaceholder(router)) return false
+  await router.replace(fullPath).catch(() => {})
+  return true
 }
 
 export default router

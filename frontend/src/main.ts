@@ -1,7 +1,8 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import { message } from 'ant-design-vue'
-import router, { setupDynamicRoutes } from './router'
+import router, { reenterIfPlaceholder, setupDynamicRoutes } from './router'
+import { bootstrapSettled } from './router/bootstrapState'
 import Antd from 'ant-design-vue'
 import 'ant-design-vue/dist/reset.css'
 import dayjs from 'dayjs'
@@ -60,11 +61,16 @@ async function bootstrap() {
   // Register feature-gated routes now that we know what's available.
   setupDynamicRoutes(router)
 
-  // If the initial navigation failed to resolve (e.g. feature-gated route
-  // wasn't registered yet), router.currentRoute.name is undefined. Force a
-  // re-navigation now that all routes are available.
-  if (!router.currentRoute.value.name) {
-    await router.replace(window.location.pathname + window.location.search).catch(() => {})
+  // The initial navigation (triggered by app.use(router) at mount time, before the
+  // feature list was known) could only land on the catch-all placeholder route
+  // (`BootstrapPlaceholder`) — or fail to resolve at all. Re-navigate to the original
+  // address now that every route is registered.
+  try {
+    await reenterIfPlaceholder(router, window.location.pathname + window.location.search)
+  } finally {
+    // Only now is a placeholder match a genuine 404: the 404 view stays blank before
+    // this point so a feature-gated deep link never flashes "页面不存在或功能未启用".
+    bootstrapSettled.value = true
   }
 }
 
