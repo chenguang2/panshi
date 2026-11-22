@@ -139,6 +139,63 @@ test.describe('中继区域管理 · 下发配置（SSE 桩）', () => {
     await expect(drawer).toContainText('下发配置完成：gateways_e2e-a')
   })
 
+  test('Toast 层级：自绘遮罩打开期间的 message 必须压过遮罩且可命中', async ({ page }) => {
+    /**
+     * 回归：`.modal-overlay` 基础 z-index 1000、多个调用点内联 2000，而 antd message
+     * 默认 1010（cssinjs 注入的 `.ant-message` 类规则，非内联样式）→ 弹窗打开期间弹出的
+     * toast 被整块盖住，既看不见也点不到（2026-11-22 用户实测）。
+     * 修复 = `style.css` 单点把 `.ant-message` 抬到 3000（见该处注释）。
+     */
+    await stubSseStream(page, '/relay/gateways/1/push-config', {
+      events: sseSuccess({ lines: PUSH_LINES, hostsPattern: 'gateways_e2e-a' }),
+    })
+    await regionRow(page, 'e2e-a').locator('button', { hasText: '下发配置' }).click()
+    await confirmModal(page, '下发网关配置').locator('.btn-primary', { hasText: '开始下发' }).click()
+    await expect(execDrawer(page)).toBeVisible()
+
+    const notice = page.locator('.ant-message .ant-message-notice-content').first()
+    await expect(notice).toContainText('下发配置完成')
+    // toast 进场动画从 translateY(-100%) 起（`.ant-message-move-up-enter`），动画未落定时
+    // 中心点还在视口上方（elementFromPoint 返回 null）——先等它落进视口再取点
+    await expect.poll(async () => (await notice.boundingBox())?.y ?? -1, { timeout: 3000 }).toBeGreaterThanOrEqual(0)
+
+    const probe = await page.evaluate(() => {
+      const visible = (el: Element) => {
+        const cs = getComputedStyle(el)
+        return cs.display !== 'none' && cs.visibility !== 'hidden' && Number(cs.opacity) > 0
+      }
+      const overlayZ = Math.max(
+        0,
+        ...[...document.querySelectorAll('.modal-overlay')]
+          .filter(visible)
+          .map((el) => Number(getComputedStyle(el).zIndex) || 0),
+      )
+      const msg = document.querySelector('.ant-message')
+      const content = document.querySelector('.ant-message .ant-message-notice-content')
+      if (!msg || !content) return { overlayZ, messageZ: -1, inlineStyle: 'missing', hitInside: false, hit: '', at: '' }
+      const rect = content.getBoundingClientRect()
+      const x = rect.left + rect.width / 2
+      const y = rect.top + rect.height / 2
+      const hit = document.elementFromPoint(x, y)
+      return {
+        overlayZ,
+        messageZ: Number(getComputedStyle(msg).zIndex) || 0,
+        // antd 的 z-index 由 cssinjs 以类规则注入（内联样式应为 null）——若是内联样式则本修复方式无效
+        inlineStyle: msg.getAttribute('style'),
+        hitInside: !!(hit && hit.closest('.ant-message')),
+        hit: hit ? `<${hit.tagName.toLowerCase()} class="${String(hit.className)}">` : 'null',
+        at: `(${Math.round(x)}, ${Math.round(y)})`,
+      }
+    })
+
+    expect(probe.inlineStyle, 'antd message 的层级不应来自内联样式（否则 CSS 单点无效）').toBeNull()
+    expect(probe.overlayZ, '执行抽屉的自绘遮罩必须真的可见，否则本用例无意义').toBeGreaterThan(0)
+    expect(probe.messageZ, 'toast 的 z-index 必须高于同时可见的自绘遮罩').toBeGreaterThan(probe.overlayZ)
+    // 仓库内最高内联档位是 2000（useOverlayModal / BatchActionProgressModal / NodeTaskCenter）
+    expect(probe.messageZ, 'toast 必须压过最高内联档位 2000').toBeGreaterThan(2000)
+    expect(probe.hitInside, `toast 中心点 ${probe.at} 命中的应是 toast 自身，实际命中 ${probe.hit}`).toBe(true)
+  })
+
   test('空白名单危险确认：0 启用节点时显式带 allow_empty 载荷才下发', async ({ page }) => {
     const sse = await stubSseStream(page, '/relay/gateways/2/push-config', {
       events: sseSuccess({ lines: PUSH_LINES, hostsPattern: 'gateways_e2e-b' }),

@@ -961,6 +961,24 @@ select.form-input {
   color: var(--fg) !important;
 }
 
+/* Toast / Notification 层级（单点）
+   Toast 必须压过自绘遮罩：`.modal-overlay` 基础 z-index 1000，但多个调用点用内联
+   `z-index: 2000`（`components/BatchActionProgressModal.vue`、
+   `composables/useOverlayModal.ts`、NodeTaskCenter 的程序化弹窗等），而 antd message
+   默认 z-index 1010（token `zIndexPopupBase + 10`，由 cssinjs 注入的 `.ant-message`
+   类规则给出，非内联样式）→ 弹窗打开期间弹出的 toast 被遮罩整块盖住、既看不见也点不到
+   （2026-11-22 实测 elementFromPoint 命中 `.modal-overlay`）。抬到 3000 一次性覆盖
+   当前全部内联档位（最高 2000），不必逐个改弹窗。 */
+.ant-message {
+  z-index: 3000 !important;
+}
+/* notification 同样可能弹在弹窗期间（antd 默认 token.zIndexPopupBase + 50 = 1050），
+   一并抬到同一档。注：当前仓库无 notification 消费方（`grep -rn 'notification\.' src`
+   为空），规则为占位防线——接入时无需再排查层级。 */
+.ant-notification {
+  z-index: 3000 !important;
+}
+
 /* Popover */
 .ant-popover-inner {
   background: var(--surface) !important;
