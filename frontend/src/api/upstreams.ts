@@ -21,3 +21,23 @@ export function getUpstreamStatusCounts(params: Record<string, unknown> = {}) {
     cluster_count: number
   }>('/upstreams/status-counts', { params })
 }
+
+/** 引用查询响应：只含**存在引用**的上游（无引用的上游不出现在 items 里） */
+export interface UpstreamReferenceItem {
+  upstream_id: number
+  upstream_name: string
+  routes: Array<{ route_id: number; route_name: string }>
+}
+
+/**
+ * 批量删除前置引用查询（批次 B2）。
+ *
+ * 后端判定与批量删除的拦截同语义（`Route.upstream_id`），前端据此在确认弹窗**之前**
+ * 把「被路由引用」的上游挑出来（跳过或全量阻断），避免用户点了删除才发现一堆失败。
+ * 不属于该集群的 id 被静默忽略（响应里不出现）；单次上限 500。
+ */
+export function fetchUpstreamReferences(clusterId: number, ids: number[]) {
+  return api.get<{ items: UpstreamReferenceItem[] }>(`/clusters/${clusterId}/upstreams/references`, {
+    params: { ids: ids.join(',') },
+  })
+}

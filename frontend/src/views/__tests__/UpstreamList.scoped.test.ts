@@ -49,6 +49,7 @@ vi.mock('@/composables/useClusterUtils', () => ({
 }))
 
 import { showDeleteConfirm } from '@/composables/useClusterUtils'
+import { message } from 'ant-design-vue'
 
 const MOCK_CLUSTERS = [
   { id: 1, display_name: '生产集群', name: 'production', group_name: '线上' },
@@ -555,6 +556,184 @@ describe('UpstreamList.vue scoped 形态（统一管理面板上游 Tab）', () 
     const table = wrapper.findComponent({ name: 'ATableStub' })
     expect(table.props('rowSelection')).toBeTruthy()
     expect(wrapper.find('.l5-batchbar').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  // ── 批量删除前置引用预检（批次 B2）─────────────────────────────────────────
+  // 后端批量端点对「被路由引用」的上游逐条拦截（该上游已被路由引用，请先删除引用路由），
+  // 前端在确认弹窗之前查一次引用端点，避免用户点了删除才发现一堆失败。
+  // 时机：每次点批量删除、且勾选行 ≥1 时，按集群分组各查一次（无引用也查 → 便宜且语义统一）。
+
+  function referenceParams() {
+    return mockApiGet.mock.calls
+      .filter((c) => String(c[0]).endsWith('/upstreams/references'))
+      .map((c) => ({ url: String(c[0]), params: (c[1]?.params ?? {}) as Record<string, unknown> }))
+  }
+
+  function mockReferences(items: unknown[]) {
+    const base = mockApiGet.getMockImplementation()!
+    mockApiGet.mockImplementation((url: string, cfg?: { params?: Record<string, unknown> }) =>
+      String(url).endsWith('/upstreams/references') ? Promise.resolve({ data: { items } }) : base(url, cfg),
+    )
+  }
+
+  it('部分被引用：预检按集群带正确 ids，被引用行跳过并写进确认弹窗警示行', async () => {
+    mockReferences([
+      {
+        upstream_id: 1,
+        upstream_name: 'user-service',
+        routes: [
+          { route_id: 5, route_name: 'route-a' },
+          { route_id: 6, route_name: 'route-b' },
+        ],
+      },
+    ])
+    const wrapper = await mountScoped()
+    const table = wrapper.findComponent({ name: 'ATableStub' })
+    ;(table.props('rowSelection') as { onChange: (k: number[]) => void }).onChange([1, 2])
+    await wrapper.vm.$nextTick()
+    await wrapper.find('[data-test="batch-delete"]').trigger('click')
+    await flushPromises()
+
+    // 预检请求：一集群一次，ids 为本次勾选集
+    const refs = referenceParams()
+    expect(refs).toHaveLength(1)
+    expect(refs[0].url).toBe('/clusters/2/upstreams/references')
+    expect(refs[0].params.ids).toBe('1,2')
+
+    const confirm = showDeleteConfirm as unknown as Mock
+    expect(confirm).toHaveBeenCalledTimes(1)
+    const opts = confirm.mock.calls[0][0] as {
+      title: string
+      extraWarning?: string
+      onOk: (db: boolean, edge: boolean, nodeIds: number[]) => Promise<void>
+    }
+    // 弹窗标题只含可删行（被引用行已被剔除）
+    expect(opts.title).toContain('1 条上游')
+    expect(opts.title).toContain('order-service')
+    expect(opts.title).not.toContain('user-service')
+    // 跳过项明示：名称 + 引用条数
+    expect(opts.extraWarning).toContain('已跳过 1 条被路由引用的上游')
+    expect(opts.extraWarning).toContain('user-service（2 条路由）')
+
+    await opts.onOk(true, false, [])
+    await flushPromises()
+    expect(mockApiDelete).toHaveBeenCalledTimes(1)
+    const [url, cfg] = mockApiDelete.mock.calls[0] as [string, { data: Record<string, unknown> }]
+    expect(url).toBe('/clusters/2/upstreams')
+    expect(cfg.data.upstream_ids).toEqual([2])
+    wrapper.unmount()
+  })
+
+  it('全部被引用：只弹 warning，不弹确认框、不发 DELETE', async () => {
+    const warn = vi.spyOn(message, 'warning').mockImplementation(() => undefined as never)
+    mockReferences([
+      {
+        upstream_id: 1,
+        upstream_name: 'user-service',
+        routes: [{ route_id: 5, route_name: 'route-a' }],
+      },
+      {
+        upstream_id: 2,
+        upstream_name: 'order-service',
+        routes: [
+          { route_id: 6, route_name: 'route-b' },
+          { route_id: 7, route_name: 'route-c' },
+          { route_id: 8, route_name: 'route-d' },
+        ],
+      },
+    ])
+    const wrapper = await mountScoped()
+    const table = wrapper.findComponent({ name: 'ATableStub' })
+    ;(table.props('rowSelection') as { onChange: (k: number[]) => void }).onChange([1, 2])
+    await wrapper.vm.$nextTick()
+    await wrapper.find('[data-test="batch-delete"]').trigger('click')
+    await flushPromises()
+
+    expect(showDeleteConfirm).not.toHaveBeenCalled()
+    expect(mockApiDelete).not.toHaveBeenCalled()
+    expect(warn).toHaveBeenCalledTimes(1)
+    const text = String(warn.mock.calls[0][0])
+    expect(text).toContain('均被路由引用')
+    expect(text).toContain('请先解除引用')
+    expect(text).toContain('user-service（1 条路由）')
+    expect(text).toContain('order-service（3 条路由）')
+    // 勾选不被清空（用户可先去解引用再回来删）
+    expect(wrapper.find('.l5-batchbar').text()).toContain('已选 2 项')
+    warn.mockRestore()
+    wrapper.unmount()
+  })
+
+  it('无引用：预检照做一次，确认弹窗无警示行、删除集合与现状一致', async () => {
+    mockReferences([])
+    const wrapper = await mountScoped()
+    const table = wrapper.findComponent({ name: 'ATableStub' })
+    ;(table.props('rowSelection') as { onChange: (k: number[]) => void }).onChange([1, 2])
+    await wrapper.vm.$nextTick()
+    await wrapper.find('[data-test="batch-delete"]').trigger('click')
+    await flushPromises()
+
+    expect(referenceParams()).toHaveLength(1)
+    const opts = (showDeleteConfirm as unknown as Mock).mock.calls[0][0] as {
+      extraWarning?: string
+      title: string
+      onOk: (db: boolean, edge: boolean, nodeIds: number[]) => Promise<void>
+    }
+    expect(opts.extraWarning).toBeUndefined()
+    expect(opts.title).toContain('2 条上游')
+    await opts.onOk(true, false, [])
+    await flushPromises()
+    const [, cfg] = mockApiDelete.mock.calls[0] as [string, { data: Record<string, unknown> }]
+    expect(cfg.data.upstream_ids).toEqual([1, 2])
+    wrapper.unmount()
+  })
+
+  it('页面形态跨集群勾选：预检按集群分组各查一次（同一实现，不分叉）', async () => {
+    const base = mockApiGet.getMockImplementation()!
+    mockApiGet.mockImplementation((url: string, cfg?: { params?: Record<string, unknown> }) => {
+      if (url === '/upstreams') {
+        const other = makeUpstream({ id: 9, cluster_id: 1, cluster_name: '生产集群', name: 'prod-service' })
+        return Promise.resolve({ data: { total: 3, items: [...SCOPED_UPSTREAMS, other] } })
+      }
+      if (url === '/upstreams/status-counts') {
+        return Promise.resolve({
+          data: { total: 3, published: 1, pending: 1, unpublished: 1, target_count: 3, cluster_count: 2 },
+        })
+      }
+      if (String(url).endsWith('/upstreams/references')) {
+        // 集群 1 的 prod-service 被引用；集群 2 的两条都没被引用
+        const ids = String(cfg?.params?.ids ?? '')
+        const items = ids.includes('9')
+          ? [{ upstream_id: 9, upstream_name: 'prod-service', routes: [{ route_id: 3, route_name: 'prod-route' }] }]
+          : []
+        return Promise.resolve({ data: { items } })
+      }
+      return base(url, cfg)
+    })
+    const wrapper = await mountPage()
+    const table = wrapper.findComponent({ name: 'ATableStub' })
+    ;(table.props('rowSelection') as { onChange: (k: number[]) => void }).onChange([1, 9])
+    await wrapper.vm.$nextTick()
+    await wrapper.find('[data-test="batch-delete"]').trigger('click')
+    await flushPromises()
+
+    const refs = referenceParams()
+    expect(refs.map((r) => r.url).sort()).toEqual([
+      '/clusters/1/upstreams/references',
+      '/clusters/2/upstreams/references',
+    ])
+    const opts = (showDeleteConfirm as unknown as Mock).mock.calls[0][0] as {
+      extraWarning?: string
+      onOk: (db: boolean, edge: boolean, nodeIds: number[]) => Promise<void>
+    }
+    expect(opts.extraWarning).toContain('prod-service（1 条路由）')
+    await opts.onOk(true, false, [])
+    await flushPromises()
+    // 只对集群 2 发删除（集群 1 的唯一勾选行被跳过）
+    expect(mockApiDelete).toHaveBeenCalledTimes(1)
+    const [url, cfg] = mockApiDelete.mock.calls[0] as [string, { data: Record<string, unknown> }]
+    expect(url).toBe('/clusters/2/upstreams')
+    expect(cfg.data.upstream_ids).toEqual([1])
     wrapper.unmount()
   })
 })

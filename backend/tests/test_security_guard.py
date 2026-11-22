@@ -19,6 +19,8 @@ from tests.api_helpers import admin_auth_headers, AuthedTestClient, isolated_app
 UNAUTHENTICATED_SAMPLES = [
     ("get", "/api/v1/clusters/1/routes"),
     ("get", "/api/v1/clusters/1/upstreams"),
+    # 上游批量删除前置引用查询（2026-11-22 批次 B2，rule #19）
+    ("get", "/api/v1/clusters/1/upstreams/references?ids=1"),
     ("get", "/api/v1/clusters/1/nodes"),
     ("get", "/api/v1/clusters/1/plugin_configs"),
     # 插件组删除前置引用查询（2026-10-10 plugin-group-ux-close-loop，rule #19）

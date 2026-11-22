@@ -359,7 +359,7 @@ import { message, Modal } from 'ant-design-vue'
 import ClusterSelect from '@/components/ClusterSelect.vue'
 import StrokeIcon from '@/components/StrokeIcon.vue'
 import { CaretDownOutlined } from '@ant-design/icons-vue'
-import { listUpstreams, getUpstreamStatusCounts } from '@/api/upstreams'
+import { listUpstreams, getUpstreamStatusCounts, fetchUpstreamReferences } from '@/api/upstreams'
 import { listClusters, getClusterNodes } from '@/api/clusters'
 import { PAGE_SIZE_TABLE } from '@/constants'
 import PageHeader from '@/components/PageHeader.vue'
@@ -944,6 +944,55 @@ const batchSelectedUpstreams = computed(() =>
   upstreams.value.filter((u: { id: number }) => selectedUpstreamKeys.value.includes(u.id)),
 )
 
+/**
+ * 批量删除前置引用预检结果：upstream id → 引用它的路由名清单（批次 B2）。
+ *
+ * 由 `precheckUpstreamReferences` 在确认弹窗**之前**填充，用于把被路由引用的上游
+ * 从本次删除集合里排除（部分被引用）或直接阻断（全部被引用）。删除结束后清空。
+ */
+const blockedRefs = ref<Record<number, string[]>>({})
+
+/** 被路由引用的路由名（未命中 → 空数组 = 可删） */
+function referencedRouteNamesOf(id: number): string[] {
+  return blockedRefs.value[id] ?? []
+}
+
+/** 本次可删的上游（勾选行 − 被路由引用行） */
+const deletableUpstreams = computed(() =>
+  batchSelectedUpstreams.value.filter((u: { id: number }) => referencedRouteNamesOf(u.id).length === 0),
+)
+
+/** 被引用行的提示片段：「A（3 条路由）」，最多 3 个，其余折成「等 N 条」 */
+function referencedUpstreamsHint(rows: Array<{ id: number; name: string }>, limit = 3): string {
+  const parts = rows.slice(0, limit).map((u) => `${u.name}（${referencedRouteNamesOf(u.id).length} 条路由）`)
+  return rows.length > limit ? `${parts.join('、')} 等 ${rows.length} 条` : parts.join('、')
+}
+
+/**
+ * 预检：逐集群拉取「被路由引用」清单（一集群一次请求，返回值为引用明细的条数）。
+ *
+ * 端点与后端批量删除的逐条拦截**同语义**（Route.upstream_id），故预检命中 ⇔ 删除必失败。
+ * 请求失败**不阻断**删除：退回后端逐条拦截的旧行为（预检是体验增强，不是安全门）。
+ */
+async function precheckUpstreamReferences(groups: ClusterUpstreamBatchGroup[]): Promise<number> {
+  const refs: Record<number, string[]> = {}
+  for (const g of groups) {
+    try {
+      const res = await fetchUpstreamReferences(
+        g.clusterId,
+        g.upstreams.map((u) => u.id),
+      )
+      for (const item of res.data?.items || []) {
+        refs[item.upstream_id] = (item.routes || []).map((r) => r.route_name)
+      }
+    } catch {
+      /* 预检不可用：该集群退回后端逐条拦截 */
+    }
+  }
+  blockedRefs.value = refs
+  return Object.keys(refs).length
+}
+
 function clearBatchSelection() {
   selectedUpstreamKeys.value = []
 }
@@ -988,6 +1037,9 @@ function toggleBatchProgressExpand(label: string) {
  * 数据库记录 / 可同步删 Edge 已发布配置 / 勾选节点后节点不再承载该上游流量；
  * 执行走 runClusterGroupedBatchUpstreamDelete（按 cluster_id 分组顺序请求集合端点，
  * 节点选择逐集群裁剪），进度弹窗与节点批量条同款（BatchActionProgressModal）。
+ *
+ * 前置「被路由引用」预检（批次 B2）：全部被引用只提示不弹确认，部分被引用先跳过并在
+ * 确认弹窗里列出跳过项（见 precheckUpstreamReferences）。
  */
 async function handleBatchDelete() {
   const list = batchSelectedUpstreams.value
@@ -995,7 +1047,20 @@ async function handleBatchDelete() {
     message.warning('请先勾选要删除的上游')
     return
   }
-  const groups = groupUpstreamsByCluster(list)
+
+  // 「被路由引用」预检（批次 B2）：后端批量端点对引用上游逐条拦截（该上游已被路由引用，
+  // 请先删除引用路由）。这里在确认弹窗**之前**问一次引用端点，避免用户点了删除才发现一堆失败：
+  // 全部被引用 → 只弹 warning（不发 DELETE、不弹确认）；部分被引用 → 跳过并在弹窗里明示。
+  const allGroups = groupUpstreamsByCluster(list)
+  await precheckUpstreamReferences(allGroups)
+  const referenced = list.filter((u: { id: number }) => referencedRouteNamesOf(u.id).length > 0)
+  if (referenced.length === list.length) {
+    message.warning(`选中的 ${list.length} 条上游均被路由引用，请先解除引用：${referencedUpstreamsHint(referenced)}`)
+    return
+  }
+
+  // 可删子集 = 勾选行 − 被引用行（被引用行的「跳过」提示写进确认弹窗警示行）
+  const groups = groupUpstreamsByCluster(deletableUpstreams.value)
   // 确认弹窗的 Edge 节点清单：跨集群时逐节点标注归属集群（showDeleteConfirm 依据 clusterName 去重数自动渲染）
   const nodeRows: Array<{ id: number; ip: string; management_port: number; status?: number; clusterName?: string }> = []
   for (const g of groups) {
@@ -1009,7 +1074,7 @@ async function handleBatchDelete() {
     }
   }
 
-  const names = list.map((u: { name: string }) => u.name)
+  const names = deletableUpstreams.value.map((u: { name: string }) => u.name)
   const title =
     names.length > 3
       ? `确定要删除选中的 ${names.length} 条上游吗？${names.slice(0, 3).join('、')} 等 ${names.length} 条`
@@ -1019,17 +1084,25 @@ async function handleBatchDelete() {
     title,
     apiEndpoint: `/clusters/${groups[0].clusterId}/upstreams`,
     nodes: nodeRows,
+    extraWarning: referenced.length
+      ? `已跳过 ${referenced.length} 条被路由引用的上游：${referencedUpstreamsHint(referenced)}，请先解除引用后再删除`
+      : undefined,
     onOk: async (deleteDb, deleteEdge, nodeIds) => {
-      const summaries = await runClusterGroupedBatchUpstreamDelete(
-        groups,
-        { deleteDb, deleteEdge, nodeIds },
-        { progress: batchProgress },
-      )
-      const { success, failed, text } = upstreamBatchSummaryMessage(summaries)
-      clearBatchSelection()
-      await refreshAfterWrite()
-      if (failed === 0) message.success(`已删除 ${success} 个上游`)
-      else message.warning(text)
+      try {
+        const summaries = await runClusterGroupedBatchUpstreamDelete(
+          groups,
+          { deleteDb, deleteEdge, nodeIds },
+          { progress: batchProgress },
+        )
+        const { success, failed, text } = upstreamBatchSummaryMessage(summaries)
+        clearBatchSelection()
+        await refreshAfterWrite()
+        if (failed === 0) message.success(`已删除 ${success} 个上游`)
+        else message.warning(text)
+      } finally {
+        // 删除结束（成功/失败/异常）即清空预检结果，避免污染下一次批量删除
+        blockedRefs.value = {}
+      }
     },
   })
 }

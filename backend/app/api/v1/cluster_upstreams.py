@@ -1,11 +1,12 @@
 import json
 from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, status, Request, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
 
 from app.core.database import get_db
+from app.config import MAX_PAGE_SIZE
 from app.models.cluster import Upstream, UpstreamTarget, ConfigVersion, Node, Route
 from app.models.user import User
 from app.schemas.cluster import (
@@ -24,6 +25,34 @@ router = APIRouter(prefix="/clusters", tags=["clusters"], dependencies=[Depends(
 
 UPSTREAM_ALLOWED_SORT_FIELDS = {"name", "load_balance", "description", "created_at"}
 UPSTREAM_ALLOWED_SEARCH_FIELDS = {"name", "description"}
+# 引用查询单次上限（与全站 MAX_PAGE_SIZE 同量级：足够覆盖一次整页批量勾选）
+UPSTREAM_REFERENCES_MAX_IDS = MAX_PAGE_SIZE
+
+
+def _parse_upstream_ids(raw: str) -> list[int]:
+    """解析 `ids=1,2,3`（引用查询用）：空串/非整数一律 400，去重保序。
+
+    上限 500 与全站 `MAX_PAGE_SIZE` 对齐：超限说明调用方在拼异常大的批量请求，
+    直接拒绝而不是静默截断（静默截断会让前端漏检被引用上游 → 删到一半失败）。
+    """
+    parts = [p.strip() for p in raw.split(",")]
+    if not parts or all(p == "" for p in parts):
+        raise HTTPException(status_code=400, detail="ids 不能为空")
+    parsed: list[int] = []
+    for p in parts:
+        if p == "":
+            raise HTTPException(status_code=400, detail=f"ids 格式不正确：{raw}")
+        try:
+            parsed.append(int(p))
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"ids 格式不正确：{raw}")
+    deduped = list(dict.fromkeys(parsed))
+    if len(deduped) > UPSTREAM_REFERENCES_MAX_IDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"单次最多查询 {UPSTREAM_REFERENCES_MAX_IDS} 条上游",
+        )
+    return deduped
 
 
 @router.get("/{cluster_id}/upstreams", response_model=dict)
@@ -137,6 +166,64 @@ async def create_upstream(cluster_id: int, upstream: UpstreamCreate, db: AsyncSe
     response = UpstreamWithTargets.model_validate(db_upstream)
     response.targets = [UpstreamTargetSchema.model_validate(t) for t in targets]
     return response
+
+
+@router.get("/{cluster_id}/upstreams/references")
+async def get_upstream_references(
+    cluster_id: int,
+    ids: str = Query(..., description="逗号分隔的上游 id 列表（上限 500）"),
+    db: AsyncSession = Depends(get_db),
+):
+    """批量删除前置引用查询（只读）：列出这批上游中被路由引用的那些。
+
+    - 判定与 `delete_upstreams_batch` 的删除拦截**同语义**（`Route.upstream_id in ids`），
+      前端在确认弹窗前拉取本端点做预检，展示的「被引用」集合与后端拦截永不分叉；
+    - 只返回**存在引用**的上游（无引用的不出现在 items 里）——前端据此区分
+      「部分被引用，先跳过再删」与「全部被引用，直接阻断不弹确认」；
+    - 不属于该集群 / 不存在的 id 静默忽略（不报错，避免跨集群探测）。
+
+    注意：本路由必须声明在 `/{cluster_id}/upstreams/{upstream_id}` **之前**，
+    否则 "references" 会被整数路径参数匹配成 422。
+    """
+    upstream_ids = _parse_upstream_ids(ids)
+    if not upstream_ids:
+        raise HTTPException(status_code=400, detail="ids 不能为空")
+
+    upstreams = (
+        await db.execute(
+            select(Upstream).where(
+                Upstream.cluster_id == cluster_id,
+                Upstream.id.in_(upstream_ids),
+            )
+        )
+    ).scalars().all()
+    if not upstreams:
+        return {"items": []}
+
+    routes = (
+        await db.execute(
+            select(Route)
+            .where(Route.upstream_id.in_([u.id for u in upstreams]))
+            .order_by(Route.id)
+        )
+    ).scalars().all()
+    routes_by_upstream: dict[int, list[dict]] = {}
+    for r in routes:
+        routes_by_upstream.setdefault(r.upstream_id, []).append(
+            {"route_id": r.id, "route_name": r.name}
+        )
+
+    return {
+        "items": [
+            {
+                "upstream_id": u.id,
+                "upstream_name": u.name,
+                "routes": routes_by_upstream[u.id],
+            }
+            for u in upstreams
+            if u.id in routes_by_upstream
+        ]
+    }
 
 
 @router.get("/{cluster_id}/upstreams/{upstream_id}", response_model=UpstreamWithTargets)
