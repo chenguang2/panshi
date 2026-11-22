@@ -84,6 +84,8 @@ test.describe('中继区域管理 · 查看配置预览（只读）', () => {
     // 每段一个「复制」按钮 + 底部说明
     await expect(modal.locator('.config-file button', { hasText: '复制' })).toHaveCount(4)
     await expect(modal.locator('.config-notes li')).toHaveCount(4)
+    // 范围说明（relay-push-scope-hint）：预览含 sshd 块，但下发只写 nginx
+    await expect(modal).toContainText('本预览含 sshd 跳板配置；实际下发生效需使用「配置跳板转发」。')
 
     // 只读语义：整个交互只有一条预览 GET，无任何写请求
     expect(stub.requests.filter((r) => r.method !== 'GET')).toHaveLength(0)

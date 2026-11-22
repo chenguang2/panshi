@@ -70,8 +70,8 @@ test.describe('中继区域管理 · 配置跳板转发（SSE 桩）', () => {
     await expect(drawer).toBeVisible()
     await expect(drawer.locator('.modal-header h2')).toHaveText('配置跳板转发 - E2E 甲局')
     await expect(drawer.locator('.progress-bar')).toHaveClass(/progress-success/, { timeout: 15000 })
-    await expect(drawer).toContainText('sshd 跳板转发配置完成：gateways_e2e-a')
-    await expect(page.locator('.ant-message')).toContainText('跳板转发配置完成（gateways_e2e-a）')
+    await expect(drawer).toContainText('配置跳板转发完成：gateways_e2e-a')
+    await expect(page.locator('.ant-message')).toContainText('配置跳板转发完成（gateways_e2e-a）')
 
     // 载荷：root 凭据随本次请求提交（不落库、不进命令行）
     expect(sse.requests).toHaveLength(1)
@@ -104,10 +104,10 @@ test.describe('中继区域管理 · 配置跳板转发（SSE 桩）', () => {
     const drawer = execDrawer(page)
     await expect(drawer).toBeVisible()
     await expect(drawer.locator('.progress-bar')).toHaveClass(/progress-exception/)
-    await expect(drawer).toContainText('执行失败（rc=2，failed）')
+    await expect(drawer).toContainText('配置跳板转发失败（rc=2，failed）')
     await expect(drawer, 'stderr 行应出现在执行日志中').toContainText('已回滚 drop-in')
-    // 现状文案：sshd 失败沿用「下发失败」措辞（isInit ? 初始化 : 下发），此处按实现断言
-    await expect(page.locator('.ant-message')).toContainText('下发失败（rc=2）')
+    // 动作名三态（utils/relayActions）：sshd 失败须报「配置跳板转发失败」，不得沿用「下发失败」
+    await expect(page.locator('.ant-message')).toContainText('配置跳板转发失败（rc=2），详见执行日志')
 
     // 失败不自动复检（只有 rc=0 才 recheckAfterSshd）
     expect(stub.requests.filter((r) => r.path.startsWith('/relay/health-check'))).toHaveLength(0)

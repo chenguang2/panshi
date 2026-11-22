@@ -74,8 +74,8 @@ test.describe('中继区域管理 · 初始化网关（SSE 桩）', () => {
     for (const line of INIT_LINES) {
       await expect(drawer, `执行日志应包含「${line}」`).toContainText(line)
     }
-    await expect(drawer).toContainText('初始化完成：gateways_e2e-a，监听 8443')
-    await expect(page.locator('.ant-message')).toContainText('初始化完成（gateways_e2e-a，监听 8443）')
+    await expect(drawer).toContainText('初始化网关完成：gateways_e2e-a，监听 8443')
+    await expect(page.locator('.ant-message')).toContainText('初始化网关完成（gateways_e2e-a，监听 8443）')
     // 请求落在 init 端点且空载荷（未透传任何危险参数）
     expect(stub.requests.filter((r) => r.path === '/relay/gateways/1/init')).toHaveLength(1)
   })
@@ -94,9 +94,9 @@ test.describe('中继区域管理 · 初始化网关（SSE 桩）', () => {
     const drawer = execDrawer(page)
     await expect(drawer).toBeVisible()
     await expect(drawer.locator('.progress-bar')).toHaveClass(/progress-exception/)
-    await expect(drawer).toContainText('执行失败（rc=2，failed）')
+    await expect(drawer).toContainText('初始化网关失败（rc=2，failed）')
     await expect(drawer).toContainText('nginx -t 校验失败：duplicate listen 8443')
-    await expect(page.locator('.ant-message')).toContainText('初始化失败（rc=2），详见执行日志')
+    await expect(page.locator('.ant-message')).toContainText('初始化网关失败（rc=2），详见执行日志')
   })
 
   test('未填 OpenResty 前缀：前端拦住并提示，不发任何流请求', async ({ page }) => {

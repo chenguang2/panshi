@@ -64,6 +64,8 @@ test.describe('中继区域管理 · 下发配置（SSE 桩）', () => {
     await expect(confirm).toBeVisible()
     await expect(confirm).toContainText('本次将下发 3 个启用节点（共 4 个节点；全量替换')
     await expect(confirm).toContainText('该区域尚无成功下发记录，本次为首次写入白名单')
+    // 范围说明（relay-push-scope-hint）：下发只写 nginx 白名单，sshd 另走「配置跳板转发」
+    await expect(confirm).toContainText('本次下发仅更新流量白名单（nginx）。SSH 跳板转发需另行使用「配置跳板转发」。')
     await confirm.locator('.btn-primary', { hasText: '开始下发' }).click()
 
     const drawer = execDrawer(page)
@@ -80,8 +82,8 @@ test.describe('中继区域管理 · 下发配置（SSE 桩）', () => {
     for (const line of PUSH_LINES) {
       await expect(drawer, `执行日志应逐行包含「${line}」`).toContainText(line)
     }
-    await expect(drawer, '终态关键信息应带区域清单分组名').toContainText('下发完成：gateways_e2e-a')
-    await expect(page.locator('.ant-message')).toContainText('配置已下发（gateways_e2e-a）')
+    await expect(drawer, '终态关键信息应带区域清单分组名').toContainText('下发配置完成：gateways_e2e-a')
+    await expect(page.locator('.ant-message')).toContainText('下发配置完成（gateways_e2e-a）')
     // 执行结束后行内按钮复位（不再停留在「下发中…」）
     await expect(regionRow(page, 'e2e-a').locator('button', { hasText: '下发配置' })).toBeEnabled()
 
@@ -117,9 +119,9 @@ test.describe('中继区域管理 · 下发配置（SSE 桩）', () => {
     const drawer = execDrawer(page)
     await expect(drawer).toBeVisible()
     await expect(drawer.locator('.progress-bar')).toHaveClass(/progress-exception/)
-    await expect(drawer).toContainText('执行失败（rc=2，failed）')
+    await expect(drawer).toContainText('下发配置失败（rc=2，failed）')
     await expect(drawer).toContainText('写入 edge_targets.conf 失败：Permission denied')
-    await expect(page.locator('.ant-message')).toContainText('下发失败（rc=2），详见执行日志')
+    await expect(page.locator('.ant-message')).toContainText('下发配置失败（rc=2），详见执行日志')
     expect(sse.requests).toHaveLength(1)
 
     // 非流式态：可关闭，行内按钮已复位
@@ -134,7 +136,7 @@ test.describe('中继区域管理 · 下发配置（SSE 桩）', () => {
     await regionRow(page, 'e2e-a').locator('button', { hasText: '下发配置' }).click()
     await confirmModal(page, '下发网关配置').locator('.btn-primary', { hasText: '开始下发' }).click()
     await expect(drawer.locator('.progress-bar')).toHaveClass(/progress-success/, { timeout: 15000 })
-    await expect(drawer).toContainText('下发完成：gateways_e2e-a')
+    await expect(drawer).toContainText('下发配置完成：gateways_e2e-a')
   })
 
   test('空白名单危险确认：0 启用节点时显式带 allow_empty 载荷才下发', async ({ page }) => {
@@ -146,6 +148,12 @@ test.describe('中继区域管理 · 下发配置（SSE 桩）', () => {
     const confirm = confirmModal(page, '下发网关配置')
     await expect(confirm).toBeVisible()
     await expect(confirm).toContainText('该区域当前没有启用节点，下发将把该局网关白名单清空')
+    // 范围说明仍在，且排在危险提示之前（危险提示保持为最后一句）
+    const bodyText = await confirm.locator('.modal-body').innerText()
+    const hintAt = bodyText.indexOf('本次下发仅更新流量白名单（nginx）')
+    expect(hintAt, '空白名单确认应保留下发范围说明').toBeGreaterThanOrEqual(0)
+    expect(hintAt, '范围说明须排在危险提示之前').toBeLessThan(bodyText.indexOf('该区域当前没有启用节点'))
+    expect(bodyText.trimEnd(), '危险提示须是最后一句').toMatch(/再继续。$/)
     const okDanger = confirm.locator('.btn-danger', { hasText: '仍要下发（白名单为空）' })
     await expect(okDanger).toBeVisible()
 

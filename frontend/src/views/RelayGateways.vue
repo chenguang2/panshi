@@ -584,6 +584,10 @@
             <ul class="config-notes">
               <li v-for="(n, i) in configModal.data.notes" :key="i">{{ n }}</li>
             </ul>
+            <!-- 范围说明（沿用 .config-hint 次要文案样式）：预览含 sshd 块，但下发只写 nginx -->
+            <p class="config-hint" style="margin-top: 8px">
+              本预览含 sshd 跳板配置；实际下发生效需使用「配置跳板转发」。
+            </p>
           </template>
           <div v-else class="config-hint">加载失败，请重试</div>
         </div>
@@ -754,6 +758,8 @@ import {
 } from '@/api/relay'
 import { getApiErrorMessage } from '@/utils/error'
 import { formatDateTime } from '@/utils/format'
+// 执行类动作名三态单点（relay-action-label）：抽屉标题/终态高亮/成功失败提示统一取名
+import { relayActionName, type RelayExecKind } from '@/utils/relayActions'
 
 const CODE_PATTERN = /^[a-z][a-z0-9-]{1,31}$/
 // 与后端 schemas/relay.py 同规则的格式硬校验（前端 inline + 后端 400/422 双层）
@@ -765,7 +771,7 @@ const loading = ref(false)
 const testing = ref(false)
 const testingId = ref<number | null>(null)
 const checkingAll = ref(false)
-const activeKind = ref<'init' | 'push' | 'sshd' | null>(null)
+const activeKind = ref<RelayExecKind | null>(null)
 const activeId = ref<number | null>(null)
 
 // 执行过程抽屉：复用节点管理同款 NodeExecutionResultDrawer + useInstallStream（SSE），
@@ -1678,9 +1684,9 @@ function resetActiveState() {
 }
 
 /** 打开执行过程抽屉并开始 SSE 流（复用节点安装的流式模型）。 */
-function startExec(record: RelayGateway, kind: 'init' | 'push' | 'sshd', body: Record<string, unknown> = {}) {
-  const isInit = kind === 'init'
-  const label = { init: '初始化网关', push: '下发配置', sshd: '配置跳板转发' }[kind]
+function startExec(record: RelayGateway, kind: RelayExecKind, body: Record<string, unknown> = {}) {
+  // 动作名三态单点（utils/relayActions）：init/push/sshd 各自一名，抽屉与全部提示共用
+  const actionName = relayActionName(kind)
   const url =
     kind === 'init'
       ? relayInitStreamUrl(record.id)
@@ -1690,7 +1696,7 @@ function startExec(record: RelayGateway, kind: 'init' | 'push' | 'sshd', body: R
   activeKind.value = kind
   activeId.value = record.id
   finalEvent = null
-  execDrawerTitle.value = `${label} - ${record.name}`
+  execDrawerTitle.value = `${actionName} - ${record.name}`
   execDrawerVisible.value = true
   execLogs.value = []
   execHighlights.value = []
@@ -1726,24 +1732,15 @@ function startExec(record: RelayGateway, kind: 'init' | 'push' | 'sshd', body: R
       execResult.value = { stdout: execLogs.value.join('\n'), stderr: '', command: '', rc }
       const hosts = (finalEvent?.hosts_pattern as string) || `gateways_${record.code}`
       const port = (finalEvent?.listen_port as number) || 8443
+      // 完成明细按动作补充（初始化多报监听端口），动作名本身恒取自单点映射
+      const doneDetail = kind === 'init' ? `${hosts}，监听 ${port}` : hosts
       execHighlights.value =
-        rc === 0
-          ? kind === 'init'
-            ? [`初始化完成：${hosts}，监听 ${port}`]
-            : kind === 'push'
-              ? [`下发完成：${hosts}`]
-              : [`sshd 跳板转发配置完成：${hosts}`]
-          : [`执行失败（rc=${rc}，${status}）`]
+        rc === 0 ? [`${actionName}完成：${doneDetail}`] : [`${actionName}失败（rc=${rc}，${status}）`]
       if (rc === 0) {
-        message.success(
-          kind === 'init'
-            ? `初始化完成（${hosts}，监听 ${port}）`
-            : kind === 'sshd'
-              ? `跳板转发配置完成（${hosts}），正在自动复检…`
-              : `配置已下发（${hosts}）`,
-        )
+        const tail = kind === 'sshd' ? '，正在自动复检…' : ''
+        message.success(`${actionName}完成（${doneDetail}）${tail}`)
       } else {
-        message.error(`${isInit ? '初始化' : '下发'}失败（rc=${rc}），详见执行日志`)
+        message.error(`${actionName}失败（rc=${rc}），详见执行日志`)
       }
       refreshAll()
       // B″ 跳板框完成即隐：配置成功后自动复检，刷新体检快照（证据清零 → 橙框消失）
@@ -1829,6 +1826,15 @@ function submitSshdSetup() {
   startExec(record, 'sshd', body)
 }
 
+/** 「下发配置」范围说明（relay-push-scope-hint）：下发只写 nginx 流量白名单
+ * （`relay_push.yml` 的 relay_sshd_enabled=false 是既定取舍），sshd 跳板转发走独立的
+ * 「配置跳板转发」root 通道——界面必须讲清，否则用户会以为「下发就够了」。 */
+const PUSH_SCOPE_HINT = '本次下发仅更新流量白名单（nginx）。SSH 跳板转发需另行使用「配置跳板转发」。'
+/** 确认弹窗内的次要说明行：沿用既有 .modal 内联灰字样式（不新增样式类）。 */
+function mutedHint(text: string): VNode {
+  return h('p', { style: 'color: var(--muted); font-size: 12px' }, text)
+}
+
 function handlePush(record: RelayGateway) {
   // 空名单防护（openspec: relay-push-empty-whitelist-guard）：0 启用节点时危险确认，
   // 显式携带 allow_empty 才放行；正常路径展示本次白名单规模与全量替换语义。
@@ -1837,16 +1843,14 @@ function handlePush(record: RelayGateway) {
     showOverlayModal({
       title: '下发网关配置',
       content: h('div', null, [
+        // 范围说明在前，危险提示必须是最后一句（仍在下方占末位）
+        mutedHint(PUSH_SCOPE_HINT),
         h(
           'p',
           null,
           '该区域当前没有启用节点，下发将把该局网关白名单清空，该局所有经网关的发布/节点任务将被 403 拒绝。',
         ),
-        h(
-          'p',
-          { style: 'color: var(--muted); font-size: 12px' },
-          '若为误操作，请先到集群节点列表将节点状态改为「启用」，再重新下发；确要清空（如区域下线）再继续。',
-        ),
+        mutedHint('若为误操作，请先到集群节点列表将节点状态改为「启用」，再重新下发；确要清空（如区域下线）再继续。'),
       ]),
       okText: '仍要下发（白名单为空）',
       okDanger: true,
@@ -1864,11 +1868,8 @@ function handlePush(record: RelayGateway) {
       ),
       // 下发漂移（openspec: relay-push-drift-preview）：相对快照的将新增/将移除提示
       pushDriftLine(record),
-      h(
-        'p',
-        { style: 'color: var(--muted); font-size: 12px' },
-        '该局全部网关机都下发成功才算成功；sshd PermitOpen 腿不随本次下发（由「更多 ▾ → 配置跳板转发」单独配置）。确认后打开执行日志，可实时查看过程。',
-      ),
+      mutedHint('该局全部网关机都下发成功才算成功。确认后打开执行日志，可实时查看过程。'),
+      mutedHint(PUSH_SCOPE_HINT),
     ]),
     okText: driftOkText(record),
     onOk: () => startExec(record, 'push'),

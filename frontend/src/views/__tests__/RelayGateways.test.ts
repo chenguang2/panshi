@@ -104,7 +104,8 @@ const stubs = {
   },
   'a-menu-divider': { template: '<hr class="mock-menu-divider" />', props: [] },
   NodeExecutionResultDrawer: {
-    template: '<div class="mock-drawer" :data-visible="visible" />',
+    template:
+      '<div class="mock-drawer" :data-visible="visible" :data-title="title" :data-highlights="(highlights || []).join(\'|\')" />',
     props: {
       visible: Boolean,
       title: String,
@@ -563,7 +564,9 @@ describe('RelayGateways', () => {
     const confirmPop = document.body.querySelector('.topo-pop')
     expect(confirmPop, '全量体检应先弹确认框').toBeTruthy()
     expect(confirmPop!.textContent).toContain('只读探测')
-    const primary = Array.from(confirmPop!.querySelectorAll('button')).find((b) => b.textContent!.trim() === '开始体检')!
+    const primary = Array.from(confirmPop!.querySelectorAll('button')).find(
+      (b) => b.textContent!.trim() === '开始体检',
+    )!
     primary!.click()
     await flushPromises()
 
@@ -689,7 +692,10 @@ describe('RelayGateways', () => {
 
       expect(mockPut, `${errKeyword} 坏值 ${badValue} 不应发请求`).not.toHaveBeenCalled()
       const errors = wrapper.findAll('.modal .form-error')
-      expect(errors.some((e) => e.text().includes(errKeyword)), `${errKeyword} 应有 inline 红字`).toBe(true)
+      expect(
+        errors.some((e) => e.text().includes(errKeyword)),
+        `${errKeyword} 应有 inline 红字`,
+      ).toBe(true)
     }
   })
 
@@ -864,6 +870,10 @@ describe('RelayGateways', () => {
     expect(vnodeText(opts.content)).toContain(
       '本次将下发 2 个启用节点（共 3 个节点；全量替换，未启用的节点将从白名单移除）',
     )
+    // 范围说明（relay-push-scope-hint）：下发只写 nginx 流量白名单，sshd 另走「配置跳板转发」
+    expect(vnodeText(opts.content)).toContain(
+      '本次下发仅更新流量白名单（nginx）。SSH 跳板转发需另行使用「配置跳板转发」。',
+    )
     expect(opts.okText).toBe('开始下发')
 
     await confirmOverlay()
@@ -911,6 +921,11 @@ describe('RelayGateways', () => {
     expect(text).toContain('白名单清空')
     expect(text).toContain('403')
     expect(text).toContain('将节点状态改为「启用」')
+    // 范围说明仍在，且排在危险提示之前（危险提示必须保持为最后一句）
+    const hintAt = text.indexOf('本次下发仅更新流量白名单（nginx）')
+    expect(hintAt).toBeGreaterThanOrEqual(0)
+    expect(hintAt).toBeLessThan(text.indexOf('该区域当前没有启用节点'))
+    expect(text.trimEnd().endsWith('再继续。')).toBe(true)
 
     await confirmOverlay()
 
@@ -1018,6 +1033,108 @@ describe('RelayGateways', () => {
     expect(streamMock.forceComplete).toHaveBeenCalled()
   })
 
+  // ── 动作名三态（relay-action-label）：抽屉标题与成功/失败提示必须对应用户点击的动作 ──
+  // 缺陷回归：曾用 `isInit ? '初始化' : '下发'` 二分支，「配置跳板转发」失败被报成「下发失败」。
+  const drawerTitle = (wrapper: Awaited<ReturnType<typeof mountPage>>) =>
+    wrapper.find('.mock-drawer').attributes('data-title')
+
+  /** 走「配置跳板转发」弹窗（填 root 密码 + 开始配置），返回已启动的流回调 */
+  async function startSshdStream(wrapper: Awaited<ReturnType<typeof mountPage>>) {
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text().includes('配置跳板转发'))!
+      .trigger('click')
+    await flushPromises()
+    const modal = wrapper.find('.modal-overlay')
+    await modal.find('input[type="password"]').setValue('s3cret')
+    await flushPromises()
+    await modal
+      .findAll('button')
+      .find((b) => b.text().includes('开始配置'))!
+      .trigger('click')
+    await flushPromises()
+    const [, , handlers] = streamMock.start.mock.calls[0] as [
+      string,
+      unknown,
+      { onComplete: (rc: number, status: string) => void },
+    ]
+    return handlers
+  }
+
+  it('初始化失败提示用「初始化网关」（不再用裸「初始化/下发」二分支取名）', async () => {
+    const wrapper = await mountPage()
+    await flushPromises()
+    await wrapper
+      .findAll('.mock-menu-item')
+      .find((b) => b.text().startsWith('初始化网关'))!
+      .trigger('click')
+    await flushPromises()
+    await confirmOverlay()
+
+    expect(drawerTitle(wrapper)).toBe('初始化网关 - 路局A')
+    const [, , handlers] = streamMock.start.mock.calls[0] as [
+      string,
+      unknown,
+      { onComplete: (rc: number, status: string) => void },
+    ]
+    const errToast = vi.mocked(message.error)
+    errToast.mockClear()
+    handlers.onComplete(2, 'failed')
+    await flushPromises()
+    expect(errToast).toHaveBeenCalledWith('初始化网关失败（rc=2），详见执行日志')
+  })
+
+  it('下发配置失败提示用「下发配置」', async () => {
+    const wrapper = await mountPage()
+    await flushPromises()
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text().includes('下发配置'))!
+      .trigger('click')
+    await flushPromises()
+    await confirmOverlay()
+
+    expect(drawerTitle(wrapper)).toBe('下发配置 - 路局A')
+    const [, , handlers] = streamMock.start.mock.calls[0] as [
+      string,
+      unknown,
+      { onComplete: (rc: number, status: string) => void },
+    ]
+    const errToast = vi.mocked(message.error)
+    errToast.mockClear()
+    handlers.onComplete(2, 'failed')
+    await flushPromises()
+    expect(errToast).toHaveBeenCalledWith('下发配置失败（rc=2），详见执行日志')
+  })
+
+  it('配置跳板转发失败提示用「配置跳板转发」（缺陷回归：曾误报「下发失败」）', async () => {
+    const wrapper = await mountPage()
+    await flushPromises()
+    const handlers = await startSshdStream(wrapper)
+
+    expect(drawerTitle(wrapper)).toBe('配置跳板转发 - 路局A')
+    const errToast = vi.mocked(message.error)
+    errToast.mockClear()
+    handlers.onComplete(2, 'failed')
+    await flushPromises()
+    expect(errToast).toHaveBeenCalledWith('配置跳板转发失败（rc=2），详见执行日志')
+    // 抽屉内可见的终态高亮同样带动作名（toast 被抽屉遮罩盖住，高亮才是用户实际看到的失败文案）
+    expect(wrapper.find('.mock-drawer').attributes('data-highlights')).toBe('配置跳板转发失败（rc=2，failed）')
+  })
+
+  it('配置跳板转发成功：提示与自动复检尾注同用「配置跳板转发」', async () => {
+    const wrapper = await mountPage()
+    await flushPromises()
+    const handlers = await startSshdStream(wrapper)
+
+    const okToast = vi.mocked(message.success)
+    okToast.mockClear()
+    handlers.onComplete(0, 'success')
+    await flushPromises()
+    expect(okToast).toHaveBeenCalledWith('配置跳板转发完成（gateways_luju），正在自动复检…')
+    expect(wrapper.find('.mock-drawer').attributes('data-visible')).toBe('true')
+  })
+
   it('查看配置拉取预览并渲染文件路径与内容（ansible 不可用时手工配置兜底）', async () => {
     mockGet.mockImplementation((url: string) => {
       if (url === '/relay/gateways') return Promise.resolve({ data: REGIONS })
@@ -1058,6 +1175,8 @@ describe('RelayGateways', () => {
     expect(text).toContain('listen 8443;')
     expect(text).toContain('/work/openresty/nginx/conf/edge_targets.conf')
     expect(text).toContain('手工应用：写入对应路径')
+    // 范围说明（relay-push-scope-hint）：预览含 sshd 块，但下发不写它
+    expect(text).toContain('本预览含 sshd 跳板配置；实际下发生效需使用「配置跳板转发」。')
   })
 
   it('配置跳板转发：输入 root 密码后以 sshd 流启动，且凭据不残留', async () => {
@@ -1733,7 +1852,10 @@ describe('RelayGateways', () => {
     expect(modal.text()).not.toContain('网关机 SSH 凭据')
     expect(modal.findAll('select').length).toBe(0)
     // 取消关闭
-    await modal.findAll('button').find((b) => b.text().trim() === '取消')!.trigger('click')
+    await modal
+      .findAll('button')
+      .find((b) => b.text().trim() === '取消')!
+      .trigger('click')
     await flushPromises()
     expect(wrapper.find('.modal-overlay').exists()).toBe(false)
 
@@ -1756,7 +1878,10 @@ describe('RelayGateways', () => {
     await modal.find('input.mono-input').setValue('Bad_Code')
     await modal.findAll('input.form-input')[1]!.setValue('济南二局')
     mockPost.mockClear()
-    await modal.findAll('.modal button.btn-primary').find((b) => b.text().includes('保存'))!.trigger('click')
+    await modal
+      .findAll('.modal button.btn-primary')
+      .find((b) => b.text().includes('保存'))!
+      .trigger('click')
     await flushPromises()
     expect(mockPost).not.toHaveBeenCalled()
     expect(modal.text()).toContain('区域码格式错误')
@@ -1764,13 +1889,19 @@ describe('RelayGateways', () => {
     // 后端查重 400 → toast 透因
     mockPost.mockRejectedValueOnce({ response: { data: { detail: '区域code已存在' } } })
     await modal.find('input.mono-input').setValue('jinan2')
-    await modal.findAll('.modal button.btn-primary').find((b) => b.text().includes('保存'))!.trigger('click')
+    await modal
+      .findAll('.modal button.btn-primary')
+      .find((b) => b.text().includes('保存'))!
+      .trigger('click')
     await flushPromises()
     expect(message.error).toHaveBeenCalled()
 
     // 修正后成功：载荷含全部字段（两腿空=null=直连形态，SSH 字段留空待登记两腿时收集）
     await modal.find('input.mono-input').setValue('jinan3')
-    await modal.findAll('.modal button.btn-primary').find((b) => b.text().includes('保存'))!.trigger('click')
+    await modal
+      .findAll('.modal button.btn-primary')
+      .find((b) => b.text().includes('保存'))!
+      .trigger('click')
     await flushPromises()
     expect(mockPost).toHaveBeenLastCalledWith(
       '/relay/gateways',
@@ -1785,9 +1916,9 @@ describe('RelayGateways', () => {
         ssh_port: 22,
       }),
     )
-    expect(
-      vi.mocked(message.success).mock.calls.some((a) => String(a[0]).includes('区域已创建（初始直连形态）')),
-    ).toBe(true)
+    expect(vi.mocked(message.success).mock.calls.some((a) => String(a[0]).includes('区域已创建（初始直连形态）'))).toBe(
+      true,
+    )
     expect(mockGet).toHaveBeenCalledWith('/relay/gateways')
     expect(mockGet).toHaveBeenCalledWith('/relay/topology')
   })
