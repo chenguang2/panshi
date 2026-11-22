@@ -12,11 +12,11 @@ async function makeProps(overrides: Record<string, unknown> = {}) {
     visible: true,
     title: '批量启动',
     items: [
-      { ip: '10.0.0.1', status: 'running', logs: ['开始执行...', 'nginx_start rc=0'] },
-      { ip: '10.0.0.2', status: 'pending', logs: [] },
-      { ip: '10.0.0.3', status: 'success', logs: ['✅ 启动成功'] },
+      { label: '10.0.0.1', status: 'running', logs: ['开始执行...', 'nginx_start rc=0'] },
+      { label: '10.0.0.2', status: 'pending', logs: [] },
+      { label: '10.0.0.3', status: 'success', logs: ['✅ 启动成功'] },
     ],
-    expandedIp: null,
+    expandedKey: null,
     ...overrides,
   }
 }
@@ -27,7 +27,7 @@ describe('BatchActionProgressModal', () => {
     document.body.innerHTML = ''
   })
 
-  it('renders each node as a row with status', async () => {
+  it('renders each item as a row with status', async () => {
     const BatchActionProgressModal = (await import('../BatchActionProgressModal.vue')).default
     const wrapper = mount(BatchActionProgressModal, { props: await makeProps(), global: { stubs } })
     const text = bodyText()
@@ -40,14 +40,46 @@ describe('BatchActionProgressModal', () => {
     wrapper.unmount()
   })
 
-  it('expands node details when a row is clicked', async () => {
+  it('首列承载身份标签：非 IP 的资源名称同样完整渲染（上游/路由域）', async () => {
     const BatchActionProgressModal = (await import('../BatchActionProgressModal.vue')).default
     const wrapper = mount(BatchActionProgressModal, {
-      props: await makeProps({ expandedIp: '10.0.0.1' }),
+      props: await makeProps({
+        title: '批量删除上游',
+        items: [
+          { label: 'user-service', status: 'success', logs: ['✅ 数据库记录已删除'] },
+          { label: 'order-service-with-a-long-name', status: 'error', logs: ['❌ 删除失败'] },
+        ],
+      }),
+      global: { stubs },
+    })
+    const rows = Array.from(document.querySelectorAll('.batch-node-row'))
+    expect(rows).toHaveLength(2)
+    expect(rows[0].textContent).toContain('user-service')
+    // 长名称不截断（折行而非省略）
+    expect(rows[1].textContent).toContain('order-service-with-a-long-name')
+    wrapper.unmount()
+  })
+
+  it('expands item details when a row is clicked', async () => {
+    const BatchActionProgressModal = (await import('../BatchActionProgressModal.vue')).default
+    const wrapper = mount(BatchActionProgressModal, {
+      props: await makeProps({ expandedKey: '10.0.0.1' }),
       global: { stubs },
     })
     const text = bodyText()
     expect(text).toContain('nginx_start rc=0')
+    wrapper.unmount()
+  })
+
+  it('toggle-expand 携带身份标签 label（不是旧字段 ip）', async () => {
+    const BatchActionProgressModal = (await import('../BatchActionProgressModal.vue')).default
+    const wrapper = mount(BatchActionProgressModal, {
+      props: await makeProps({ items: [{ label: 'user-service', status: 'success', logs: [] }] }),
+      global: { stubs },
+    })
+    const row = document.querySelector('.batch-node-row') as HTMLElement
+    row.click()
+    expect(wrapper.emitted('toggle-expand')).toEqual([['user-service']])
     wrapper.unmount()
   })
 

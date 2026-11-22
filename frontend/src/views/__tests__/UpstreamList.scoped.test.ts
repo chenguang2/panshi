@@ -115,7 +115,7 @@ const stubs = {
   BatchActionProgressModal: {
     name: 'BatchActionProgressModal',
     template: '<div class="mock-batch-progress" :data-visible="visible">{{ title }}</div>',
-    props: ['visible', 'title', 'items', 'expandedIp'],
+    props: ['visible', 'title', 'items', 'expandedKey'],
   },
 }
 
@@ -382,10 +382,15 @@ describe('UpstreamList.vue scoped 形态（统一管理面板上游 Tab）', () 
     const progress = wrapper.findComponent({ name: 'BatchActionProgressModal' })
     expect(progress.props('visible')).toBe(true)
     expect(progress.props('title')).toBe('批量删除上游')
-    expect((progress.props('items') as Array<{ ip: string; status: string }>).map((i) => i.ip)).toEqual([
-      'user-service',
-      'order-service',
-    ])
+    const progressItems = progress.props('items') as Array<{ label: string; status: string }>
+    // 上游域的身份列是**名称**，字段为 label（B1：不再复用旧字段名承载名称）
+    expect(progressItems.map((i) => i.label)).toEqual(['user-service', 'order-service'])
+    expect(progressItems.some((i) => 'ip' in i)).toBe(false)
+    // 展开态经 label 传递（handler 参数同步改名后仍接线正确）
+    expect(progress.props('expandedKey')).toBeNull()
+    progress.vm.$emit('toggle-expand', 'order-service')
+    await wrapper.vm.$nextTick()
+    expect(progress.props('expandedKey')).toBe('order-service')
     expect(wrapper.find('.l5-batchbar').text()).toContain('已选 0 项')
     expect(upstreamCallParams().length).toBeGreaterThanOrEqual(2) // 初次 + 删除后刷新
     wrapper.unmount()

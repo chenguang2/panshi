@@ -489,10 +489,10 @@
       v-model:visible="batchProgressVisible"
       :title="batchProgressTitle"
       :items="batchProgressItems"
-      :expanded-ip="batchProgressExpandedIp"
+      :expanded-key="batchProgressExpandedKey"
       @toggle-expand="
-        (ip: string) => {
-          batchProgressExpandedIp = batchProgressExpandedIp === ip ? null : ip
+        (label: string) => {
+          batchProgressExpandedKey = batchProgressExpandedKey === label ? null : label
         }
       "
     />
@@ -684,7 +684,7 @@ const {
   visible: batchProgressVisible,
   title: batchProgressTitle,
   items: batchProgressItems,
-  expandedIp: batchProgressExpandedIp,
+  expandedKey: batchProgressExpandedKey,
 } = batchProgress
 const selectedNodeKeys = ref<number[]>([])
 const rowSelection = computed(() => ({

@@ -12,7 +12,7 @@
  * ——单条不存在/无权限/Edge 失败都只标记该条，不阻塞其余条。
  *
  * 进度展示复用 BatchActionProgressModal（与节点/上游批量条同款组件）：
- * 其逐项行的身份列（BatchNodeProgressItem.ip）在本域承载路由名称——它是「逐项身份标签」，不是地址。
+ * 其逐项行的身份列（BatchProgressItem.label）在本域承载路由名称——它是「逐项身份标签」，不是地址。
  */
 import api from '@/api'
 import { getApiErrorMessage } from '@/utils/error'
@@ -74,7 +74,7 @@ export async function runClusterGroupedBatchRouteDelete(
   const { progress } = hooks
   const all = groups.flatMap((g) => g.routes)
   progress.title.value = '批量删除路由'
-  progress.items.value = all.map((r) => ({ ip: r.name, status: 'pending' as const, logs: [] }))
+  progress.items.value = all.map((r) => ({ label: r.name, status: 'pending' as const, logs: [] }))
   progress.visible.value = true
 
   const summaries: ClusterBatchSummary[] = []
@@ -111,11 +111,11 @@ export async function runClusterGroupedBatchRouteDelete(
         const logs: string[] = [`集群 ${group.clusterName}：删除路由 ${name}`]
         logs.push(...subScopeLogs(r))
         if (r.status === 'success' && !r.error) {
-          progress.items.value[i] = { ip: name, status: 'success', logs }
+          progress.items.value[i] = { label: name, status: 'success', logs }
           success++
         } else {
           logs.push(`❌ 删除失败${r.error ? `: ${r.error}` : ''}`)
-          progress.items.value[i] = { ip: name, status: 'error', logs }
+          progress.items.value[i] = { label: name, status: 'error', logs }
           failed++
         }
       }
@@ -123,7 +123,7 @@ export async function runClusterGroupedBatchRouteDelete(
       group.routes.forEach((route, k) => {
         if (seen.has(route.id)) return
         progress.items.value[base + k] = {
-          ip: route.name,
+          label: route.name,
           status: 'error',
           logs: [...progress.items.value[base + k].logs, '❌ 后端未返回该路由的删除结果'],
         }
@@ -135,7 +135,7 @@ export async function runClusterGroupedBatchRouteDelete(
       for (let k = 0; k < group.routes.length; k++) {
         const i = base + k
         progress.items.value[i] = {
-          ip: group.routes[k].name,
+          label: group.routes[k].name,
           status: 'error',
           logs: [...progress.items.value[i].logs, `❌ 集群级失败（${detail}）`],
         }

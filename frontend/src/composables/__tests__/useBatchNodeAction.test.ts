@@ -38,13 +38,13 @@ describe('useBatchNodeAction（batch3 1.4 / D4 共享批量核心）', () => {
   })
 
   describe('createBatchProgressState', () => {
-    it('返回 visible/title/items/expandedIp 四个 ref', async () => {
+    it('返回 visible/title/items/expandedKey 四个 ref', async () => {
       const { createBatchProgressState } = await import('../useBatchNodeAction')
       const s = createBatchProgressState()
       expect(s.visible.value).toBe(false)
       expect(s.title.value).toBe('')
       expect(s.items.value).toEqual([])
-      expect(s.expandedIp.value).toBeNull()
+      expect(s.expandedKey.value).toBeNull()
     })
   })
 
@@ -64,6 +64,8 @@ describe('useBatchNodeAction（batch3 1.4 / D4 共享批量核心）', () => {
       expect(mockApiPost).toHaveBeenCalledWith('/clusters/1/nodes/1/start')
       expect(mockApiPost).toHaveBeenCalledWith('/clusters/1/nodes/2/start')
       expect(progress.items.value).toHaveLength(2)
+      // 身份标签字段 = label（节点域承载 IP；上游/路由域承载名称）
+      expect(progress.items.value.map((i) => i.label)).toEqual(['10.0.0.1', '10.0.0.2'])
       expect(progress.items.value.every((i) => i.status === 'success')).toBe(true)
       expect(summary).toEqual({ total: 2, success: 2, failed: 0 })
     })

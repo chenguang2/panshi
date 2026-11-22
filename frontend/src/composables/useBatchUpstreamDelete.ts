@@ -12,7 +12,7 @@
  * （showDeleteConfirm，与单条删除/面板批量删除同一份告知文案）决定并原样透传。
  *
  * 进度展示复用 BatchActionProgressModal（与节点批量条同款组件）：
- * 其逐项行的身份列（BatchNodeProgressItem.ip）在节点域是 IP，在本域承载上游名称
+ * 其逐项行的身份列（BatchProgressItem.label）在节点域是 IP，在本域承载上游名称
  * ——它是「逐项身份标签」，不是地址。
  */
 import api from '@/api'
@@ -75,7 +75,7 @@ export async function runClusterGroupedBatchUpstreamDelete(
   const { progress } = hooks
   const all = groups.flatMap((g) => g.upstreams)
   progress.title.value = '批量删除上游'
-  progress.items.value = all.map((u) => ({ ip: u.name, status: 'pending' as const, logs: [] }))
+  progress.items.value = all.map((u) => ({ label: u.name, status: 'pending' as const, logs: [] }))
   progress.visible.value = true
 
   const summaries: ClusterBatchSummary[] = []
@@ -112,11 +112,11 @@ export async function runClusterGroupedBatchUpstreamDelete(
         const logs: string[] = [`集群 ${group.clusterName}：删除上游 ${name}`]
         logs.push(...subScopeLogs(r))
         if (r.status === 'success' && !r.error) {
-          progress.items.value[i] = { ip: name, status: 'success', logs }
+          progress.items.value[i] = { label: name, status: 'success', logs }
           success++
         } else {
           logs.push(`❌ 删除失败${r.error ? `: ${r.error}` : ''}`)
-          progress.items.value[i] = { ip: name, status: 'error', logs }
+          progress.items.value[i] = { label: name, status: 'error', logs }
           failed++
         }
       }
@@ -124,7 +124,7 @@ export async function runClusterGroupedBatchUpstreamDelete(
       group.upstreams.forEach((u, k) => {
         if (seen.has(u.id)) return
         progress.items.value[base + k] = {
-          ip: u.name,
+          label: u.name,
           status: 'error',
           logs: [...progress.items.value[base + k].logs, '❌ 后端未返回该上游的删除结果'],
         }
@@ -136,7 +136,7 @@ export async function runClusterGroupedBatchUpstreamDelete(
       for (let k = 0; k < group.upstreams.length; k++) {
         const i = base + k
         progress.items.value[i] = {
-          ip: group.upstreams[k].name,
+          label: group.upstreams[k].name,
           status: 'error',
           logs: [...progress.items.value[i].logs, `❌ 集群级失败（${detail}）`],
         }

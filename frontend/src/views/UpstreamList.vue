@@ -344,7 +344,7 @@
       v-model:visible="batchProgressVisible"
       :title="batchProgressTitle"
       :items="batchProgressItems"
-      :expanded-ip="batchProgressExpandedIp"
+      :expanded-key="batchProgressExpandedKey"
       @toggle-expand="toggleBatchProgressExpand"
     />
   </div>
@@ -974,11 +974,11 @@ const {
   visible: batchProgressVisible,
   title: batchProgressTitle,
   items: batchProgressItems,
-  expandedIp: batchProgressExpandedIp,
+  expandedKey: batchProgressExpandedKey,
 } = batchProgress
 
-function toggleBatchProgressExpand(ip: string) {
-  batchProgressExpandedIp.value = batchProgressExpandedIp.value === ip ? null : ip
+function toggleBatchProgressExpand(label: string) {
+  batchProgressExpandedKey.value = batchProgressExpandedKey.value === label ? null : label
 }
 
 /**

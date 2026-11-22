@@ -16,22 +16,30 @@
               border-radius: var(--radius-md);
             "
           >
-            <div v-for="item in items" :key="item.ip" style="border-bottom: 1px solid var(--border)">
+            <div v-for="item in items" :key="item.label" style="border-bottom: 1px solid var(--border)">
               <div
                 class="batch-node-row"
                 style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; cursor: pointer"
-                @click="$emit('toggle-expand', item.ip)"
+                @click="$emit('toggle-expand', item.label)"
               >
                 <span :style="{ color: statusColor(item.status), flexShrink: 0 }">{{ statusIcon(item.status) }}</span>
-                <span style="font-family: var(--font-mono); font-size: 12px; color: var(--fg); min-width: 110px">{{
-                  item.ip
-                }}</span>
+                <!-- 身份列：节点域是 IP，上游/路由域是名称；同一套 mono/110px 样式，长名称折行不裁剪 -->
+                <span
+                  style="
+                    font-family: var(--font-mono);
+                    font-size: 12px;
+                    color: var(--fg);
+                    min-width: 110px;
+                    overflow-wrap: anywhere;
+                  "
+                  >{{ item.label }}</span
+                >
                 <span style="font-size: 12px; color: var(--muted)">{{ statusText(item.status) }}</span>
                 <span style="margin-left: auto; color: var(--muted); font-size: 11px">{{
-                  expandedIp === item.ip ? '收起 ▴' : '详情 ▾'
+                  expandedKey === item.label ? '收起 ▴' : '详情 ▾'
                 }}</span>
               </div>
-              <div v-if="expandedIp === item.ip" style="padding: 4px 12px 10px">
+              <div v-if="expandedKey === item.label" style="padding: 4px 12px 10px">
                 <div
                   style="
                     background: #1e1e1e;
@@ -61,8 +69,9 @@
 </template>
 
 <script setup lang="ts">
-interface BatchNodeProgressItem {
-  ip: string
+interface BatchProgressItem {
+  /** 逐项身份标签：节点域为节点 IP，上游/路由域为资源名称（不是地址） */
+  label: string
   status: 'pending' | 'running' | 'success' | 'error'
   logs: string[]
   rc?: number
@@ -71,13 +80,13 @@ interface BatchNodeProgressItem {
 defineProps<{
   visible: boolean
   title: string
-  items: BatchNodeProgressItem[]
-  expandedIp: string | null
+  items: BatchProgressItem[]
+  expandedKey: string | null
 }>()
 
 defineEmits<{
   'update:visible': [value: boolean]
-  'toggle-expand': [ip: string]
+  'toggle-expand': [label: string]
 }>()
 
 function statusIcon(status: string): string {

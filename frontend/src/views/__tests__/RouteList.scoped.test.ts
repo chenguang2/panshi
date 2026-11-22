@@ -168,7 +168,7 @@ const stubs = {
   BatchActionProgressModal: {
     name: 'BatchActionProgressModal',
     template: '<div class="mock-batch-progress" :data-visible="visible">{{ title }}</div>',
-    props: ['visible', 'title', 'items', 'expandedIp'],
+    props: ['visible', 'title', 'items', 'expandedKey'],
   },
 }
 
@@ -402,10 +402,15 @@ describe('RouteList.vue scoped 形态（统一管理面板路由 Tab）', () => 
     const progress = wrapper.findComponent({ name: 'BatchActionProgressModal' })
     expect(progress.props('visible')).toBe(true)
     expect(progress.props('title')).toBe('批量删除路由')
-    expect((progress.props('items') as Array<{ ip: string; status: string }>).map((i) => i.ip)).toEqual([
-      '用户API',
-      '订单API',
-    ])
+    const progressItems = progress.props('items') as Array<{ label: string; status: string }>
+    // 路由域的身份列是**名称**，字段为 label（B1：不再复用旧字段名承载名称）
+    expect(progressItems.map((i) => i.label)).toEqual(['用户API', '订单API'])
+    expect(progressItems.some((i) => 'ip' in i)).toBe(false)
+    // 展开态经 label 传递（handler 参数同步改名后仍接线正确）
+    expect(progress.props('expandedKey')).toBeNull()
+    progress.vm.$emit('toggle-expand', '订单API')
+    await wrapper.vm.$nextTick()
+    expect(progress.props('expandedKey')).toBe('订单API')
     expect(wrapper.find('.l5-batchbar').text()).toContain('已选 0 项')
     expect(routeCallParams().length).toBeGreaterThanOrEqual(2) // 初次 + 删除后刷新
     wrapper.unmount()

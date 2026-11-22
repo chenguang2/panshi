@@ -1185,6 +1185,12 @@ describe('NodeList.vue batch3 批量动作（工具栏 + 分组执行）', () =>
     // 批量进度弹窗可见且 items 合并三个节点
     expect(vm.batchProgress.visible.value).toBe(true)
     expect(vm.batchProgress.items.value).toHaveLength(3)
+    // 节点域身份标签仍是节点 IP（B1：字段名为 label）
+    expect(vm.batchProgress.items.value.map((i: { label: string }) => i.label)).toEqual([
+      '10.0.0.1',
+      '10.0.0.2',
+      '10.0.0.3',
+    ])
     expect(vm.batchProgress.items.value.every((i: { status: string }) => i.status === 'success')).toBe(true)
     // 汇总提示
     expect(mockMessageInfo).toHaveBeenCalledTimes(1)

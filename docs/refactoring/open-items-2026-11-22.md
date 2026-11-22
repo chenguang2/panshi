@@ -7,7 +7,7 @@
 
 | 批次 | 内容 | 类型 | 状态 |
 |---|---|---|---|
-| **B1** | `BatchActionProgressModal` 首列字段 `ip` → `label`（上游/路由/插件组当前把名称塞进 `ip`） | 缺陷（字段语义错位） | 进行中 |
+| **B1** | `BatchActionProgressModal` 首列字段 `ip` → `label`（上游/路由/插件组当前把名称塞进 `ip`） | 缺陷（字段语义错位） | ✅ 完成 |
 | **B2** | 上游批量删除补「被路由引用」前端预检（旧面板有 `batchFilter`，现靠后端逐条失败） | 体验回退 | 待办 |
 | **B3** | Vue Router `No match found` 首访时序告警（`/edge-client`、`/database-management`、`/edge-import`） | 噪声/排障干扰 | 待办 |
 | **B4** | e2e 隔离库流程固化为 `scripts/e2e-isolated.sh`（本轮为手工搭建，且曾出现「以为隔离了其实没隔离」） | 流程/基建 | 待办 |

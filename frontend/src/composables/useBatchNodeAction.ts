@@ -15,8 +15,9 @@ import { useFeaturesStore } from '@/stores/features'
 import { getApiErrorMessage } from '@/utils/error'
 import { deleteNodesBatch } from '@/api/nodes'
 
-export interface BatchNodeProgressItem {
-  ip: string
+export interface BatchProgressItem {
+  /** 逐项身份标签：节点域为节点 IP，上游/路由域为资源名称（不是地址） */
+  label: string
   status: 'pending' | 'running' | 'success' | 'error'
   logs: string[]
   rc?: number
@@ -25,8 +26,8 @@ export interface BatchNodeProgressItem {
 export interface BatchProgressState {
   visible: Ref<boolean>
   title: Ref<string>
-  items: Ref<BatchNodeProgressItem[]>
-  expandedIp: Ref<string | null>
+  items: Ref<BatchProgressItem[]>
+  expandedKey: Ref<string | null>
 }
 
 export function createBatchProgressState(): BatchProgressState {
@@ -34,7 +35,7 @@ export function createBatchProgressState(): BatchProgressState {
     visible: ref(false),
     title: ref(''),
     items: ref([]),
-    expandedIp: ref(null),
+    expandedKey: ref(null),
   }
 }
 
@@ -82,7 +83,7 @@ export async function runBatchNodeAction(
 ): Promise<BatchActionSummary> {
   const { progress } = hooks
   progress.title.value = `批量${label}节点`
-  progress.items.value = nodes.map((n) => ({ ip: n.ip, status: 'pending' as const, logs: [] }))
+  progress.items.value = nodes.map((n) => ({ label: n.ip, status: 'pending' as const, logs: [] }))
   progress.visible.value = true
 
   let success = 0
@@ -102,7 +103,7 @@ export async function runBatchNodeAction(
       if (data.stderr) logs.push('--- stderr ---', data.stderr)
       logs.push(rc === 0 ? `✅ 节点 ${label} 成功` : `❌ 节点 ${label} 失败`)
       progress.items.value[i] = {
-        ip: node.ip,
+        label: node.ip,
         status: rc === 0 ? 'success' : 'error',
         logs,
         rc,
@@ -113,7 +114,7 @@ export async function runBatchNodeAction(
       const err = error as { response?: { data?: { detail?: string } }; message?: string }
       const detail = err.response?.data?.detail || err.message || '未知错误'
       progress.items.value[i] = {
-        ip: node.ip,
+        label: node.ip,
         status: 'error',
         logs: [...progress.items.value[i].logs, `❌ ${label}失败: ${detail}`],
       }
@@ -141,7 +142,7 @@ export async function runBatchNodeStatus(
 ): Promise<BatchStatusRow[]> {
   const { progress } = hooks
   progress.title.value = '批量状态查询节点'
-  progress.items.value = nodes.map((n) => ({ ip: n.ip, status: 'pending' as const, logs: [] }))
+  progress.items.value = nodes.map((n) => ({ label: n.ip, status: 'pending' as const, logs: [] }))
   progress.visible.value = true
 
   const rows: BatchStatusRow[] = []
@@ -161,7 +162,7 @@ export async function runBatchNodeStatus(
       if (data.stdout) logs.push('--- stdout ---', data.stdout)
       if (data.stderr) logs.push('--- stderr ---', data.stderr)
       logs.push(rc === 0 ? '✅ 节点状态查询成功' : '❌ 节点状态查询失败')
-      progress.items.value[i] = { ip: node.ip, status: rc === 0 ? 'success' : 'error', logs, rc }
+      progress.items.value[i] = { label: node.ip, status: rc === 0 ? 'success' : 'error', logs, rc }
       let detail = ''
       if (rc !== 0) {
         const errText = data.stderr || data.stdout || ''
@@ -184,7 +185,7 @@ export async function runBatchNodeStatus(
       const err = error as { response?: { data?: { detail?: string } }; message?: string }
       const detail = err.response?.data?.detail || err.message || '查询失败'
       progress.items.value[i] = {
-        ip: node.ip,
+        label: node.ip,
         status: 'error',
         logs: [...progress.items.value[i].logs, `❌ 状态查询失败: ${detail}`],
       }
@@ -223,7 +224,7 @@ export async function runClusterGroupedBatchAction(
   const { progress } = hooks
   const all = groups.flatMap((g) => g.nodes)
   progress.title.value = `批量${label}节点`
-  progress.items.value = all.map((n) => ({ ip: n.ip, status: 'pending' as const, logs: [] }))
+  progress.items.value = all.map((n) => ({ label: n.ip, status: 'pending' as const, logs: [] }))
   progress.visible.value = true
 
   const summaries: ClusterBatchSummary[] = []
@@ -264,12 +265,12 @@ export async function runClusterGroupedBatchAction(
           if (r.stderr) logs.push('--- stderr ---', r.stderr)
           const ok = r.rc === 0
           logs.push(ok ? `✅ 节点 ${label} 成功` : `❌ 节点 ${label} 失败`)
-          progress.items.value[i] = { ip: r.ip, status: ok ? 'success' : 'error', logs, rc: r.rc }
+          progress.items.value[i] = { label: r.ip, status: ok ? 'success' : 'error', logs, rc: r.rc }
           if (ok) success++
           else failed++
         } else {
           progress.items.value[i] = {
-            ip: r.ip,
+            label: r.ip,
             status: 'error',
             logs: [`❌ ${label}失败: ${r.detail || '未知错误'}`],
           }
@@ -282,7 +283,7 @@ export async function runClusterGroupedBatchAction(
       for (let k = 0; k < group.nodes.length; k++) {
         const i = base + k
         progress.items.value[i] = {
-          ip: group.nodes[k].ip,
+          label: group.nodes[k].ip,
           status: 'error',
           logs: [...progress.items.value[i].logs, `❌ 集群级失败（${detail}）`],
         }
@@ -332,7 +333,7 @@ export async function runClusterGroupedBatchDelete(
   const { progress } = hooks
   const all = groups.flatMap((g) => g.nodes)
   progress.title.value = '批量删除节点'
-  progress.items.value = all.map((n) => ({ ip: n.ip, status: 'pending' as const, logs: [] }))
+  progress.items.value = all.map((n) => ({ label: n.ip, status: 'pending' as const, logs: [] }))
   progress.visible.value = true
 
   const summaries: ClusterBatchSummary[] = []
@@ -360,20 +361,20 @@ export async function runClusterGroupedBatchDelete(
         if (k < 0) continue
         seen.add(nodeId)
         const i = base + k
-        const ip = r.node_ip || group.nodes[k].ip
+        const nodeIp = r.node_ip || group.nodes[k].ip
         const sub = r.results || []
-        const logs: string[] = [`集群 ${group.clusterName}：删除节点 ${ip}`]
+        const logs: string[] = [`集群 ${group.clusterName}：删除节点 ${nodeIp}`]
         if (r.status === 'success') {
           const dbSub = sub.find((s) => s.scope === 'database')
           logs.push(dbSub?.message ? `✅ ${dbSub.message}` : '✅ 平台管理记录已删除')
           const edgeSub = sub.find((s) => s.scope === 'edge')
           if (edgeSub?.message) logs.push(`Edge 侧：${edgeSub.message}`)
           logs.push('节点机上的 Edge/OpenResty 进程不受影响（已脱离平台监控）')
-          progress.items.value[i] = { ip, status: 'success', logs }
+          progress.items.value[i] = { label: nodeIp, status: 'success', logs }
           success++
         } else {
           logs.push(`❌ 删除失败${r.error ? `: ${r.error}` : ''}`)
-          progress.items.value[i] = { ip, status: 'error', logs }
+          progress.items.value[i] = { label: nodeIp, status: 'error', logs }
           failed++
         }
       }
@@ -381,7 +382,7 @@ export async function runClusterGroupedBatchDelete(
       group.nodes.forEach((n, k) => {
         if (seen.has(n.id)) return
         progress.items.value[base + k] = {
-          ip: n.ip,
+          label: n.ip,
           status: 'error',
           logs: [...progress.items.value[base + k].logs, '❌ 后端未返回该节点的删除结果'],
         }
@@ -393,7 +394,7 @@ export async function runClusterGroupedBatchDelete(
       for (let k = 0; k < group.nodes.length; k++) {
         const i = base + k
         progress.items.value[i] = {
-          ip: group.nodes[k].ip,
+          label: group.nodes[k].ip,
           status: 'error',
           logs: [...progress.items.value[i].logs, `❌ 集群级失败（${detail}）`],
         }
