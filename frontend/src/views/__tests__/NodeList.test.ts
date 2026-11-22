@@ -1680,8 +1680,10 @@ describe('NodeList 列宽个性化（node-list-column-resize）', () => {
     await wrapper.vm.$nextTick()
     const table = wrapper.findComponent({ name: 'ATableStub' })
     expect(table.exists()).toBe(true)
-    // 平铺态多一列「集群」（设计宽 116 / 下限 96）→ 最小宽 780 + 96 = 876
-    expect(table.props('scroll')).toEqual({ x: 876 })
+    // 平铺态多一列「集群」（设计宽 116 / 下限 96）→ 最小宽 797 + 96 = 893
+    // 2026-11-22：操作列下限 268 → 285（更多触发器加 6px 间距后内容 261 + 内距 24），
+    // 下限和 740 → 757，故 780 → 797 / 876 → 893
+    expect(table.props('scroll')).toEqual({ x: 893 })
     expect(table.props('tableLayout')).toBe('fixed')
     // 竖线/手势共享样式单点：三页表格根元素均挂 .grid-table（column-personalization-rollout D5）
     expect(wrapper.find('.node-table').classes()).toContain('grid-table')

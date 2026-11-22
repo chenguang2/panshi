@@ -358,7 +358,10 @@ describe('mockup-parity r6（parity-audit-nodes-r6：字体族 / 列宽自适应
     // 节点页内容不可压列兜底（r7-B4 起在多行对象里：操作列按钮组 / 状态列两枚胶囊）
     const nodes = page('NodeList.vue')
     expect(nodes).toContain('minWidths: () => ({')
-    expect(nodes).toContain('actions: 268')
+    // 2026-11-22 断言反转：268 → 285（⋯ 触发器加 6px 间距后内容 261 + 单元格内距 24；
+    // 268 时 ≤1440 视口会把表格撑出 3px 横向滚动条，3px 真机实测）
+    expect(nodes).toContain('actions: 285')
+    expect(nodes).not.toContain('actions: 268')
     expect(nodes).toContain('status: 140')
   })
   it('r6-③ 列配置提示行 = 图标 + 文字（三页统一 .pop-hint-line）', () => {
@@ -1234,5 +1237,57 @@ describe('最大化面板：Tab 内容封闭容器（tab-content card，2026-11-
     expect(pm).toContain('class="pml-grid card-grid l5-card sp-cards"')
     // 面板专属组件不得回流（唯一实现 = views/PluginMetadataList.vue）
     expect(() => readFileSync(resolve(process.cwd(), 'src/components/PluginMetadata.vue'), 'utf-8')).toThrow()
+  })
+})
+
+// ── 卡片页 ⋯ 触发器与「发布」间距（2026-11-22 用户批准三项改动之③）─────────────
+// 缺陷：卡片页 .menu-anchor .op-btn 是透明无边框（旧样式），与表格 ⋯（.action-trigger-btn）
+// 的「1px var(--border) + var(--surface) 白底」不一致；同时「发布→⋯」间距需 8px 有效值。
+describe('mockup-parity r12：⋯ 触发器形态统一 + 发布→⋯ 8px 间距', () => {
+  const anchorRule = () => css.match(/\.menu-anchor \.op-btn \{[^}]*\}/)![0]
+
+  it('卡片页 ⋯ = 表格 ⋯ 同形态（26×24 + 1px border + surface 底 + padding 0 居中）', () => {
+    const rule = anchorRule()
+    expect(rule).toContain('width: 26px')
+    expect(rule).toContain('min-width: 26px')
+    expect(rule).toContain('padding: 0')
+    expect(rule).toContain('justify-content: center')
+    expect(rule).toContain('border-color: var(--border)')
+    expect(rule).toContain('background: var(--surface)')
+  })
+
+  it('卡片页 ⋯ hover 转 accent 三件套（与表格触发器同款）', () => {
+    expect(css).toMatch(
+      /\.menu-anchor \.op-btn:hover \{[^}]*background: var\(--accent-bg\)[^}]*color: var\(--accent\)[^}]*oklch\(56% 0\.16 210 \/ 30%\)/,
+    )
+  })
+
+  it('.op-btn 全集仍是无边框基础样式（只给 .menu-anchor 内的触发器加框）', () => {
+    const base = css.match(/\n\.op-btn \{[^}]*\}/)![0]
+    expect(base).toContain('border: 1px solid transparent')
+    expect(base).toContain('background: transparent')
+  })
+
+  it('发布→⋯ 有效间距 8px：表格触发器 margin-left 6px（容器 gap 2px 不动）', () => {
+    // 独立列表页（节点 .node-actions-wrap + 上游/路由 .action-cell 共用一条合并规则）
+    expect(css).toMatch(/\.table-container\.l5-card \.action-cell \.action-trigger-btn \{[^}]*margin-left: 6px/)
+    // 最大化面板内三张表（同口径）
+    expect(css).toMatch(
+      /\.max-panel \.dbody \.upstream-table \.ant-table-tbody \.action-trigger-btn[^{]*\{[^}]*margin-left: 6px/,
+    )
+    // 容器 gap 保持 2px（它同时管启动/停止/状态/重载等文字按钮）
+    expect(css).toMatch(/\.table-container\.l5-card \.node-actions-wrap \{[^}]*gap: 2px/)
+    expect(page('UpstreamList.vue')).toMatch(/\.action-cell \{[^}]*gap: 2px/)
+    // 路由页曾是 6px（与设计 .ops / 上游页不一致）→ 2026-11-22 对齐为 2px，否则 2+6 变 12px
+    expect(page('RouteList.vue')).toMatch(/\.action-cell \{[^}]*gap: 2px/)
+    expect(page('RouteList.vue')).not.toMatch(/\.action-cell \{[^}]*gap: 6px/)
+  })
+
+  it('设计页同步：theme.css 的 .ops .menu-anchor 间距 = 6px（卡脚 space-between 不挂）', () => {
+    const design = readFileSync(resolve(process.cwd(), '../docs/ui/Live-Artifact-5/proposal-c/theme.css'), 'utf-8')
+    expect(design).toContain('.ops .menu-anchor { margin-left: 6px; }')
+    expect(design).toContain(
+      '.menu-anchor .op-btn[title="更多操作"] { border-color: var(--border); background: var(--surface); }',
+    )
   })
 })

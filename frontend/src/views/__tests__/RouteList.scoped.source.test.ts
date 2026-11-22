@@ -13,7 +13,10 @@ describe('路由表格单一实现（面板 Tab = RouteList scoped 形态）', (
   it('CentralList 引用 RouteList 并传 scopedClusterId，不再引用 ClusterRoutes', () => {
     const s = read('src/views/CentralList.vue')
     expect(s).toContain("import RouteList from '@/views/RouteList.vue'")
-    expect(s).toContain('<RouteList :scoped-cluster-id="maximizedCluster.id" @refresh="loadClusters" />')
+    // 断行宽容（prettier 会把超宽标签拆成多行）：仍是同一挂载形态（:key + scopedClusterId + @refresh）
+    expect(s).toMatch(
+      /<RouteList\s+[\s\S]{0,160}?:key="maximizedCluster\.id"[\s\S]{0,80}?:scoped-cluster-id="maximizedCluster\.id"[\s\S]{0,60}?@refresh="loadClusters"/,
+    )
     expect(s).not.toContain('clusters/ClusterRoutes.vue')
     expect(s).not.toContain('<ClusterRoutes')
   })

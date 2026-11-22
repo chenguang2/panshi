@@ -2257,6 +2257,25 @@ body.col-move-dragging * {
   position: relative;
   display: inline-flex;
 }
+/* 卡片页 ⋯ 触发器（2026-11-22 缺陷修复）= 表格 ⋯ 的同形态：26×24 锚点 + 1px var(--border) 描边 +
+   var(--surface) 白底 + muted 字，hover 转 accent 三件套（此前卡片页是透明无边/透明底，与表格不一致）。
+   全站 10 处 `.op-btn` 经 grep 确认都在 `.menu-anchor` 内且都是 title="更多操作" 的触发器，故只在
+   这个组合下加框，不动 `.op-btn` 全集（它仍是行内文字按钮的透明基础样式）。
+   间距：卡脚（.lp-foot）是 space-between + 弹性留白，不涉及「发布→⋯」贴间距，此处不加外边距；
+   表格的 6px 抵消见 `.action-cell / .node-actions-wrap .action-trigger-btn`（gap 2 + 6 = 8px）。 */
+.menu-anchor .op-btn {
+  width: 26px;
+  min-width: 26px;
+  padding: 0;
+  justify-content: center;
+  border-color: var(--border);
+  background: var(--surface);
+}
+.menu-anchor .op-btn:hover {
+  background: var(--accent-bg);
+  color: var(--accent);
+  border-color: oklch(56% 0.16 210 / 30%);
+}
 .l5-menu {
   position: absolute;
   right: 0;
@@ -2874,6 +2893,9 @@ th.resizable {
   min-width: 26px;
   height: 24px;
   padding: 0;
+  /* 发布→⋯ 有效间距 8px = 容器 gap 2px + 本 6px（2026-11-22 用户裁决）。
+     容器 gap 不动：它同时管启动/停止/状态/重载等文字按钮。 */
+  margin-left: 6px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -3860,6 +3882,8 @@ th.resizable {
   min-width: 26px !important;
   height: 24px !important;
   padding: 0 !important;
+  /* 发布→⋯ 有效间距 8px = 容器 gap 2px + 本 6px（与独立列表页同口径） */
+  margin-left: 6px !important;
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;

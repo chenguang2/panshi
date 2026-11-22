@@ -350,45 +350,63 @@
       </div>
       <div class="dbody">
         <!-- 切换动效包裹层：绝不给本层加 :key（否则 7 个 Tab 子组件整体重挂载，丢滚动/选中态并重复拉取）；
-             重播靠 swapClass（fx-cluster dir-next|prev / fx-tab），260ms 后清类避免 transform 长期残留 -->
+             重播靠 swapClass（fx-cluster dir-next|prev / fx-tab），340ms 后清类避免 transform 长期残留。
+             切集群的内容刷新靠**子组件上的 :key="maximizedCluster.id"**（七个 scoped 页只读 props、
+             不 watch scopedClusterId，无 key 时 Vue 复用实例 → 挂载期加载逻辑不再执行、内容停在旧集群）。 -->
         <div ref="swapEl" class="max-swap" :class="swapClass">
           <!-- 上游 Tab = 上游管理页组件的「单集群作用域」形态（A 试点同一做法：一份实现两处挂载）：
                隐藏页头/集群与分组筛选/分组切换/集群列，页面级动作「添加上游」改由工具条左侧紧凑钮；
                chips / 批量条（含批量删除）/ 表格 / 分页 / 列配置与页面同一份实现。 -->
           <div v-if="maximizedCluster.activeTab === 'upstreams'" class="tab-content">
-            <UpstreamList :scoped-cluster-id="maximizedCluster.id" @refresh="loadClusters" />
+            <UpstreamList :key="maximizedCluster.id" :scoped-cluster-id="maximizedCluster.id" @refresh="loadClusters" />
           </div>
           <div v-if="maximizedCluster.activeTab === 'routes'" class="tab-content">
             <!-- 路由 Tab = 路由管理页组件的「单集群作用域」形态（同节点/上游做法：一份实现两处挂载）：
                  隐藏页头/集群与分组筛选/分组切换/集群列，页面级动作「添加路由」改由工具条左侧紧凑钮；
                  chips / 批量条（含批量删除）/ 表格 / 分页 / 列配置与页面同一份实现。 -->
-            <RouteList :scoped-cluster-id="maximizedCluster.id" @refresh="loadClusters" />
+            <RouteList :key="maximizedCluster.id" :scoped-cluster-id="maximizedCluster.id" @refresh="loadClusters" />
           </div>
           <div v-if="maximizedCluster.activeTab === 'pluginConfigs'" class="tab-content">
             <!-- 插件组 Tab = 插件组页组件的「单集群作用域」形态（A 推广第 2 个卡片类资源，同全局规则做法）：
                  隐藏页头/集群与分组筛选/分组切换/集群带，页面级动作「添加插件组 / 批量管理」改由工具条左侧紧凑钮；
                  chips / 批量条（含批量删除）/ 卡片网格（含「引用 · N 条路由」）/ 卡脚「发布 + ⋯」与页面同一份实现。 -->
-            <PluginConfigList :scoped-cluster-id="maximizedCluster.id" @refresh="loadClusters" />
+            <PluginConfigList
+              :key="maximizedCluster.id"
+              :scoped-cluster-id="maximizedCluster.id"
+              @refresh="loadClusters"
+            />
           </div>
           <div v-if="maximizedCluster.activeTab === 'globalRules'" class="tab-content">
             <!-- 全局规则 Tab = 全局规则页组件的「单集群作用域」形态（A 推广首个卡片类资源，同节点/上游/路由做法）：
                  隐藏页头/集群与分组筛选/分组切换/集群带，页面级动作「添加全局规则 / 批量管理」改由工具条左侧紧凑钮；
                  chips / 批量条（含批量删除）/ 卡片网格 / 卡脚「发布 + ⋯」与页面同一份实现。 -->
-            <GlobalRuleList :scoped-cluster-id="maximizedCluster.id" @refresh="loadClusters" />
+            <GlobalRuleList
+              :key="maximizedCluster.id"
+              :scoped-cluster-id="maximizedCluster.id"
+              @refresh="loadClusters"
+            />
           </div>
           <div v-if="maximizedCluster.activeTab === 'staticResources'" class="tab-content">
             <!-- 静态资源 Tab = 静态资源页组件的「单集群作用域」形态（A 推广第 7 个（最后一个）资源，同插件组/全局规则做法）：
                  隐藏页头/分组与集群筛选/分组切换/集群带，页面级动作「添加静态资源 / 批量管理」改由工具条左侧紧凑钮；
                  chips / 批量条（含批量删除）/ 卡片网格（含绑定 strip、四档提示）/ 卡脚「发布 + ⋯」三栏菜单 /
                  ZIP 弹窗 / 表单弹窗（集群锁定）与页面同一份实现；发布进度日志只保留页面这一份（AGENTS #51）。 -->
-            <StaticResourceList :scoped-cluster-id="maximizedCluster.id" @refresh="loadClusters" />
+            <StaticResourceList
+              :key="maximizedCluster.id"
+              :scoped-cluster-id="maximizedCluster.id"
+              @refresh="loadClusters"
+            />
           </div>
           <div v-if="maximizedCluster.activeTab === 'globalPlugins'" class="tab-content">
             <!-- 插件元数据 Tab = 插件元数据页组件的「单集群作用域」形态（A 推广第 3 个卡片类资源，同插件组/全局规则做法）：
                  隐藏页头/集群与分组筛选/分组切换/集群带，页面级动作「添加插件元数据 / 批量管理」改由工具条左侧紧凑钮；
                  chips / 批量条（含批量删除）/ 卡片网格（含配置 JSON 折叠块与工具条全局展开开关）/ 卡脚「发布 + ⋯」
                  与页面同一份实现；创建入口唯一（工具条紧凑钮 → 共享创建弹窗，集群锁定）。 -->
-            <PluginMetadataList :scoped-cluster-id="maximizedCluster.id" @refresh="loadClusters" />
+            <PluginMetadataList
+              :key="maximizedCluster.id"
+              :scoped-cluster-id="maximizedCluster.id"
+              @refresh="loadClusters"
+            />
           </div>
           <!-- 集群节点 Tab = 节点管理页组件的「单集群作用域」形态（A 试点：一份实现两处挂载）：
                页面组件隐藏页头/集群与分组筛选/分组切换/集群列，页面级动作改由工具条左侧紧凑钮；
@@ -399,7 +417,7 @@
                七个 Tab 已全部改为独立 `v-if` 容器，混入条件链会随「前一个条件」串联，
                导致其它 Tab 激活时下方叠渲染整块节点表格（2026-11-22 面板插件组 Tab 实测）。 -->
           <div v-if="maximizedCluster.activeTab === 'nodes'" class="tab-content">
-            <NodeList :scoped-cluster-id="maximizedCluster.id" @refresh="loadClusters" />
+            <NodeList :key="maximizedCluster.id" :scoped-cluster-id="maximizedCluster.id" @refresh="loadClusters" />
           </div>
         </div>
       </div>
@@ -553,9 +571,11 @@ const maximizedCluster = computed(() => clusters.value.find((c) => c.id === maxi
 /** 最大化面板中继徽章（页面 routeBadge 单点的只读镜像） */
 const maximizedRouteBadge = computed(() => (maximizedCluster.value ? routeBadge(maximizedCluster.value) : null))
 
-// ── 面板切换动效（方案 A）：切集群 = 方向滑入；只切 Tab = 纯淡入（不位移，避免误以为换了集群）──
-// 重播机制：swapOn 先 false → nextTick + 读一次 offsetWidth 强制重排 → true；260ms 后清类，
+// ── 面板切换动效（方案 A）：切集群 = 方向滑入 + 内容区色相过渡；只切 Tab = 纯淡入（不位移，避免误以为换了集群）──
+// 重播机制：swapOn 先 false → nextTick + 读一次 offsetWidth 强制重排 → true；SWAP_CLEAR_MS 后清类，
 // 避免 transform 长期残留在 .max-swap 上（会成为 position: fixed 后代的包含块）。
+// 清类时长必须 ≥ 最长动画时长（切集群 320ms），否则动画被截断 —— 改动画时长时同步改这个常量。
+const SWAP_CLEAR_MS = 340
 type SwapKind = 'cluster' | 'tab'
 type SwapDir = 'next' | 'prev'
 const swapKind = ref<SwapKind>('cluster')
@@ -595,7 +615,7 @@ async function playSwap(kind: SwapKind, dir: SwapDir = 'next') {
   swapTimer = setTimeout(() => {
     swapOn.value = false
     swapTimer = null
-  }, 260)
+  }, SWAP_CLEAR_MS)
 }
 
 onUnmounted(() => {
@@ -1252,18 +1272,24 @@ onMounted(async () => {
   transition: background-color 240ms ease-out;
 }
 
-/* ── 切换动效（方案 A）──
+/* ── 切换动效（方案 A；2026-11-22 加强）──
    .max-swap 是 Tab 内容的包裹层，切换时由 swapClass 挂 fx-cluster / fx-tab：
-   切集群 = 方向滑入（内容从目标方向推入 22px）+ 淡入；只切 Tab = 纯淡入不位移。
-   类在 260ms 后清除（见 playSwap），避免 transform 长期残留成为 position: fixed 后代的包含块。 */
+   切集群 = 方向滑入（内容从目标方向推入 40px）+ 淡入 + 内容区背景色相短暂过渡；只切 Tab = 纯淡入不位移。
+   类在 SWAP_CLEAR_MS（340ms，见 playSwap）后清除，避免 transform 长期残留成为 position: fixed 后代的包含块；
+   清类时长必须 ≥ 最长动画时长（切集群 320ms），否则动画被截断。 */
 .max-swap {
   position: relative;
 }
 .max-swap.fx-cluster.dir-next {
-  animation: maxInNext 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: maxInNext 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 .max-swap.fx-cluster.dir-prev {
-  animation: maxInPrev 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: maxInPrev 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+/* 内容区色相过渡：从目标集群色相（.max-panel 注入的 --cc）10% 淡回表面色，只做短暂过渡、不常驻着色。
+   与滑入同长（320ms）+ both：动画结束后停在 var(--surface)，与常态一致。 */
+.max-swap.fx-cluster .tab-content {
+  animation: maxHueFade 320ms ease-out both;
 }
 .max-swap.fx-tab {
   animation: maxTabFade 140ms ease-out both;
@@ -1271,7 +1297,7 @@ onMounted(async () => {
 @keyframes maxInNext {
   from {
     opacity: 0;
-    transform: translate3d(22px, 0, 0);
+    transform: translate3d(40px, 0, 0);
   }
   to {
     opacity: 1;
@@ -1281,11 +1307,21 @@ onMounted(async () => {
 @keyframes maxInPrev {
   from {
     opacity: 0;
-    transform: translate3d(-22px, 0, 0);
+    transform: translate3d(-40px, 0, 0);
   }
   to {
     opacity: 1;
     transform: none;
+  }
+}
+@keyframes maxHueFade {
+  from {
+    /* 混色空间必须是 oklab（2026-11-22 真机裁决）：in oklch 时白底 hue 为 powerless，
+       8 个集群色相全部塌到同一个浅粉（实测 oklch(0.955 0.014 345…14)），集群色相丢失。 */
+    background-color: color-mix(in oklab, var(--cc, var(--accent)) 10%, var(--surface));
+  }
+  to {
+    background-color: var(--surface);
   }
 }
 @keyframes maxTabFade {
@@ -1310,6 +1346,10 @@ onMounted(async () => {
   .max-swap.fx-cluster,
   .max-swap.fx-tab {
     animation: maxReducedFade 90ms linear both !important;
+  }
+  /* 色相过渡同属动效，减动效分支下一并关掉（不位移也不闪色） */
+  .max-swap.fx-cluster .tab-content {
+    animation: none !important;
   }
   .max-ident {
     animation: none !important;

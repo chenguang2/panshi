@@ -14,7 +14,10 @@ describe('全局规则卡片单一实现（面板 Tab = GlobalRuleList scoped �
   it('CentralList 引用 GlobalRuleList 并传 scopedClusterId，不再引用 ClusterGlobalRules', () => {
     const s = read('src/views/CentralList.vue')
     expect(s).toContain("import GlobalRuleList from '@/views/GlobalRuleList.vue'")
-    expect(s).toContain('<GlobalRuleList :scoped-cluster-id="maximizedCluster.id" @refresh="loadClusters" />')
+    // 断行宽容（prettier 会把超宽标签拆成多行）：仍是同一挂载形态（:key + scopedClusterId + @refresh）
+    expect(s).toMatch(
+      /<GlobalRuleList\s+[\s\S]{0,160}?:key="maximizedCluster\.id"[\s\S]{0,80}?:scoped-cluster-id="maximizedCluster\.id"[\s\S]{0,60}?@refresh="loadClusters"/,
+    )
     expect(s).not.toContain('clusters/ClusterGlobalRules.vue')
     expect(s).not.toContain('<ClusterGlobalRules')
   })

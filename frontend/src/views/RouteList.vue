@@ -1391,7 +1391,9 @@ defineExpose({ viewMode })
 .action-cell {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  /* 2px = 设计 .ops（theme.css）；⋯ 触发器另有 margin-left 6px → 发布→⋯ 有效间距 8px。
+     曾是 6px（与设计/上游页不一致，2026-11-22 对齐）。 */
+  gap: 2px;
 }
 
 /* 发布状态列定宽 160 后：已发布态「vX + 完整时间」超宽走省略号（PublishStatusTag 的

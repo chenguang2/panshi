@@ -2313,6 +2313,10 @@ tr.row-disabled {
 .op-btn:hover { background: var(--accent-bg); color: var(--accent); border-color: oklch(56% 0.16 210 / 30%); }
 /* 2026-11-21 用户裁决：⋯（更多操作）触发器需可见描边 + 白底（其余行内操作仍为无边框 ghost） */
 .menu-anchor .op-btn[title="更多操作"] { border-color: var(--border); background: var(--surface); }
+/* 发布→⋯ 有效间距 8px = .ops gap 2px + 本 6px（2026-11-22 用户裁决，与实现侧 .action-trigger-btn
+   的 margin-left: 6px 同口径；.ops 的 gap 不动，它同时管其它文字按钮）。卡脚 .lp-foot 是
+   space-between + 弹性留白，不涉及此贴间距，故只挂在 .ops 下。 */
+.ops .menu-anchor { margin-left: 6px; }
 .op-btn svg { width: 12px; height: 12px; }
 .op-btn:disabled { opacity: .4; cursor: not-allowed; }
 .op-btn:disabled:hover { background: transparent; color: var(--muted); border-color: transparent; }

@@ -829,6 +829,7 @@
           <b>交互模型</b>：点击卡片上的任意<b>统计格</b>（如「上游 12」）或卡脚「统一管理」= 该集群<b>立即最大化</b>（集群网格收起、面板全屏接管空间），且<b>直达统计格对应的 Tab</b>（openStatTab 语义）；✕ 还原还原为网格。同屏只展示一个集群；七个 Tab 均为该集群作用域的资源列表，可对全部资源做增删改与发布——
           <b>节点/上游/路由 = 表格</b>（列宽/列序个性化 +「选择显示列」弹窗 + 外置分页条），<b>插件组/插件元数据/全局规则/静态资源 = 卡片网格</b>（card-grid + l5-panel，与各自卡片页同构；面板内恒平铺、无分组带、卡片无集群与分组徽标）；<b>七个 Tab 的内容统一包在 .tab-card 封闭容器内</b>（白底 + 1px 边框 + 8px 圆角、无阴影，与实现 .tab-content 同值）；
           行内/卡内 = 发布（op-pub）+ 状态四态 + 「差异」胶囊（批 7）+ ⋯ 菜单（r5 三栏）；统计格点击直达对应 Tab（openStatTab 语义）。
+          <b>切换动效口径</b>（2026-11-22 加强，与实现 CentralList.vue 一致）：切集群 = 内容区按 mini-bar 方向滑入 <b>40px</b>、<b>320ms</b>（cubic-bezier(0.22, 1, 0.36, 1)），同时内容区背景从<b>目标集群色相 10%</b> 短暂回落到白底（不常驻着色）；同集群切 Tab = <b>140ms</b> 纯淡入、不位移。
         </div>
       </div>
     </div>
@@ -841,12 +842,12 @@
    页面不再持有卡片专属样式；本块只保留「Tab 显隐 + 切换动画 + 集群切换条」等页面级样式 */
 .tab-body { display: none; }
 .tab-body.active { display: block; }
-/* 集群切换专用动画（Tab 切换不套用）：强 accent 底闪现 + 内描边辉光 + 位移，650ms */
-.tab-body.switch-flash { animation: clusterIn 0.65s ease; }
+/* 集群切换专用动画（Tab 切换不套用）：方向滑入 40px + 目标集群色相 10% 短暂回落，320ms
+   （与实现 CentralList.vue 的 fx-cluster / maxHueFade 同口径，2026-11-22 加强） */
+.tab-body.switch-flash { animation: clusterIn 320ms cubic-bezier(0.22, 1, 0.36, 1) both; }
 @keyframes clusterIn {
-  0% { opacity: 0.1; transform: translateY(12px); background: oklch(56% 0.16 210 / 30%); box-shadow: inset 0 0 0 2px oklch(56% 0.16 210 / 45%); }
-  45% { opacity: 1; transform: none; background: oklch(56% 0.16 210 / 22%); box-shadow: inset 0 0 0 2px oklch(56% 0.16 210 / 28%); }
-  100% { opacity: 1; transform: none; background: transparent; box-shadow: inset 0 0 0 2px transparent; }
+  0% { opacity: 0; transform: translate3d(40px, 0, 0); background-color: color-mix(in oklab, var(--cc, var(--accent)) 10%, var(--surface)); }
+  100% { opacity: 1; transform: none; background-color: var(--surface); }
 }
 /* 集群切换条（mini-bar） */
 .mini-bar { display: flex; align-items: center; gap: 6px; padding: 10px 16px 10px; background: var(--bg); border-bottom: 1px solid var(--border); overflow-x: auto; }

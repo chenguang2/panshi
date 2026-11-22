@@ -1069,8 +1069,11 @@ const { widths: fittedColumnWidths, minTableWidth } = useFitColumnWidths({
   reserved: () => SELECTION_COLUMN_WIDTH,
   flexKey: 'edge_path',
   // 列内容下限（r7-B4）：安装路径为弹性列不设下限（吸收余量，压到 32 才允许滚动）；
-  // 操作列按钮组 ≈ 268px（压到其下内容溢出）；状态列 140px（两枚胶囊并排需 115.6 + 内距 24）。
-  // scroll.x = 下限之和 740 + 选择列 40 = 780 → 窗口 ≥ ~1180 时永不出现横向滚动。
+  // 操作列按钮组实测 ≥285px（2026-11-22：更多触发器加 6px 间距后内容 = 启动/停止/状态/重载
+  // 4×53 + v-sep 7 + 触发器 26 + gap 10 + 6 = 261，加单元格内距 24 = 285；原 268 在 ≤1440 视口
+  // 会让触发器溢出单元格并把表格撑出 3px 横向滚动条）；
+  // 状态列 140px（两枚胶囊并排需 115.6 + 内距 24）。
+  // scroll.x = 下限之和 757 + 选择列 40 = 797 → 窗口 ≥ ~1200 时永不出现横向滚动。
   minWidths: () => ({
     ...(!isScoped.value && viewMode.value === 'flat' ? { cluster: CLUSTER_COLUMN_MIN_WIDTH } : {}),
     index: 40,
@@ -1079,7 +1082,7 @@ const { widths: fittedColumnWidths, minTableWidth } = useFitColumnWidths({
     management_port: 60,
     status: 140,
     edge_version: 50,
-    actions: 268,
+    actions: 285,
   }),
 })
 

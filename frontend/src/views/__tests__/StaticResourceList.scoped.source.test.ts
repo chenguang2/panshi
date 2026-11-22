@@ -16,7 +16,10 @@ describe('静态资源卡片单一实现（面板 Tab = StaticResourceList scope
   it('CentralList 引用 StaticResourceList 并传 scopedClusterId，不再引用旧面板组件与旧 props', () => {
     const s = read('src/views/CentralList.vue')
     expect(s).toContain("import StaticResourceList from '@/views/StaticResourceList.vue'")
-    expect(s).toContain('<StaticResourceList :scoped-cluster-id="maximizedCluster.id" @refresh="loadClusters" />')
+    // 断行宽容（prettier 会把超宽标签拆成多行）：仍是同一挂载形态（:key + scopedClusterId + @refresh）
+    expect(s).toMatch(
+      /<StaticResourceList\s+[\s\S]{0,160}?:key="maximizedCluster\.id"[\s\S]{0,80}?:scoped-cluster-id="maximizedCluster\.id"[\s\S]{0,60}?@refresh="loadClusters"/,
+    )
     expect(s).not.toContain('views/clusters/ClusterStaticResources.vue')
     expect(s).not.toMatch(/<ClusterStaticResources\s/)
     // 旧面板形态的四个 props 随组件退场（cluster / clusters / open-publish-modal / load-routes）

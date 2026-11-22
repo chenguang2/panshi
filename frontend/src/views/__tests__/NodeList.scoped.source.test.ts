@@ -13,7 +13,10 @@ describe('节点表格单一实现（面板 Tab = NodeList scoped 形态）', ()
   it('CentralList 引用 NodeList 并传 scopedClusterId，不再引用 ClusterNodes', () => {
     const s = read('src/views/CentralList.vue')
     expect(s).toContain("import NodeList from '@/views/NodeList.vue'")
-    expect(s).toContain('<NodeList :scoped-cluster-id="maximizedCluster.id" @refresh="loadClusters" />')
+    // 断行宽容（prettier 会把超宽标签拆成多行）：仍是同一挂载形态（:key + scopedClusterId + @refresh）
+    expect(s).toMatch(
+      /<NodeList\s+[\s\S]{0,160}?:key="maximizedCluster\.id"[\s\S]{0,80}?:scoped-cluster-id="maximizedCluster\.id"[\s\S]{0,60}?@refresh="loadClusters"/,
+    )
     expect(s).not.toContain('clusters/ClusterNodes.vue')
     expect(s).not.toContain('<ClusterNodes')
   })

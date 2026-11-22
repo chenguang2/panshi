@@ -16,7 +16,10 @@ describe('插件元数据卡片单一实现（面板 Tab = PluginMetadataList sc
   it('CentralList 引用 PluginMetadataList 并传 scopedClusterId，不再引用旧面板组件', () => {
     const s = read('src/views/CentralList.vue')
     expect(s).toContain("import PluginMetadataList from '@/views/PluginMetadataList.vue'")
-    expect(s).toContain('<PluginMetadataList :scoped-cluster-id="maximizedCluster.id" @refresh="loadClusters" />')
+    // 断行宽容（prettier 会把超宽标签拆成多行）：仍是同一挂载形态（:key + scopedClusterId + @refresh）
+    expect(s).toMatch(
+      /<PluginMetadataList\s+[\s\S]{0,160}?:key="maximizedCluster\.id"[\s\S]{0,80}?:scoped-cluster-id="maximizedCluster\.id"[\s\S]{0,60}?@refresh="loadClusters"/,
+    )
     expect(s).not.toContain('components/PluginMetadata.vue')
     expect(s).not.toMatch(/<PluginMetadata\s/)
     // 旧面板形态的两个 props（nodes / cluster-name）随组件退场

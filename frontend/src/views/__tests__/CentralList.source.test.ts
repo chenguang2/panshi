@@ -73,6 +73,18 @@ describe('统一管理·最大化面板切换动效（方案 A）', () => {
     return text.slice(start, end)
   }
 
+  /**
+   * 七个 scoped Tab 的挂载形态断言（对 prettier 断行宽容）：标签内须同时出现
+   * `:key="maximizedCluster.id"`（切集群重挂载）+ `:scoped-cluster-id` + `@refresh`。
+   * 注意：别写成整行 toContain —— 超过 120 列后 prettier 会把标签拆成多行。
+   */
+  function expectScopedTab(body: string, comp: string): void {
+    const re = new RegExp(
+      `<${comp}\\s+[\\s\\S]{0,160}?:key="maximizedCluster\\.id"[\\s\\S]{0,80}?:scoped-cluster-id="maximizedCluster\\.id"[\\s\\S]{0,60}?@refresh="loadClusters"`,
+    )
+    expect(body, `<${comp}> 挂载形态不符（缺 :key / scopedClusterId / @refresh）`).toMatch(re)
+  }
+
   it('动效包裹层 .max-swap 不带 :key（Tab 子组件不得整体重挂载）', () => {
     const text = s()
     const tagStart = text.indexOf('class="max-swap"')
@@ -125,11 +137,11 @@ describe('统一管理·最大化面板切换动效（方案 A）', () => {
       )
     }
     // 插件元数据 Tab = PluginMetadataList 的 scoped 形态（面板不传 nodes/cluster-name 等旧 props）
-    expect(body).toContain('<PluginMetadataList :scoped-cluster-id="maximizedCluster.id" @refresh="loadClusters" />')
+    expectScopedTab(body, 'PluginMetadataList')
     expect(body).not.toContain(':nodes="maximizedCluster.nodes"')
     // 静态资源 Tab = StaticResourceList 的 scoped 形态（2026-11-22 A 推广最后一块；
     // 旧面板 props cluster/clusters/open-publish-modal/load-routes 随之退场）
-    expect(body).toContain('<StaticResourceList :scoped-cluster-id="maximizedCluster.id" @refresh="loadClusters" />')
+    expectScopedTab(body, 'StaticResourceList')
     expect(body).not.toContain(':load-routes="loadRoutes"')
     expect(body).not.toContain(':open-publish-modal="openPublishModal"')
   })
@@ -139,14 +151,56 @@ describe('统一管理·最大化面板切换动效（方案 A）', () => {
     expect(a).toContain('@keyframes maxInNext')
     expect(a).toContain('@keyframes maxInPrev')
     expect(a).toContain('@keyframes maxTabFade')
+    expect(a).toContain('@keyframes maxHueFade')
     expect(a).toContain('@keyframes maxIdent')
-    // 200ms 同缓动、切 Tab 140ms；方向类按 dir-next / dir-prev 区分
-    expect(a).toMatch(/\.max-swap\.fx-cluster\.dir-next \{[\s\S]*?animation: maxInNext 200ms/)
-    expect(a).toMatch(/\.max-swap\.fx-cluster\.dir-prev \{[\s\S]*?animation: maxInPrev 200ms/)
+    // 2026-11-22 加强：切集群 320ms 位移 40px、同缓动；切 Tab 仍 140ms；方向类按 dir-next / dir-prev 区分
+    expect(a).toMatch(
+      /\.max-swap\.fx-cluster\.dir-next \{[\s\S]*?animation: maxInNext 320ms cubic-bezier\(0\.22, 1, 0\.36, 1\)/,
+    )
+    expect(a).toMatch(
+      /\.max-swap\.fx-cluster\.dir-prev \{[\s\S]*?animation: maxInPrev 320ms cubic-bezier\(0\.22, 1, 0\.36, 1\)/,
+    )
     expect(a).toMatch(/\.max-swap\.fx-tab \{[\s\S]*?animation: maxTabFade 140ms/)
+    expect(a).toMatch(/@keyframes maxInNext \{\s*from \{[^}]*translate3d\(40px, 0, 0\)/)
+    expect(a).toMatch(/@keyframes maxInPrev \{\s*from \{[^}]*translate3d\(-40px, 0, 0\)/)
   })
 
-  it('reduced-motion 降级为纯淡入（关闭位移与身份区动画）', () => {
+  it('切集群时内容区色相短暂过渡（maxHueFade：--cc 10% → surface，不常驻着色）', () => {
+    const a = animSection()
+    // 色相过渡挂在 .tab-content 上（内容区），取自 .max-panel 注入的 --cc（集群色相）并回落 surface
+    expect(a).toMatch(/\.max-swap\.fx-cluster \.tab-content \{[\s\S]*?animation: maxHueFade 320ms/)
+    // 混色空间必须是 oklab：in oklch 时白底 hue powerless，8 个集群色相全塌成同一浅粉（2026-11-22 真机裁决）
+    expect(a).toMatch(
+      /@keyframes maxHueFade \{\s*from \{[^}]*color-mix\(in oklab, var\(--cc, var\(--accent\)\) 10%, var\(--surface\)\)/,
+    )
+    expect(a).not.toMatch(/color-mix\(in oklch/)
+    expect(a).toMatch(/@keyframes maxHueFade \{[^@]*?to \{\s*background-color: var\(--surface\)/)
+  })
+
+  it('清类时机 ≥ 最长动画时长（320ms → SWAP_CLEAR_MS 340ms，防动画截断）', () => {
+    const text = s()
+    expect(text).toContain('const SWAP_CLEAR_MS = 340')
+    expect(text).toMatch(/\}, SWAP_CLEAR_MS\)/)
+  })
+
+  it('七个 Tab 子组件各带 :key="maximizedCluster.id"（切集群重挂载 → 重新加载内容）', () => {
+    // 缺陷（2026-11-22 用户实测）：七个 scoped 页只读 props、不 watch scopedClusterId，
+    // 无 key 时 minibar 切集群会复用实例 → 挂载期加载逻辑不再执行，内容停在旧集群。
+    const body = tabBody()
+    for (const comp of [
+      'UpstreamList',
+      'RouteList',
+      'PluginConfigList',
+      'GlobalRuleList',
+      'StaticResourceList',
+      'PluginMetadataList',
+      'NodeList',
+    ]) {
+      expectScopedTab(body, comp)
+    }
+  })
+
+  it('reduced-motion 降级为纯淡入（关闭位移、身份区动画与色相过渡）', () => {
     const a = animSection()
     const start = a.indexOf('@media (prefers-reduced-motion: reduce)')
     expect(start, '缺少 prefers-reduced-motion 块').toBeGreaterThan(-1)
@@ -155,6 +209,8 @@ describe('统一管理·最大化面板切换动效（方案 A）', () => {
     expect(block).toContain('.max-ident')
     expect(block).toContain('animation: none !important')
     expect(block).toContain('.mini-item')
+    // 新增的色相过渡在减动效分支下一并关掉
+    expect(block).toContain('.max-swap.fx-cluster .tab-content')
   })
 
   it('动效只动 opacity/transform，不含布局属性动画', () => {
