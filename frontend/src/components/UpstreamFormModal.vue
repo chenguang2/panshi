@@ -922,7 +922,8 @@ async function handleSubmit() {
     emit('saved')
     emit('close')
     // 3.2 保存后发布引导：先关表单再弹引导（useOverlayModal 挂 body、z-index 2000，不叠遮罩）；
-    // 「立即发布」经 emit 交回调方打开 PublishConfirmModal，不自动发布
+    // 「立即发布」经 emit 交回调方打开 PublishConfirmModal，不自动发布。
+    // 保存成功不再弹 toast：反馈由本弹窗单一承担（单通道，与 RouteFormModal 同口径）
     showOverlayModal({
       title: '保存成功',
       content: '配置尚未发布，发布后才会推送到 Edge 节点生效。',

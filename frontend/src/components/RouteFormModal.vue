@@ -517,8 +517,9 @@ async function handleSubmit() {
         plugins: form.plugins.map((p: any) => ({ plugin_name: p.plugin_name, config: p.config })),
       })
     }
-    // save-guide-single-feedback：单通道——保存成功不再弹 toast（恒在引导弹窗遮罩 z-index 2000
-    // 之下且 3 秒自动消失，信息与弹窗重复）；成功与「尚未发布」语义统一由下方引导弹窗承担
+    // save-guide-single-feedback：单通道——保存成功的反馈由下方引导弹窗单一承担（弹窗本身标题即
+    // 「保存成功」，再弹 toast 属同一信息重复；2026-11-22 复查：当年另一条理由「toast 被 2000 遮罩
+    // 盖住」已随层级阶梯（toast 抬到 3000）失效，但单通道取舍不变——不要因层级修好而恢复 toast）
     emit('saved')
     emit('close')
     announceUnpublished(cid, routeId)
