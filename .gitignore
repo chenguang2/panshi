@@ -62,6 +62,8 @@ product/linux/tongsuo/bin/openssl
 logs/
 *.log
 !docs/edge/*.log
+# Edge API 示例日志分处子目录（framework/、plugins/…），单层 negation 覆盖不到
+!docs/edge/**/*.log
 backend/uvicorn.err
 backend/uvicorn.out
 
@@ -72,6 +74,10 @@ uv.lock
 .sisyphus/
 session-*.md
 *.png
+# 白名单：这些 png 是构建产物/文档资产，必须入库（*.png 仅用于挡随手截图/临时图）
+!docs/user-manual/images/**
+!frontend/public/**
+!frontend/src/assets/**
 *.bak
 *.bak2
 frontend@*
@@ -108,7 +114,12 @@ docs/monitor/应用可观测性系统培训.pdf
 
 # =============================================
 # 运行时数据（不入库）
+# 清单本体含明文 SSH 口令（AGENTS #10），备份/派生文件一律同挡：
+# gateways_inventory_service 每次保存写 gateways.bak.<ts>，旧的 *.bak 规则匹配不到
 backend/ansible/inventory/host
+backend/ansible/inventory/host.*
 backend/ansible/inventory/gateways
+backend/ansible/inventory/gateways.*
+backend/ansible/inventory/*.bak*
 backend/ansible/inventory/backups/
 data/
