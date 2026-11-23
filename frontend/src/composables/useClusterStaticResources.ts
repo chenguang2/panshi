@@ -6,9 +6,14 @@ import { buildDeleteProgressContent } from './useClusterUtils'
 import { formatFileSize, formatDateTime } from '@/utils/format'
 import { getApiErrorMessage } from '@/utils/error'
 import { showOverlayModal } from './useOverlayModal'
+import { useFeaturesStore } from '@/stores/features'
 
-/** zip 体积上限（32MB，与后端 MAX_ZIP_SIZE 一致；static-resources-ux-close-loop 1.1 上传预检单点） */
-export const STATIC_ZIP_MAX_BYTES = 32 * 1024 * 1024
+/**
+ * zip 体积上限的兜底缺省值（MB）：features store 未加载或缺键时使用。
+ * 真实生效值 = features.yaml `limits.static_zip_max_mb`（static-zip-limit-config），
+ * 调用时经 store 读取，不得在模块级固化成字节常量。
+ */
+export const STATIC_ZIP_MAX_MB_DEFAULT = 32
 
 interface StaticResourceDeps {
   clusters: Ref<Cluster[]>
@@ -26,6 +31,11 @@ interface StaticResourceDeps {
  */
 export function useClusterStaticResources(deps: StaticResourceDeps) {
   const { clusters, afterUpload } = deps
+  // static-zip-limit-config：上限读 features store（部署配置单一事实源）
+  const featuresStore = useFeaturesStore()
+
+  /** 当前生效的 zip 上限（字节）。调用时读取，热加载后的新值对下一次上传生效。 */
+  const zipMaxBytes = (): number => featuresStore.limitOf('static_zip_max_mb', STATIC_ZIP_MAX_MB_DEFAULT) * 1024 * 1024
 
   /** 上传进行中（1.2：据此禁用上传按钮） */
   const uploading = ref(false)
@@ -37,10 +47,11 @@ export function useClusterStaticResources(deps: StaticResourceDeps) {
     input.onchange = async () => {
       const file = input.files?.[0]
       if (!file) return
-      // static-resources-ux-close-loop 1.1：预检单点——超限（32MB）即时拒绝，不发请求；
-      // 文案与后端同款
-      if (file.size > STATIC_ZIP_MAX_BYTES) {
-        message.error('zip 文件过大：上限 32MB')
+      // static-resources-ux-close-loop 1.1：预检单点——超限即时拒绝，不发请求；
+      // static-zip-limit-config：上限与文案取值同源（features.yaml limits.static_zip_max_mb）
+      const maxMb = featuresStore.limitOf('static_zip_max_mb', STATIC_ZIP_MAX_MB_DEFAULT)
+      if (file.size > zipMaxBytes()) {
+        message.error(`zip 文件过大：上限 ${maxMb}MB`)
         return
       }
 

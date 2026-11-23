@@ -29,6 +29,8 @@ export const useFeaturesStore = defineStore('features', () => {
   /** 插件元数据可用插件专用清单（同上；旧 Python 写死开关已退役，本清单是唯一事实源） */
   const metadataPlugins = ref<string[]>([])
   const concurrency = ref<Record<string, number>>({})
+  /** 部署级体积上限（static-zip-limit-config）：features.yaml `limits` 命名空间透出 */
+  const limits = ref<Record<string, number>>({})
   /** 品牌信息（branding-configuration）：登录页主品牌/页脚、侧边栏文案与版本徽标消费 */
   const branding = ref<BrandingConfig>({ ...BRANDING_DEFAULTS })
   const loaded = ref(false)
@@ -56,6 +58,7 @@ export const useFeaturesStore = defineStore('features', () => {
     globalRulePlugins.value = res.data.global_rule_plugins || []
     metadataPlugins.value = res.data.plugin_metadata_plugins || []
     concurrency.value = res.data.concurrency || {}
+    limits.value = res.data.limits || {}
     applyBranding(res.data.branding)
     loaded.value = true
   }
@@ -87,17 +90,29 @@ export const useFeaturesStore = defineStore('features', () => {
     return concurrency.value[name] ?? defaultVal
   }
 
+  /**
+   * 读取部署级体积上限（static-zip-limit-config）：未加载/缺键回退调用方缺省值。
+   * 与 concurrencyOf 同构——调用时读取，热加载后的新值对下一次操作生效。
+   */
+  function limitOf(name: string, defaultVal: number): number {
+    if (!loaded.value) return defaultVal
+    const v = limits.value[name]
+    return typeof v === 'number' ? v : defaultVal
+  }
+
   return {
     features,
     enabledPlugins,
     globalRulePlugins,
     metadataPlugins,
     concurrency,
+    limits,
     branding,
     loaded,
     load,
     reload,
     has,
     concurrencyOf,
+    limitOf,
   }
 })

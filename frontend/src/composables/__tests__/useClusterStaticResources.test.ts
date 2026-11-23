@@ -29,6 +29,11 @@ vi.mock('ant-design-vue', async (importOriginal) => {
 // 那些成员已随面板 Tab 改 scoped 形态而删除（发布链路唯一实现 = StaticResourceList 逐节点循环，
 // 其路径标注由 StaticResourceList 的用例覆盖）。此处只保留仍在生产消费的上传流。
 
+// static-zip-limit-config：上限由 features store 的 limits.static_zip_max_mb 决定
+// （缺省 32MB）——用例需要 pinia 提供 store 实例。
+import { setActivePinia, createPinia } from 'pinia'
+import { useFeaturesStore } from '@/stores/features'
+
 function makeDeps() {
   const clusters = ref<Cluster[]>([])
   const afterUpload = vi.fn().mockResolvedValue(undefined)
@@ -73,6 +78,8 @@ describe('静态资源上传 · 预检与结果行', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     document.body.innerHTML = ''
+    // 每个用例独立 pinia：默认（未配置 limits）→ 上限回退 32MB
+    setActivePinia(createPinia())
   })
 
   it('1.1 超 32MB：即时拒绝（message.error），不发上传请求', async () => {
@@ -80,6 +87,25 @@ describe('静态资源上传 · 预检与结果行', () => {
     expect(mockMessageError).toHaveBeenCalledWith('zip 文件过大：上限 32MB')
     expect(mockApiPost).not.toHaveBeenCalled()
     expect(afterUpload).not.toHaveBeenCalled()
+  })
+
+  it('1.1b 配置上限 64MB（static-zip-limit-config）：按 store 值判定，文案随之变化', async () => {
+    // 65MB → 拒绝（若仍硬编码 32MB 也会拒绝，故同时断言 33MB 放行）
+    const features = useFeaturesStore()
+    features.limits = { static_zip_max_mb: 64 }
+    features.loaded = true
+
+    const rejected = await runUpload(65 * 1024 * 1024)
+    expect(mockMessageError).toHaveBeenCalledWith('zip 文件过大：上限 64MB')
+    expect(mockApiPost).not.toHaveBeenCalled()
+    expect(rejected.afterUpload).not.toHaveBeenCalled()
+
+    // 33MB 在上限 64MB 内 → 发出请求（证明判定用的是 store 值而非 32MB 硬编码）
+    const accepted = await runUpload(33 * 1024 * 1024, {
+      data: { current_version: 1, file_size: 33 * 1024 * 1024 },
+    })
+    expect(mockApiPost).toHaveBeenCalled()
+    expect(accepted.text).toContain('已保存到管理端（版本 v1')
   })
 
   it('1.3 上传成功：结果行为「已保存到管理端（版本 vN，大小）」+ 发布时机说明，不暴露 storage_path', async () => {

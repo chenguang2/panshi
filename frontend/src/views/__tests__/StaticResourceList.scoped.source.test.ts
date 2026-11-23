@@ -135,9 +135,12 @@ describe('StaticResourceList scoped 形态契约', () => {
 describe('useClusterStaticResources 已收窄为上传流（A 推广清理）', () => {
   it('面板表单态/删除/发布/版本成员已删除，只留上传（静态资源页唯一消费方）', () => {
     const s = read('src/composables/useClusterStaticResources.ts')
-    // 存活：上传流（页面菜单「上传」经此，含 32MB 预检与进度弹窗）
+    // 存活：上传流（页面菜单「上传」经此，含体积预检与进度弹窗）
     expect(s).toContain('const uploadStaticResource = (sr: StaticResource) => {')
-    expect(s).toContain('STATIC_ZIP_MAX_BYTES = 32 * 1024 * 1024')
+    // static-zip-limit-config：上限单点 = 调用时读 features store（不再硬编码字节常量）
+    expect(s).toContain("limitOf('static_zip_max_mb'")
+    expect(s).toContain('zip 文件过大：上限 ${maxMb}MB')
+    expect(s).not.toContain('STATIC_ZIP_MAX_BYTES = 32 * 1024 * 1024')
     // 退场：表单态 / 编辑提交 / 删除 / 发布 / 版本管理（发布唯一实现 = StaticResourceList 逐节点循环）
     for (const dead of [
       'staticResourceFormData',

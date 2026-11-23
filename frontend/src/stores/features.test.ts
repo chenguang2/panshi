@@ -173,6 +173,58 @@ describe('features store', () => {
   })
 })
 
+describe('features store limits（static-zip-limit-config）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+  })
+
+  it('load() 解析 limits 字段，limitOf 返回配置值', async () => {
+    mockFeaturesGet({ features: {}, enabled_plugins: [], limits: { static_zip_max_mb: 64 } })
+
+    const store = useFeaturesStore()
+    await store.load()
+
+    expect(store.limits).toEqual({ static_zip_max_mb: 64 })
+    expect(store.limitOf('static_zip_max_mb', 32)).toBe(64)
+  })
+
+  it('limits 缺键 → limitOf 回退调用方缺省值', async () => {
+    mockFeaturesGet({ features: {}, enabled_plugins: [], limits: {} })
+
+    const store = useFeaturesStore()
+    await store.load()
+
+    expect(store.limitOf('static_zip_max_mb', 32)).toBe(32)
+  })
+
+  it('响应无 limits 字段 → limitOf 回退缺省值（向后兼容）', async () => {
+    mockFeaturesGet({ features: {}, enabled_plugins: [] })
+
+    const store = useFeaturesStore()
+    await store.load()
+
+    expect(store.limits).toEqual({})
+    expect(store.limitOf('static_zip_max_mb', 32)).toBe(32)
+  })
+
+  it('未加载前 limitOf 回退缺省值（不阻塞上传流）', () => {
+    const store = useFeaturesStore()
+    expect(store.limitOf('static_zip_max_mb', 32)).toBe(32)
+  })
+
+  it('reload() 后新值生效（热加载链路：配置改动下一次操作即用新值）', async () => {
+    mockFeaturesGet({ features: {}, enabled_plugins: [], limits: { static_zip_max_mb: 32 } })
+    const store = useFeaturesStore()
+    await store.load()
+    expect(store.limitOf('static_zip_max_mb', 32)).toBe(32)
+
+    mockFeaturesGet({ features: {}, enabled_plugins: [], limits: { static_zip_max_mb: 128 } })
+    await store.reload()
+    expect(store.limitOf('static_zip_max_mb', 32)).toBe(128)
+  })
+})
+
 describe('features store branding（branding-configuration）', () => {
   beforeEach(() => {
     setActivePinia(createPinia())

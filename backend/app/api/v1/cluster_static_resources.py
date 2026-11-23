@@ -11,6 +11,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.features import static_zip_max_mb
 from app.config import MAX_PAGE_SIZE
 from app.models.cluster import Cluster, Node, ConfigVersion, Route, RoutePlugin
 from app.models.static_resource import StaticResource
@@ -37,10 +38,13 @@ BASE_STORAGE_DIR = os.path.join(
     "data", "static"
 )
 
-# 静态资源 zip 上传大小上限，对齐网关 nginx client_max_body_size（当前部署 32m）：
-# 经中继发布是把整个 zip 作为 PUT body 发给网关（cluster_static_resources.publish_static_resource），
-# 超过网关上限会在发布腿报 413；上传腿在此提前拦截，也避免无上限全量读入内存。
-STATIC_ZIP_MAX_BYTES = 32 * 1024 * 1024
+# 静态资源 zip 上传大小上限：由 features.yaml 的 limits.static_zip_max_mb 决定
+# （static-zip-limit-config，缺省 32MB，mtime 热加载）。经中继发布是把整个 zip 作为
+# PUT body 发给网关（publish_static_resource），超过网关 nginx client_max_body_size
+# 会在发布腿报 413；上传腿在此提前拦截，也避免无上限全量读入内存。
+def _zip_limit_bytes() -> int:
+    """当前生效的 zip 上限（字节）。唯一入口：两处校验 + 报错文案 + 413 说明。"""
+    return static_zip_max_mb() * 1024 * 1024
 
 
 def _get_storage_path(edge_uuid: str, version: int) -> str:
@@ -469,19 +473,21 @@ async def upload_static_resource_zip(
         raise HTTPException(status_code=400, detail="仅支持 zip 格式文件")
 
     # 大小上限：优先用客户端声明的 file.size 拦截（避免超限内容全量读入内存）
-    if file.size is not None and file.size > STATIC_ZIP_MAX_BYTES:
+    limit_bytes = _zip_limit_bytes()
+    limit_mb = static_zip_max_mb()
+    if file.size is not None and file.size > limit_bytes:
         raise HTTPException(
             status_code=400,
-            detail=f"zip 文件过大：上限 {STATIC_ZIP_MAX_BYTES // (1024 * 1024)}MB（对齐网关 client_max_body_size）")
+            detail=f"zip 文件过大：上限 {limit_mb}MB（部署配置 limits.static_zip_max_mb）")
 
     # file.size 可能为 None（multipart 解析器之外路径）：最多读上限+1 字节做防御校验
-    content = await file.read(STATIC_ZIP_MAX_BYTES + 1)
+    content = await file.read(limit_bytes + 1)
     if not content:
         raise HTTPException(status_code=400, detail="文件内容为空")
-    if len(content) > STATIC_ZIP_MAX_BYTES:
+    if len(content) > limit_bytes:
         raise HTTPException(
             status_code=400,
-            detail=f"zip 文件过大：上限 {STATIC_ZIP_MAX_BYTES // (1024 * 1024)}MB（对齐网关 client_max_body_size）")
+            detail=f"zip 文件过大：上限 {limit_mb}MB（部署配置 limits.static_zip_max_mb）")
 
     if not zipfile.is_zipfile(io.BytesIO(content)):
         raise HTTPException(status_code=400, detail="无效的 zip 文件")
@@ -527,9 +533,10 @@ def _publish_error_detail(e: Exception) -> str:
     """
     if isinstance(e, EdgeAPIError) and e.status_code == 413:
         return (
-            "请求体过大（413）：经中继发布经网关转发，网关请求体上限"
-            "（nginx client_max_body_size，当前部署 32m）可能被超出；"
-            f"可缩小 zip 或改直连。原始错误：{e}"
+            "请求体过大（413）：发布是把整个 zip 作为请求体转发，网关（经中继）或"
+            " Edge 自身（直连）的 nginx client_max_body_size 可能小于当前平台上限"
+            f"（{static_zip_max_mb()}MB，见 features.yaml limits.static_zip_max_mb）；"
+            f"可缩小 zip、调大对应 nginx 上限，或改用其它路径。原始错误：{e}"
         )
     return str(e)
 

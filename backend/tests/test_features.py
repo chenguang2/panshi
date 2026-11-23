@@ -35,7 +35,7 @@ class TestFeaturesModule:
 
     def test_features_not_exists_returns_defaults(self, tmp_path: Path):
         """When features.yaml does not exist, should return default config (all enabled)."""
-        from app.core.features import BRANDING_DEFAULTS, load_features
+        from app.core.features import BRANDING_DEFAULTS, LIMIT_DEFAULTS, load_features
 
         nonexistent = tmp_path / "nonexistent.yaml"
         result = load_features(str(nonexistent))
@@ -44,6 +44,8 @@ class TestFeaturesModule:
             "features": {},
             "enabled_plugins": [],
             "branding": dict(BRANDING_DEFAULTS),
+            # static-zip-limit-config：缺省值随默认配置一并透出
+            "limits": dict(LIMIT_DEFAULTS),
         }
 
     # ── Valid YAML ───────────────────────────────────────

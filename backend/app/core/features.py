@@ -68,6 +68,25 @@ BRANDING_DEFAULTS: dict[str, str] = {
     "version": "v1.0",
 }
 
+# 体积上限命名空间（static-zip-limit-config）：部署级容量策略，每实例一值。
+# 语义与 `concurrency` 同款：未知键 / bool / 非 int / 越界 → 启动报错退出；
+# 未配置 → 校验阶段回写缺省值（GET /system/features 恒定透出完整键集）。
+# 调大 `static_zip_max_mb` 前必须同步调大 nginx 侧上限，否则上传能过、发布 413：
+#   经中继发布腿 → 网关 nginx `client_max_body_size`；
+#   直连发布腿   → 各 Edge 节点 edge.env 的 `client_max_body_size`（未配置时 nginx 默认 1m）。
+KNOWN_LIMIT_KEYS: frozenset[str] = frozenset({
+    "static_zip_max_mb",
+})
+
+LIMIT_DEFAULTS: dict[str, int] = {
+    "static_zip_max_mb": 32,
+}
+
+# 各键合法区间（闭区间，整数 MB）
+LIMIT_RANGES: dict[str, tuple[int, int]] = {
+    "static_zip_max_mb": (1, 2048),
+}
+
 # ── Module-level cache with mtime-based invalidation ──────────────────
 _features: dict | None = None
 _features_mtime: float = 0.0
@@ -146,6 +165,19 @@ def get_branding() -> dict[str, str]:
     return get_features().get("branding") or dict(BRANDING_DEFAULTS)
 
 
+def static_zip_max_mb() -> int:
+    """静态资源 zip 上传体积上限（MB，static-zip-limit-config 唯一读取点）。
+
+    mtime 热加载：改 features.yaml 即生效免重启。未配置/缺键回落 32
+    （load_features 已在校验阶段回写缺省，此处兜底防御）。
+    """
+    limits = get_features().get("limits")
+    if not isinstance(limits, dict):
+        return LIMIT_DEFAULTS["static_zip_max_mb"]
+    value = limits.get("static_zip_max_mb", LIMIT_DEFAULTS["static_zip_max_mb"])
+    return int(value)
+
+
 # ── Loading & validation ──────────────────────────────────────────────
 
 
@@ -165,6 +197,7 @@ def load_features(path: str = "features.yaml") -> dict:
             "features": {},
             "enabled_plugins": [],
             "branding": dict(BRANDING_DEFAULTS),
+            "limits": dict(LIMIT_DEFAULTS),
         }
         _features_mtime = 0.0
         return _features
@@ -178,6 +211,7 @@ def load_features(path: str = "features.yaml") -> dict:
     _validate(raw)
     _validate_concurrency(raw)
     _validate_branding(raw)
+    _validate_limits(raw)
     _features = raw  # type: ignore[assignment]
     try:
         _features_mtime = p.stat().st_mtime
@@ -312,3 +346,46 @@ def _validate_branding(config: dict) -> None:
     merged = dict(BRANDING_DEFAULTS)
     merged.update(branding)
     config["branding"] = merged
+
+
+def _validate_limits(config: dict) -> None:
+    """Validate the ``limits`` namespace; prints error and exits on failure.
+
+    static-zip-limit-config：未配置 → 整组回落缺省（并回写，供 GET /system/features
+    透出完整键集，对齐 branding 合并语义）；部分配置 → 缺失键补缺省；
+    未知键 / 非映射 / bool / 非 int / 越界 → 报错退出，防拼写错误静默失效。
+    """
+    limits = config.get("limits")
+    if limits is None:
+        config["limits"] = dict(LIMIT_DEFAULTS)
+        return
+    if not isinstance(limits, dict):
+        print(
+            "错误: features.yaml 中 'limits' 必须是映射（字典），"
+            f" 当前值: {limits} (类型: {type(limits).__name__})",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    unknown = [k for k in limits if k not in KNOWN_LIMIT_KEYS]
+    if unknown:
+        print(
+            f"错误: features.yaml 包含未知体积上限配置项 {unknown}。"
+            f" 允许的配置项: {sorted(KNOWN_LIMIT_KEYS)}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    for key, val in limits.items():
+        low, high = LIMIT_RANGES[key]
+        if isinstance(val, bool) or not isinstance(val, int) or not (low <= val <= high):
+            print(
+                f"错误: features.yaml 中 'limits.{key}' 必须是 {low}-{high} 的整数（MB），"
+                f" 当前值: {val} (类型: {type(val).__name__})",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+    merged = dict(LIMIT_DEFAULTS)
+    merged.update(limits)
+    config["limits"] = merged

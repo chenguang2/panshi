@@ -48,7 +48,7 @@ branding:
   system_name: 磐石                    # 系统短名：浏览器标签页标题
   brand_name: 磐石 Gateway             # 品牌名：登录页主品牌 + 侧边栏文案
   product_name: Panshi Gateway Admin   # 产品英文全名：登录页页脚前缀
-  version: v1.0                        # 版本号：登录页页脚后缀 + 侧边栏徽标
+  version: v3.1                        # 版本号：登录页页脚后缀 + 侧边栏徽标
   # system_name: Bedrock                    # 系统短名：浏览器标签页标题
   # brand_name: Bedrock Gateway             # 品牌名：登录页主品牌 + 侧边栏文案
   # product_name: Bedrock Gateway Admin   # 产品英文全名：登录页页脚前缀
@@ -70,3 +70,12 @@ plugin_metadata_plugins:
 concurrency:
   max_playbooks: 5
   batch_action: 5
+# 体积上限（static-zip-limit-config）：部署级容量策略，每实例一值，mtime 热加载。
+# static_zip_max_mb：静态资源 zip 上限（整数 MB，缺省 32，范围 1–2048）。
+# ⚠ 调大它之前必须先调大 nginx 侧上限，否则「上传能过、发布 413」：
+#   - 经中继发布腿 → 区域网关 nginx 的 client_max_body_size（当前部署 32m）；
+#   - 直连发布腿   → 各 Edge 节点 edge.env 的 client_max_body_size
+#                    （实测为注释态时 nginx 默认 1m，超过即直连发布 413）。
+# 提示：上限越大，单请求越可能被整体读入后端内存（上传腿按上限做防御读取）。
+limits:
+  static_zip_max_mb: 32

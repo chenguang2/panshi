@@ -126,7 +126,9 @@ async def test_publish_413_has_friendly_hint(test_db, tmp_path, relay_off):
             cluster_id=cluster.id, resource_id=sr.id, req=None, db=test_db)
     err = result["results"][0]["error"]
     assert "client_max_body_size" in err
-    assert "32m" in err
+    # static-zip-limit-config：文案上限改为动态（缺省配置 = 32MB，并给出配置指针）
+    assert "32MB" in err
+    assert "limits.static_zip_max_mb" in err
     assert "413" in err
 
 

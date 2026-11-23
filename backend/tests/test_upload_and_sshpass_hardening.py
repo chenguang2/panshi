@@ -1,8 +1,9 @@
 """缺陷加固回归（安全车道，TDD）：
 
 M3 — 静态资源 zip 上传无大小限制：原实现 `await file.read()` 全量入内存后才
-判空，无上限。修复后上传腿对齐网关 nginx client_max_body_size（当前部署 32m，
-经中继发布超限即 413）在读取前拦截，常量 STATIC_ZIP_MAX_BYTES。
+判空，无上限。修复后上传腿在读取前拦截；上限由 features.yaml 的
+`limits.static_zip_max_mb` 决定（缺省 32MB，static-zip-limit-config），单点
+`_zip_limit_bytes()`。
 
 L8 — sshpass -p <密码> 把 SSH 密码暴露在 ps / /proc/<pid>/cmdline（world-readable）。
 修复后改 `sshpass -e` + 环境变量 SSHPASS 传递，argv 不再含明文密码。
@@ -47,9 +48,12 @@ async def _seed_resource(isolated_session) -> int:
 def _patch_limit(monkeypatch, tmp_path, limit: int) -> None:
     from app.api.v1 import cluster_static_resources as csr
 
-    # raising=False：常量未实现时（RED 阶段）也要让行为断言跑起来
+    # raising=False：字段未实现时（RED 阶段）也要让行为断言跑起来
     monkeypatch.setattr(csr, "BASE_STORAGE_DIR", str(tmp_path), raising=False)
-    monkeypatch.setattr(csr, "STATIC_ZIP_MAX_BYTES", limit, raising=False)
+    # static-zip-limit-config：上限单点 = _zip_limit_bytes()（读 features.yaml），
+    # 文案展示值单点 = static_zip_max_mb()；两者同 patch 保持一致性
+    monkeypatch.setattr(csr, "_zip_limit_bytes", lambda: limit)
+    monkeypatch.setattr(csr, "static_zip_max_mb", lambda: max(1, limit // (1024 * 1024)))
 
 
 class TestStaticZipUploadLimit:
@@ -127,6 +131,39 @@ class TestStaticZipUploadLimit:
         assert data["file_size"] == len(small)
         # 落盘了
         assert list(tmp_path.rglob("*.zip")), "正常 zip 应写入存储目录"
+
+    async def test_configured_limit_is_consumed(
+        self, async_authed_client, isolated_session, monkeypatch, tmp_path,
+    ):
+        """配置真被消费：features.yaml 配 1MB → 2MB zip 被拒（文案上限 1MB）。
+
+        不 patch `_zip_limit_bytes`，走真实 features.yaml 读取链（static-zip-limit-config）。
+        """
+        from app.api.v1 import cluster_static_resources as csr
+        import app.core.features as fmod
+
+        rid = await _seed_resource(isolated_session)
+        cfg = tmp_path / "features.yaml"
+        cfg.write_text("limits:\n  static_zip_max_mb: 1\n", encoding="utf-8")
+        storage = tmp_path / "storage"
+        monkeypatch.setattr(csr, "BASE_STORAGE_DIR", str(storage), raising=False)
+        fmod._features = None
+        fmod._features_mtime = 0.0
+        monkeypatch.setattr(fmod, "_FEATURES_PATH", cfg)
+        try:
+            big = _make_zip_bytes(fill=2 * 1024 * 1024)  # ZIP_STORED：zip ≈ 2MB > 1MB
+            assert len(big) > 1024 * 1024
+            resp = await async_authed_client.post(
+                f"/api/v1/clusters/1/static-resources/{rid}/upload",
+                files={"file": ("big.zip", big, "application/zip")},
+            )
+            assert resp.status_code == 400, resp.text
+            detail = resp.json()["detail"]
+            assert "过大" in detail and "上限 1MB" in detail, detail
+            assert not storage.exists() or list(storage.rglob("*")) == []
+        finally:
+            fmod._features = None
+            fmod._features_mtime = 0.0
 
 
 # ── 缺陷二 L8：sshpass 密码改经 SSHPASS 环境变量，不进 argv ─────────
