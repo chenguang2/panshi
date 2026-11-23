@@ -8,6 +8,7 @@ import uuid
 from app.core.database import get_db
 from app.config import MAX_PAGE_SIZE
 from app.models.cluster import Cluster, Route, RoutePlugin, ConfigVersion, Upstream, Node
+from app.models.static_resource import StaticResource
 from app.schemas.publish_detail import parse_publish_detail
 from app.schemas.route import RouteCreate, RouteUpdate, RouteResponse, RouteListResponse, PluginUpdateRequest
 from app.schemas.cluster import DeleteClusterRequest, BatchDeleteRoutesRequest, PublishRequest
@@ -240,6 +241,22 @@ async def update_route(cluster_id: int, route_id: int, route_update: RouteUpdate
 
     for key, value in update_data.items():
         setattr(route, key, value)
+
+    # 静态资源 URL 路径跟随路由 URI（static-resource-path-sync）：
+    # url_path 是建卡/换绑时的快照，路由改 URI 后读取侧（卡片「路径」、发布摘要、
+    # 上传日志、集群导出）会显示旧值。此处幂等回写（含 NULL 旧值；未改 URI 的保存
+    # 也执行 = 自愈存量脏行）。SHALL NOT 推进 updated_at——该列驱动静态资源
+    # 「待发布」态，改路径不需要重发 zip（把 updated_at 赋回自身列抑制 onupdate）。
+    if route.uri:
+        sr_table = StaticResource.__table__
+        await db.execute(
+            sr_table.update()
+            .where(
+                sr_table.c.route_id == route_id,
+                or_(sr_table.c.url_path != route.uri, sr_table.c.url_path.is_(None)),
+            )
+            .values(url_path=route.uri, updated_at=sr_table.c.updated_at)
+        )
 
     # 审计增强必须在 flush/commit 前（同事务骨架）
     audit = getattr(request.state, "audit", None)
