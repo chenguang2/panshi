@@ -14,12 +14,23 @@ interface NodeResultItem {
   warning?: string
 }
 
+/** Edge 生效上传上限诊断（edge-upload-limit-alignment，后端 `_limits_diagnosis` 同构） */
+export interface EdgeEnvLimitsInfo {
+  platform_mb: number
+  admin_mb?: number | null
+  effective_mb: number
+  sufficient: boolean
+  note: string
+}
+
 /** 读取配置流（GET /clusters/{id}/edge-env/read-stream）的单个事件负载 */
 interface EdgeEnvReadStreamEvent {
   type: string
   line?: string
   message?: string
   content?: string
+  /** 内容事件附带的生效上限诊断（缺失时前端按同一公式本地推算） */
+  limits?: EdgeEnvLimitsInfo
   /** 节点执行路径（后端提供；缺失时不显示标签） */
   route?: 'relay' | 'direct'
   /** 经中继时的跳板主机串，如 jboss@192.168.0.13 */

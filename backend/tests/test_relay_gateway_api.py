@@ -577,6 +577,8 @@ class TestRelayGatewayApi:
         assert '"10.20.0.9:9180"' in edge["content"]
         server = next(f for f in body["files"] if f["path"].endswith("relay_8443.conf"))
         assert "listen 8443;" in server["content"]
+        # edge-upload-limit-alignment：预览与下发同源，含按平台上限渲染的请求体上限
+        assert "client_max_body_size" in server["content"]
         assert body["listen_port"] == 8443
         assert body["region_code"] == "luju"
         assert body["notes"]

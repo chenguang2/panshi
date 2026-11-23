@@ -59,6 +59,9 @@
         {{ statusSourceLabel }}<template v-if="statusReadAtText"> · 读取于 {{ statusReadAtText }}</template>
       </span>
       <span v-if="isDirty" class="ee-dirty-badge">● 未发布修改</span>
+      <span v-if="limitHint" class="ee-limit-hint" :class="{ warn: !limitHint.sufficient }" data-test="edge-limit-hint">
+        {{ limitHint.text }}
+      </span>
     </div>
 
     <!-- Read Template Progress Modal -->
@@ -308,6 +311,8 @@ import { PAGE_SIZE_DROPDOWN } from '@/constants'
 import { load as yamlLoad } from 'js-yaml'
 import { ansiToHtml } from '@/utils/ansi'
 import { formatDateTime } from '@/utils/format'
+import { describeAdminLimit } from '@/utils/edgeEnvLimits'
+import { useFeaturesStore } from '@/stores/features'
 
 const route = useRoute()
 const router = useRouter()
@@ -445,6 +450,14 @@ const statusSourceLabel = computed(() => {
   return '未读取，手动输入'
 })
 const statusReadAtText = computed(() => (contentSource.value ? formatDateTime(contentSource.value.at) : ''))
+
+// edge-upload-limit-alignment：Edge 生效上传上限提示（口径与后端 edge_env_limits.py 一致：
+// admin 段为准，缺失按 pack 基线 32MB；http 段写更大值不生效）
+const featuresStore = useFeaturesStore()
+const platformLimitMb = computed(() => featuresStore.limitOf('static_zip_max_mb', 32))
+const limitHint = computed(() =>
+  editorContent.value ? describeAdminLimit(editorContent.value, platformLimitMb.value) : null,
+)
 
 /** 离开守卫：发布中直接拦（提示等待）；dirty 走确认 */
 async function confirmLeaveIfDirty(): Promise<boolean> {
@@ -897,6 +910,13 @@ function onVersionLoadToEditor(data: { content: string; version: number }) {
 .ee-dirty-badge {
   color: #d46b08;
   font-weight: 600;
+}
+.ee-limit-hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+.ee-limit-hint.warn {
+  color: #d46b08;
 }
 .ee-editor-area {
   margin-top: 0;

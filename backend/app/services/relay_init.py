@@ -27,7 +27,14 @@ class RelayInitError(RuntimeError):
 
 
 def render_relay_server_conf(listen_port: int = 8443, region_code: str = "") -> str:
-    """渲染中继网关 8443 server 块（含 map include；幂等整文件覆盖写）。"""
+    """渲染中继网关 8443 server 块（含 map include；幂等整文件覆盖写）。
+
+    edge-upload-limit-alignment：`client_max_body_size` 取平台上限
+    （features.yaml limits.static_zip_max_mb），使「经中继发布」腿与直连腿同源，
+    不再依赖运维在网关机上手调（网关机手调值会在本函数重写时以平台值为准）。
+    """
+    from app.core.features import static_zip_max_mb
+
     region_note = f"region: {region_code}" if region_code else "region: unknown"
     return f"""# 由磐石平台初始化写入（{region_note}），勿手改核心段
 include edge_targets.conf;
@@ -35,6 +42,7 @@ include edge_targets.conf;
 server {{
     listen {listen_port};
     server_name _;
+    client_max_body_size {static_zip_max_mb()}m;
     access_log logs/relay_access.log main buffer=16384 flush=3;
 
     location / {{

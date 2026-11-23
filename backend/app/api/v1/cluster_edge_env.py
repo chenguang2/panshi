@@ -13,6 +13,13 @@ from app.models.cluster import Cluster, Node, ConfigVersion
 from app.schemas.edge_env import (
     EdgeEnvReadResponse,
     EdgeEnvDeployRequest,
+    EdgeEnvLimits,
+)
+from app.core.features import static_zip_max_mb
+from app.services.edge_env_limits import (
+    EDGE_ADMIN_BASELINE_MB,
+    ensure_admin_limit,
+    parse_admin_body_limit_mb,
 )
 from app.schemas.cluster import ConfigVersionResponse, ConfigVersionListResponse
 from app.services.ansible_service import AnsibleRunnerService, _run_ansible_stream, translate_ansible_error
@@ -75,7 +82,45 @@ async def read_edge_env(
         raise HTTPException(status_code=502, detail=f"节点 {node.ip} 读取 edge.env 失败")
 
     content = result.get("shell_stdout") or result.get("stdout", "")
-    return EdgeEnvReadResponse(node_id=node.id, node_ip=node.ip, content=content, **route_fields)
+    return EdgeEnvReadResponse(
+        node_id=node.id,
+        node_ip=node.ip,
+        content=content,
+        limits=_limits_diagnosis(content),
+        **route_fields,
+    )
+
+
+def _limits_diagnosis(content: str) -> EdgeEnvLimits:
+    """Edge 生效上传上限诊断（edge-upload-limit-alignment）。
+
+    http 级同名配置不参与判定：Edge pack 的 nginx_server_monitor.conf 在 server 级
+    自带 `client_max_body_size 32m`，只有 `deploy.http.admin.…` 能覆盖它（实测）。
+    """
+    platform_mb = static_zip_max_mb()
+    admin_mb = parse_admin_body_limit_mb(content)
+    effective_mb = EDGE_ADMIN_BASELINE_MB if admin_mb is None else admin_mb
+    sufficient = effective_mb >= platform_mb
+    if admin_mb is None:
+        note = (
+            f"未在 deploy.http.admin 配置 client_max_body_size：Edge pack 的 server 级默认 "
+            f"{EDGE_ADMIN_BASELINE_MB}MB 生效（http 段写更大的值不生效），直连发布超过 "
+            f"{EDGE_ADMIN_BASELINE_MB}MB 将报 413；部署时会自动补齐到平台上限 {platform_mb}MB。"
+        )
+    elif not sufficient:
+        note = (
+            f"deploy.http.admin.client_max_body_size={admin_mb}MB 低于平台上限 {platform_mb}MB，"
+            f"直连发布超过 {admin_mb}MB 将报 413；部署时会自动抬到平台上限。"
+        )
+    else:
+        note = f"Edge 上传上限 {effective_mb}MB，已与平台上限 {platform_mb}MB 对齐。"
+    return EdgeEnvLimits(
+        platform_mb=platform_mb,
+        admin_mb=admin_mb,
+        effective_mb=effective_mb,
+        sufficient=sufficient,
+        note=note,
+    )
 
 
 @router.post("/clusters/{cluster_id}/edge-env/deploy")
@@ -92,6 +137,24 @@ async def deploy_edge_env(
     cluster = await db.get(Cluster, cluster_id)
     if not cluster:
         raise HTTPException(status_code=404, detail="集群不存在")
+
+    # edge-upload-limit-alignment：部署前按平台上限对齐 Edge 生效上限。
+    # 只改 deploy.http.admin.client_max_body_size 单行（文本级，保留注释与顺序）：
+    # Edge pack 的 server 级 32m 只有该段能覆盖，写 http 级无效（2026-11-23 实测）。
+    platform_mb = static_zip_max_mb()
+    content, limit_action, limit_old = ensure_admin_limit(request.content, platform_mb)
+    limit_note: str | None = None
+    if limit_action == "inserted":
+        limit_note = (
+            f"已自动补齐 deploy.http.admin.client_max_body_size: {platform_mb}m（平台上限）"
+            f"——Edge 只有该段能覆盖 pack 的 server 级 {EDGE_ADMIN_BASELINE_MB}MB 默认"
+        )
+    elif limit_action == "raised":
+        limit_note = (
+            f"已将 deploy.http.admin.client_max_body_size 从 {limit_old}MB 抬到 {platform_mb}m（平台上限）"
+        )
+    elif limit_action == "absent":
+        limit_note = "未定位到 deploy.http.admin 配置块，未自动对齐 Edge 上传上限，请检查 edge.env 结构"
 
     # Step 2: resolve target nodes
     if request.node_ids:
@@ -112,7 +175,10 @@ async def deploy_edge_env(
         node_results: list[dict] = []
         all_success = True
         new_version: int | None = None  # 首个节点成功后立即创建（Q3：SSE 中断时「版本存在 ⟺ 至少一节点成功」）
-        config_data = {"yaml": request.content}
+        config_data = {"yaml": content}
+
+        if limit_note:
+            yield f"data: {json.dumps({'line': limit_note})}\n\n"
 
         for i, node in enumerate(nodes):
             # 节点执行路径（与 HTTP 腿 route 契约对齐）：SSH 腿必须按跳板决策自行
@@ -129,7 +195,7 @@ async def deploy_edge_env(
                     runner_method=_ansible_service,
                     ip=node.ip,
                     tag="edge_init_env",
-                    extravars={"env_content": request.content, "destpath": node.edge_path},
+                    extravars={"env_content": content, "destpath": node.edge_path},
                     job_timeout=120,
                 ):
                     yield event
@@ -285,7 +351,9 @@ async def read_edge_env_stream(
             content = result.get("shell_stdout") or result.get("stdout", "")
             # Ansible may return rc=0 but still fail (e.g. "no hosts matched")
             if result.get("rc") == 0 and "no hosts matched" not in content.lower():
-                yield f"data: {json.dumps({'type': 'content', 'content': content, 'percent': 100, **route_fields})}\n\n"
+                # edge-upload-limit-alignment：内容事件附带生效上限诊断（前端优先用该值，
+                # 缺失时按同一公式本地推算——两条路径口径一致）
+                yield f"data: {json.dumps({'type': 'content', 'content': content, 'percent': 100, 'limits': _limits_diagnosis(content).model_dump(), **route_fields})}\n\n"
             else:
                 # Friendly error message（与部署流单源：共享 translate_ansible_error）
                 err_msg = translate_ansible_error(ansible_stdout, node.ip) or "读取 edge.env 失败"

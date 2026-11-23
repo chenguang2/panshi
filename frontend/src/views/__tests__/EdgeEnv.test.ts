@@ -384,6 +384,36 @@ describe('EdgeEnv.vue 入口守卫 · 未选集群/节点不发起 SSE', () => {
     wrapper.unmount()
   })
 
+  it('limitHint：编辑内容缺 http.admin 上限时提示 pack 基线 32MB 并预告自动补齐', async () => {
+    // 平台上限 132（features store 由 main.ts 启动时加载；测试内直接置位）
+    const { useFeaturesStore } = await import('@/stores/features')
+    const features = useFeaturesStore()
+    features.limits = { static_zip_max_mb: 132 }
+    features.loaded = true
+    const wrapper = await mountPage()
+    const vm = wrapper.vm as any
+    vm.editorContent =
+      'deploy:\n  http:\n    client_max_body_size: 132m\n    admin:\n      listen:\n        - addr: 0.0.0.0:16621\n'
+    await wrapper.vm.$nextTick()
+    const hint = vm.limitHint
+    expect(hint).toBeTruthy()
+    expect(hint.sufficient).toBe(false)
+    expect(hint.willAutoFill).toBe(true)
+    expect(hint.text).toContain('pack 默认 32MB')
+    const strip = wrapper.find('[data-test="edge-limit-hint"]')
+    expect(strip.exists()).toBe(true)
+    expect(strip.classes()).toContain('warn')
+    // 对齐后不再警示
+    vm.editorContent = vm.editorContent.replace(
+      '        - addr: 0.0.0.0:16621\n',
+      '        - addr: 0.0.0.0:16621\n      client_max_body_size: 132m\n',
+    )
+    await wrapper.vm.$nextTick()
+    expect(vm.limitHint.sufficient).toBe(true)
+    expect(wrapper.find('[data-test="edge-limit-hint"]').classes()).not.toContain('warn')
+    wrapper.unmount()
+  })
+
   it('executePublish：未选集群或未选节点时不发起部署 SSE', async () => {
     const wrapper = await mountPage()
     const vm = wrapper.vm as any

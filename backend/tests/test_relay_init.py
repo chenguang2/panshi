@@ -33,6 +33,19 @@ def test_render_relay_server_conf_structure():
     assert 'return 403' in conf
     assert "proxy_buffering off" in conf  # SSE 依赖
     assert "region: luju" in conf
+    # edge-upload-limit-alignment：网关 8443 请求体上限取平台上限（server 块内，值随配置）
+    import re as _re
+
+    assert _re.search(r"client_max_body_size \d+m;", conf), conf
+
+
+def test_render_relay_server_conf_limit_follows_platform_config(monkeypatch):
+    """平台上限改了，渲染值随之变化（features.yaml mtime 热加载链路）。"""
+    import app.core.features as fmod
+
+    monkeypatch.setattr(fmod, "static_zip_max_mb", lambda: 132)
+    conf = relay_init.render_relay_server_conf(listen_port=8443, region_code="luju")
+    assert "client_max_body_size 132m;" in conf
 
 
 def test_render_relay_server_conf_port_parametrized():
