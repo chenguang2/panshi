@@ -2389,10 +2389,10 @@ tr.l5-group td { background: var(--bg); padding: 0; border-bottom: 1px solid var
 .g-chev.folded svg { transform: rotate(-90deg); }
 .g-name { font-size: 13px; font-weight: 600; color: var(--fg); }
 .g-meta { display: inline-flex; gap: 6px; }
-.g-chip { font-size: 11px; font-family: var(--font-mono); padding: 1px 8px; border-radius: 999px; background: oklch(50% 0.018 240 / 8%); color: var(--muted); }
-.g-chip.ok { background: oklch(55% 0.15 145 / 12%); color: var(--success); }
-.g-chip.bad { background: oklch(55% 0.18 28 / 10%); color: var(--danger); }
-.g-chip.warn { background: oklch(65% 0.15 85 / 14%); color: var(--warning); }
+.g-chip { font-size: 12px; font-weight: 600; font-family: var(--font-mono); padding: 1px 8px; border-radius: 999px; border: 1px solid oklch(50% 0.018 240 / 22%); background: oklch(50% 0.018 240 / 12%); color: var(--fg); }
+.g-chip.ok { background: oklch(55% 0.15 145 / 20%); border-color: oklch(55% 0.15 145 / 35%); color: oklch(50% 0.15 145); }
+.g-chip.bad { background: oklch(55% 0.18 28 / 16%); border-color: oklch(55% 0.18 28 / 35%); color: oklch(50% 0.18 28); }
+.g-chip.warn { background: oklch(65% 0.15 85 / 20%); border-color: oklch(65% 0.15 85 / 35%); color: oklch(57% 0.13 70); }
 .g-spacer { flex: 1; }
 .g-note { font-size: 11px; color: var(--muted); }
 

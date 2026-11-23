@@ -2632,24 +2632,29 @@ th.sorted-desc .sort-ind::after {
   gap: 6px;
 }
 .g-chip {
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 600;
   font-family: var(--font-mono);
   padding: 1px 8px;
   border-radius: 999px;
-  background: oklch(50% 0.018 240 / 8%);
-  color: var(--muted);
+  border: 1px solid oklch(50% 0.018 240 / 22%);
+  background: oklch(50% 0.018 240 / 12%);
+  color: var(--fg);
 }
 .g-chip.ok {
-  background: var(--success-bg);
-  color: var(--success);
+  background: oklch(55% 0.15 145 / 20%);
+  border-color: oklch(55% 0.15 145 / 35%);
+  color: oklch(50% 0.15 145);
 }
 .g-chip.bad {
-  background: var(--danger-bg);
-  color: var(--danger);
+  background: oklch(55% 0.18 28 / 16%);
+  border-color: oklch(55% 0.18 28 / 35%);
+  color: oklch(50% 0.18 28);
 }
 .g-chip.warn {
-  background: oklch(65% 0.15 85 / 14%);
-  color: var(--warning);
+  background: oklch(65% 0.15 85 / 20%);
+  border-color: oklch(65% 0.15 85 / 35%);
+  color: oklch(57% 0.13 70);
 }
 .g-spacer {
   flex: 1;
