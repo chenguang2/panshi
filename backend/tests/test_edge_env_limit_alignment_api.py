@@ -2,8 +2,9 @@
 
 契约（openspec/changes/edge-upload-limit-alignment/specs/edge-env-remote-editing）：
 - GET 读取响应带 limits（platform/admin/effective/sufficient/note），admin 缺失时 effective=32；
-- POST deploy 下发内容 = 自动对齐后的内容（缺失→inserted、更低→raised、更高→kept 原样），
-  并在 SSE 首部输出一行说明；其余内容逐行不变。
+- POST deploy 下发内容 = 自动对齐后的内容：**缺失 → inserted（补写平台值）**；**显式写下的值
+  一律 kept 原样（含更低值——用户裁决 B：运维刻意收紧，平台不静默抬升）**，更低值仅在 SSE
+  首部告警「发布 X–YMB 的 zip 会 413」；其余内容逐行不变。
 """
 
 import json
