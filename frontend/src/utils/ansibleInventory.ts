@@ -28,8 +28,8 @@ export const KNOWN_HOST_KEYS = [
   'ansible_ssh_common_args',
 ] as const
 
-/** 高级设置字段定义（行展开表单渲染依据）。 */
-interface AdvancedFieldDef {
+/** 高级设置字段定义（行展开表单渲染依据；AnsibleAdvancedField 的入参类型）。 */
+export interface AdvancedFieldDef {
   key: string
   label: string
   type: 'text' | 'number' | 'select' | 'switch' | 'password'

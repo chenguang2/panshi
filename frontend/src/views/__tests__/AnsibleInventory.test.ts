@@ -9,7 +9,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { h } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
 import { useAuthStore } from '@/stores/auth'
@@ -70,7 +69,7 @@ function btnIn(scope: { findAll: (sel: string) => { text: () => string }[] }, te
   return btn
 }
 
-async function openPage(opts?: { tableStub?: Record<string, unknown> }) {
+async function openPage() {
   setActivePinia(createPinia())
   // 「操作日志」入口有 audit_logs 权限门控：种 admin 身份使其可见
   const auth = useAuthStore()
@@ -84,7 +83,7 @@ async function openPage(opts?: { tableStub?: Record<string, unknown> }) {
           template: '<div v-if="open" class="drawer-stub"><slot /></div>',
         },
         MonacoEditor: { template: '<div class="monaco-stub" />' },
-        'a-table': opts?.tableStub ?? { template: '<div class="a-table-stub" />' },
+        'a-table': { template: '<div class="a-table-stub" />' },
       },
     },
   })
@@ -246,50 +245,61 @@ describe('AnsibleInventory 批量导入预览（批 2）', () => {
 })
 
 /**
- * 高级连接变量入口（2026-11-24 用户裁决 B）：
- * 行首触发器必须自证可点——描边按钮 + 「高级」文字 + 图标，不靠用户猜测齿轮语义；
- * 组级卡片操作列的第二个「高级」入口随之退场（同一行不再有两个入口展开同一区块）。
+ * 高级连接变量入口（2026-11-24 用户裁决 B + 列序裁决）：
+ * 行首触发器必须自证可点——描边按钮 + 「高级」文字 + 图标；
+ * 列序与设计页一致（# → 高级 → IP），因此关闭 antd 自带展开列、由模板自绘触发器列。
  */
-function expandTableStub() {
-  return {
-    name: 'ATableStub',
-    props: ['dataSource', 'expandIcon'],
-    setup(props: { dataSource?: unknown[]; expandIcon?: (p: { expanded: boolean; record: object }) => unknown }) {
-      return () =>
-        h(
-          'div',
-          { class: 'a-table-stub' },
-          (props.dataSource || []).map((record, i) =>
-            h(
-              'div',
-              { class: 'row-stub', key: i },
-              props.expandIcon ? props.expandIcon({ expanded: false, record: record as object }) : null,
-            ),
-          ),
-        )
-    },
-  }
-}
-
 describe('AnsibleInventory 高级连接变量入口', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    mockGetInventory.mockResolvedValue(INVENTORY_RESPONSE)
-    mockListBackups.mockResolvedValue({ data: { backups: [] } })
+  const src = readFileSync(resolve(__dirname, '../AnsibleInventory.vue'), 'utf8')
+
+  it('两张表都关闭 antd 展开列，改由自有「高级」列自绘触发器', () => {
+    expect(src.match(/:show-expand-column="false"/g)?.length).toBe(2)
+    expect(src.match(/key="advanced" :width="86"/g)?.length).toBe(2)
+    expect(src).not.toContain(':expand-icon=')
   })
 
-  it('行首触发器是带文字「高级」的描边按钮（含图标 + aria-expanded）', async () => {
-    const w = await openPage({ tableStub: expandTableStub() })
-    const triggers = w.findAll('.adv-expand-icon')
-    expect(triggers.length).toBeGreaterThan(0)
-    expect(triggers[0].text().trim()).toBe('高级')
-    expect(triggers[0].find('svg').exists()).toBe(true)
-    expect(triggers[0].attributes('aria-expanded')).toBe('false')
-    expect(triggers[0].attributes('role')).toBe('button')
+  it('触发器是描边按钮：「高级」文字 + 齿轮图标 + aria-expanded', () => {
+    expect(src.match(/class="adv-expand-icon"/g)?.length).toBe(2)
+    expect(src.match(/<span class="adv-text">高级<\/span>/g)?.length).toBe(2)
+    expect(src).toContain(":aria-expanded=\"isRowExpanded(record) ? 'true' : 'false'\"")
+    expect(src).toContain('SettingOutlined')
   })
 
   it('组级卡片操作列不再有重复的「高级」按钮', () => {
-    const source = readFileSync(resolve(__dirname, '../AnsibleInventory.vue'), 'utf8')
-    expect(source).not.toMatch(/<a-button[^>]*@click="toggleGroupExpand"/)
+    expect(src).not.toMatch(/<a-button[^>]*@click="toggleGroupExpand"/)
+  })
+})
+
+/**
+ * 设计页对齐（docs/ui/Live-Artifact-5/proposal-c/ansible-inventory.html，2026-11-24）。
+ * 结构类改动走源码断言：真实 a-table 在 jsdom 下需要 matchMedia 桩（#54），此处钉结构契约更稳。
+ */
+describe('AnsibleInventory 设计页结构契约', () => {
+  const src = readFileSync(resolve(__dirname, '../AnsibleInventory.vue'), 'utf8')
+
+  it('页头 = 视图 seg + 恢复记录/刷新/保存生效 + 统计徽标（元数据行已退役）', () => {
+    expect(src).toContain('<div class="seg">')
+    expect(src).toContain('PageStatBadges')
+    expect(src).toContain(':aria-pressed="viewMode === \'table\'"')
+    expect(src).not.toContain('class="inv-meta"')
+  })
+
+  it('主机表含 # 序号列（45px / index + 1）；展开列由 antd 固定在行首', () => {
+    expect(src).toMatch(/title="#" key="index" :width="45"[\s\S]{0,140}index \+ 1/)
+    // antd 的展开列恒在最左；用 expandIconColumnIndex 挪位会触发 deprecation 警告，故不加
+    expect(src).not.toContain('expand-icon-column-index')
+  })
+
+  it('凭据继承可见：空值占位给实际继承值 + 行内标注', () => {
+    expect(src).toContain('inheritsGroupCreds(record)')
+    expect(src).toContain('继承组级凭据')
+    expect(src).toContain('groupUser ? `继承 ${groupUser}`')
+    expect(src).toContain("groupPass ? '继承组级密码'")
+  })
+
+  it('源码视图含体量 chip + 状态条 + 固定编辑器高度', () => {
+    expect(src).toContain('sourceLineCount')
+    expect(src).toContain('sourceSizeText')
+    expect(src).toContain('height="520px"')
   })
 })

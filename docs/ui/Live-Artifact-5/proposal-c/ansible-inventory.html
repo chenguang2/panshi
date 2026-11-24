@@ -53,9 +53,8 @@
 
 /* 高级连接变量区：展开行整块下沉（灰底 + 上分隔），字段两行 5 + 4 */
 .inv-detail td { background: var(--bg); padding: 12px 16px 14px !important; border-bottom: 1px solid var(--border) !important; }
-.inv-adv { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px 14px; }
+.inv-adv { display: block; }
 .inv-adv .fld { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-.inv-adv .fld.wide { grid-column: span 2; }
 .inv-adv label { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--muted); white-space: nowrap; }
 .inv-adv .q, .inv-adv .ref { display: inline-flex; align-items: center; justify-content: center; width: 13px; height: 13px; border: 1px solid var(--border); border-radius: 50%; font-size: 9px; line-height: 1; color: var(--muted); }
 .inv-adv .q { cursor: help; }
@@ -68,6 +67,21 @@
 .inv-toggle.on { background: var(--accent); }
 .inv-toggle.on::after { left: 17px; }
 .inv-offhint { font-size: 11px; color: var(--muted); }
+
+/* 高级连接变量 = A+C 折中：连接/认证分区 + 提权独立子面板（关闭时收起） */
+.adv-sec + .adv-sec,
+.adv-panel { margin-top: 12px; }
+.adv-sec-head { display: flex; align-items: center; gap: 8px; padding-top: 10px; margin-bottom: 9px; border-top: 1px solid var(--border); font-size: 11.5px; font-weight: 700; letter-spacing: .02em; color: var(--muted); }
+.adv-sec-head .cnt { font-family: var(--font-mono); font-weight: 600; color: oklch(50% 0.018 240 / 55%); }
+.adv-g4 { display: grid; grid-template-columns: 150px 220px 200px 220px; gap: 12px 14px; }
+.adv-g2 { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 12px 14px; }
+.adv-panel { border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); padding: 10px 12px; }
+.adv-panel-head { display: flex; align-items: center; gap: 8px; }
+.adv-panel-head .t { font-size: 11.5px; font-weight: 700; color: var(--fg); }
+.adv-panel-head .inv-sw { margin-left: auto; height: 20px; }
+.adv-panel-body { display: grid; grid-template-columns: 200px 200px; gap: 12px 14px; margin-top: 8px; }
+.adv-panel-body[hidden] { display: none; }
+.adv-panel .adv-collapsed { margin-top: 6px; font-size: 11.5px; color: var(--muted); }
 
 /* 表尾「添加主机」通栏虚线行 */
 .inv-add { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; height: 38px; border: none; border-top: 1px dashed var(--border); background: transparent; color: var(--muted); font-family: var(--font-body); font-size: 12.5px; cursor: pointer; }
@@ -227,6 +241,7 @@
         </thead>
         <tbody>
           <tr>
+            <td class="c-c"><span class="c-idx">1</span></td>
             <td class="c-c"><button class="inv-exp" title="高级连接变量（组级）" aria-label="高级连接变量">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.34 1.87l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.7 1.7 0 00-1.87-.34 1.7 1.7 0 00-1 1.55V21a2 2 0 11-4 0v-.09a1.7 1.7 0 00-1.11-1.55 1.7 1.7 0 00-1.87.34l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.7 1.7 0 00.34-1.87 1.7 1.7 0 00-1.55-1H3a2 2 0 110-4h.09a1.7 1.7 0 001.55-1.11 1.7 1.7 0 00-.34-1.87l-.06-.06a2 2 0 112.83-2.83l.06.06a1.7 1.7 0 001.87.34H9a1.7 1.7 0 001-1.55V3a2 2 0 114 0v.09a1.7 1.7 0 001 1.55 1.7 1.7 0 001.87-.34l.06-.06a2 2 0 112.83 2.83l-.06.06a1.7 1.7 0 00-.34 1.87V9a1.7 1.7 0 001.55 1H21a2 2 0 110 4h-.09a1.7 1.7 0 00-1.51 1z"/></svg><span>高级</span>
             </button></td>
@@ -272,45 +287,36 @@
             <td><input class="inv-inp" value="linux123!@#" placeholder="继承组级密码"></td>
             <td class="inv-ops"><button class="inv-danger">删除</button></td>
           </tr>
-          <tr class="inv-detail">
+<tr class="inv-detail">
             <td colspan="6">
               <div class="inv-adv">
-                <div class="fld">
-                  <label>SSH 端口 <span class="q" title="远程主机的 SSH 端口号，默认 22。留空则使用 Ansible 默认值">?</span><span class="ref" title="常用参数速查：点击查看可选端口，行可点复制"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span></label>
-                  <input class="inv-inp" placeholder="未设置">
+              <!-- 连接 -->
+              <div class="adv-sec">
+                <div class="adv-sec-head">连接 <span class="cnt">4</span></div>
+                <div class="adv-g4">
+                  <div class="fld"><label>SSH 端口 <span class="q">?</span><span class="ref"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span></label><input class="inv-inp" placeholder="未设置"></div>
+                  <div class="fld"><label>连接目标 (ansible_host) <span class="q">?</span><span class="ref"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span></label><input class="inv-inp" placeholder="192.168.1.100"></div>
+                  <div class="fld"><label>连接方式 <span class="q">?</span><span class="ref"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span></label><input class="inv-inp" placeholder="留空继承默认"></div>
+                  <div class="fld"><label>Python 解释器路径 <span class="q">?</span><span class="ref"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span></label><input class="inv-inp" placeholder="/usr/bin/python3"></div>
                 </div>
-                <div class="fld">
-                  <label>连接目标 (ansible_host) <span class="q" title="清单主机键是标识符，此字段可覆盖实际连接地址——常用于 NAT / 端口转发场景">?</span><span class="ref" title="常用参数速查：点击查看可选写法，行可点复制"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span></label>
-                  <input class="inv-inp" placeholder="192.168.1.100">
+              </div>
+              <!-- 认证 -->
+              <div class="adv-sec">
+                <div class="adv-sec-head">认证 <span class="cnt">2</span></div>
+                <div class="adv-g2">
+                  <div class="fld"><label>私钥路径 <span class="q">?</span><span class="ref"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span></label><input class="inv-inp" placeholder="~/.ssh/id_rsa"></div>
+                  <div class="fld"><label>SSH 额外参数 <span class="q">?</span><span class="ref"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span></label><input class="inv-inp" placeholder="-o StrictHostKeyChecking=no -o ProxyJump=jump_host"></div>
                 </div>
-                <div class="fld">
-                  <label>连接方式 <span class="q" title="Ansible 如何连接远程主机：smart 自动选择，ssh 最常用">?</span><span class="ref" title="常用参数速查：点击查看可选连接方式，行可点复制"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span></label>
-                  <input class="inv-inp" placeholder="留空继承默认">
+              </div>
+              <!-- 提权子面板（关闭态：面板体收起，只留一行说明） -->
+              <div class="adv-panel">
+                <div class="adv-panel-head"><span class="t">提权（sudo）</span><span class="inv-sw"><span class="inv-toggle"></span>关闭</span></div>
+                <div class="adv-collapsed">未启用提权 —— 命令以登录用户身份执行；需要 sudo 时打开开关。</div>
+                <div class="adv-panel-body" hidden>
+                  <div class="fld"><label>提权用户 <span class="q">?</span><span class="ref"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span></label><input class="inv-inp" placeholder="root（留空默认 root）"></div>
+                  <div class="fld"><label>提权密码 <span class="q">?</span></label><input class="inv-inp" placeholder="未设置（sudoers 免密时可留空）"></div>
                 </div>
-                <div class="fld">
-                  <label>Python 解释器路径 <span class="q" title="远程主机上的 Python 解释器路径。留空则由 Ansible 自动检测">?</span><span class="ref" title="常用参数速查：点击查看常见解释器路径，行可点复制"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span></label>
-                  <input class="inv-inp" placeholder="/usr/bin/python3">
-                </div>
-                <div class="fld">
-                  <label>提权 (become) <span class="q" title="是否使用 sudo 提权执行命令。关闭时下方提权用户 / 提权密码字段自动禁用">?</span></label>
-                  <div class="inv-sw"><span class="inv-toggle"></span><span class="inv-offhint">关闭</span></div>
-                </div>
-                <div class="fld">
-                  <label>提权用户 <span class="q" title="提权后以哪个用户身份执行，留空默认 root">?</span><span class="ref" title="常用参数速查：点击查看常见提权用户，行可点复制"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span></label>
-                  <input class="inv-inp off" placeholder="未启用提权" disabled>
-                </div>
-                <div class="fld">
-                  <label>提权密码 <span class="q" title="sudo 密码。留空则使用 sudoers NOPASSWD 配置">?</span></label>
-                  <input class="inv-inp off" placeholder="未启用提权" disabled>
-                </div>
-                <div class="fld">
-                  <label>私钥路径 <span class="q" title="支持 ~ 表示用户主目录，如 ~/.ssh/my_key">?</span><span class="ref" title="常用参数速查：点击查看常见私钥路径，行可点复制"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span></label>
-                  <input class="inv-inp" placeholder="~/.ssh/id_rsa">
-                </div>
-                <div class="fld wide">
-                  <label>SSH 额外参数 <span class="q" title="多个参数空格分隔，如 -o ProxyCommand=&quot;ssh -W %h:%p gateway&quot;">?</span><span class="ref" title="常用参数速查：点击查看 12 条常用 SSH 参数，行可点复制"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span></label>
-                  <input class="inv-inp" placeholder="-o StrictHostKeyChecking=no -o ProxyJump=jump_host">
-                </div>
+              </div>
               </div>
             </td>
           </tr>
@@ -360,7 +366,7 @@
     <div class="inv-cardhead">
       <h3>清单源码</h3>
       <span class="inv-ch-sub">inventory 文件原文，保留注释与全部自定义字段</span>
-      <span class="inv-chip">19 行 / 418 B</span>
+      <span class="inv-chip">19 行 / 515 B</span>
     </div>
     <div class="inv-code">
       <div class="inv-gutter">1<br>2<br>3<br>4<br>5<br>6<br>7<br>8<br>9<br>10<br>11<br>12<br>13<br>14<br>15<br>16<br>17<br>18<br>19</div>

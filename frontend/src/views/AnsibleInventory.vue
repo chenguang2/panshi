@@ -4,52 +4,46 @@
       title="Ansible 主机清单"
       description="维护 Edge 集群的 Ansible inventory（all.children.edge_cluster），保存后立即对节点任务生效，无需重启；SSH 密码按平台约定明文存储与展示，不做掩码。"
     >
+      <template #stats>
+        <PageStatBadges :items="statBadges" />
+      </template>
       <template #actions>
-        <a-tag v-if="dirty" color="warning" class="dirty-tag">有未保存修改</a-tag>
-        <div class="view-toggle">
+        <div class="seg">
           <button
-            class="btn btn-sm"
-            :class="viewMode === 'table' ? 'btn-primary' : 'btn-secondary'"
+            type="button"
+            class="seg-opt all"
+            :class="{ active: viewMode === 'table' }"
+            :aria-pressed="viewMode === 'table'"
             :disabled="loading || switching"
             @click="setView('table')"
           >
             表格视图
           </button>
           <button
-            class="btn btn-sm"
-            :class="viewMode === 'source' ? 'btn-primary' : 'btn-secondary'"
+            type="button"
+            class="seg-opt all"
+            :class="{ active: viewMode === 'source' }"
+            :aria-pressed="viewMode === 'source'"
             :disabled="loading || switching"
             @click="setView('source')"
           >
             源码视图
           </button>
         </div>
-        <button class="btn btn-secondary" @click="openBackups">恢复记录</button>
+        <button class="btn btn-secondary" @click="openBackups"><HistoryOutlined /> 恢复记录</button>
         <button
           class="btn btn-secondary"
           title="放弃本地修改，重新从服务器加载"
           :disabled="loading || switching || saving"
           @click="reloadClicked"
         >
-          {{ loading ? '刷新中…' : '刷新' }}
+          <ReloadOutlined /> {{ loading ? '刷新中…' : '刷新' }}
         </button>
         <button class="btn btn-primary" :disabled="!dirty || loading || switching" @click="save">
-          {{ saving ? '保存中…' : '保存生效' }}
+          <StrokeIcon name="check" :size="13" /> {{ saving ? '保存中…' : '保存生效' }}
         </button>
       </template>
     </PageHeader>
-
-    <!-- 元数据行：最后修改时间 · 主机数 · 操作日志入口（批 2） -->
-    <div class="inv-meta">
-      <span v-if="lastModified">清单最后修改：{{ formatDateTime(lastModified) }}</span>
-      <span>{{ rows.length }} 台主机</span>
-      <router-link
-        v-if="canViewAudit"
-        :to="{ path: '/audit-log', query: { resource: 'ansible_inventory' } }"
-        class="btn btn-secondary btn-sm"
-        >操作日志</router-link
-      >
-    </div>
 
     <a-spin :spinning="loading || switching" tip="正在与服务器同步...">
       <div class="inventory-body">
@@ -64,39 +58,20 @@
           </template>
         </a-alert>
 
-        <!-- 未录入平台的 IP 联动提醒条 -->
-        <a-alert v-if="unmanagedIps.length" type="warning" show-icon>
-          <template #message> 以下 {{ unmanagedIps.length }} 个 IP 存在于主机清单，但尚未录入节点管理 </template>
-          <template #description>
-            <div class="alert-desc-row">
-              <span
-                ><span class="mono">{{ unmanagedIps.join('、') }}</span
-                >&#x3000;节点任务只会操作平台已录入的节点，如需纳管请先添加。</span
-              >
-              <a @click="goNodes">前往节点管理 →</a>
-            </div>
-          </template>
-        </a-alert>
+        <!-- 未录入平台的 IP 联动提醒：单行（设计页 .alert 单行形态，压掉原双行大框） -->
+        <div v-if="unmanagedIps.length" class="alert alert-warning inv-notice">
+          <span class="alert-icon"><StrokeIcon name="warning" :size="14" /></span>
+          <div class="alert-content">
+            <b>{{ unmanagedIps.length }} 个 IP 需要纳管</b>：<span class="mono">{{ unmanagedIps.join('、') }}</span>
+            存在于主机清单，但尚未录入节点管理 —— 节点任务只会操作平台已录入的节点。
+          </div>
+          <a class="inv-link" @click="goNodes">前往节点管理 →</a>
+        </div>
 
         <!-- ── 表格视图 ── -->
         <template v-if="viewMode === 'table'">
-          <a-alert
-            v-if="unknownKeys.length && showUnknownHint"
-            type="info"
-            show-icon
-            closable
-            @close="showUnknownHint = false"
-          >
-            <template #message>
-              部分主机包含自定义字段：<span class="mono">{{ unknownKeys.join('、') }}</span>
-            </template>
-            <template #description>
-              表格视图仅维护 IP 与 SSH 凭据；这些自定义字段不会丢失——保存时原样保留，完整内容可在源码视图中查看与维护。
-            </template>
-          </a-alert>
-
           <!-- 卡片外壳：card-header（全局）+ 全局 table-container 表格，与数据库管理页同款 -->
-          <div class="table-container table-container-brand">
+          <div class="table-container l5-card">
             <div class="card-header">
               <div class="card-heading">
                 <h3>组级默认凭据</h3>
@@ -104,51 +79,74 @@
                   >写入 edge_cluster.vars；未单独配置凭据的主机继承此默认值；密码按平台约定明文存储</span
                 >
               </div>
+              <code class="inv-path">inventory/host → all.children.edge_cluster.vars</code>
             </div>
             <a-table
               :data-source="groupCredRows"
               :pagination="false"
               size="middle"
               row-key="node"
+              :table-layout="'fixed'"
+              :show-expand-column="false"
+              :scroll="{ x: 906 }"
               :expanded-row-keys="groupExpandedKeys"
               @expanded-rows-change="onGroupExpandedChange"
-              :expand-icon="renderGroupExpandIcon"
             >
               <template #expandedRowRender>
                 <AnsibleAdvancedFields :values="baseVars" :errors="groupAdvancedErrors" @change="setGroupAdvanced" />
               </template>
-              <a-table-column title="字段" key="node" width="200">
+              <!-- 展开触发列（antd 展开列已关，列序与设计页一致：高级 → 字段 → 用户 → 密码 → 操作） -->
+              <a-table-column title="" key="advanced" :width="86">
+                <template #default>
+                  <a-tooltip :title="groupAdvancedTitle">
+                    <button
+                      type="button"
+                      class="adv-expand-icon"
+                      :class="{ expanded: groupRowExpanded }"
+                      :aria-expanded="groupRowExpanded ? 'true' : 'false'"
+                      aria-label="高级连接变量"
+                      @click="toggleGroupExpand"
+                    >
+                      <SettingOutlined style="font-size: 13px" />
+                      <span class="adv-text">高级</span>
+                    </button>
+                  </a-tooltip>
+                </template>
+              </a-table-column>
+              <a-table-column title="字段" key="node" :width="200">
                 <template #default="{ record }">
                   <span class="mono">{{ record.node }}</span>
                 </template>
               </a-table-column>
-              <a-table-column title="SSH 用户" key="user" width="320">
+              <a-table-column title="SSH 用户" key="user" :width="300">
                 <template #default>
                   <a-input
                     v-model:value="groupUser"
+                    class="inv-inp"
                     placeholder="例如 root（留空则主机需自带凭据）"
                     allow-clear
                     @change="markDirty"
                   />
                 </template>
               </a-table-column>
-              <a-table-column title="SSH 密码" key="pass" width="320">
+              <a-table-column title="SSH 密码" key="pass" :width="320">
                 <template #default>
                   <a-input
                     v-model:value="groupPass"
+                    class="inv-inp"
                     placeholder="留空则主机需自带凭据"
                     allow-clear
                     @change="markDirty"
                   />
                 </template>
               </a-table-column>
-              <a-table-column title="操作" key="action" width="130" align="right">
+              <a-table-column title="操作" key="action" align="right">
                 <template #default>
-                  <a-space :size="2">
-                    <a-button type="text" danger size="small" :disabled="groupVarsEmpty" @click="deleteGroupVars">
+                  <div class="action-cell">
+                    <button type="button" class="inv-danger" :disabled="groupVarsEmpty" @click="deleteGroupVars">
                       删除
-                    </a-button>
-                  </a-space>
+                    </button>
+                  </div>
                 </template>
               </a-table-column>
             </a-table>
@@ -158,12 +156,17 @@
             </div>
           </div>
 
-          <div class="table-container table-container-brand">
+          <div class="table-container l5-card">
             <div class="card-header">
-              <h3>
-                主机列表<span class="count-pill">{{ rows.length }}</span>
-              </h3>
-              <button class="btn btn-secondary btn-sm" @click="openBulkImport">批量导入</button>
+              <div class="card-heading">
+                <h3>
+                  主机列表<span class="count-pill">{{ rows.length }}</span>
+                </h3>
+                <span class="card-subtitle">留空 SSH 用户或密码即继承组级默认</span>
+              </div>
+              <button class="btn btn-secondary btn-sm" @click="openBulkImport">
+                <StrokeIcon name="upload" :size="12" /> 批量导入
+              </button>
             </div>
             <a-table
               :data-source="rows"
@@ -171,9 +174,11 @@
               :row-class-name="rowClassName"
               :pagination="false"
               size="middle"
+              :table-layout="'fixed'"
+              :show-expand-column="false"
+              :scroll="{ x: 771 }"
               :expanded-row-keys="expandedKeys"
               @expanded-rows-change="onExpandedChange"
-              :expand-icon="renderExpandIcon"
             >
               <template #expandedRowRender="{ record }">
                 <AnsibleAdvancedFields
@@ -182,45 +187,96 @@
                   @change="(key, value) => setAdvanced(record, key, value)"
                 />
               </template>
-              <a-table-column title="IP" key="ip" width="230">
+              <a-table-column title="#" key="index" :width="45">
+                <template #default="{ index }">
+                  <span class="inv-idx">{{ index + 1 }}</span>
+                </template>
+              </a-table-column>
+              <a-table-column title="" key="advanced" :width="86">
+                <template #default="{ record }">
+                  <a-tooltip :title="rowAdvancedTitle(record)">
+                    <button
+                      type="button"
+                      class="adv-expand-icon"
+                      :class="{ expanded: isRowExpanded(record) }"
+                      :aria-expanded="isRowExpanded(record) ? 'true' : 'false'"
+                      aria-label="高级连接变量"
+                      @click="toggleExpand(record)"
+                    >
+                      <SettingOutlined style="font-size: 13px" />
+                      <span class="adv-text">高级</span>
+                      <span v-if="rowUnknownKeys(record).length" class="orange-dot" />
+                    </button>
+                  </a-tooltip>
+                </template>
+              </a-table-column>
+              <a-table-column title="IP" key="ip" :width="190">
                 <template #default="{ record, index }">
                   <a-input
                     v-model:value="record.ip"
+                    class="inv-inp"
                     placeholder="例如 192.168.1.10"
                     @change="markDirty"
                     @keydown.enter="index === rows.length - 1 ? onLastRowEnter($event) : undefined"
                   />
+                  <span v-if="inheritsGroupCreds(record)" class="inv-inherit"
+                    >继承组级凭据 <b>{{ groupUser || '（未配置用户）' }}</b></span
+                  >
                 </template>
               </a-table-column>
-              <a-table-column title="SSH 用户" key="user" width="200">
+              <a-table-column title="SSH 用户" key="user" :width="210">
                 <template #default="{ record }">
                   <a-input
                     v-model:value="record.ansible_ssh_user"
-                    placeholder="留空继承组级默认"
+                    class="inv-inp"
+                    :placeholder="groupUser ? `继承 ${groupUser}` : '留空继承组级默认'"
                     allow-clear
                     @change="markDirty"
                   />
                 </template>
               </a-table-column>
-              <a-table-column title="SSH 密码" key="pass" width="220">
+              <a-table-column title="SSH 密码" key="pass" :width="240">
                 <template #default="{ record }">
                   <a-input
                     v-model:value="record.ansible_ssh_pass"
-                    placeholder="留空继承组级默认"
+                    class="inv-inp"
+                    :placeholder="groupPass ? '继承组级密码' : '留空继承组级默认'"
                     allow-clear
                     @change="markDirty"
                   />
                 </template>
               </a-table-column>
-              <a-table-column title="操作" key="action" width="130" align="right">
+              <a-table-column title="操作" key="action" align="right">
                 <template #default="{ record }">
-                  <a-space :size="2">
-                    <a-button type="text" danger size="small" @click="removeRow(record)">删除</a-button>
-                  </a-space>
+                  <div class="action-cell">
+                    <button type="button" class="inv-danger" @click="removeRow(record)">删除</button>
+                  </div>
                 </template>
               </a-table-column>
             </a-table>
             <button class="add-row-dashed" @click="appendAndLocate">＋ 添加主机</button>
+
+            <!-- 条件态：清单里存在表外自定义字段时提示（常驻信息，不做成警告大框） -->
+            <div v-if="unknownKeys.length" class="inv-note">
+              <StrokeIcon name="inbox" :size="12" />
+              另有 {{ unknownKeys.length }} 个自定义字段
+              <code v-for="k in unknownKeys" :key="k">{{ k }}</code>
+              —— 仅源码视图可维护，保存时原样保留。
+            </div>
+
+            <div class="inv-statusbar">
+              <span v-if="lastModified"
+                >清单最后修改 <b>{{ formatDateTime(lastModified) }}</b></span
+              >
+              <span v-if="dirty" class="inv-dirty">● 有未保存修改</span>
+              <span class="inv-spacer"></span>
+              <router-link
+                v-if="canViewAudit"
+                :to="{ path: '/audit-log', query: { resource: 'ansible_inventory' } }"
+                class="inv-link"
+                >操作日志 →</router-link
+              >
+            </div>
           </div>
         </template>
 
@@ -237,18 +293,29 @@
               <div class="card-heading">
                 <h3>清单源码</h3>
                 <span class="card-subtitle"
-                  >源码为 inventory 文件原文（保留注释与全部自定义字段）；YAML
-                  校验由服务端完成，保存前自动备份当前文件。</span
+                  >inventory 文件原文，保留注释与全部自定义字段；YAML 校验由服务端完成，保存前自动备份当前文件。</span
                 >
               </div>
+              <span class="inv-chip">{{ sourceLineCount }} 行 / {{ sourceSizeText }}</span>
             </div>
             <div class="card-body">
               <MonacoEditor
                 :model-value="sourceDraft"
                 language="yaml"
-                height="calc(100vh - 440px)"
+                height="520px"
                 @update:model-value="onEditorInput"
               />
+            </div>
+            <div class="inv-statusbar">
+              <span
+                >内容来自 <b>backend/ansible/inventory/host</b
+                ><template v-if="lastModified">
+                  · 最后保存 <b>{{ formatDateTime(lastModified) }}</b></template
+                ></span
+              >
+              <span v-if="dirty" class="inv-dirty">● 有未保存修改</span>
+              <span class="inv-spacer"></span>
+              <span>YAML 校验由服务端完成 · 保存前自动备份</span>
             </div>
           </div>
         </template>
@@ -327,14 +394,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, toRaw, h, type VNode } from 'vue'
-import { message, Tooltip } from 'ant-design-vue'
-import { SettingOutlined } from '@ant-design/icons-vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, toRaw } from 'vue'
+import { message } from 'ant-design-vue'
+import { HistoryOutlined, ReloadOutlined, SettingOutlined } from '@ant-design/icons-vue'
 import { showOverlayModal } from '@/composables/useOverlayModal'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { onBeforeRouteLeave } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
+import PageStatBadges from '@/components/PageStatBadges.vue'
+import StrokeIcon from '@/components/StrokeIcon.vue'
 import AnsibleAdvancedFields from '@/components/AnsibleAdvancedFields.vue'
 import MonacoEditor from '@/components/MonacoEditor.vue'
 import {
@@ -392,11 +461,34 @@ const dirty = ref(false)
 const loading = ref(false)
 const saving = ref(false)
 const switching = ref(false)
-const showUnknownHint = ref(true)
 const sourceErrors = ref<string[]>([])
 const lastModified = ref<string | null>(null)
 
 const extraVars = computed(() => extraVarKeys(baseVars.value))
+
+/** 页头轻统计：主机数（首项 accent）+ 未纳管 IP 数（补充维度，不重复 chips/表格里的数字语义） */
+const statBadges = computed(() => {
+  const items: { value: number | string; label: string; tone?: 'accent' | 'warn' }[] = [
+    { value: rows.value.length, label: '台主机' },
+  ]
+  if (unmanagedIps.value.length) items.push({ value: unmanagedIps.value.length, label: '台未纳管', tone: 'warn' })
+  return items
+})
+
+/** 源码视图卡头体量：行数 + 字节数（真实文本，非估算） */
+/** 行数口径与会话视图一致：忽略文件末尾换行产生的空行 */
+const sourceLineCount = computed(() => {
+  const text = sourceDraft.value
+  if (!text) return 0
+  const lines = text.split('\n')
+  return lines[lines.length - 1] === '' ? lines.length - 1 : lines.length
+})
+const sourceSizeText = computed(() => formatFileSize(new TextEncoder().encode(sourceDraft.value).length))
+
+/** 该行凭据是否整行继承组级默认（两个字段都空且组级确有凭据）——用于行内「继承组级凭据」标注 */
+function inheritsGroupCreds(record: InventoryHostEntry): boolean {
+  return !record.ansible_ssh_user && !record.ansible_ssh_pass && !!(groupUser.value || groupPass.value)
+}
 
 function markDirty(): void {
   dirty.value = true
@@ -423,61 +515,18 @@ function toggleExpand(record: object): void {
     : [...expandedKeys.value, k]
 }
 
-/**
- * 展开列自定义图标：设置图标 ⚙（替代易误读为"新增 IP"的默认 + 号）。
- * 常显品牌色 + Tooltip 提示 + hover 高亮；展开时旋转。主机行与组级行共用。
- */
-/**
- * 展开列自定义触发器：「高级」描边按钮 + 齿轮图标（2026-11-24 用户裁决 B）。
- * 文字让入口自证可点；已配置高级变量时 tooltip 换口径，行内有仅源码可维护的自定义字段时挂橙点。
- */
-function buildExpandIcon(expanded: boolean, hasAdvanced: boolean, toggle: () => void, note?: string): VNode {
-  const base = hasAdvanced
+/** 主机行触发器 tooltip：已配置 > 含表外字段 > 未配置（原渲染函数迁入模板后的文案来源） */
+function rowAdvancedTitle(record: InventoryHostEntry): string {
+  const unknown = rowUnknownKeys(record)
+  const base = rowHasAdvanced(record)
     ? '已配置高级连接变量：点击展开查看或修改'
     : '高级连接变量：点击展开设置（SSH 端口 / 连接方式 / 提权 / 私钥等）'
-  return h(
-    Tooltip,
-    { title: note ? `${base}${note}` : base },
-    {
-      default: () =>
-        h(
-          'span',
-          {
-            class: 'adv-expand-icon' + (expanded ? ' expanded' : ''),
-            role: 'button',
-            tabindex: 0,
-            'aria-label': '高级连接变量',
-            'aria-expanded': expanded ? 'true' : 'false',
-            onClick: (e: Event) => {
-              e.stopPropagation()
-              toggle()
-            },
-            onKeydown: (e: KeyboardEvent) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault()
-                toggle()
-              }
-            },
-          },
-          [
-            h(SettingOutlined, { style: 'font-size: 13px;' }),
-            h('span', { class: 'adv-text' }, '高级'),
-            note ? h('span', { class: 'orange-dot' }) : null,
-          ],
-        ),
-    },
-  )
+  return unknown.length ? `${base}；另有仅源码模式可维护的自定义字段：${unknown.join('、')}` : base
 }
 
-function renderExpandIcon(props: { expanded: boolean; record: object }): VNode {
-  const record = props.record as InventoryHostEntry
-  const unknown = rowUnknownKeys(record)
-  return buildExpandIcon(
-    props.expanded,
-    rowHasAdvanced(record),
-    () => toggleExpand(record),
-    unknown.length ? `；另有仅源码模式可维护的自定义字段：${unknown.join('、')}` : undefined,
-  )
+/** 该主机行的「高级」是否展开 */
+function isRowExpanded(record: InventoryHostEntry): boolean {
+  return expandedKeys.value.includes(rowKeyOf(record))
 }
 
 function onExpandedChange(keys: (number | string)[]): void {
@@ -518,9 +567,13 @@ function onGroupExpandedChange(keys: (number | string)[]): void {
   groupExpandedKeys.value = keys.map(String)
 }
 
-function renderGroupExpandIcon(props: { expanded: boolean }): VNode {
-  return buildExpandIcon(props.expanded, groupHasAdvanced(), toggleGroupExpand)
-}
+/** 组级行触发器 tooltip / 展开态（模板自绘按钮用；antd 展开列已关闭） */
+const groupAdvancedTitle = computed(() =>
+  groupHasAdvanced()
+    ? '已配置组级高级连接变量：点击展开查看或修改'
+    : '组级高级连接变量：点击展开设置（SSH 端口 / 连接方式 / 提权 / 私钥等）',
+)
+const groupRowExpanded = computed(() => groupExpandedKeys.value.includes(GROUP_ROW_KEY))
 
 /** vars 是否已空（凭据与高级变量都无值）——空时「删除」无对象可删 */
 const groupVarsEmpty = computed(() => Object.keys(buildVars()).length === 0)
@@ -670,7 +723,6 @@ async function load(): Promise<void> {
     // 文件解析失败时表格为空，强制进入源码视图展示真实文件内容供修复
     // （避免切到源码时被空表格渲染出的骨架覆盖掉原文）
     if (loadErrors.value.length) viewMode.value = 'source'
-    showUnknownHint.value = true
     dirty.value = false
   } catch (err: unknown) {
     message.error(apiDetail(err, '加载主机清单失败'))
@@ -1044,27 +1096,176 @@ onUnmounted(() => {
   min-height: 320px;
 }
 
-.view-toggle {
-  display: flex;
-  gap: 6px;
+/* ── 清单页专属解剖（设计页 proposal-c/ansible-inventory.html 同值） ── */
+
+/* 未纳管提示：单行（图标 + 文案 + 右端入口） */
+.inv-notice {
+  align-items: center;
+  padding: 9px 16px;
+  margin-bottom: 0;
+  font-size: 12.5px;
+}
+.inv-notice .alert-icon {
+  display: inline-flex;
 }
 
-.dirty-tag {
-  cursor: default;
+/* 卡头右端只读路径 / 体量胶囊 */
+.inv-path {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 1px 7px;
+  white-space: nowrap;
+}
+.inv-chip {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
 }
 
-/* 元数据行（批 2）：最后修改 · 主机数 · 操作日志 */
-.inv-meta {
-  display: flex;
-  align-items: baseline;
-  gap: 16px;
+/* 表格内输入：30px 高 + 等宽（IP 与 SSH 凭据都是机器值，等宽才好逐字符核对） */
+.inventory-page :deep(.inv-inp.ant-input),
+.inventory-page :deep(.inv-inp.ant-input-affix-wrapper) {
+  height: 30px;
+  font-size: 12.5px;
+}
+.inventory-page :deep(.inv-inp.ant-input),
+.inventory-page :deep(.inv-inp.ant-input-affix-wrapper .ant-input) {
+  font-family: var(--font-mono);
+}
+
+/* 行内「删除」= 无边框危险文本（设计页 .inv-danger）：描边红按钮会与左侧描边「高级」抢视觉重量 */
+.inv-danger {
+  padding: 2px 6px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--danger);
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+.inv-danger:hover {
+  background: oklch(55% 0.18 28 / 8%);
+}
+.inv-danger:focus-visible {
+  outline: 2px solid var(--danger);
+  outline-offset: 1px;
+}
+.inv-danger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.inv-danger:disabled:hover {
+  background: transparent;
+}
+
+/* 行内动作容器（与路由/上游页同款：gap 2px；按钮圆角/字重/hover 由共享层 .action-cell 规则提供） */
+.action-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* 序号列 */
+.inv-idx {
+  font-family: var(--font-mono);
   font-size: 12px;
   color: var(--muted);
-  margin-top: -12px;
 }
-.inv-meta a {
-  cursor: pointer;
+
+/* 继承标注（凭据整行继承组级默认时挂在 IP 下方） */
+.inv-inherit {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.inv-inherit b {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--fg);
+}
+
+/* 卡底弱提示（清单外自定义字段：常驻信息，不是警告） */
+.inv-note {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 20px;
+  border-top: 1px dashed var(--border);
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.inv-note code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 5px;
+}
+
+/* 卡底状态条：最后修改 · 未保存胶囊 · 操作日志入口 */
+.inv-statusbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 20px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.inv-statusbar b {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--fg);
+}
+.inv-spacer {
+  flex: 1 1 auto;
+}
+.inv-dirty {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: oklch(52% 0.13 60);
+  background: oklch(65% 0.15 85 / 16%);
+  border: 1px solid oklch(65% 0.15 85 / 35%);
+}
+.inv-link {
+  color: var(--accent);
+  font-size: 11.5px;
+  text-decoration: none;
   white-space: nowrap;
+  cursor: pointer;
+}
+.inv-link:hover {
+  text-decoration: underline;
 }
 
 .alert-desc-row {
