@@ -35,7 +35,7 @@ cat  ~/.config/uv/config.toml
 ## 转换格式
 
 ```
-yum install -y dos2unix git
+yum install -y dos2unix git make gcc gcc-c++
 dos2unix gen-linux.sh
 ```
 
