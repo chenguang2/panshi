@@ -3,7 +3,7 @@
   核心变化：
   1. 裸 <table> → <a-table>（排序、分页、多选自动管理）
   2. 裸 <form>/<input>/<select> → <a-form>/<a-input>/<a-select>
-  3. 手写 .modal-overlay → <a-modal>
+  3. 弹窗统一走平台 .modal-overlay 壳（2026-11-24 起全站禁用 a-modal，标杆见 NodeFormModal）
   4. 手写 .pagination → <a-table> 内置分页
   5. 手写 .action-dropdown → <a-dropdown>
   6. 消除所有 `as any` 类型逃逸

@@ -18,24 +18,28 @@
             <div style="max-height: 360px; overflow: auto; min-width: 360px">
               <div style="font-weight: 600; margin-bottom: 8px">常用参数速查</div>
               <table style="width: 100%; font-size: 12px; border-collapse: collapse">
-                <tr style="background: #fafafa">
-                  <td style="padding: 4px 8px; font-weight: 600">参数</td>
-                  <td style="padding: 4px 8px">含义</td>
-                </tr>
-                <tr v-for="r in def.helpRef" :key="r.param" style="border-bottom: 1px solid #f0f0f0">
-                  <td
-                    style="padding: 4px 8px; font-family: monospace; white-space: nowrap; cursor: pointer"
-                    :title="'点击复制：' + r.param"
-                    @click="copyText(r.param)"
-                  >
-                    {{ r.param }}
-                  </td>
-                  <td style="padding: 4px 8px">{{ r.desc }}</td>
-                </tr>
+                <tbody>
+                  <tr style="background: #fafafa">
+                    <td style="padding: 4px 8px; font-weight: 600">参数</td>
+                    <td style="padding: 4px 8px">含义</td>
+                  </tr>
+                  <tr v-for="r in def.helpRef" :key="r.param" style="border-bottom: 1px solid #f0f0f0">
+                    <td
+                      style="padding: 4px 8px; font-family: monospace; white-space: nowrap; cursor: pointer"
+                      :title="'点击复制：' + r.param"
+                      @click="copyText(r.param)"
+                    >
+                      {{ r.param }}
+                    </td>
+                    <td style="padding: 4px 8px">{{ r.desc }}</td>
+                  </tr>
+                </tbody>
               </table>
             </div>
           </template>
-          <span class="hint-mark" style="cursor: pointer">📋</span>
+          <span class="hint-mark ref" style="cursor: pointer" title="常用参数速查：点击查看可选值，行可点复制"
+            ><StrokeIcon name="list" :size="9"
+          /></span>
         </a-popover>
       </label>
       <a-input-number
@@ -85,6 +89,7 @@
 
 <script setup lang="ts">
 import { message } from 'ant-design-vue'
+import StrokeIcon from '@/components/StrokeIcon.vue'
 import { ADVANCED_FIELDS, toBool } from '@/utils/ansibleInventory'
 
 /** 取值对象：主机行传行记录本身，组级行传 edge_cluster.vars。errors：字段键 → 错误原因（行内标红）。 */
@@ -157,5 +162,12 @@ function copyText(text: string): void {
   border: 1px solid currentColor;
   font-size: 11px;
   cursor: help;
+}
+.hint-mark:hover {
+  color: var(--accent, #1677ff);
+}
+/* 速查图标：与「?」同尺寸同色，靠图形区分——线稿三横线（取代历史上的剪贴板 emoji） */
+.hint-mark.ref svg {
+  display: block;
 }
 </style>

@@ -7,6 +7,9 @@
  * - POST /ansible/inventory/backups/{name}/restore → { ok: true }
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { h } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { setActivePinia, createPinia } from 'pinia'
 import { useAuthStore } from '@/stores/auth'
@@ -67,7 +70,7 @@ function btnIn(scope: { findAll: (sel: string) => { text: () => string }[] }, te
   return btn
 }
 
-async function openPage() {
+async function openPage(opts?: { tableStub?: Record<string, unknown> }) {
   setActivePinia(createPinia())
   // 「操作日志」入口有 audit_logs 权限门控：种 admin 身份使其可见
   const auth = useAuthStore()
@@ -81,13 +84,7 @@ async function openPage() {
           template: '<div v-if="open" class="drawer-stub"><slot /></div>',
         },
         MonacoEditor: { template: '<div class="monaco-stub" />' },
-        'a-table': { template: '<div class="a-table-stub" />' },
-        'a-modal': { template: '<div class="modal-stub"><slot /></div>' },
-        'a-textarea': {
-          props: ['value'],
-          emits: ['update:value'],
-          template: '<textarea :value="value ?? \'\'" @input="$emit(\'update:value\', $event.target.value)" />',
-        },
+        'a-table': opts?.tableStub ?? { template: '<div class="a-table-stub" />' },
       },
     },
   })
@@ -245,5 +242,54 @@ describe('AnsibleInventory 批量导入预览（批 2）', () => {
     await w.find('textarea').setValue('bad ip here')
     expect(w.text()).toContain('不是 IP')
     expect(w.text()).toContain('按主机名原样保存')
+  })
+})
+
+/**
+ * 高级连接变量入口（2026-11-24 用户裁决 B）：
+ * 行首触发器必须自证可点——描边按钮 + 「高级」文字 + 图标，不靠用户猜测齿轮语义；
+ * 组级卡片操作列的第二个「高级」入口随之退场（同一行不再有两个入口展开同一区块）。
+ */
+function expandTableStub() {
+  return {
+    name: 'ATableStub',
+    props: ['dataSource', 'expandIcon'],
+    setup(props: { dataSource?: unknown[]; expandIcon?: (p: { expanded: boolean; record: object }) => unknown }) {
+      return () =>
+        h(
+          'div',
+          { class: 'a-table-stub' },
+          (props.dataSource || []).map((record, i) =>
+            h(
+              'div',
+              { class: 'row-stub', key: i },
+              props.expandIcon ? props.expandIcon({ expanded: false, record: record as object }) : null,
+            ),
+          ),
+        )
+    },
+  }
+}
+
+describe('AnsibleInventory 高级连接变量入口', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockGetInventory.mockResolvedValue(INVENTORY_RESPONSE)
+    mockListBackups.mockResolvedValue({ data: { backups: [] } })
+  })
+
+  it('行首触发器是带文字「高级」的描边按钮（含图标 + aria-expanded）', async () => {
+    const w = await openPage({ tableStub: expandTableStub() })
+    const triggers = w.findAll('.adv-expand-icon')
+    expect(triggers.length).toBeGreaterThan(0)
+    expect(triggers[0].text().trim()).toBe('高级')
+    expect(triggers[0].find('svg').exists()).toBe(true)
+    expect(triggers[0].attributes('aria-expanded')).toBe('false')
+    expect(triggers[0].attributes('role')).toBe('button')
+  })
+
+  it('组级卡片操作列不再有重复的「高级」按钮', () => {
+    const source = readFileSync(resolve(__dirname, '../AnsibleInventory.vue'), 'utf8')
+    expect(source).not.toMatch(/<a-button[^>]*@click="toggleGroupExpand"/)
   })
 })

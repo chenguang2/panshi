@@ -545,33 +545,50 @@ select.form-input {
 }
 
 /* ===========================
-   清单表格展开列设置图标（全局：由表格组件内部 h() 渲染，scoped 样式不生效）
+   清单表格展开列「高级」触发按钮（全局：由表格组件内部 h() 渲染，scoped 样式不生效）
+   2026-11-24 用户裁决 B：描边按钮 + 文字「高级」，让入口自证可点（不再靠齿轮语义猜）
    =========================== */
 .adv-expand-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
+  gap: 4px;
   height: 24px;
+  padding: 0 8px 0 6px;
   cursor: pointer;
-  color: var(--accent);
-  border: 1px solid transparent;
-  border-radius: 4px;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
   transition:
-    background 0.2s,
-    border-color 0.2s,
-    color 0.2s,
-    transform 0.25s;
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s;
   user-select: none;
 }
 .adv-expand-icon:hover {
-  background: oklch(56% 0.16 210 / 12%);
-  border-color: oklch(56% 0.16 210 / 30%);
+  color: var(--accent);
+  background: var(--accent-bg);
+  border-color: oklch(56% 0.16 210 / 45%);
 }
 .adv-expand-icon.expanded {
-  background: oklch(56% 0.16 210 / 12%);
-  border-color: oklch(56% 0.16 210 / 30%);
-  transform: rotate(90deg);
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.adv-expand-icon:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.adv-expand-icon .adv-text {
+  font-family: var(--font-body);
+}
+.adv-expand-icon .orange-dot {
+  margin-left: 0;
+  vertical-align: middle;
 }
 
 /* ===========================

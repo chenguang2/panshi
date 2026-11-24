@@ -50,6 +50,8 @@ const ICON_PATHS = {
   // 插件开关工具条「全部启用/全部禁用」（设计稿原 path，批 7 bug3）
   check: '<path d="M20 6 9 17l-5-5" />',
   minus: '<line x1="5" y1="12" x2="19" y2="12" />',
+  // 字段「常用参数速查」清单（Ansible 高级连接变量：点击弹出可选值表，行可点复制）
+  list: '<path d="M4 7h16M4 12h16M4 17h16" />',
   // 空态图标（components/EmptyState.vue 默认 icon；设计原语 .empty5 的 52px 虚线圆内图形）
   inbox:
     '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12" /><path d="M5.45 5.11 2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z" />',

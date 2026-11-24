@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ansible 主机清单 · 方案 C 网关控制台感 — 磐石网关管理平台</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+/* —— 本页专属解剖（只作用于 Ansible 主机清单） —— */
+.page-header h1 { font-size: 21px; }
+
+/* 视图容器：表格视图 ⇄ 源码视图（与产品同语义，同一时刻只显示一个） */
+.inv-view[hidden] { display: none; }
+
+/* 卡片外壳：沿用 .l5-card，仅补底部间距 */
+.inv-card { margin-bottom: 16px; }
+.inv-card:last-of-type { margin-bottom: 0; }
+
+/* 卡头：标题 +（副标题）+ 右端路径 chip / 体量 chip */
+.inv-cardhead { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.inv-cardhead h3 { margin: 0; font-size: 13px; font-weight: 600; color: var(--fg); display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.inv-ch-sub { font-size: 11.5px; color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inv-path { margin-left: auto; flex-shrink: 0; font-family: var(--font-mono); font-size: 11px; color: var(--muted); background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 1px 7px; white-space: nowrap; }
+.inv-chip { margin-left: auto; flex-shrink: 0; display: inline-flex; align-items: center; height: 20px; padding: 0 9px; border-radius: 999px; font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--muted); background: var(--bg); border: 1px solid var(--border); }
+.inv-count { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 7px; border-radius: 999px; background: oklch(50% 0.018 240 / 8%); color: var(--muted); font-family: var(--font-mono); font-size: 11px; font-weight: 600; }
+
+/* 未纳管提示条：单行（替代 antd 双行大框） */
+.inv-notice { align-items: center; padding: 9px 16px; margin-bottom: 14px; font-size: 12.5px; }
+.inv-notice .alert-icon { display: inline-flex; }
+.inv-notice .alert-content b { font-weight: 600; }
+
+/* 表内输入：30px 高、等宽正文（IP 与凭据都是机器值） */
+.inv-inp { width: 100%; height: 30px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); font-family: var(--font-mono); font-size: 12.5px; color: var(--fg); outline: none; transition: border-color .15s, box-shadow .15s; }
+.inv-inp:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
+.inv-inp::placeholder { font-family: var(--font-body); color: oklch(50% 0.018 240 / 45%); }
+.inv-inp.off { background: oklch(97.5% 0.003 250); border-style: dashed; color: oklch(58% 0.01 250); }
+
+/* 行首「高级」触发按钮：描边 + 文字，自证可点（2026-11-24 用户裁决 B） */
+.inv-exp { display: inline-flex; align-items: center; justify-content: center; gap: 4px; height: 24px; padding: 0 8px 0 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--muted); font-family: var(--font-body); font-size: 12px; line-height: 1; white-space: nowrap; cursor: pointer; transition: background .15s, border-color .15s, color .15s; }
+.inv-exp:hover { color: var(--accent); background: var(--accent-bg); border-color: oklch(56% 0.16 210 / 45%); }
+.inv-exp.open { color: #fff; background: var(--accent); border-color: var(--accent); }
+.inv-exp svg { width: 13px; height: 13px; }
+
+/* 操作列：只剩删除（高级由行首 ⚙ 承担，避免同行两个入口展开同一区块） */
+.inv-ops { white-space: nowrap; text-align: right; }
+.inv-danger { border: none; background: transparent; color: var(--danger); font-size: 12px; padding: 2px 6px; border-radius: var(--radius-sm); cursor: pointer; font-family: var(--font-body); }
+.inv-danger:hover { background: oklch(55% 0.18 28 / 8%); }
+
+/* 继承态：凭据留空即继承组级默认——输入框占位 + IP 下一行标注 */
+.inv-inherit { display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; font-size: 11px; color: var(--muted); white-space: nowrap; }
+.inv-inherit b { font-weight: 600; color: var(--fg); font-family: var(--font-mono); }
+.inv-inherit::before { content: '↳'; color: oklch(50% 0.018 240 / 45%); }
+
+/* 高级连接变量区：展开行整块下沉（灰底 + 上分隔），字段两行 5 + 4 */
+.inv-detail td { background: var(--bg); padding: 12px 16px 14px !important; border-bottom: 1px solid var(--border) !important; }
+.inv-adv { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px 14px; }
+.inv-adv .fld { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.inv-adv .fld.wide { grid-column: span 2; }
+.inv-adv label { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.inv-adv .q, .inv-adv .ref { display: inline-flex; align-items: center; justify-content: center; width: 13px; height: 13px; border: 1px solid var(--border); border-radius: 50%; font-size: 9px; line-height: 1; color: var(--muted); }
+.inv-adv .q { cursor: help; }
+.inv-adv .ref { cursor: pointer; }
+.inv-adv .q:hover, .inv-adv .ref:hover { border-color: var(--accent); color: var(--accent); }
+.inv-adv .ref svg { width: 9px; height: 9px; }
+.inv-sw { display: flex; align-items: center; gap: 8px; height: 30px; }
+.inv-toggle { position: relative; display: inline-block; width: 34px; height: 19px; border-radius: 999px; background: oklch(50% 0.018 240 / 18%); }
+.inv-toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 15px; height: 15px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / 18%); }
+.inv-toggle.on { background: var(--accent); }
+.inv-toggle.on::after { left: 17px; }
+.inv-offhint { font-size: 11px; color: var(--muted); }
+
+/* 表尾「添加主机」通栏虚线行 */
+.inv-add { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; height: 38px; border: none; border-top: 1px dashed var(--border); background: transparent; color: var(--muted); font-family: var(--font-body); font-size: 12.5px; cursor: pointer; }
+.inv-add:hover { color: var(--accent); background: var(--accent-bg); }
+
+/* 卡底弱提示（清单外自定义字段：常驻信息，不是警告） */
+.inv-note { display: flex; align-items: center; gap: 6px; padding: 8px 16px; border-top: 1px dashed var(--border); font-size: 11.5px; color: var(--muted); }
+.inv-note code { font-family: var(--font-mono); font-size: 11px; color: var(--fg); background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; }
+
+/* 卡底状态条：来源 / 未保存 / 次要入口（与 edge-env 状态条同构） */
+.inv-statusbar { display: flex; align-items: center; gap: 10px; padding: 9px 16px; border-top: 1px solid var(--border); background: var(--bg); font-size: 11.5px; color: var(--muted); border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
+.inv-statusbar b { color: var(--fg); font-family: var(--font-mono); font-weight: 600; }
+.inv-spacer { flex: 1 1 auto; }
+.inv-dirty { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 9px; border-radius: 999px; font-size: 11px; font-weight: 600; color: oklch(52% 0.13 60); background: oklch(65% 0.15 85 / 16%); border: 1px solid oklch(65% 0.15 85 / 35%); }
+.inv-link { color: var(--accent); font-size: 11.5px; text-decoration: none; white-space: nowrap; }
+.inv-link:hover { text-decoration: underline; }
+
+/* 源码编辑器：行号槽 + 着色正文（与 edge-env 同解剖，固定高度不留 calc 空白） */
+/* 编辑器区：Monaco 形态（白底 + 行号槽 + 自身描边，高度固定、不再 calc 留白） */
+.inv-code { display: flex; margin: 12px 16px 0; height: 520px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: 12.5px; line-height: 1.8; background: var(--surface); }
+.inv-gutter { flex: 0 0 auto; padding: 12px 10px 12px 16px; text-align: right; color: oklch(72% 0.01 250); user-select: none; border-right: 1px solid var(--border); background: oklch(98.5% 0.004 250); }
+.inv-lines { flex: 1 1 auto; padding: 12px 16px; white-space: pre; color: var(--fg); }
+.inv-lines .c { color: oklch(58% 0.012 250); }
+.inv-lines .k { color: oklch(45% 0.09 255); }
+.inv-lines .v { color: oklch(48% 0.13 150); }
+.inv-lines .n { color: oklch(50% 0.14 55); }
+.inv-lines .ln { display: block; }
+
+/* ── 浮层：恢复记录抽屉（右侧 560px）+ 批量导入弹窗 ── */
+.inv-mask { position: fixed; inset: 0; display: none; background: oklch(20% 0.02 250 / 32%); z-index: 1000; }
+.inv-mask.open { display: block; }
+
+.inv-drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 560px; display: none; flex-direction: column; background: var(--surface); border-left: 1px solid var(--border); box-shadow: -10px 0 28px oklch(20% 0.02 250 / 14%); z-index: 1000; }
+.inv-drawer.open { display: flex; }
+.inv-dh { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.inv-dh h3 { margin: 0; font-size: 14px; font-weight: 600; color: var(--fg); }
+.inv-x { margin-left: auto; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; padding: 0; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--muted); cursor: pointer; }
+.inv-x:hover { color: var(--fg); background: var(--bg); border-color: var(--border); }
+.inv-x svg { width: 14px; height: 14px; }
+.inv-dbody { flex: 1 1 auto; overflow: auto; }
+.inv-bk { padding: 10px 16px; border-bottom: 1px solid var(--border); }
+.inv-bk-row { display: flex; align-items: center; gap: 10px; }
+.inv-bk-time { font-family: var(--font-mono); font-size: 12.5px; color: var(--fg); }
+.inv-bk-size { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.inv-bk-act { margin-left: auto; display: inline-flex; gap: 6px; }
+.inv-bk-pre { margin: 8px 0 0; max-height: 220px; overflow: auto; padding: 8px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: 11.5px; line-height: 1.65; color: var(--fg); white-space: pre; }
+.inv-dfoot { padding: 10px 16px; border-top: 1px solid var(--border); background: var(--bg); font-size: 11.5px; line-height: 1.6; color: var(--muted); }
+
+/* 批量导入弹窗内：等宽粘贴框 + 摘要胶囊 + 逐行提示（弹窗壳用平台统一 .modal 解剖） */
+.inv-ta { width: 100%; height: 168px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--fg); font-family: var(--font-mono); font-size: 12.5px; line-height: 1.7; outline: none; resize: vertical; box-sizing: border-box; }
+.inv-ta:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
+.inv-sum { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; font-size: 11.5px; color: var(--muted); }
+.inv-sum .ps-tag { border: 1px solid var(--border); background: var(--surface); color: var(--muted); }
+.inv-sum .ps-tag.ok { border-color: oklch(55% 0.15 145 / 35%); background: oklch(55% 0.15 145 / 12%); color: oklch(48% 0.14 145); }
+.inv-mline { display: flex; gap: 6px; margin-top: 6px; font-size: 11.5px; line-height: 1.6; }
+.inv-mline.warn { color: oklch(50% 0.12 70); }
+.inv-mline.err { color: var(--danger); }
+/* 禁用态：有解析错误时「确认导入」不可点（同产品 disabled 语义） */
+.modal-footer .btn:disabled, .modal-footer .btn[disabled] { opacity: .5; cursor: not-allowed; box-shadow: none; }
+
+</style>
+</head>
+<body>
+<div class="app-layout">
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="sidebar-logo-icon">磐</div>
+    <span class="sidebar-logo-text">磐石</span>
+    <span class="sidebar-logo-version">v1.0</span>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">核心功能</div>
+      <a class="nav-item" href="overview.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h5v5H3v-5zm7 0h5v5h-5v-5z"/></svg><span>概览</span></a>
+      <a class="nav-item" href="clusters.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h14v5H2V3zm0 7h14v5H2v-5z"/></svg><span>集群管理</span></a>
+      <a class="nav-item" href="routes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l5-7v5h9v4H7v5l-5-7z"/></svg><span>路由管理</span></a>
+      <a class="nav-item" href="upstreams.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>上游管理</span></a>
+      <a class="nav-item" href="nodes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3a2 2 0 110 4 2 2 0 010-4zM3.5 14a2 2 0 110-4 2 2 0 010 4zM14.5 14a2 2 0 110-4 2 2 0 010 4z"/></svg><span>节点管理</span></a>
+      <a class="nav-item" href="plugin-groups.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h12v5H3v-5z"/></svg><span>插件组</span></a>
+      <a class="nav-item" href="plugin-metadata.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h8l3 3v9a1 1 0 01-1 1H5a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M9 7v4M9 13v-1"/></svg><span>插件元数据</span></a>
+      <a class="nav-item" href="global-rules.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l6 3v4c0 3-2.5 5.5-6 7-3.5-1.5-6-4-6-7V5l6-3z"/></svg><span>全局规则</span></a>
+      <a class="nav-item" href="static-resources.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3a1 1 0 011-1h6l4 4v10a1 1 0 01-1 1H6a1 1 0 01-1-1V3zM11 2v4h4"/></svg><span>静态资源</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">证书管理</div>
+      <a class="nav-item" href="ca-certs.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="12.5" r="2.5"/><path d="M8 12.5h7M13 12.5v2.5M15 12.5v2.5"/></svg><span>CA 根证书</span></a>
+      <a class="nav-item" href="server-certs.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="10" height="8" rx="1"/><path d="M6.5 8V6a2.5 2.5 0 015 0v2"/></svg><span>服务器证书</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">边缘网络</div>
+      <a class="nav-item" href="edge-env.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="2.5"/><path d="M9 3v2M9 13v2M3 9h2M13 9h2M4.5 4.5l1.5 1.5M12 12l1.5 1.5M4.5 13.5l1.5-1.5M12 6l1.5-1.5"/></svg><span>edge.env 配置</span></a>
+      <a class="nav-item" href="stream-proxies.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="12" height="4" rx="1"/><rect x="4" y="7" width="10" height="4" rx="1"/><rect x="5" y="12" width="8" height="4" rx="1"/></svg><span>四层代理</span></a>
+      <a class="nav-item" href="dns-udp-proxies.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="4" r="2"/><circle cx="4" cy="14" r="2"/><circle cx="14" cy="14" r="2"/><path d="M9 6v3M4 12l2-2M14 12l-2-2"/></svg><span>DNS代理[UDP]</span></a>
+      <a class="nav-item" href="dns-http-proxies.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="4" r="2"/><circle cx="4" cy="14" r="2"/><circle cx="14" cy="14" r="2"/><path d="M9 6v3M4 12l2-2M14 12l-2-2"/></svg><span>DNS代理[HTTP]</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">运维管理</div>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l7 7-7 7-7-7z"/></svg><span>Edge直连</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>数据导入</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h8v8H5V7zM7 7V5h4v2"/></svg><span>工具箱</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6-4 6 4v8l-6 4-6-4V6zM3 6l6 4m0 0l6-4m-6 4v8"/></svg><span>自启动管理</span></a>
+      <a class="nav-item active" href="ansible-inventory.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="12" height="14" rx="1"/><path d="M6 6h6M6 9.5h6M6 13h4"/></svg><span>Ansible 主机清单</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6-4 6 4v8l-6 4-6-4V6zM3 6l6 4m0 0l6-4m-6 4v8"/></svg><span>节点任务</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="6" height="6" rx="1"/><rect x="10" y="10" width="6" height="6" rx="1"/><path d="M5 8v3a2 2 0 002 2h3"/></svg><span>中继区域管理</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">系统管理</div>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l5 3v6l-5 3-5-3V5l5-3z"/></svg><span>插件管理</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9a3 3 0 100-6 3 3 0 000 6zM3 16c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg><span>用户管理</span></a>
+      <a class="nav-item" href="plugin-switches.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9h8a4 4 0 010 8H5a4 4 0 010-8zM5 15a2 2 0 110-4 2 2 0 010 4z"/></svg><span>插件开关</span></a>
+    </div>
+  </nav>
+</aside>
+<div class="main-area">
+<header class="top-header"><div class="top-header-breadcrumb"><a href="index.html">首页</a><span>/</span><span>运维管理</span><span>/</span><span>Ansible 主机清单</span></div><div class="top-header-actions"><div class="h-search"><input type="text" placeholder="搜索功能或页面..."><svg class="s-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div><div class="header-user"><div class="header-avatar">管</div><span>管理员</span></div></div></header>
+<div class="content-area">
+
+  <!-- ══════════ 页头：视图 seg + 恢复记录 / 刷新 / 保存生效（主操作恒最右） ══════════ -->
+  <div class="page-header" style="margin-bottom:20px;">
+    <div>
+      <h1>Ansible 主机清单<span class="ph-inline"><span class="ph-lite lite-accent"><b>4</b> 台主机</span><span class="ph-lite lite-warn"><b>2</b> 台未纳管</span></span></h1>
+      <p>维护 Edge 集群的 Ansible 主机清单（all.children.edge_cluster），保存后立即对节点任务生效，无需重启；SSH 密码按平台约定明文存储与展示，不做掩码。</p>
+    </div>
+    <div class="page-header-actions">
+      <div class="seg" id="viewSeg">
+        <span class="seg-opt all active" data-view="table">表格视图</span>
+        <span class="seg-opt all" data-view="source">源码视图</span>
+      </div>
+      <button class="btn btn-secondary"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 109-9 9 9 0 00-6.36 2.64L3 8"/><path d="M3 3v5h5"/><path d="M12 8v4l3 2"/></svg>恢复记录</button>
+      <button class="btn btn-secondary"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 11-2.64-6.36"/><path d="M21 3v6h-6"/></svg>刷新</button>
+      <button class="btn btn-primary"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>保存生效</button>
+    </div>
+  </div>
+
+  <!-- ── 表格视图（默认） ── -->
+  <div id="stateTable" class="inv-view">
+
+  <!-- 未纳管 IP 联动提醒：单行（antd 双行大框 → 一行） -->
+  <div class="alert alert-warning inv-notice">
+    <span class="alert-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+    <div class="alert-content"><b>2 个 IP 需要纳管</b>：<span class="c-mono">192.168.0.14</span>、<span class="c-mono">192.168.0.15</span> 存在于主机清单，但尚未录入节点管理 —— 节点任务只会操作平台已录入的节点。</div>
+    <a class="inv-link" href="nodes.html">前往节点管理 →</a>
+  </div>
+
+  <!-- ① 组级默认凭据：单行表（vars 段本身） -->
+  <div class="l5-card inv-card">
+    <div class="inv-cardhead">
+      <h3>组级默认凭据</h3>
+      <span class="inv-ch-sub">未单独配置凭据的主机继承此默认值 · 密码按平台约定明文存储</span>
+      <code class="inv-path">inventory/host → all.children.edge_cluster.vars</code>
+    </div>
+    <div class="l5-table-wrap">
+      <table class="l5-table" style="min-width:880px">
+        <colgroup><col style="width:86px"><col style="width:150px"><col style="width:300px"><col style="width:320px"><col></colgroup>
+        <thead>
+          <tr><th></th><th>字段</th><th>SSH 用户</th><th>SSH 密码</th><th style="text-align:right">操作</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="c-c"><button class="inv-exp" title="高级连接变量（组级）" aria-label="高级连接变量">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.34 1.87l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.7 1.7 0 00-1.87-.34 1.7 1.7 0 00-1 1.55V21a2 2 0 11-4 0v-.09a1.7 1.7 0 00-1.11-1.55 1.7 1.7 0 00-1.87.34l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.7 1.7 0 00.34-1.87 1.7 1.7 0 00-1.55-1H3a2 2 0 110-4h.09a1.7 1.7 0 001.55-1.11 1.7 1.7 0 00-.34-1.87l-.06-.06a2 2 0 112.83-2.83l.06.06a1.7 1.7 0 001.87.34H9a1.7 1.7 0 001-1.55V3a2 2 0 114 0v.09a1.7 1.7 0 001 1.55 1.7 1.7 0 001.87-.34l.06-.06a2 2 0 112.83 2.83l-.06.06a1.7 1.7 0 00-.34 1.87V9a1.7 1.7 0 001.55 1H21a2 2 0 110 4h-.09a1.7 1.7 0 00-1.51 1z"/></svg><span>高级</span>
+            </button></td>
+            <td><span class="c-mono c-strong">vars</span></td>
+            <td><input class="inv-inp" value="jboss" placeholder="留空则主机需自带凭据"></td>
+            <td><input class="inv-inp" value="linux123!@#" placeholder="留空则主机需自带凭据"></td>
+            <td class="inv-ops"><button class="inv-danger">删除</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ② 主机列表：4 台主机（第 2 台展开高级字段） -->
+  <div class="l5-card inv-card">
+    <div class="inv-cardhead">
+      <h3>主机列表<span class="inv-count">4</span></h3>
+      <span class="inv-ch-sub">留空 SSH 用户或密码即继承组级默认</span>
+      <button class="btn btn-secondary btn-sm" style="margin-left:auto"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 9l5-5 5 5"/><path d="M12 4v10"/></svg>批量导入</button>
+    </div>
+    <div class="l5-table-wrap">
+      <table class="l5-table" style="min-width:940px">
+        <colgroup><col style="width:45px"><col style="width:86px"><col style="width:190px"><col style="width:210px"><col style="width:240px"><col></colgroup>
+        <thead>
+          <tr><th class="c-c">#</th><th></th><th>IP</th><th>SSH 用户</th><th>SSH 密码</th><th style="text-align:right">操作</th></tr>
+        </thead>
+        <tbody>
+          <!-- 1 -->
+          <tr>
+            <td class="c-c"><span class="c-idx">1</span></td>
+            <td class="c-c"><button class="inv-exp" title="高级连接变量" aria-label="高级连接变量"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.34 1.87l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.7 1.7 0 00-1.87-.34 1.7 1.7 0 00-1 1.55V21a2 2 0 11-4 0v-.09a1.7 1.7 0 00-1.11-1.55 1.7 1.7 0 00-1.87.34l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.7 1.7 0 00.34-1.87 1.7 1.7 0 00-1.55-1H3a2 2 0 110-4h.09a1.7 1.7 0 001.55-1.11 1.7 1.7 0 00-.34-1.87l-.06-.06a2 2 0 112.83-2.83l.06.06a1.7 1.7 0 001.87.34H9a1.7 1.7 0 001-1.55V3a2 2 0 114 0v.09a1.7 1.7 0 001 1.55 1.7 1.7 0 001.87-.34l.06-.06a2 2 0 112.83 2.83l-.06.06a1.7 1.7 0 00-.34 1.87V9a1.7 1.7 0 001.55 1H21a2 2 0 110 4h-.09a1.7 1.7 0 00-1.51 1z"/></svg><span>高级</span></button></td>
+            <td><input class="inv-inp" value="192.168.0.13" placeholder="例如 192.168.1.10"></td>
+            <td><input class="inv-inp" value="jboss" placeholder="继承 jboss"></td>
+            <td><input class="inv-inp" value="linux123!@#" placeholder="继承组级密码"></td>
+            <td class="inv-ops"><button class="inv-danger">删除</button></td>
+          </tr>
+          <!-- 2（展开高级连接变量：提权关闭 → 提权用户/提权密码灰显禁用） -->
+          <tr>
+            <td class="c-c"><span class="c-idx">2</span></td>
+            <td class="c-c"><button class="inv-exp open" title="已展开高级连接变量" aria-label="高级连接变量"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.34 1.87l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.7 1.7 0 00-1.87-.34 1.7 1.7 0 00-1 1.55V21a2 2 0 11-4 0v-.09a1.7 1.7 0 00-1.11-1.55 1.7 1.7 0 00-1.87.34l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.7 1.7 0 00.34-1.87 1.7 1.7 0 00-1.55-1H3a2 2 0 110-4h.09a1.7 1.7 0 001.55-1.11 1.7 1.7 0 00-.34-1.87l-.06-.06a2 2 0 112.83-2.83l.06.06a1.7 1.7 0 001.87.34H9a1.7 1.7 0 001-1.55V3a2 2 0 114 0v.09a1.7 1.7 0 001 1.55 1.7 1.7 0 001.87-.34l.06-.06a2 2 0 112.83 2.83l-.06.06a1.7 1.7 0 00-.34 1.87V9a1.7 1.7 0 001.55 1H21a2 2 0 110 4h-.09a1.7 1.7 0 00-1.51 1z"/></svg><span>高级</span></button></td>
+            <td><input class="inv-inp" value="192.168.0.14" placeholder="例如 192.168.1.10"></td>
+            <td><input class="inv-inp" value="jboss" placeholder="继承 jboss"></td>
+            <td><input class="inv-inp" value="linux123!@#" placeholder="继承组级密码"></td>
+            <td class="inv-ops"><button class="inv-danger">删除</button></td>
+          </tr>
+          <tr class="inv-detail">
+            <td colspan="6">
+              <div class="inv-adv">
+                <div class="fld">
+                  <label>SSH 端口 <span class="q" title="远程主机的 SSH 端口号，默认 22。留空则使用 Ansible 默认值">?</span><span class="ref" title="常用参数速查：点击查看可选端口，行可点复制"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span></label>
+                  <input class="inv-inp" placeholder="未设置">
+                </div>
+                <div class="fld">
+                  <label>连接目标 (ansible_host) <span class="q" title="清单主机键是标识符，此字段可覆盖实际连接地址——常用于 NAT / 端口转发场景">?</span><span class="ref" title="常用参数速查：点击查看可选写法，行可点复制"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span></label>
+                  <input class="inv-inp" placeholder="192.168.1.100">
+                </div>
+                <div class="fld">
+                  <label>连接方式 <span class="q" title="Ansible 如何连接远程主机：smart 自动选择，ssh 最常用">?</span><span class="ref" title="常用参数速查：点击查看可选连接方式，行可点复制"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span></label>
+                  <input class="inv-inp" placeholder="留空继承默认">
+                </div>
+                <div class="fld">
+                  <label>Python 解释器路径 <span class="q" title="远程主机上的 Python 解释器路径。留空则由 Ansible 自动检测">?</span><span class="ref" title="常用参数速查：点击查看常见解释器路径，行可点复制"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span></label>
+                  <input class="inv-inp" placeholder="/usr/bin/python3">
+                </div>
+                <div class="fld">
+                  <label>提权 (become) <span class="q" title="是否使用 sudo 提权执行命令。关闭时下方提权用户 / 提权密码字段自动禁用">?</span></label>
+                  <div class="inv-sw"><span class="inv-toggle"></span><span class="inv-offhint">关闭</span></div>
+                </div>
+                <div class="fld">
+                  <label>提权用户 <span class="q" title="提权后以哪个用户身份执行，留空默认 root">?</span><span class="ref" title="常用参数速查：点击查看常见提权用户，行可点复制"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span></label>
+                  <input class="inv-inp off" placeholder="未启用提权" disabled>
+                </div>
+                <div class="fld">
+                  <label>提权密码 <span class="q" title="sudo 密码。留空则使用 sudoers NOPASSWD 配置">?</span></label>
+                  <input class="inv-inp off" placeholder="未启用提权" disabled>
+                </div>
+                <div class="fld">
+                  <label>私钥路径 <span class="q" title="支持 ~ 表示用户主目录，如 ~/.ssh/my_key">?</span><span class="ref" title="常用参数速查：点击查看常见私钥路径，行可点复制"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span></label>
+                  <input class="inv-inp" placeholder="~/.ssh/id_rsa">
+                </div>
+                <div class="fld wide">
+                  <label>SSH 额外参数 <span class="q" title="多个参数空格分隔，如 -o ProxyCommand=&quot;ssh -W %h:%p gateway&quot;">?</span><span class="ref" title="常用参数速查：点击查看 12 条常用 SSH 参数，行可点复制"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span></label>
+                  <input class="inv-inp" placeholder="-o StrictHostKeyChecking=no -o ProxyJump=jump_host">
+                </div>
+              </div>
+            </td>
+          </tr>
+          <!-- 3（凭据留空 → 继承组级默认） -->
+          <tr>
+            <td class="c-c"><span class="c-idx">3</span></td>
+            <td class="c-c"><button class="inv-exp" title="高级连接变量" aria-label="高级连接变量"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.34 1.87l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.7 1.7 0 00-1.87-.34 1.7 1.7 0 00-1 1.55V21a2 2 0 11-4 0v-.09a1.7 1.7 0 00-1.11-1.55 1.7 1.7 0 00-1.87.34l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.7 1.7 0 00.34-1.87 1.7 1.7 0 00-1.55-1H3a2 2 0 110-4h.09a1.7 1.7 0 001.55-1.11 1.7 1.7 0 00-.34-1.87l-.06-.06a2 2 0 112.83-2.83l.06.06a1.7 1.7 0 001.87.34H9a1.7 1.7 0 001-1.55V3a2 2 0 114 0v.09a1.7 1.7 0 001 1.55 1.7 1.7 0 001.87-.34l.06-.06a2 2 0 112.83 2.83l-.06.06a1.7 1.7 0 00-.34 1.87V9a1.7 1.7 0 001.55 1H21a2 2 0 110 4h-.09a1.7 1.7 0 00-1.51 1z"/></svg><span>高级</span></button></td>
+            <td><input class="inv-inp" value="192.168.0.15" placeholder="例如 192.168.1.10"><span class="inv-inherit">继承组级凭据 <b>jboss</b></span></td>
+            <td><input class="inv-inp" placeholder="继承 jboss"></td>
+            <td><input class="inv-inp" placeholder="继承组级密码"></td>
+            <td class="inv-ops"><button class="inv-danger">删除</button></td>
+          </tr>
+          <!-- 4 -->
+          <tr>
+            <td class="c-c"><span class="c-idx">4</span></td>
+            <td class="c-c"><button class="inv-exp" title="高级连接变量" aria-label="高级连接变量"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.34 1.87l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.7 1.7 0 00-1.87-.34 1.7 1.7 0 00-1 1.55V21a2 2 0 11-4 0v-.09a1.7 1.7 0 00-1.11-1.55 1.7 1.7 0 00-1.87.34l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.7 1.7 0 00.34-1.87 1.7 1.7 0 00-1.55-1H3a2 2 0 110-4h.09a1.7 1.7 0 001.55-1.11 1.7 1.7 0 00-.34-1.87l-.06-.06a2 2 0 112.83-2.83l.06.06a1.7 1.7 0 001.87.34H9a1.7 1.7 0 001-1.55V3a2 2 0 114 0v.09a1.7 1.7 0 001 1.55 1.7 1.7 0 001.87-.34l.06-.06a2 2 0 112.83 2.83l-.06.06a1.7 1.7 0 00-.34 1.87V9a1.7 1.7 0 001.55 1H21a2 2 0 110 4h-.09a1.7 1.7 0 00-1.51 1z"/></svg><span>高级</span></button></td>
+            <td><input class="inv-inp" value="192.168.61.13" placeholder="例如 192.168.1.10"></td>
+            <td><input class="inv-inp" value="jboss" placeholder="继承 jboss"></td>
+            <td><input class="inv-inp" value="jboss@12306" placeholder="继承组级密码"></td>
+            <td class="inv-ops"><button class="inv-danger">删除</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <button class="inv-add"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>添加主机</button>
+
+    <!-- 条件态：仅当清单存在「表外自定义字段」时出现（降级为卡内弱提示，不再占整块 antd 提示框） -->
+    <div class="inv-note">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+      另有 <code>ansible_ssh_common_args</code>、<code>custom_note</code> 两个自定义字段 —— 仅源码视图可维护，保存时原样保留。
+    </div>
+
+    <div class="inv-statusbar">
+      <span>清单最后修改 <b>2026/11/24 09:34:54</b></span>
+      <span class="inv-dirty">● 有未保存修改</span>
+      <span class="inv-spacer"></span>
+      <a class="inv-link" href="#">操作日志 →</a>
+    </div>
+  </div>
+
+  </div>
+
+  <!-- ── 源码视图（页头 seg 切换） ── -->
+  <div id="stateSource" class="inv-view" hidden>
+
+  <div class="l5-card inv-card">
+    <div class="inv-cardhead">
+      <h3>清单源码</h3>
+      <span class="inv-ch-sub">inventory 文件原文，保留注释与全部自定义字段</span>
+      <span class="inv-chip">19 行 / 418 B</span>
+    </div>
+    <div class="inv-code">
+      <div class="inv-gutter">1<br>2<br>3<br>4<br>5<br>6<br>7<br>8<br>9<br>10<br>11<br>12<br>13<br>14<br>15<br>16<br>17<br>18<br>19</div>
+      <div class="inv-lines"><span class="ln"><span class="k">all</span>:</span><span class="ln">  <span class="k">children</span>:</span><span class="ln">    <span class="k">edge_cluster</span>:</span><span class="ln">      <span class="k">hosts</span>:</span><span class="ln">        <span class="v">192.168.0.13</span>:</span><span class="ln">          <span class="k">ansible_ssh_user</span>: <span class="v">jboss</span></span><span class="ln">          <span class="k">ansible_ssh_pass</span>: <span class="v">linux123!@#</span></span><span class="ln">        <span class="v">192.168.0.14</span>:</span><span class="ln">          <span class="k">ansible_ssh_user</span>: <span class="v">jboss</span></span><span class="ln">          <span class="k">ansible_ssh_pass</span>: <span class="v">linux123!@#</span></span><span class="ln">        <span class="v">192.168.0.15</span>:</span><span class="ln">          <span class="k">ansible_ssh_user</span>: <span class="v">jboss</span></span><span class="ln">          <span class="k">ansible_ssh_pass</span>: <span class="v">linux123!@#</span></span><span class="ln">        <span class="v">192.168.61.13</span>:</span><span class="ln">          <span class="k">ansible_ssh_user</span>: <span class="v">jboss</span></span><span class="ln">          <span class="k">ansible_ssh_pass</span>: <span class="v">jboss@12306</span></span><span class="ln">      <span class="k">vars</span>:</span><span class="ln">        <span class="k">ansible_ssh_user</span>: <span class="v">jboss</span></span><span class="ln">        <span class="k">ansible_ssh_pass</span>: <span class="v">linux123!@#</span></span></div>
+    </div>
+    <div class="inv-statusbar">
+      <span>内容来自 <b>backend/ansible/inventory/host</b> · 最后保存 <b>2026/11/24 09:34:54</b></span>
+      <span class="inv-dirty">● 有未保存修改</span>
+      <span class="inv-spacer"></span>
+      <span>YAML 校验由服务端完成 · 保存前自动备份当前文件</span>
+    </div>
+  </div>
+
+  </div>
+
+</div>
+</div>
+</div>
+<!-- ── 浮层 ①：恢复记录抽屉（页头「恢复记录」打开；保留最近 10 份） ── -->
+<div class="inv-mask" id="invMask"></div>
+
+<aside class="inv-drawer" id="bkDrawer" role="dialog" aria-modal="true" aria-labelledby="bkTitle">
+  <div class="inv-dh">
+    <h3 id="bkTitle">恢复记录</h3>
+    <button class="inv-x" data-close aria-label="关闭恢复记录"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+  </div>
+  <div class="inv-dbody">
+    <div class="inv-bk">
+      <div class="inv-bk-row">
+        <span class="inv-bk-time">2026/11/24 09:34:54</span>
+        <span class="inv-bk-size">418 B</span>
+        <span class="inv-bk-act"><button class="btn btn-secondary btn-sm">查看</button><button class="btn btn-danger btn-sm">恢复此备份</button></span>
+      </div>
+    </div>
+    <div class="inv-bk">
+      <div class="inv-bk-row">
+        <span class="inv-bk-time">2026/10/27 13:27:57</span>
+        <span class="inv-bk-size">1.3 KB</span>
+        <span class="inv-bk-act"><button class="btn btn-secondary btn-sm">收起</button><button class="btn btn-danger btn-sm">恢复此备份</button></span>
+      </div>
+      <pre class="inv-bk-pre">all:
+  children:
+    edge_cluster:
+      hosts:
+        192.168.0.13:
+          ansible_ssh_user: jboss
+          ansible_ssh_pass: linux123!@#
+        192.168.0.14:
+          ansible_ssh_user: jboss
+          ansible_ssh_pass: linux123!@#</pre>
+    </div>
+    <div class="inv-bk">
+      <div class="inv-bk-row">
+        <span class="inv-bk-time">2026/10/27 13:24:18</span>
+        <span class="inv-bk-size">1.3 KB</span>
+        <span class="inv-bk-act"><button class="btn btn-secondary btn-sm">查看</button><button class="btn btn-danger btn-sm">恢复此备份</button></span>
+      </div>
+    </div>
+    <div class="inv-bk">
+      <div class="inv-bk-row">
+        <span class="inv-bk-time">2026/10/27 13:23:40</span>
+        <span class="inv-bk-size">1.1 KB</span>
+        <span class="inv-bk-act"><button class="btn btn-secondary btn-sm">查看</button><button class="btn btn-danger btn-sm">恢复此备份</button></span>
+      </div>
+    </div>
+    <div class="inv-bk">
+      <div class="inv-bk-row">
+        <span class="inv-bk-time">2026/10/27 13:23:25</span>
+        <span class="inv-bk-size">418 B</span>
+        <span class="inv-bk-act"><button class="btn btn-secondary btn-sm">查看</button><button class="btn btn-danger btn-sm">恢复此备份</button></span>
+      </div>
+    </div>
+  </div>
+  <div class="inv-dfoot">每次保存时自动备份当前清单，仅保留最近 10 份；恢复前会把当前清单再备份一次（可再恢复回来）。节点任务运行中的恢复会被拒绝。</div>
+</aside>
+
+<!-- ── 浮层 ②：批量导入弹窗（主机列表卡头「批量导入」打开；与「添加节点」同款平台弹窗解剖） ── -->
+<div class="modal-overlay" id="bulkModal" role="dialog" aria-modal="true" aria-labelledby="bulkTitle">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="bulkTitle">批量导入主机</h2>
+      <button class="modal-close" data-close aria-label="关闭批量导入">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">主机列表<span class="required">*</span></label>
+        <textarea class="inv-ta" spellcheck="false"># 每行：主机键 [SSH 用户] [SSH 密码]
+192.168.0.16 jboss linux123!@#
+192.168.0.17
+192.168.0.13 jboss newpass
+192.168.0.19 jboss linux123!@# extra
+web-01 jboss linux123!@#</textarea>
+        <div class="form-hint">每行一条：主机键 [SSH 用户] [SSH 密码]；主机键可为 IP 或主机名，支持 # 注释行。留空凭据即继承组级默认。</div>
+      </div>
+      <div class="inv-sum">
+        <span class="ps-tag ok">将新增 2 台主机</span>
+        <span class="ps-tag">将覆盖 1 条现有主机凭据</span>
+      </div>
+      <div class="inv-mline warn"><span>第 6 行：主机键 web-01 不是 IP，将按主机名原样保存</span></div>
+      <div class="inv-mline err"><span>第 5 行：最多 3 段（IP 用户 密码），该行有 4 段</span></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" data-close>取消</button>
+      <button class="btn btn-primary" disabled>确认导入</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// 视图切换（与产品同语义：表格视图 ⇄ 源码视图，转换由服务端完成）
+(function(){
+  var opts = document.querySelectorAll('#viewSeg .seg-opt');
+  var table = document.getElementById('stateTable');
+  var source = document.getElementById('stateSource');
+  opts.forEach(function(el){
+    el.addEventListener('click', function(){
+      opts.forEach(function(o){ o.classList.remove('active'); });
+      el.classList.add('active');
+      var isSource = el.getAttribute('data-view') === 'source';
+      table.hidden = isSource;
+      source.hidden = !isSource;
+    });
+  });
+})();
+// 浮层：恢复记录抽屉（遮罩制）/ 批量导入弹窗（平台统一 .modal-overlay，点遮罩关闭）
+(function(){
+  var mask = document.getElementById('invMask');
+  var drawer = document.getElementById('bkDrawer');
+  var modal = document.getElementById('bulkModal');
+  function closeAll(){
+    mask.classList.remove('open');
+    drawer.classList.remove('open');
+    modal.classList.remove('open');
+    document.body.style.overflow = '';
+  }
+  function lock(){ document.body.style.overflow = 'hidden'; }
+  var bkBtn = Array.prototype.find.call(document.querySelectorAll('.page-header-actions button'), function(b){ return b.textContent.trim() === '恢复记录'; });
+  if (bkBtn) bkBtn.addEventListener('click', function(){
+    closeAll();
+    mask.classList.add('open');
+    drawer.classList.add('open');
+    lock();
+  });
+  var bulkBtn = Array.prototype.find.call(document.querySelectorAll('.inv-cardhead button'), function(b){ return b.textContent.trim() === '批量导入'; });
+  if (bulkBtn) bulkBtn.addEventListener('click', function(){
+    closeAll();
+    modal.classList.add('open');
+    lock();
+  });
+  mask.addEventListener('click', closeAll);
+  modal.addEventListener('click', function(e){ if (e.target === modal) closeAll(); });
+  document.querySelectorAll('[data-close]').forEach(function(b){ b.addEventListener('click', closeAll); });
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape') closeAll(); });
+})();
+</script>
+</body>
+</html>

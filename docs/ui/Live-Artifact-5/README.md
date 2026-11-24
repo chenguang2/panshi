@@ -1,6 +1,6 @@
 # Live-Artifact-5 · 设计页（方案 C 定稿）
 
-本目录是磐石 Gateway 前端**页面级设计稿的唯一基线**。基线 = `proposal-c/` 下的 16 张页面 HTML + 共享主题 `theme.css` + 卡片页解剖说明 `CARD-PAGES-DESIGN-BRIEF.md`；入口是根目录的 **`index.html`（设计页目录）**。
+本目录是磐石 Gateway 前端**页面级设计稿的唯一基线**。基线 = `proposal-c/` 下的 17 张页面 HTML + 共享主题 `theme.css` + 卡片页解剖说明 `CARD-PAGES-DESIGN-BRIEF.md`；入口是根目录的 **`index.html`（设计页目录）**。
 
 > 2026-11-21 收敛：旧方案 A/B、工具条三变体页与 proposal-c 内 10 份过程稿已删除，历史仍在 git 里。此后**变体对比稿验证完即删**，不留在基线目录。
 
@@ -14,6 +14,8 @@
 | 列表 | 节点管理 | `proposal-c/nodes.html` | 列表页 | `views/NodeList.vue` |
 | 列表 | 上游管理 | `proposal-c/upstreams.html` | 列表页 | `views/UpstreamList.vue` |
 | 列表 | 路由管理 | `proposal-c/routes.html` | 列表页（分组/平铺） | `views/RouteList.vue` |
+| 边缘网络 | edge.env 配置 | `proposal-c/edge-env.html` | 编辑页（YAML 编辑器 + 上限诊断） | `views/EdgeEnv.vue` |
+| 运维 | Ansible 主机清单 | `proposal-c/ansible-inventory.html` | 编辑页（表格 / 源码双态） | `views/AnsibleInventory.vue` |
 | 卡片 | 四层代理 | `proposal-c/stream-proxies.html` | 卡片页 | `views/StreamProxyList.vue` |
 | 卡片 | DNS 代理（UDP） | `proposal-c/dns-udp-proxies.html` | 卡片页 | `views/DnsUdpProxyList.vue` |
 | 卡片 | DNS 代理（HTTP） | `proposal-c/dns-http-proxies.html` | 卡片页 | `views/DnsQueryList.vue` |

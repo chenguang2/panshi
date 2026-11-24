@@ -145,12 +145,6 @@
               <a-table-column title="操作" key="action" width="130" align="right">
                 <template #default>
                   <a-space :size="2">
-                    <a-tooltip :title="groupAdvancedHint">
-                      <a-button type="text" size="small" @click="toggleGroupExpand">
-                        高级
-                        <span v-if="groupAdvancedMarked" class="orange-dot" />
-                      </a-button>
-                    </a-tooltip>
                     <a-button type="text" danger size="small" :disabled="groupVarsEmpty" @click="deleteGroupVars">
                       删除
                     </a-button>
@@ -221,20 +215,6 @@
               <a-table-column title="操作" key="action" width="130" align="right">
                 <template #default="{ record }">
                   <a-space :size="2">
-                    <a-tooltip
-                      :title="
-                        rowHasAdvanced(record)
-                          ? '已配置高级连接变量'
-                          : rowUnknownKeys(record).length
-                            ? '仅源码模式可维护：' + rowUnknownKeys(record).join('、')
-                            : '高级连接变量'
-                      "
-                    >
-                      <a-button type="text" size="small" @click="toggleExpand(record)">
-                        高级
-                        <span v-if="rowUnknownKeys(record).length" class="orange-dot" />
-                      </a-button>
-                    </a-tooltip>
                     <a-button type="text" danger size="small" @click="removeRow(record)">删除</a-button>
                   </a-space>
                 </template>
@@ -301,33 +281,48 @@
       </div>
     </a-drawer>
 
-    <!-- 批量导入弹窗 -->
-    <a-modal
-      v-model:open="bulkImportVisible"
-      title="批量导入主机"
-      :ok-button-props="{ disabled: bulkImportResult.errors.length > 0 }"
-      ok-text="确认导入"
-      cancel-text="取消"
-      @ok="confirmBulkImport"
-    >
-      <a-textarea
-        v-model:value="bulkImportText"
-        :rows="10"
-        placeholder="每行一条：主机键 [SSH用户] [SSH密码]（主机键为 IP 或主机名；支持 # 注释）"
-      />
-      <div v-if="bulkImportText" class="bulk-preview">
-        <div v-if="bulkImportResult.duplicatesInText" class="bulk-hint">
-          文本内 {{ bulkImportResult.duplicatesInText }} 条重复已合并
+    <!-- 批量导入弹窗：平台统一 .modal 解剖（与「添加节点」同款：品牌淡蓝头部 + 右上 × + 页脚取消/主操作） -->
+    <div class="modal-overlay" :style="{ display: bulkImportVisible ? 'flex' : 'none' }">
+      <div class="modal" style="max-width: 600px">
+        <div class="modal-header">
+          <h2>批量导入主机</h2>
+          <button class="modal-close" aria-label="关闭批量导入" @click="closeBulkImport">&times;</button>
         </div>
-        <div v-if="bulkSummary" class="bulk-summary">{{ bulkSummary }}</div>
-        <div v-for="w in bulkHostnameWarnings" :key="w.ip" class="bulk-warn">
-          第 {{ w.line }} 行：主机键 {{ w.ip }} 不是 IP，将按主机名原样保存
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">主机列表<span class="required">*</span></label>
+            <textarea
+              v-model="bulkImportText"
+              class="form-input bulk-import-textarea"
+              rows="8"
+              spellcheck="false"
+              placeholder="每行一条：主机键 [SSH用户] [SSH密码]（主机键为 IP 或主机名；支持 # 注释）"
+            ></textarea>
+            <div class="form-hint">
+              每行一条：主机键 [SSH 用户] [SSH 密码]；主机键可为 IP 或主机名，支持 # 注释行。留空凭据即继承组级默认。
+            </div>
+          </div>
+          <div v-if="bulkImportText" class="bulk-preview">
+            <div v-if="bulkImportResult.duplicatesInText" class="bulk-hint">
+              文本内 {{ bulkImportResult.duplicatesInText }} 条重复已合并
+            </div>
+            <div v-if="bulkSummary" class="bulk-summary">{{ bulkSummary }}</div>
+            <div v-for="w in bulkHostnameWarnings" :key="w.ip" class="bulk-warn">
+              第 {{ w.line }} 行：主机键 {{ w.ip }} 不是 IP，将按主机名原样保存
+            </div>
+            <div v-for="err in bulkImportResult.errors" :key="err.line" class="bulk-error">
+              第 {{ err.line }} 行：{{ err.reason }}
+            </div>
+          </div>
         </div>
-        <div v-for="err in bulkImportResult.errors" :key="err.line" class="bulk-error">
-          第 {{ err.line }} 行：{{ err.reason }}
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="closeBulkImport">取消</button>
+          <button class="btn btn-primary" :disabled="bulkImportResult.errors.length > 0" @click="confirmBulkImport">
+            确认导入
+          </button>
         </div>
       </div>
-    </a-modal>
+    </div>
   </div>
 </template>
 
@@ -432,12 +427,17 @@ function toggleExpand(record: object): void {
  * 展开列自定义图标：设置图标 ⚙（替代易误读为"新增 IP"的默认 + 号）。
  * 常显品牌色 + Tooltip 提示 + hover 高亮；展开时旋转。主机行与组级行共用。
  */
-function buildExpandIcon(expanded: boolean, hasAdvanced: boolean, toggle: () => void): VNode {
+/**
+ * 展开列自定义触发器：「高级」描边按钮 + 齿轮图标（2026-11-24 用户裁决 B）。
+ * 文字让入口自证可点；已配置高级变量时 tooltip 换口径，行内有仅源码可维护的自定义字段时挂橙点。
+ */
+function buildExpandIcon(expanded: boolean, hasAdvanced: boolean, toggle: () => void, note?: string): VNode {
+  const base = hasAdvanced
+    ? '已配置高级连接变量：点击展开查看或修改'
+    : '高级连接变量：点击展开设置（SSH 端口 / 连接方式 / 提权 / 私钥等）'
   return h(
     Tooltip,
-    {
-      title: hasAdvanced ? '已配置高级连接变量（点击展开/收起）' : '高级连接变量（点击展开/收起）',
-    },
+    { title: note ? `${base}${note}` : base },
     {
       default: () =>
         h(
@@ -447,6 +447,7 @@ function buildExpandIcon(expanded: boolean, hasAdvanced: boolean, toggle: () => 
             role: 'button',
             tabindex: 0,
             'aria-label': '高级连接变量',
+            'aria-expanded': expanded ? 'true' : 'false',
             onClick: (e: Event) => {
               e.stopPropagation()
               toggle()
@@ -458,15 +459,24 @@ function buildExpandIcon(expanded: boolean, hasAdvanced: boolean, toggle: () => 
               }
             },
           },
-          [h(SettingOutlined, { style: 'font-size: 14px;' })],
+          [
+            h(SettingOutlined, { style: 'font-size: 13px;' }),
+            h('span', { class: 'adv-text' }, '高级'),
+            note ? h('span', { class: 'orange-dot' }) : null,
+          ],
         ),
     },
   )
 }
 
 function renderExpandIcon(props: { expanded: boolean; record: object }): VNode {
-  return buildExpandIcon(props.expanded, rowHasAdvanced(props.record as InventoryHostEntry), () =>
-    toggleExpand(props.record),
+  const record = props.record as InventoryHostEntry
+  const unknown = rowUnknownKeys(record)
+  return buildExpandIcon(
+    props.expanded,
+    rowHasAdvanced(record),
+    () => toggleExpand(record),
+    unknown.length ? `；另有仅源码模式可维护的自定义字段：${unknown.join('、')}` : undefined,
   )
 }
 
@@ -511,16 +521,6 @@ function onGroupExpandedChange(keys: (number | string)[]): void {
 function renderGroupExpandIcon(props: { expanded: boolean }): VNode {
   return buildExpandIcon(props.expanded, groupHasAdvanced(), toggleGroupExpand)
 }
-
-/** 高级按钮提示：已配置 > 仅源码可维护的其余 vars 键 > 未配置 */
-const groupAdvancedHint = computed(() => {
-  if (groupHasAdvanced()) return '已配置组级高级连接变量'
-  if (extraVars.value.length) return '仅源码模式可维护：' + extraVars.value.join('、')
-  return '组级高级连接变量'
-})
-
-/** 高级按钮橙色角标：有高级变量或有仅源码可维护的键时提示 */
-const groupAdvancedMarked = computed(() => groupHasAdvanced() || extraVars.value.length > 0)
 
 /** vars 是否已空（凭据与高级变量都无值）——空时「删除」无对象可删 */
 const groupVarsEmpty = computed(() => Object.keys(buildVars()).length === 0)
@@ -938,6 +938,11 @@ function openBulkImport(): void {
   bulkImportText.value = ''
 }
 
+/** 关闭批量导入弹窗（取消 / 右上 ×；不清空文本，便于再次打开前保留上次内容由 openBulkImport 统一清空） */
+function closeBulkImport(): void {
+  bulkImportVisible.value = false
+}
+
 function confirmBulkImport(): void {
   const { entries } = bulkImportResult.value
   if (bulkImportResult.value.errors.length) return
@@ -1239,6 +1244,13 @@ onUnmounted(() => {
 }
 
 /* 批量导入预览 */
+/* 批量导入：等宽粘贴框（与设计页一致，便于逐行核对主机键/凭据） */
+.bulk-import-textarea {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+
 .bulk-preview {
   margin-top: 12px;
   font-size: 13px;
