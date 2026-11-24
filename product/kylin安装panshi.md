@@ -11,6 +11,9 @@ unzip panshi.zip
 ```
 # 安装 uv
 curl -LsSf https://astral.sh/uv/install.sh | sh
+
+curl -LsSf --doh-url https://223.5.5.5/dns-query https://astral.sh/uv/install.sh | sh
+
 uv --version
 
 # 加入路径
