@@ -7,61 +7,74 @@
           @click="startReadTemplate"
           :disabled="!activeClusterId || !selectedNodeId || readStreaming"
         >
-          {{ readStreaming ? '读取中...' : '读取节点配置' }}
+          <StrokeIcon name="rotate" :size="13" />{{ readStreaming ? '读取中...' : '读取节点配置' }}
         </button>
+        <button class="btn btn-secondary" @click="showVersionManagement" :disabled="!activeClusterId">版本管理</button>
         <button class="btn btn-primary" @click="onPublishClick" :disabled="!activeClusterId || !allNodes.length">
-          发布
+          <StrokeIcon name="upload" :size="13" />发布
         </button>
-        <button class="btn btn-ghost" @click="showVersionManagement" :disabled="!activeClusterId">版本管理</button>
       </template>
     </PageHeader>
 
-    <div class="ee-toolbar">
-      <ClusterSelect
-        :model-value="activeClusterId"
-        :clusters="clusters"
-        style="width: 260px"
-        @change="onASelectClusterChange"
-      />
-      <select
-        :value="selectedNodeId"
-        class="form-input"
-        style="width: 240px"
-        @change="onNodeSelectChange"
-        :disabled="!nodes.length"
-      >
-        <option value="">请选择节点</option>
-        <option v-for="n in nodes" :key="n.id" :value="n.id" :class="{ 'ee-node-offline': n.status !== 1 }">
-          {{ n.ip }}:{{ n.management_port }}{{ n.status === 1 ? '' : ' (离线)' }}
-        </option>
-      </select>
-    </div>
-
-    <div v-if="!activeClusterId" class="ee-empty">
-      <div class="ee-empty-text">请先选择一个集群</div>
-    </div>
-    <div v-else-if="noActiveNodes" class="ee-empty">
-      <div class="ee-empty-text">当前集群无节点，无法管理 edge.env</div>
-      <div class="ee-empty-sub">请先在集群管理中为该集群添加节点</div>
-    </div>
-    <div v-else class="ee-editor-area">
-      <div v-if="!editorContent && !readStreaming" class="ee-empty-card">
-        <div class="ee-empty-card-title">开始使用</div>
-        <div class="ee-guide-line">① 在上方选择集群与节点</div>
-        <div class="ee-guide-line">② 点击「读取节点配置」载入当前配置</div>
-        <div class="ee-guide-line">③ 编辑后点击「发布」写入所选节点</div>
+    <div class="ee-card">
+      <div class="ee-toolbar">
+        <span class="ee-field-label">集群</span>
+        <ClusterSelect
+          :model-value="activeClusterId"
+          :clusters="clusters"
+          style="width: 200px"
+          @change="onASelectClusterChange"
+        />
+        <span class="ee-field-label">节点</span>
+        <select
+          :value="selectedNodeId"
+          class="l5-select ee-node-select"
+          @change="onNodeSelectChange"
+          :disabled="!nodes.length"
+        >
+          <option value="">请选择节点</option>
+          <option v-for="n in nodes" :key="n.id" :value="n.id" :class="{ 'ee-node-offline': n.status !== 1 }">
+            {{ n.ip }}:{{ n.management_port }}{{ n.status === 1 ? '' : ' (离线)' }}
+          </option>
+        </select>
+        <span class="t-spacer"></span>
+        <span v-if="selectedNodePath" class="ee-path">
+          <span>Edge 路径</span><code :title="selectedNodePath">{{ selectedNodePath }}</code>
+        </span>
       </div>
-      <MonacoEditor v-else v-model="editorContent" language="yaml" height="calc(100vh - 320px)" />
-    </div>
 
-    <div v-if="statusSourceLabel" class="ee-status-bar">
-      <span class="ee-status-source">
-        {{ statusSourceLabel }}<template v-if="statusReadAtText"> · 读取于 {{ statusReadAtText }}</template>
-      </span>
-      <span v-if="isDirty" class="ee-dirty-badge">● 未发布修改</span>
-      <span v-if="limitHint" class="ee-limit-hint" :class="{ warn: !limitHint.sufficient }" data-test="edge-limit-hint">
-        {{ limitHint.text }}
-      </span>
+      <div v-if="limitWarning" class="ee-warn-bar" data-test="edge-limit-hint">
+        <StrokeIcon name="warning" :size="14" />
+        <span>{{ limitWarning }}</span>
+      </div>
+
+      <div v-if="!activeClusterId" class="ee-empty">
+        <div class="ee-empty-text">请先选择一个集群</div>
+      </div>
+      <div v-else-if="noActiveNodes" class="ee-empty">
+        <div class="ee-empty-text">当前集群无节点，无法管理 edge.env</div>
+        <div class="ee-empty-sub">请先在集群管理中为该集群添加节点</div>
+      </div>
+      <div v-else class="ee-editor-area">
+        <div v-if="!editorContent && !readStreaming" class="ee-empty-card">
+          <div class="ee-empty-card-title">开始使用</div>
+          <div class="ee-guide-line">① 在上方选择集群与节点</div>
+          <div class="ee-guide-line">② 点击「读取节点配置」载入当前配置</div>
+          <div class="ee-guide-line">③ 编辑后点击「发布」写入所选节点</div>
+        </div>
+        <MonacoEditor v-else v-model="editorContent" language="yaml" height="calc(100vh - 320px)" />
+      </div>
+
+      <div v-if="statusSourceLabel" class="ee-status-bar">
+        <span class="ee-status-source">
+          {{ statusSourceLabel }}<template v-if="statusReadAtText"> · 读取于 {{ statusReadAtText }}</template>
+        </span>
+        <span v-if="isDirty" class="ee-dirty-badge">● 未发布修改</span>
+        <span class="ee-status-spacer"></span>
+        <span v-if="limitHint" class="ee-limit-chip" :class="{ ok: limitHint.sufficient }" data-test="edge-limit-chip">
+          上限 {{ limitHint.effectiveMb }}MB / 平台 {{ limitHint.platformMb }}MB
+        </span>
+      </div>
     </div>
 
     <!-- Read Template Progress Modal -->
@@ -299,6 +312,7 @@ import ClusterSelect from '@/components/ClusterSelect.vue'
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import { message } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'
+import StrokeIcon from '@/components/StrokeIcon.vue'
 import MonacoEditor from '@/components/MonacoEditor.vue'
 import VersionManagementModal from '@/components/VersionManagementModal.vue'
 import api from '@/api'
@@ -458,6 +472,19 @@ const platformLimitMb = computed(() => featuresStore.limitOf('static_zip_max_mb'
 const limitHint = computed(() =>
   editorContent.value ? describeAdminLimit(editorContent.value, platformLimitMb.value) : null,
 )
+
+/** 上限不匹配时的整条警示文案（匹配则整条不渲染；文案单点在 describeAdminLimit） */
+const limitWarning = computed(() => {
+  const hint = limitHint.value
+  return hint && !hint.sufficient ? hint.text : null
+})
+
+/** 当前选中节点的落盘路径（工具条右端只读提示） */
+const selectedNodePath = computed<string>(() => {
+  if (!selectedNodeId.value) return ''
+  const node = nodes.value.find((n: any) => String(n.id) === String(selectedNodeId.value))
+  return node?.edge_path || ''
+})
 
 /** 离开守卫：发布中直接拦（提示等待）；dirty 走确认 */
 async function confirmLeaveIfDirty(): Promise<boolean> {
@@ -859,12 +886,63 @@ function onVersionLoadToEditor(data: { content: string; version: number }) {
   font-weight: 600;
   margin-bottom: 4px;
 }
+.ee-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
 .ee-toolbar {
   display: flex;
   align-items: center;
-  gap: 16px;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+}
+.ee-field-label {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.ee-node-select {
+  width: 220px;
+}
+.ee-path {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.ee-path code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 1px 6px;
+  max-width: 210px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ee-warn-bar {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 16px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: #b45309;
+  background: rgba(250, 173, 20, 0.1);
+  border-bottom: 1px solid rgba(250, 173, 20, 0.3);
+}
+.ee-warn-bar :deep(svg) {
+  flex-shrink: 0;
+  margin-top: 1px;
 }
 .ee-filter-group {
   display: flex;
@@ -903,20 +981,46 @@ function onVersionLoadToEditor(data: { content: string; version: number }) {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-top: 8px;
-  font-size: 12px;
+  padding: 9px 16px;
+  font-size: 11.5px;
   color: var(--muted);
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+.ee-status-spacer {
+  flex: 1 1 auto;
 }
 .ee-dirty-badge {
-  color: #d46b08;
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 11px;
   font-weight: 600;
+  color: #b45309;
+  background: rgba(250, 173, 20, 0.16);
+  border: 1px solid rgba(250, 173, 20, 0.35);
 }
-.ee-limit-hint {
-  font-size: 12px;
-  color: var(--muted);
+.ee-limit-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: #b45309;
+  background: rgba(250, 173, 20, 0.12);
+  border: 1px solid rgba(250, 173, 20, 0.3);
+  white-space: nowrap;
 }
-.ee-limit-hint.warn {
-  color: #d46b08;
+.ee-limit-chip.ok {
+  color: #15803d;
+  background: rgba(22, 163, 74, 0.1);
+  border-color: rgba(22, 163, 74, 0.3);
 }
 .ee-editor-area {
   margin-top: 0;

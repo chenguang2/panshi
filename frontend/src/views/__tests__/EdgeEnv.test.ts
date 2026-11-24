@@ -392,6 +392,12 @@ describe('EdgeEnv.vue 入口守卫 · 未选集群/节点不发起 SSE', () => {
     features.loaded = true
     const wrapper = await mountPage()
     const vm = wrapper.vm as any
+    // 编辑器与状态条都在「已选集群且有节点」的卡片分支内（设计：编辑页收成一张卡）
+    vm.activeClusterId = 1
+    vm.nodes = [
+      { id: 1, ip: '192.168.0.13', management_port: 16621, status: 1, edge_path: '/work/jboss/uapm-2/uap-edge' },
+    ]
+    vm.allNodes = vm.nodes
     vm.editorContent =
       'deploy:\n  http:\n    client_max_body_size: 132m\n    admin:\n      listen:\n        - addr: 0.0.0.0:16621\n'
     await wrapper.vm.$nextTick()
@@ -400,9 +406,11 @@ describe('EdgeEnv.vue 入口守卫 · 未选集群/节点不发起 SSE', () => {
     expect(hint.sufficient).toBe(false)
     expect(hint.willAutoFill).toBe(true)
     expect(hint.text).toContain('pack 默认 32MB')
+    // 断言反转（edge-env-page-parity）：提示由「状态条小字」改为「编辑器上方整条警示」
     const strip = wrapper.find('[data-test="edge-limit-hint"]')
     expect(strip.exists()).toBe(true)
-    expect(strip.classes()).toContain('warn')
+    expect(strip.classes()).toContain('ee-warn-bar')
+    expect(strip.text()).toContain('pack 默认 32MB')
     // 对齐后不再警示
     vm.editorContent = vm.editorContent.replace(
       '        - addr: 0.0.0.0:16621\n',
@@ -410,7 +418,13 @@ describe('EdgeEnv.vue 入口守卫 · 未选集群/节点不发起 SSE', () => {
     )
     await wrapper.vm.$nextTick()
     expect(vm.limitHint.sufficient).toBe(true)
-    expect(wrapper.find('[data-test="edge-limit-hint"]').classes()).not.toContain('warn')
+    // 匹配后整条警示不渲染（而不是退化成灰色小字）
+    expect(wrapper.find('[data-test="edge-limit-hint"]').exists()).toBe(false)
+    // 状态条常驻口径胶囊
+    const chip = wrapper.find('[data-test="edge-limit-chip"]')
+    expect(chip.exists()).toBe(true)
+    expect(chip.classes()).toContain('ok')
+    expect(chip.text()).toBe('上限 132MB / 平台 132MB')
     wrapper.unmount()
   })
 
@@ -940,7 +954,9 @@ describe('EdgeEnv.vue 工具栏收纳与空态指引', () => {
     expect(publishBtn!.classes()).toContain('btn-primary')
     const versionBtn = wrapper.findAll('button').find((b) => b.text() === '版本管理')
     expect(versionBtn).toBeDefined()
-    expect(versionBtn!.classes()).toContain('btn-ghost')
+    // 页头非主操作一律 secondary（#90）：ghost 无边框，用户实测读成「按钮缺边框」
+    expect(versionBtn!.classes()).toContain('btn-secondary')
+    expect(versionBtn!.classes()).not.toContain('btn-ghost')
     wrapper.unmount()
   })
 
