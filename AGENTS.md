@@ -282,7 +282,7 @@ openspec/        # 变更工件；openspec/specs/ = main specs
 **不入库**（已由 .gitignore 覆盖，不要 force-add）：
 - `backend/data/` 全部内容（数据库、静态资源、归档）— 没有任何 .db 文件被跟踪
 - `uv.lock`（`backend/uv.lock` 为历史遗留的已跟踪文件；新 lock 文件不提交）
-- `logs/`、`*.png`、`product/`、`docs/other/`、`test-results/`
+- `logs/`、`*.png`（白名单例外 `!docs/user-manual/images/**`）、`product/`（个别文档为历史已跟踪文件）、`docs/other/`、`test-results/`
 - `backend/ansible/soft/`、`backend/ansible/collections/`、`backend/bin/`
 - AI 工具缓存：`.playwright-mcp/`、`.history/`、`.omo/`、`.sisyphus/`、`.cortexkit/`
 - 运行时输出：`backend/uvicorn.err|out`、`session-*.md`、`backend/data/static/`、`backend/data/archives/`
@@ -293,6 +293,8 @@ openspec/        # 变更工件；openspec/specs/ = main specs
 - `.opencode/skills/` 和 `.opencode/command/`（AI 工具配置）
 
 **依赖声明**：新增后端依赖 → `backend/pyproject.toml`（不是 requirements.txt）；新增前端依赖 → `frontend/package.json`。
+
+**提交信息必须对照暂存内容写**：`git add` 之后先看 `git diff --cached`（不是 add 之前看的 `git diff`），再写 commit message。工作树可能在秒级被并行会话/用户改动，凭先前 diff 记忆写信息会让「提交信息与提交内容不符」——2026-11-24 实测：`git diff` 看到 `static_zip_max_mb` 132→135，随后 `git add` 时文件已被改回 32，实际提交 132→32，而信息写成了「上限定稿 135」（135 从未落库，事后靠 `git show <sha> -- <file>` 才澄清）。
 
 ## 快速检查清单
 
