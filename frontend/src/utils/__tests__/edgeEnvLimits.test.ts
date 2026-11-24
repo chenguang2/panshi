@@ -60,12 +60,14 @@ describe('describeAdminLimit', () => {
     expect(hint.text).toContain('部署时将自动补齐到 132MB')
   })
 
-  it('低于平台 → 提示将自动抬高', () => {
+  it('低于平台 → 保留显式值并告警落差（不自动抬升）', () => {
     const hint = describeAdminLimit(WITH_ADMIN_32, 132)
     expect(hint.adminMb).toBe(32)
-    expect(hint.willAutoFill).toBe(true)
+    expect(hint.willAutoFill).toBe(false)
     expect(hint.text).toContain('低于平台上限 132MB')
-    expect(hint.text).toContain('自动抬到 132MB')
+    expect(hint.text).toContain('32–132MB')
+    expect(hint.text).toContain('413')
+    expect(hint.text).toContain('不会自动抬升')
   })
 
   it('已对齐 → 中性文案，不再提示补齐', () => {

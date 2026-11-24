@@ -100,17 +100,18 @@ export function describeAdminLimit(content: string, platformMb: number): EdgeLim
       effectiveMb,
       sufficient,
       willAutoFill: true,
-      text: `Edge 上传上限按 pack 默认 ${EDGE_ADMIN_BASELINE_MB}MB 生效（http 段写更大的值无效）；部署时将自动补齐到 ${platformMb}MB`,
+      text: `Edge 上传上限按 pack 默认 ${EDGE_ADMIN_BASELINE_MB}MB 生效（http 段的值不生效，server 级只认 admin 段）；部署时将自动补齐到 ${platformMb}MB`,
     }
   }
   if (!sufficient) {
+    // 用户裁决 B（2026-11-24）：显式更低值保留不覆盖，只告警落差
     return {
       platformMb,
       adminMb,
       effectiveMb,
       sufficient,
-      willAutoFill: true,
-      text: `Edge 上传上限 ${adminMb}MB 低于平台上限 ${platformMb}MB；部署时将自动抬到 ${platformMb}MB`,
+      willAutoFill: false,
+      text: `Edge 上传上限 ${adminMb}MB 低于平台上限 ${platformMb}MB：发布 ${adminMb}–${platformMb}MB 的 zip 会报 413（平台不会自动抬升你的显式配置；如非本意，把 admin 段调到 ${platformMb}m 或把平台上限调到 ${adminMb}MB）`,
     }
   }
   return {

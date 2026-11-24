@@ -122,6 +122,19 @@ class TestReadLimitsDiagnosis:
         assert limits["sufficient"] is sufficient
         assert limits["note"]
 
+    async def test_insufficient_note_mentions_413_range_and_no_auto_raise(self, env_db, monkeypatch):
+        db, cluster = env_db
+        monkeypatch.setattr("app.api.v1.cluster_edge_env.static_zip_max_mb", lambda: 132)
+        svc = MagicMock(spec=AnsibleRunnerService)
+        svc.generic_run = AsyncMock(return_value={"rc": 0, "shell_stdout": CONTENT_ADMIN_32, "stdout": ""})
+        app = _make_app(db)
+        with patch("app.api.v1.cluster_edge_env._ansible_service", svc):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers=AUTH) as c:
+                resp = await c.get(f"/api/v1/clusters/{cluster.id}/edge-env?node_id=1")
+        note = resp.json()["limits"]["note"]
+        assert "32–132MB" in note and "413" in note
+        assert "不会自动抬升" in note
+
     async def test_missing_admin_note_explains_pack_baseline(self, env_db, monkeypatch):
         db, cluster = env_db
         monkeypatch.setattr("app.api.v1.cluster_edge_env.static_zip_max_mb", lambda: 132)
@@ -132,7 +145,7 @@ class TestReadLimitsDiagnosis:
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers=AUTH) as c:
                 resp = await c.get(f"/api/v1/clusters/{cluster.id}/edge-env?node_id=1")
         note = resp.json()["limits"]["note"]
-        assert "http 段写更大的值不生效" in note
+        assert "http 段写的 132MB 不生效" in note  # 点名不生效的 http 级值
         assert "32MB" in note
 
 
@@ -165,15 +178,16 @@ class TestDeployInjection:
         assert len(sent.splitlines()) == len(CONTENT_NO_ADMIN.splitlines()) + 1
         assert any("已自动补齐" in line for line in _lines_of(events)[:1]), _lines_of(events)[:2]
 
-    async def test_lower_admin_value_is_raised(self, env_db):
+    async def test_lower_admin_value_kept_with_warning(self, env_db):
+        """用户裁决 B：显式 32m 原样下发，SSE 首行告警「发布 32–132MB 会 413」。"""
         db, cluster = env_db
         captured: list[dict] = []
         events = await self._deploy(db, cluster, CONTENT_ADMIN_32, 132, captured)
 
-        sent = captured[0]["env_content"]
-        assert "client_max_body_size: 132m" in sent
-        assert "client_max_body_size: 32m" not in sent
-        assert any("抬到 132m" in line for line in _lines_of(events)[:1]), _lines_of(events)[:2]
+        assert captured[0]["env_content"] == CONTENT_ADMIN_32  # 逐字不变
+        first = _lines_of(events)[:1]
+        assert any("低于平台上限 132MB" in line and "413" in line for line in first), first
+        assert not any("已自动补齐" in line for line in first), first
 
     async def test_higher_admin_value_kept(self, env_db):
         db, cluster = env_db

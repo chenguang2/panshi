@@ -20,6 +20,7 @@ from app.services.edge_env_limits import (
     EDGE_ADMIN_BASELINE_MB,
     ensure_admin_limit,
     parse_admin_body_limit_mb,
+    parse_http_body_limit_mb,
 )
 from app.schemas.cluster import ConfigVersionResponse, ConfigVersionListResponse
 from app.services.ansible_service import AnsibleRunnerService, _run_ansible_stream, translate_ansible_error
@@ -99,18 +100,27 @@ def _limits_diagnosis(content: str) -> EdgeEnvLimits:
     """
     platform_mb = static_zip_max_mb()
     admin_mb = parse_admin_body_limit_mb(content)
+    http_mb = parse_http_body_limit_mb(content)
     effective_mb = EDGE_ADMIN_BASELINE_MB if admin_mb is None else admin_mb
     sufficient = effective_mb >= platform_mb
     if admin_mb is None:
+        http_hint = (
+            f"http 段写的 {http_mb}MB 不生效（server 级只认 admin 段）" if http_mb is not None else "http 段也没有该配置"
+        )
         note = (
-            f"未在 deploy.http.admin 配置 client_max_body_size：Edge pack 的 server 级默认 "
-            f"{EDGE_ADMIN_BASELINE_MB}MB 生效（http 段写更大的值不生效），直连发布超过 "
-            f"{EDGE_ADMIN_BASELINE_MB}MB 将报 413；部署时会自动补齐到平台上限 {platform_mb}MB。"
+            f"未在 deploy.http.admin 配置 client_max_body_size：{http_hint}，Edge 实际按 pack 基线 "
+            f"{EDGE_ADMIN_BASELINE_MB}MB 生效；部署时会自动补齐到平台上限 {platform_mb}MB。"
         )
     elif not sufficient:
         note = (
-            f"deploy.http.admin.client_max_body_size={admin_mb}MB 低于平台上限 {platform_mb}MB，"
-            f"直连发布超过 {admin_mb}MB 将报 413；部署时会自动抬到平台上限。"
+            f"Edge 上传上限 {admin_mb}MB 低于平台上限 {platform_mb}MB：发布 {admin_mb}–{platform_mb}MB 的 zip "
+            f"会报 413（平台不会自动抬升你的显式配置；如非本意，请把 admin 段调到 {platform_mb}m，"
+            f"或把平台上限调到 {admin_mb}MB）"
+        )
+    elif admin_mb > platform_mb:
+        note = (
+            f"Edge 上传上限 {admin_mb}MB 高于平台上限 {platform_mb}MB（保留原值）：实际可发布的 zip "
+            f"仍受平台上限 {platform_mb}MB 约束。"
         )
     else:
         note = f"Edge 上传上限 {effective_mb}MB，已与平台上限 {platform_mb}MB 对齐。"
@@ -146,12 +156,15 @@ async def deploy_edge_env(
     limit_note: str | None = None
     if limit_action == "inserted":
         limit_note = (
-            f"已自动补齐 deploy.http.admin.client_max_body_size: {platform_mb}m（平台上限）"
+            f"已自动补齐缺失的 deploy.http.admin.client_max_body_size: {platform_mb}m（平台上限）"
             f"——Edge 只有该段能覆盖 pack 的 server 级 {EDGE_ADMIN_BASELINE_MB}MB 默认"
         )
-    elif limit_action == "raised":
+    elif limit_action == "kept" and limit_old is not None and limit_old < platform_mb:
+        # 用户裁决 B（2026-11-24）：显式更低值保留不覆盖，只在部署日志里告警落差
         limit_note = (
-            f"已将 deploy.http.admin.client_max_body_size 从 {limit_old}MB 抬到 {platform_mb}m（平台上限）"
+            f"注意：Edge 上传上限 {limit_old}MB 低于平台上限 {platform_mb}MB——发布 "
+            f"{limit_old}–{platform_mb}MB 的 zip 将报 413；平台不会自动抬升你的显式配置，"
+            f"如需放宽请把该行调到 {platform_mb}m，或把平台上限调到 {limit_old}MB"
         )
     elif limit_action == "absent":
         limit_note = "未定位到 deploy.http.admin 配置块，未自动对齐 Edge 上传上限，请检查 edge.env 结构"

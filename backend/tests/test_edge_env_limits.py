@@ -128,14 +128,12 @@ class TestEnsureAdminLimit:
         i_new = lines.index("      client_max_body_size: 132m")
         assert i_admin < i_new < i_custom
 
-    def test_raised_when_lower(self):
-        new, action, old = ensure_admin_limit(WITH_ADMIN_32, 132)
-        assert (action, old) == ("raised", 32)
-        assert "client_max_body_size: 132m" in new
-        assert "client_max_body_size: 32m" not in new
-        # 只差一行
-        diff = [l for l in WITH_ADMIN_32.splitlines() if l not in new.splitlines()]
-        assert diff == ["      client_max_body_size: 32m"]
+    def test_lower_value_preserved_not_raised(self):
+        """用户裁决 B：显式更低值是运维刻意收紧，平台不得静默覆盖。"""
+        new, action, current = ensure_admin_limit(WITH_ADMIN_32, 132)
+        assert (action, current) == ("kept", 32)
+        assert new == WITH_ADMIN_32  # 逐字不变
+        assert effective_limit_mb(new) == 32
 
     def test_kept_when_higher(self):
         new, action, old = ensure_admin_limit(WITH_ADMIN_256, 132)

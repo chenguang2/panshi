@@ -7,7 +7,9 @@
 
 本模块是「生效上限判定」与「部署前文本级对齐」的唯一实现：
 - 判定：admin 段有值 → 该值；缺失 → pack 基线 32MB（http 级不参与）；
-- 对齐：缺失→写入、低于→抬高、高于→保留。**必须文本级**，不得 YAML round-trip
+- 对齐（2026-11-24 用户裁决 B）：**只在缺失时补写平台值；显式写下的一律保留**
+  （更低值 = 运维刻意收紧，平台不得静默覆盖；由诊断/编辑提示/部署日志三处告警暴露
+  「发布 >XMB 会 413」的落差）。**必须文本级**，不得 YAML round-trip
   （edge.env 带人工注释与顺序语义，yaml.dump 会全部毁掉）。
 """
 
@@ -125,11 +127,14 @@ def effective_limit_mb(content: str) -> int:
 
 
 def ensure_admin_limit(content: str, platform_mb: int) -> tuple[str, str, int | None]:
-    """把 admin 段上限对齐到平台上限（文本级）。
+    """admin 段上限对齐（文本级）：只在缺失时补写平台值，显式值一律保留。
+
+    用户裁决 B（2026-11-24）：显式写下的更低值是运维的刻意收紧，平台不得静默覆盖；
+    落差由调用方以告警形式暴露（「发布 X–YMB 的 zip 会 413」）。
 
     Returns:
-        (new_content, action, old_mb)
-        action: inserted（原缺失）/ raised（原更低，已抬高）/ kept（已 ≥ 平台值或不适用）
+        (new_content, action, current_mb)
+        action: inserted（原缺失，已补写平台值）/ kept（已存在，原样保留）
                  / absent（定位不到 deploy.http.admin，内容原样返回）
     """
     lines, nl, trailing = _split_lines(content)
@@ -147,14 +152,8 @@ def ensure_admin_limit(content: str, platform_mb: int) -> tuple[str, str, int | 
         m = _RE_KEY.match(line)
         if not m or _indent_of(line) <= admin_indent:
             continue
-        current = _to_mb(m.group("value"))
-        if current is not None and current >= platform_mb:
-            return content, "kept", current
-        new_line = f"{m.group('indent')}{m.group('key')}: {target}"
-        if m.group("comment"):
-            new_line += f"  {m.group('comment')}"
-        lines[i] = new_line
-        return _join_lines(lines, nl, trailing), "raised", current
+        # 已显式配置：原样保留（高低都不动），落差交调用方告警
+        return content, "kept", _to_mb(m.group("value"))
 
     # 未配置：插入到 admin: 之后，缩进取 admin 子行缩进（无子行则 +2）
     child_indent = admin_indent + 2
@@ -164,3 +163,36 @@ def ensure_admin_limit(content: str, platform_mb: int) -> tuple[str, str, int | 
             break
     lines.insert(i_admin + 1, f"{' ' * child_indent}{_KEY}: {target}")
     return _join_lines(lines, nl, trailing), "inserted", None
+
+
+def parse_http_body_limit_mb(content: str) -> int | None:
+    """解析 `deploy.http` **本级**的 client_max_body_size（admin 子块里的不算）。
+
+    用途：诊断文案点明「http 级写了 X MB 也不生效」——Edge pack 的 server 级
+    32m 只认 admin 段，运维常在 http 级白写一行（2026-11-24 实测再次出现）。
+    """
+    lines, _nl, _trailing = _split_lines(content)
+    i_http, http_indent = _find_block(lines, _RE_HTTP)
+    if i_http is None:
+        return None
+    http_end = _block_end(lines, i_http, http_indent)
+    # http 块的直接子键缩进：取第一个子行缩进
+    child_indent = None
+    for i in range(i_http + 1, http_end):
+        line = lines[i]
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        child_indent = _indent_of(line)
+        break
+    if child_indent is None:
+        return None
+    for i in range(i_http + 1, http_end):
+        line = lines[i]
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if _indent_of(line) != child_indent:
+            continue
+        m = _RE_KEY.match(line)
+        if m:
+            return _to_mb(m.group("value"))
+    return None
