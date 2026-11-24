@@ -9,7 +9,7 @@
 ## What Changes
 
 - **单一事实源**：以 `features.yaml` 的 `limits.static_zip_max_mb` 为唯一上限来源（已有，mtime 热加载）。
-- **Edge 侧自动对齐（核心）**：`POST /clusters/{id}/edge-env/deploy` 下发前，对提交内容做文本级检查与补齐——`deploy.http.admin.client_max_body_size` 缺失 → 按平台上限写入；低于平台上限 → 抬到平台上限（并说明原值）；高于平台上限 → 保留（不降）。补齐动作以 SSE 行与响应字段显式回报，**不改动用户其余内容与注释**。
+- **Edge 侧对齐与告警（核心，2026-11-24 用户裁决 B 修订）**：`POST /clusters/{id}/edge-env/deploy` 下发前对提交内容做文本级处理——`deploy.http.admin.client_max_body_size` **缺失 → 补写平台上限**；**显式写下的值一律保留不覆盖（含低于平台值的刻意收紧）**，该落差在部署流 SSE、读取诊断、前端编辑提示三处告警「发布 {admin}–{平台}MB 的 zip 会 413」并给出修复动作（抬高该行或调低平台上限）。**不改动用户其余内容与注释**。
 - **Edge 侧生效上限诊断**：`GET /clusters/{id}/edge-env` 响应新增 `limits` 段（平台上限 / admin 段值 / 按 pack 默认推算的生效值 / 是否够用 / 中文说明），明确指出「未在 admin 段配置时 Edge 实际按 32MB 生效，写 http 段无效」。
 - **前端一致性**：edge.env 页面状态条/警示条展示「Edge 生效上限 vs 平台上限」，编辑内容未对齐时在部署前提示「将自动补齐」；类型定义与 API 同步。
 - **中继网关腿收口**：`render_relay_server_conf` 在 8443 server 块写入 `client_max_body_size {平台上限}m`，`GET /relay/gateways/{id}/config-preview` 同源展示，使「经中继」与「直连」两腿的上限都可从平台配置推导，无需人工记 nginx 指令。

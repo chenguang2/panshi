@@ -27,7 +27,7 @@ edge.env 是人工编辑的 YAML，含大量注释与顺序语义（如 `## http
 1. 先用既有 `validate_edge_env()` 校验（YAML 合法 + 必填结构存在）；不合法则按现状报错，不做任何写入。
 2. 再用**行扫描**定位：顶层 `http:` → 其下的 `admin:`（同为 http 的子键，缩进相等）→ 在 `admin:` 子块内找 `client_max_body_size:`。
 3. 命中 → 仅替换该行的值部分；未命中 → 在 `admin:` 行之后插入一行，缩进取 `admin:` 下第一个子行的缩进（无子行则 `admin:` 缩进 + 2）。
-4. 返回 `(new_content, action, old_mb)`，`action ∈ {inserted, raised, kept, absent}`；非 http.admin 结构的异常情况（如 `admin:` 非映射）走 `absent` 并只记录说明，不猜测改写。
+4. 返回 `(new_content, action, current_mb)`，`action ∈ {inserted, kept, absent}`——**只在缺失时写（inserted），已存在一律 kept 原样返回**（2026-11-24 用户裁决 B：显式更低值属运维刻意收紧，平台不得静默覆盖；落差交三处告警）。非 http.admin 结构的异常情况走 `absent` 并只记录说明，不猜测改写。
 
 约束：插入点不跨越其它块；只处理「第一个 http.admin」；重复键已在既有校验覆盖范围外，出现多个 `admin:` 时按首个处理并在说明里注明（防御，不报错）。
 

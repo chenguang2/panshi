@@ -7,7 +7,7 @@
 `POST /clusters/{cluster_id}/edge-env/deploy` SHALL 在下发前按平台上限（`features.yaml` 的 `limits.static_zip_max_mb`，缺省 32）检查提交内容中 `deploy.http.admin.client_max_body_size`：
 
 - 缺失 → SHALL 写入 `{平台上限}m`；
-- 低于平台上限 → SHALL 抬到 `{平台上限}m`（回报原值）；
+- **低于平台上限 → SHALL 原样保留，不自动抬升**（用户裁决 2026-11-24：显式更低的数字是运维的刻意收紧，平台不得静默覆盖），并在部署流/读取诊断/编辑提示三处告警「发布 {admin}–{平台}MB 的 zip 会 413」及修复建议（调高该行或调低平台上限）；
 - 高于平台上限 → SHALL 保留原值，不下调；
 - 编辑内容无法解析为 YAML 或缺失既有必填结构 → 沿用既有校验错误，不写入。
 
@@ -19,11 +19,11 @@
 - **THEN** 部署前 SHALL 在 `deploy.http.admin` 下写入 `client_max_body_size: {平台上限}m`
 - **AND** 部署流 SHALL 输出一行说明此为自动补齐
 
-#### Scenario: admin 段上限低于平台上限时抬高
+#### Scenario: admin 段上限低于平台上限时保留并告警
 
 - **WHEN** 提交内容中 `deploy.http.admin.client_max_body_size: 32m` 而平台上限为 132
-- **THEN** 下发内容 SHALL 变为 `132m`
-- **AND** 说明 SHALL 回显「32m → 132m」
+- **THEN** 下发内容 SHALL 逐字保持 `32m`（不抬升）
+- **AND** 部署流 SHALL 输出告警：「发布 32–132MB 的 zip 将报 413」，并给出「把该行调到 132m 或把平台上限调到 32MB」两个修复动作
 
 #### Scenario: admin 段上限高于平台上限时保留
 
@@ -44,7 +44,7 @@
 - **WHEN** 节点 edge.env 只有 `deploy.http.client_max_body_size: 132m`，没有 admin 段该项
 - **THEN** 响应 `limits.effective_mb` SHALL 为 32
 - **AND** `limits.sufficient` SHALL 为 false（当平台上限 > 32）
-- **AND** `limits.note` SHALL 说明「Edge pack server 级默认 32MB 生效，须写在 http.admin 段」
+- **AND** `limits.note` SHALL 说明「Edge pack server 级默认 32MB 生效，须写在 http.admin 段」，且当 http 级存在同名配置时 SHALL 点名「http 段写的 {N}MB 不生效」
 
 #### Scenario: admin 段已对齐
 
