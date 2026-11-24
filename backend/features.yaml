@@ -78,4 +78,4 @@ concurrency:
 #                    （实测为注释态时 nginx 默认 1m，超过即直连发布 413）。
 # 提示：上限越大，单请求越可能被整体读入后端内存（上传腿按上限做防御读取）。
 limits:
-  static_zip_max_mb: 132
+  static_zip_max_mb: 32
