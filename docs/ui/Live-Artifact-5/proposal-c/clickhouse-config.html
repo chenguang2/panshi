@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClickHouse 配置 · 方案 C 网关控制台感 — 磐石网关管理平台</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+/* —— 本页专属解剖（ClickHouse 配置）：配置管理页 = 健康卡 + 连接列表 + 弹窗样张。
+   状态色只绑定实测连通性（可达/不可达/检测中/未配置），不自造颜色 —— */
+.page-header h1 { font-size: 21px; }
+
+/* 卡头（配置页双卡共用：健康卡 / 连接列表） */
+.ck-cardhead { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.ck-cardhead h3 { margin: 0; font-size: 13px; font-weight: 600; color: var(--fg); }
+.ck-cardhead .ck-sub { font-size: 11.5px; color: var(--muted); }
+
+/* 当前数据源健康卡 */
+.ck-hero { display: flex; align-items: flex-start; gap: 14px; padding: 16px 20px 18px; }
+.ck-verdict { flex-shrink: 0; }
+.ck-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.ck-name-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ck-name { font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--fg); }
+.ck-addr { font-family: var(--font-mono); font-size: 12.5px; color: var(--muted); }
+.ck-meta { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); }
+.ck-meta .ok { color: var(--success); }
+.ck-actions { flex-shrink: 0; display: flex; gap: 8px; align-items: center; }
+
+/* 不可达样张（错误解剖：摘要 + 可展开原始错误） */
+.ck-error { font-size: 12.5px; color: var(--danger); }
+.ck-error .ck-link { background: none; border: none; color: var(--accent); cursor: pointer; font-size: 12px; padding: 0 4px; text-decoration: underline; text-underline-offset: 2px; }
+.ck-error-detail {
+  margin-top: 6px; padding: 8px 10px; font-family: var(--font-mono); font-size: 11px;
+  color: var(--muted); background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-md); word-break: break-all; white-space: pre-wrap;
+}
+
+/* 上次测试标记 */
+.test-ok { color: var(--success); font-size: 12px; }
+.test-fail { color: var(--danger); font-size: 12px; }
+
+/* 弹窗样张（静态呈现，600px = 实现同宽） */
+.ck-annot { font-size: 11px; color: var(--muted); margin: 24px 0 6px 2px; }
+.ck-annot b { color: var(--fg); font-weight: 600; }
+.ck-modal { width: 600px; max-width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); }
+.ck-mh { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--accent-bg); border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+.ck-mh h2 { margin: 0; font-size: 14px; font-weight: 600; color: var(--fg); }
+.ck-mx { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-sm); border: none; background: transparent; cursor: pointer; color: var(--muted); font-size: 20px; line-height: 1; }
+.ck-mx:hover { background: var(--bg); color: var(--fg); }
+.ck-mb { padding: 20px; }
+.ck-mf { display: flex; justify-content: flex-start; align-items: center; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--border); }
+.ck-mf .spacer { flex: 1; }
+.ck-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; margin-bottom: 14px; }
+.ck-field { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ck-field.full { display: block; }
+.ck-label { font-size: 12px; font-weight: 600; color: var(--fg); white-space: nowrap; }
+.ck-label .req { color: var(--danger); margin-left: 2px; }
+.ck-input { flex: 1 1 140px; min-width: 0; width: 100%; height: 32px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); font-size: 12.5px; color: var(--fg); outline: none; transition: border-color .15s, box-shadow .15s; }
+.ck-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
+.ck-input::placeholder { color: oklch(50% 0.018 240 / 45%); }
+.ck-hint { color: var(--muted); cursor: help; margin-left: 2px; font-size: 12px; }
+.ck-activate { margin-top: 2px; padding-top: 12px; border-top: 1px dashed var(--border); }
+.ck-activate label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--fg); cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="app-layout">
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="sidebar-logo-icon">磐</div>
+    <span class="sidebar-logo-text">磐石</span>
+    <span class="sidebar-logo-version">v1.0</span>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">核心功能</div>
+      <a class="nav-item" href="overview.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h5v5H3v-5zm7 0h5v5h-5v-5z"/></svg><span>概览</span></a>
+      <a class="nav-item" href="clusters.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h14v5H2V3zm0 7h14v5H2v-5z"/></svg><span>集群管理</span></a>
+      <a class="nav-item" href="routes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l5-7v5h9v4H7v5l-5-7z"/></svg><span>路由管理</span></a>
+      <a class="nav-item" href="upstreams.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>上游管理</span></a>
+      <a class="nav-item" href="nodes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3a2 2 0 110 4 2 2 0 010-4zM3.5 14a2 2 0 110-4 2 2 0 010 4zM14.5 14a2 2 0 110-4 2 2 0 010 4z"/></svg><span>节点管理</span></a>
+      <a class="nav-item" href="plugin-groups.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h12v5H3v-5z"/></svg><span>插件组</span></a>
+      <a class="nav-item" href="plugin-metadata.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h8l3 3v9a1 1 0 01-1 1H5a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M9 7v4M9 13v-1"/></svg><span>插件元数据</span></a>
+      <a class="nav-item" href="global-rules.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l6 3v4c0 3-2.5 5.5-6 7-3.5-1.5-6-4-6-7V5l6-3z"/></svg><span>全局规则</span></a>
+      <a class="nav-item" href="static-resources.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3a1 1 0 011-1h6l4 4v10a1 1 0 01-1 1H6a1 1 0 01-1-1V3zM11 2v4h4"/></svg><span>静态资源</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">证书管理</div>
+      <a class="nav-item" href="ca-certs.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="12.5" r="2.5"/><path d="M8 12.5h7M13 12.5v2.5M15 12.5v2.5"/></svg><span>CA 根证书</span></a>
+      <a class="nav-item" href="server-certs.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="10" height="8" rx="1"/><path d="M6.5 8V6a2.5 2.5 0 015 0v2"/></svg><span>服务器证书</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">边缘网络</div>
+      <a class="nav-item" href="edge-env.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="2.5"/><path d="M9 3v2M9 13v2M3 9h2M13 9h2M4.5 4.5l1.5 1.5M12 12l1.5 1.5M4.5 13.5l1.5-1.5M12 6l1.5-1.5"/></svg><span>edge.env 配置</span></a>
+      <a class="nav-item" href="stream-proxies.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="12" height="4" rx="1"/><rect x="4" y="7" width="10" height="4" rx="1"/><rect x="5" y="12" width="8" height="4" rx="1"/></svg><span>四层代理</span></a>
+      <a class="nav-item" href="dns-udp-proxies.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="4" r="2"/><circle cx="4" cy="14" r="2"/><circle cx="14" cy="14" r="2"/><path d="M9 6v3M4 12l2-2M14 12l-2-2"/></svg><span>DNS代理[UDP]</span></a>
+      <a class="nav-item" href="dns-http-proxies.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="4" r="2"/><circle cx="4" cy="14" r="2"/><circle cx="14" cy="14" r="2"/><path d="M9 6v3M4 12l2-2M14 12l-2-2"/></svg><span>DNS代理[HTTP]</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">监控</div>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h3l2-6 3 10 2-7 1.5 3H16"/></svg><span>指标总览</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.5"/><path d="M12 12l4 4"/></svg><span>指标查询</span></a>
+      <a class="nav-item active" href="clickhouse-config.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="9" cy="4.5" rx="6.5" ry="2.5"/><path d="M2.5 4.5v9c0 1.4 2.9 2.5 6.5 2.5s6.5-1.1 6.5-2.5v-9M2.5 9c0 1.4 2.9 2.5 6.5 2.5s6.5-1.1 6.5-2.5"/></svg><span>ClickHouse 配置</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">运维管理</div>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l7 7-7 7-7-7z"/></svg><span>Edge直连</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>数据导入</span></a>
+      <a class="nav-item" href="tools.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h8v8H5V7zM7 7V5h4v2"/></svg><span>工具箱</span></a>
+      <a class="nav-item" href="edge-autostart.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6-4 6 4v8l-6 4-6-4V6zM3 6l6 4m0 0l6-4m-6 4v8"/></svg><span>自启动管理</span></a>
+      <a class="nav-item" href="ansible-inventory.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="12" height="14" rx="1"/><path d="M6 6h6M6 9.5h6M6 13h4"/></svg><span>Ansible 主机清单</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6-4 6 4v8l-6 4-6-4V6zM3 6l6 4m0 0l6-4m-6 4v8"/></svg><span>节点任务</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="6" height="6" rx="1"/><rect x="10" y="10" width="6" height="6" rx="1"/><path d="M5 8v3a2 2 0 002 2h3"/></svg><span>中继区域管理</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">系统管理</div>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l5 3v6l-5 3-5-3V5l5-3z"/></svg><span>插件管理</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9a3 3 0 100-6 3 3 0 000 6zM3 16c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg><span>用户管理</span></a>
+      <a class="nav-item" href="plugin-switches.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9h8a4 4 0 010 8H5a4 4 0 010-8zM5 15a2 2 0 110-4 2 2 0 010 4z"/></svg><span>插件开关</span></a>
+    </div>
+  </nav>
+</aside>
+<div class="main-area">
+<header class="top-header"><div class="top-header-breadcrumb"><a href="index.html">首页</a><span>/</span><span>监控</span><span>/</span><span>ClickHouse 配置</span></div><div class="top-header-actions"><div class="h-search"><input type="text" placeholder="搜索功能或页面..."><svg class="s-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div><div class="header-user"><div class="header-avatar">管</div><span>管理员</span></div></div></header>
+<div class="content-area">
+
+  <!-- ══════════ 页头：操作日志 + 新建连接（主操作恒最右） ══════════ -->
+  <div class="page-header" style="margin-bottom:20px;">
+    <div>
+      <h1>ClickHouse 配置<span class="ph-inline"><span class="ph-lite lite-accent"><b>2</b> 条连接</span><span class="ph-lite lite-bad"><b>1</b> 条测试失败</span></span></h1>
+      <p>管理指标查询使用的 ClickHouse 连接：支持多条命名连接，激活其中一条。此处切换仅影响监控/指标数据源，与平台数据库（「数据库管理」页）无关。</p>
+    </div>
+    <div class="page-header-actions">
+      <a class="btn btn-secondary" href="#">操作日志</a>
+      <button class="btn btn-primary"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg> 新建连接</button>
+    </div>
+  </div>
+
+  <!-- ══════════ 当前数据源健康卡（四态绑定实测：可达 / 不可达 / 检测中 / 未配置） ══════════ -->
+  <div class="l5-card" style="margin-bottom:16px;">
+    <div class="ck-cardhead"><h3>当前数据源</h3><span class="ck-sub">进入页面自动检测；状态只绑定实测连通性</span></div>
+    <div class="ck-hero">
+      <span class="ck-verdict"><span class="pill pill-run" style="height:24px;font-size:12px;"><span class="dot"></span>可达</span></span>
+      <div class="ck-info">
+        <div class="ck-name-row">
+          <span class="lp-tag tech">ClickHouse</span>
+          <span class="ck-name">生产指标库</span>
+        </div>
+        <span class="ck-addr">192.168.100.42:9000/esapm_metrics</span>
+        <div class="ck-meta">
+          <span>上次测试：<span class="ok">✓ 5 分钟前</span></span>
+          <button class="tool-btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 11-2.64-6.36"/><path d="M21 3v6h-6"/></svg>重新检测</button>
+          <a class="tool-btn" href="#">去指标总览</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ 连接列表（grid-table 解剖；操作层级：设为当前 = 行内主操作 accent） ══════════ -->
+  <div class="l5-card">
+    <div class="ck-cardhead"><h3>连接列表</h3><span class="ck-sub">激活连接即时生效于指标查询；激活与删除有保护</span></div>
+    <div class="l5-table-wrap"><table class="l5-table" style="min-width:1120px"><colgroup><col style="width:40px"><col style="width:140px"><col style="width:180px"><col style="width:150px"><col style="width:100px"><col style="width:90px"><col style="width:140px"><col style="width:90px"><col style="width:300px"></colgroup><thead><tr><th class="c-c">#</th><th class="resizable">名称</th><th class="resizable">地址</th><th class="resizable">数据库</th><th class="resizable">用户</th><th class="resizable">密码</th><th class="resizable">上次测试</th><th class="resizable">当前</th><th class="resizable">操作</th></tr></thead><tbody>
+      <tr class="row-selected">
+        <td class="c-c"><span class="c-idx">1</span></td>
+        <td class="nw"><span class="c-strong">生产指标库</span></td>
+        <td class="nw"><span class="c-mono">192.168.100.42:9000</span></td>
+        <td class="nw"><span class="c-mono c-dim">esapm_metrics</span></td>
+        <td class="nw"><span class="c-mono c-dim">default</span></td>
+        <td class="nw"><span class="c-dim">已设置</span></td>
+        <td class="nw"><span class="test-ok" title="上次测试成功 · 2025/11/25 09:41:12">✓ 5 分钟前</span></td>
+        <td class="nw"><span class="pill pill-run"><span class="dot"></span>当前</span></td>
+        <td class="ops-cell"><div class="ops">
+          <button class="op-btn" title="测试该连接"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>测试</button>
+          <button class="op-pub" disabled style="opacity:.4;cursor:not-allowed" title="当前连接无需切换">设为当前</button>
+          <button class="op-btn" title="编辑连接"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="4" height="16" rx="1"/><rect x="10" y="4" width="4" height="16" rx="1"/><rect x="17" y="4" width="4" height="16" rx="1"/></svg>编辑</button>
+          <button class="op-btn" disabled style="opacity:.4;cursor:not-allowed" title="请先切换到其他连接"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg>删除</button>
+        </div></td>
+      </tr>
+      <tr>
+        <td class="c-c"><span class="c-idx">2</span></td>
+        <td class="nw"><span class="c-strong">预发指标库</span></td>
+        <td class="nw"><span class="c-mono">192.168.100.43:9000</span></td>
+        <td class="nw"><span class="c-mono c-dim">esapm_metrics</span></td>
+        <td class="nw"><span class="c-mono c-dim">default</span></td>
+        <td class="nw"><span class="c-dim">已设置</span></td>
+        <td class="nw"><span class="test-fail" title="连接失败：connection refused">✗ 2 小时前</span></td>
+        <td class="nw"><span class="c-dim">—</span></td>
+        <td class="ops-cell"><div class="ops">
+          <button class="op-btn" title="测试该连接"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>测试</button>
+          <button class="op-pub" title="将指标查询数据源切换到该连接">设为当前</button>
+          <button class="op-btn" title="编辑连接"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="4" height="16" rx="1"/><rect x="10" y="4" width="4" height="16" rx="1"/><rect x="17" y="4" width="4" height="16" rx="1"/></svg>编辑</button>
+          <button class="op-btn" title="删除连接（仅删配置，不触碰 ClickHouse 数据）" style="color:var(--danger)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg>删除</button>
+        </div></td>
+      </tr>
+      <tr>
+        <td class="c-c"><span class="c-idx">3</span></td>
+        <td class="nw"><span class="c-strong">临时调试</span></td>
+        <td class="nw"><span class="c-mono">127.0.0.1:9000</span></td>
+        <td class="nw"><span class="c-mono c-dim">esapm_metrics</span></td>
+        <td class="nw"><span class="c-mono c-dim">default</span></td>
+        <td class="nw"><span class="c-dim">未设置</span></td>
+        <td class="nw"><span class="c-dim">未测试</span></td>
+        <td class="nw"><span class="c-dim">—</span></td>
+        <td class="ops-cell"><div class="ops">
+          <button class="op-btn" title="测试该连接"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>测试</button>
+          <button class="op-pub" title="将指标查询数据源切换到该连接">设为当前</button>
+          <button class="op-btn" title="编辑连接"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="4" height="16" rx="1"/><rect x="10" y="4" width="4" height="16" rx="1"/><rect x="17" y="4" width="4" height="16" rx="1"/></svg>编辑</button>
+          <button class="op-btn" title="删除连接（仅删配置，不触碰 ClickHouse 数据）" style="color:var(--danger)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg>删除</button>
+        </div></td>
+      </tr>
+    </tbody></table></div>
+  </div>
+
+  <!-- ══════════ 不可达态样张（健康卡失败变体的错误解剖） ══════════ -->
+  <div class="ck-annot"><b>不可达态样张</b> · 健康卡失败变体（红色判定 + 中文失败摘要 + 可展开原始错误；此时页面任何位置 MUST NOT 出现绿色在线暗示——spec 既有契约，视觉沿用）</div>
+  <div class="l5-card" style="margin-bottom:16px;">
+    <div class="ck-hero">
+      <span class="ck-verdict"><span class="pill pill-stop" style="height:24px;font-size:12px;"><span class="dot"></span>不可达</span></span>
+      <div class="ck-info">
+        <div class="ck-name-row">
+          <span class="lp-tag tech">ClickHouse</span>
+          <span class="ck-name">生产指标库</span>
+        </div>
+        <span class="ck-addr">192.168.100.42:9000/esapm_metrics</span>
+        <div class="ck-error">
+          连接失败：connection refused
+          <button class="ck-link">收起详情</button>
+          <div class="ck-error-detail">ClickHouseError: Failed to connect to 192.168.100.42:9000 — Connection refused (os error 111)，重试 1 次后放弃；请确认 clickhouse.yaml 网络可达与服务状态</div>
+        </div>
+        <div class="ck-meta">
+          <span>上次测试：<span style="color:var(--danger)">✗ 5 分钟前</span></span>
+          <button class="tool-btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 11-2.64-6.36"/><path d="M21 3v6h-6"/></svg>重新检测</button>
+          <a class="tool-btn" href="#">去指标总览</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ 弹窗样张：新建连接（600px，实现同宽；编辑态差异见注记） ══════════ -->
+  <div class="ck-annot"><b>弹窗样张 · 新建连接</b>（600px）· 编辑态差异：密码占位变「已保存，留空不修改」；「保存后设为当前连接」勾选仅新建与非当前编辑态出现（无激活连接时锁定为「保存后自动成为当前连接」）；页脚「测试连接」不落盘</div>
+  <div class="ck-modal">
+    <div class="ck-mh"><h2>新建连接</h2><button class="ck-mx">&times;</button></div>
+    <div class="ck-mb">
+      <div class="ck-form-row">
+        <div class="ck-field"><label class="ck-label">名称<span class="req">*</span></label><input class="ck-input" value="生产指标库"></div>
+        <div class="ck-field"><label class="ck-label">主机<span class="req">*</span></label><input class="ck-input" value="192.168.100.42"></div>
+      </div>
+      <div class="ck-form-row">
+        <div class="ck-field"><label class="ck-label">端口<span class="ck-hint" title="ClickHouse native TCP 端口，默认 9000；HTTP 端口 8123 不适用于本平台">ⓘ</span></label><input class="ck-input" value="9000"></div>
+        <div class="ck-field"><label class="ck-label">连接超时(秒)</label><input class="ck-input" value="5"></div>
+      </div>
+      <div class="ck-form-row">
+        <div class="ck-field"><label class="ck-label">数据库</label><input class="ck-input" value="esapm_metrics"></div>
+        <div class="ck-field"><label class="ck-label">用户</label><input class="ck-input" value="default"></div>
+      </div>
+      <div class="ck-field full"><label class="ck-label">密码</label><input class="ck-input" type="password" placeholder="可选"></div>
+      <div class="ck-activate"><label><input type="checkbox"> 保存后设为当前连接</label></div>
+    </div>
+    <div class="ck-mf">
+      <button class="btn btn-secondary btn-sm"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> 测试连接</button>
+      <span class="spacer"></span>
+      <button class="btn btn-secondary">取消</button>
+      <button class="btn btn-primary">保存</button>
+    </div>
+  </div>
+
+</div>
+</div>
+</div>
+<div class="l5-prop-tag">方案 C · <b>ClickHouse 配置</b></div>
+</body>
+</html>

@@ -1343,3 +1343,23 @@ describe('mockup-parity：自启动管理（autostart-page-restyle，基准 prop
     expect(autostart).not.toMatch(/>重载</)
   })
 })
+
+describe('mockup-parity：ClickHouse 配置（clickhouse-config-page-restyle，基准 proposal-c/clickhouse-config.html）', () => {
+  const ck = page('ClickHouseConfig.vue')
+
+  it('ck-① 连接表挂 grid-table 解剖（禁 accent 大写表头旧样式回流）', () => {
+    expect(ck).toContain('grid-table')
+    expect(ck).not.toContain('text-transform: uppercase')
+    expect(ck).not.toContain('border-bottom: 2px solid var(--accent)')
+  })
+
+  it('ck-② 健康卡判定为胶囊结构（pill + 色点挂 status-dot 语义类）+ ck-hero 解剖', () => {
+    expect(ck).toContain('ck-hero')
+    expect(ck).toMatch(/class="pill health-verdict" :class="verdictPillClass"/)
+    expect(ck).toContain('dot status-dot')
+  })
+
+  it('ck-③ 页头统计徽标必须接入（设计页 .ph-inline 两枚）', () => {
+    expect(ck).toContain('PageStatBadges')
+  })
+})

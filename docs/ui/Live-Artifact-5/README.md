@@ -1,6 +1,6 @@
 # Live-Artifact-5 · 设计页（方案 C 定稿）
 
-本目录是磐石 Gateway 前端**页面级设计稿的唯一基线**。基线 = `proposal-c/` 下的 20 张页面 HTML + 共享主题 `theme.css` + 卡片页解剖说明 `CARD-PAGES-DESIGN-BRIEF.md`；入口是根目录的 **`index.html`（设计页目录）**。
+本目录是磐石 Gateway 前端**页面级设计稿的唯一基线**。基线 = `proposal-c/` 下的 21 张页面 HTML + 共享主题 `theme.css` + 卡片页解剖说明 `CARD-PAGES-DESIGN-BRIEF.md`；入口是根目录的 **`index.html`（设计页目录）**。
 
 > 2026-11-21 收敛：旧方案 A/B、工具条三变体页与 proposal-c 内 10 份过程稿已删除，历史仍在 git 里。此后**变体对比稿验证完即删**，不留在基线目录。
 
@@ -18,6 +18,7 @@
 | 运维 | Ansible 主机清单 | `proposal-c/ansible-inventory.html` | 编辑页（表格 / 源码双态） | `views/AnsibleInventory.vue` |
 | 运维 | 工具箱 | `proposal-c/tools.html` | 工作台页（工具栏 + 双栏对转 / 输入即算 / 表单生成器） | `views/Tools.vue` |
 | 运维 | 自启动管理 | `proposal-c/edge-autostart.html` | 列表页（nodes 同构：工具条 + 状态行 + 批量条 + grid-table + ListPager） | `views/EdgeAutostart.vue` |
+| 监控 | ClickHouse 配置 | `proposal-c/clickhouse-config.html` | 配置管理页（健康卡四态 + 连接列表 + 弹窗） | `views/ClickHouseConfig.vue` |
 | 卡片 | 四层代理 | `proposal-c/stream-proxies.html` | 卡片页 | `views/StreamProxyList.vue` |
 | 卡片 | DNS 代理（UDP） | `proposal-c/dns-udp-proxies.html` | 卡片页 | `views/DnsUdpProxyList.vue` |
 | 卡片 | DNS 代理（HTTP） | `proposal-c/dns-http-proxies.html` | 卡片页 | `views/DnsQueryList.vue` |

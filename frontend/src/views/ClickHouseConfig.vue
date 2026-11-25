@@ -4,6 +4,9 @@
       title="ClickHouse 配置"
       description="管理指标查询使用的 ClickHouse 连接：支持多条命名连接，激活其中一条。此处切换仅影响监控/指标数据源，与平台数据库（「数据库管理」页）无关。"
     >
+      <template #stats>
+        <PageStatBadges :items="headerStatItems" />
+      </template>
       <template #actions>
         <router-link v-if="canViewAudit" to="/audit-log" class="btn btn-secondary">操作日志</router-link>
         <button class="btn btn-primary" @click="openCreateModal"><StrokeIcon name="plus" :size="13" /> 新建连接</button>
@@ -11,50 +14,68 @@
     </PageHeader>
 
     <!-- 当前数据源健康卡：状态只绑定实测连通性（可达/不可达/检测中/未配置） -->
-    <div class="card">
-      <div class="card-header"><h3>当前数据源</h3></div>
-      <div class="card-body">
-        <a-empty v-if="!activeConnection" description="未配置活动连接" />
-        <div v-else class="status-body">
-          <span class="status-dot" :class="healthDotClass"></span>
-          <div class="active-info">
-            <div class="active-name">
-              <a-tag color="blue">ClickHouse</a-tag>
-              <span class="name">{{ activeConnection.name }}</span>
-              <span class="health-verdict" :class="health.state">
-                {{ healthVerdictText }}
-              </span>
+    <div class="l5-card ck-card">
+      <div class="ck-cardhead">
+        <h3>当前数据源</h3>
+        <span class="ck-sub">进入页面自动检测；状态只绑定实测连通性</span>
+      </div>
+      <div v-if="!activeConnection" class="ck-empty-wrap">
+        <EmptyState title="未配置活动连接" description="未配置时指标页面按默认参数尝试连接（127.0.0.1）。">
+          <button class="btn btn-primary btn-sm" @click="openCreateModal">新建连接</button>
+        </EmptyState>
+      </div>
+      <div v-else class="ck-hero">
+        <span class="ck-verdict">
+          <span class="pill health-verdict" :class="verdictPillClass">
+            <span class="dot status-dot" :class="healthDotClass"></span>{{ healthVerdictText }}
+          </span>
+        </span>
+        <div class="ck-info">
+          <div class="ck-name-row">
+            <span class="lp-tag tech">ClickHouse</span>
+            <span class="ck-name">{{ activeConnection.name }}</span>
+          </div>
+          <span class="ck-addr"
+            >{{ activeConnection.host }}:{{ activeConnection.port }}/{{ activeConnection.database }}</span
+          >
+          <div v-if="health.state === 'fail' && health.error" class="health-error">
+            <span>{{ health.error }}</span>
+            <button v-if="health.errorDetail" class="link-btn" @click="health.showDetail = !health.showDetail">
+              {{ health.showDetail ? '收起详情' : '查看详情' }}
+            </button>
+            <div v-if="health.showDetail && health.errorDetail" class="health-error-detail">
+              {{ health.errorDetail }}
             </div>
-            <div class="active-address">
-              {{ activeConnection.host }}:{{ activeConnection.port }}/{{ activeConnection.database }}
-            </div>
-            <div v-if="health.state === 'fail' && health.error" class="health-error">
-              <span>{{ health.error }}</span>
-              <button v-if="health.errorDetail" class="link-btn" @click="health.showDetail = !health.showDetail">
-                {{ health.showDetail ? '收起详情' : '查看详情' }}
+          </div>
+          <div class="ck-meta">
+            <span>{{ lastTestSummary }}</span>
+            <span class="ck-actions">
+              <button class="tool-btn" :disabled="health.state === 'testing'" @click="runHealthCheck">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M21 12a9 9 0 11-2.64-6.36" />
+                  <path d="M21 3v6h-6" />
+                </svg>
+                {{ health.state === 'testing' ? '检测中…' : '重新检测' }}
               </button>
-              <div v-if="health.showDetail && health.errorDetail" class="health-error-detail">
-                {{ health.errorDetail }}
-              </div>
-            </div>
-            <div class="health-meta">
-              {{ lastTestSummary }}
-              <span class="health-actions">
-                <button class="btn btn-secondary btn-sm" :disabled="health.state === 'testing'" @click="runHealthCheck">
-                  {{ health.state === 'testing' ? '检测中…' : '重新检测' }}
-                </button>
-                <router-link to="/metrics/dashboard" class="btn btn-secondary btn-sm">去指标总览</router-link>
-              </span>
-            </div>
+              <router-link to="/metrics/dashboard" class="tool-btn">去指标总览</router-link>
+            </span>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- 连接列表 -->
-    <div class="card">
-      <div class="card-header">
+    <!-- 连接列表（grid-table 解剖；操作层级：设为当前 = 行内主操作 accent） -->
+    <div class="table-container l5-card ck-card">
+      <div class="ck-cardhead">
         <h3>连接列表</h3>
+        <span class="ck-sub">激活连接即时生效于指标查询；激活与删除有保护</span>
       </div>
       <div class="card-body table-body">
         <a-table
@@ -63,7 +84,9 @@
           :loading="loading"
           row-key="id"
           :pagination="false"
-          class="connection-table"
+          :scroll="{ x: 1235 }"
+          :table-layout="'fixed'"
+          class="ck-table grid-table"
         >
           <template #bodyCell="{ record, column, index }">
             <template v-if="column.key === 'index'">{{ index + 1 }}</template>
@@ -87,43 +110,84 @@
               <span v-else class="text-muted">未测试</span>
             </template>
             <template v-else-if="column.key === 'active'">
-              <span v-if="record.is_active" class="badge badge-success">当前</span>
+              <span v-if="record.is_active" class="pill pill-run"><span class="dot"></span>当前</span>
               <span v-else class="text-muted">-</span>
             </template>
             <template v-else-if="column.key === 'actions'">
-              <div class="table-actions">
+              <div class="ops">
                 <button
-                  class="btn btn-secondary btn-sm"
+                  class="op-btn"
                   :disabled="testingId === record.id"
+                  :title="testingId === record.id ? '测试中…' : '测试该连接'"
                   @click="handleTestSaved(record)"
                 >
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                  </svg>
                   {{ testingId === record.id ? '测试中…' : '测试' }}
                 </button>
                 <button
-                  class="btn btn-sm"
-                  :class="record.is_active ? 'btn-secondary' : 'btn-primary'"
+                  class="op-pub"
                   :disabled="record.is_active"
+                  :title="record.is_active ? '当前连接无需切换' : '将指标查询数据源切换到该连接'"
                   @click="handleActivate(record)"
                 >
                   设为当前
                 </button>
-                <button class="btn btn-secondary btn-sm" @click="openEditModal(record)">编辑</button>
+                <button class="op-btn" title="编辑连接" @click="openEditModal(record)">
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <rect x="3" y="4" width="4" height="16" rx="1" />
+                    <rect x="10" y="4" width="4" height="16" rx="1" />
+                    <rect x="17" y="4" width="4" height="16" rx="1" />
+                  </svg>
+                  编辑
+                </button>
                 <button
-                  class="btn btn-sm"
-                  :class="record.is_active ? 'btn-secondary' : 'btn-danger'"
+                  class="op-btn op-danger"
                   :disabled="record.is_active"
-                  :title="record.is_active ? '请先切换到其他连接' : ''"
+                  :title="record.is_active ? '请先切换到其他连接' : '删除连接（仅删配置，不触碰 ClickHouse 数据）'"
                   @click="handleDelete(record)"
                 >
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" />
+                  </svg>
                   删除
                 </button>
               </div>
             </template>
           </template>
           <template #emptyText>
-            <div class="ck-empty">
-              <p>暂无 ClickHouse 连接；未配置时指标页面按默认参数尝试连接（127.0.0.1）。</p>
-              <button class="btn btn-primary btn-sm" @click="openCreateModal">新建连接</button>
+            <div class="mock-empty">
+              <EmptyState title="暂无 ClickHouse 连接" description="未配置时指标页面按默认参数尝试连接（127.0.0.1）。">
+                <button class="btn btn-primary btn-sm" @click="openCreateModal">新建连接</button>
+              </EmptyState>
             </div>
           </template>
         </a-table>
@@ -251,6 +315,8 @@ import { h, computed, onMounted, reactive, ref } from 'vue'
 import StrokeIcon from '@/components/StrokeIcon.vue'
 import { message } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'
+import PageStatBadges from '@/components/PageStatBadges.vue'
+import EmptyState from '@/components/EmptyState.vue'
 import { showOverlayModal } from '@/composables/useOverlayModal'
 import { useAuthStore } from '@/stores/auth'
 import {
@@ -269,14 +335,14 @@ import { formatDateTime, formatRelativeTime } from '@/utils/format'
 
 const columns = [
   { title: '#', key: 'index', width: 45 },
-  { title: '名称', dataIndex: 'name', key: 'name' },
-  { title: '地址', key: 'address' },
-  { title: '数据库', dataIndex: 'database', key: 'database' },
-  { title: '用户', dataIndex: 'user', key: 'user' },
-  { title: '密码', key: 'password' },
-  { title: '上次测试', key: 'lastTest' },
-  { title: '当前', key: 'active' },
-  { title: '操作', key: 'actions' },
+  { title: '名称', dataIndex: 'name', key: 'name', width: 140 },
+  { title: '地址', key: 'address', width: 180 },
+  { title: '数据库', dataIndex: 'database', key: 'database', width: 150 },
+  { title: '用户', dataIndex: 'user', key: 'user', width: 100 },
+  { title: '密码', key: 'password', width: 90 },
+  { title: '上次测试', key: 'lastTest', width: 140 },
+  { title: '当前', key: 'active', width: 90 },
+  { title: '操作', key: 'actions', width: 300 },
 ]
 
 const authStore = useAuthStore()
@@ -299,6 +365,20 @@ const health = reactive({
 const healthDotClass = computed(() =>
   health.state === 'ok' ? 'online' : health.state === 'fail' ? 'offline' : 'testing-dot',
 )
+
+/** 判定胶囊变体（可达绿 / 不可达红 / 检测中·未配置灰）；文案与色点语义见 healthDotClass */
+const verdictPillClass = computed(() =>
+  health.state === 'ok' ? 'pill-run' : health.state === 'fail' ? 'pill-stop' : 'pill-unknown',
+)
+
+/** 页头统计徽标（补充维度）：连接总数 + 上次测试失败数，均取当前已加载数据集 */
+const headerStatItems = computed(() => {
+  const failed = connections.value.filter((c) => c.last_test_ok === false).length
+  return [
+    { value: connections.value.length, label: '条连接' },
+    { value: failed, label: '条测试失败', tone: 'bad' as const },
+  ]
+})
 
 const healthVerdictText = computed(() => {
   if (health.state === 'testing' || health.state === 'idle') return '检测中…'
@@ -648,89 +728,88 @@ onMounted(async () => {
   gap: 20px;
 }
 
-/* ── 当前数据源健康卡 ── */
-.status-body {
+/* ── 当前数据源健康卡（ck-cardhead + ck-hero，设计页 clickhouse-config.html 同名类）── */
+.ck-cardhead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.ck-cardhead h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.ck-cardhead .ck-sub {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.ck-empty-wrap {
+  padding: 12px 0;
+}
+.ck-hero {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
+  gap: 14px;
+  padding: 16px 20px 18px;
 }
-.status-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
+.ck-verdict {
   flex-shrink: 0;
-  margin-top: 5px;
 }
-.status-dot.online {
-  background: oklch(65% 0.19 145);
+/* 判定胶囊 24px 大号；色点复用 .status-dot 全局色，尺寸收为胶囊内 6px */
+.ck-verdict .pill {
+  height: 24px;
+  font-size: 12px;
 }
-.status-dot.offline {
-  background: oklch(62% 0.21 25);
+.ck-verdict .pill .dot.status-dot {
+  width: 6px;
+  height: 6px;
+  margin: 0;
 }
-.status-dot.testing-dot {
-  background: var(--muted);
-  opacity: 0.6;
-}
-.active-info {
+.ck-info {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
 }
-.active-name {
+.ck-name-row {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
-.active-name .name {
-  font-size: 14px;
+.ck-name {
+  font-family: var(--font-display);
+  font-size: 15px;
   font-weight: 600;
+  color: var(--fg);
 }
-.health-verdict {
-  font-size: 12px;
-  font-weight: 600;
-}
-.health-verdict.ok {
-  color: oklch(58% 0.16 150);
-}
-.health-verdict.fail {
-  color: oklch(58% 0.2 25);
-}
-.health-verdict.testing,
-.health-verdict.idle {
+.ck-addr {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
   color: var(--muted);
 }
-.active-address {
-  color: var(--muted);
-  font-size: 13px;
-}
-.health-error {
-  font-size: 12px;
-  color: oklch(55% 0.19 25);
-  max-width: 720px;
-}
-.health-error-detail {
-  margin-top: 4px;
-  padding: 8px 10px;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 11px;
-  color: var(--muted);
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  word-break: break-all;
-  white-space: pre-wrap;
-}
-.health-meta {
+.ck-meta {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   font-size: 12px;
   color: var(--muted);
 }
-.health-actions {
+.ck-meta .ok {
+  color: var(--success);
+}
+.ck-actions {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+}
+.ck-actions .tool-btn svg {
+  width: 12px;
+  height: 12px;
 }
 .link-btn {
   background: none;
@@ -744,65 +823,32 @@ onMounted(async () => {
   text-decoration: underline;
 }
 
-/* ── 连接列表表格 ── */
+/* ── 连接列表表格（grid-table 全局解剖接管表头/悬停/密度；本页仅留语义色）── */
 .mono {
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 13px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
 }
 .table-body {
   padding: 0;
 }
-.connection-table :deep(.ant-table) {
-  background: transparent;
-}
-.connection-table :deep(.ant-table-thead > tr > th) {
-  background: oklch(56% 0.16 210 / 10%);
-  border-bottom: 2px solid var(--accent);
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 12px 8px;
-  white-space: nowrap;
-}
-.connection-table :deep(.ant-table-thead > tr > th::before) {
-  display: none !important;
-}
-.connection-table :deep(.ant-table-tbody > tr > td) {
-  padding: 12px 8px;
-  border-bottom: 1px solid var(--border) !important;
-  color: var(--muted);
-  font-size: 13px;
-  white-space: nowrap;
-}
-.connection-table :deep(.ant-table-tbody > tr:last-child > td) {
-  border-bottom: none !important;
-}
-.connection-table :deep(.ant-table-tbody > tr:hover > td) {
-  background: var(--bg);
-}
-.table-actions {
+.ops {
   display: flex;
   align-items: center;
   gap: 6px;
 }
+.ops .op-btn.op-danger {
+  color: var(--danger);
+}
+.ops .op-btn.op-danger:disabled:hover {
+  color: var(--danger);
+}
 .test-ok {
-  color: oklch(58% 0.16 150);
+  color: var(--success);
   font-size: 12px;
 }
 .test-fail {
-  color: oklch(58% 0.2 25);
+  color: var(--danger);
   font-size: 12px;
-}
-.ck-empty {
-  padding: 18px 16px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  color: var(--muted);
-  font-size: 13px;
 }
 
 /* ── 弹窗 ── */

@@ -2546,7 +2546,7 @@ tr.l5-group td { background: var(--bg); padding: 0; border-bottom: 1px solid var
 .ph-lite.lite-accent b { color: var(--accent); }
 .ph-lite.lite-warn { border-color: oklch(65% 0.15 85 / 32%); background: oklch(65% 0.15 85 / 10%); color: var(--warning); }
 .ph-lite.lite-warn b { color: var(--warning); }
-.ph-lite.lite-bad { border-color: oklch(55% 0.18 28 / 30%); background: oklch(55% 0.18 28 / 8%); color: var(--danger); }
+.ph-lite.lite-bad { border-color: oklch(55% 0.18 28 / 30%); background: oklch(55% 0.18 28 / 10%); color: var(--danger); }
 .ph-lite.lite-bad b { color: var(--danger); }
 
 /* ── 批次 2 增补：技术名标签 / 启用开关 / 禁用态卡片 / 折叠计数 ── */

@@ -178,7 +178,7 @@ describe('ClickHouseConfig.vue', () => {
         { ...baseItem, id: 'ck_b', name: '备份源', is_active: false },
       ]),
     )
-    await wrapper.findAll('.mock-table .row')[1].find('.cell[data-col="actions"] .btn-primary').trigger('click')
+    await wrapper.findAll('.mock-table .row')[1].find('.cell[data-col="actions"] .op-pub').trigger('click')
     await flushPromises()
     expect(document.body.textContent).toContain('切换激活连接')
     expect(document.body.textContent).toContain('该连接尚未测试')
@@ -195,7 +195,7 @@ describe('ClickHouseConfig.vue', () => {
       last_test_error: '连接被拒绝：10.0.0.9:9000 无服务监听',
     }
     const wrapper = await mountPage(LIST([{ ...baseItem, is_active: true }, failed]))
-    await wrapper.findAll('.mock-table .row')[1].find('.cell[data-col="actions"] .btn-primary').trigger('click')
+    await wrapper.findAll('.mock-table .row')[1].find('.cell[data-col="actions"] .op-pub').trigger('click')
     await flushPromises()
     expect(document.body.textContent).toContain('上次测试：✗')
     expect(document.body.textContent).toContain('切换后指标查询可能不可用')
@@ -211,7 +211,7 @@ describe('ClickHouseConfig.vue', () => {
       last_test_at: '2026-10-27T07:00:00',
     }
     const wrapper = await mountPage(LIST([{ ...baseItem, is_active: true }, passed]))
-    await wrapper.findAll('.mock-table .row')[1].find('.cell[data-col="actions"] .btn-primary').trigger('click')
+    await wrapper.findAll('.mock-table .row')[1].find('.cell[data-col="actions"] .op-pub').trigger('click')
     await flushPromises()
     expect(document.body.textContent).toContain('上次测试：✓')
     expect(document.body.textContent).not.toContain('可能不可用')
