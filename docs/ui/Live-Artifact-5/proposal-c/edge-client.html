@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Edge 直连 · 方案 C 网关控制台感 — 磐石网关管理平台</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+/* —— 本页专属解剖（Edge 直连）：调试工作台页（tools.html 同族）。
+   连接条 + 调试横幅 + 资源卡（tab 条 + grid-table）+ 弹窗样张 —— */
+.page-header h1 { font-size: 21px; }
+
+/* 调试横幅（a-alert 的自绘 token 化） */
+.ec-warn {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 11px 14px; margin-bottom: 16px;
+  background: oklch(85% 0.12 85 / 25%);
+  border: 1px solid oklch(70% 0.14 80 / 55%);
+  border-radius: var(--radius-lg);
+}
+.ec-warn svg { flex-shrink: 0; margin-top: 1px; color: oklch(50% 0.12 70); }
+.ec-warn b { font-size: 13px; color: oklch(45% 0.11 70); }
+.ec-warn span { font-size: 12px; color: oklch(45% 0.09 70); }
+.ec-warn .ec-close { margin-left: auto; flex-shrink: 0; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; border: none; background: transparent; cursor: pointer; color: oklch(50% 0.12 70); font-size: 16px; border-radius: var(--radius-sm); }
+.ec-warn .ec-close:hover { background: oklch(70% 0.14 80 / 25%); }
+
+/* 资源卡 tab 条（卡头行内 8 tab） */
+.ec-tabs { display: flex; align-items: center; gap: 4px; padding: 0 8px; border-bottom: 1px solid var(--border); }
+.ec-tab {
+  position: relative; padding: 11px 12px; border: none; background: transparent; cursor: pointer;
+  font-size: 13px; color: var(--muted); white-space: nowrap; border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+.ec-tab:hover { color: var(--fg); background: var(--bg); }
+.ec-tab.active { color: var(--accent); font-weight: 600; }
+.ec-tab.active::after { content: ''; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px; background: var(--accent); border-radius: 2px 2px 0 0; }
+.ec-tab .ec-tabn { font-size: 10.5px; color: oklch(50% 0.018 240 / 60%); margin-left: 4px; font-family: var(--font-mono); }
+.ec-tab.active .ec-tabn { color: var(--accent); opacity: .7; }
+
+/* tab 内工具条（添加 + 搜索） */
+.ec-tabbar { display: flex; align-items: center; gap: 10px; padding: 10px 16px; }
+.ec-tabbar .spacer { flex: 1; }
+
+/* 已连接状态（连接条右簇） */
+.ec-conn { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); }
+.ec-hint { font-size: 11.5px; color: oklch(50% 0.018 240 / 70%); border-bottom: 1px dashed oklch(50% 0.018 240 / 35%); cursor: help; }
+
+/* JSON 查看弹窗样张 */
+.ec-annot { font-size: 11px; color: var(--muted); margin: 24px 0 6px 2px; }
+.ec-annot b { color: var(--fg); font-weight: 600; }
+.ec-modal { width: 640px; max-width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); }
+.ec-mh { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--accent-bg); border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+.ec-mh h2 { margin: 0; font-size: 14px; font-weight: 600; color: var(--fg); }
+.ec-mx { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border: none; background: transparent; cursor: pointer; color: var(--muted); font-size: 20px; line-height: 1; border-radius: var(--radius-sm); }
+.ec-mx:hover { background: var(--bg); color: var(--fg); }
+.ec-mb { padding: 16px 20px; }
+.ec-note { display: flex; align-items: center; gap: 7px; font-size: 12px; color: oklch(45% 0.09 70); background: oklch(85% 0.12 85 / 20%); border: 1px dashed oklch(70% 0.14 80 / 50%); border-radius: var(--radius-md); padding: 7px 10px; margin-bottom: 14px; }
+.ec-pre {
+  margin: 0; padding: 12px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md);
+  font-family: var(--font-mono); font-size: 11.5px; line-height: 1.65; color: var(--fg);
+  max-height: 320px; overflow: auto; white-space: pre;
+}
+.ec-mf { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--border); }
+/* 表单（添加上游样张） */
+.ec-field { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+.ec-field > label { font-size: 12px; font-weight: 600; color: var(--fg); white-space: nowrap; width: 64px; }
+.ec-input { flex: 1; min-width: 0; height: 32px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); font-size: 12.5px; color: var(--fg); outline: none; }
+.ec-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
+.ec-input::placeholder { color: oklch(50% 0.018 240 / 45%); }
+</style>
+</head>
+<body>
+<div class="app-layout">
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="sidebar-logo-icon">磐</div>
+    <span class="sidebar-logo-text">磐石</span>
+    <span class="sidebar-logo-version">v1.0</span>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">核心功能</div>
+      <a class="nav-item" href="overview.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h5v5H3v-5zm7 0h5v5h-5v-5z"/></svg><span>概览</span></a>
+      <a class="nav-item" href="clusters.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h14v5H2V3zm0 7h14v5H2v-5z"/></svg><span>集群管理</span></a>
+      <a class="nav-item" href="routes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l5-7v5h9v4H7v5l-5-7z"/></svg><span>路由管理</span></a>
+      <a class="nav-item" href="upstreams.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>上游管理</span></a>
+      <a class="nav-item" href="nodes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3a2 2 0 110 4 2 2 0 010-4zM3.5 14a2 2 0 110-4 2 2 0 010 4zM14.5 14a2 2 0 110-4 2 2 0 010 4z"/></svg><span>节点管理</span></a>
+      <a class="nav-item" href="plugin-groups.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h12v5H3v-5z"/></svg><span>插件组</span></a>
+      <a class="nav-item" href="plugin-metadata.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h8l3 3v9a1 1 0 01-1 1H5a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M9 7v4M9 13v-1"/></svg><span>插件元数据</span></a>
+      <a class="nav-item" href="global-rules.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l6 3v4c0 3-2.5 5.5-6 7-3.5-1.5-6-4-6-7V5l6-3z"/></svg><span>全局规则</span></a>
+      <a class="nav-item" href="static-resources.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3a1 1 0 011-1h6l4 4v10a1 1 0 01-1 1H6a1 1 0 01-1-1V3zM11 2v4h4"/></svg><span>静态资源</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">证书管理</div>
+      <a class="nav-item" href="ca-certs.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="12.5" r="2.5"/><path d="M8 12.5h7M13 12.5v2.5M15 12.5v2.5"/></svg><span>CA 根证书</span></a>
+      <a class="nav-item" href="server-certs.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="10" height="8" rx="1"/><path d="M6.5 8V6a2.5 2.5 0 015 0v2"/></svg><span>服务器证书</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">边缘网络</div>
+      <a class="nav-item" href="edge-env.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="2.5"/><path d="M9 3v2M9 13v2M3 9h2M13 9h2M4.5 4.5l1.5 1.5M12 12l1.5 1.5M4.5 13.5l1.5-1.5M12 6l1.5-1.5"/></svg><span>edge.env 配置</span></a>
+      <a class="nav-item" href="stream-proxies.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="12" height="4" rx="1"/><rect x="4" y="7" width="10" height="4" rx="1"/><rect x="5" y="12" width="8" height="4" rx="1"/></svg><span>四层代理</span></a>
+      <a class="nav-item" href="dns-udp-proxies.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="4" r="2"/><circle cx="4" cy="14" r="2"/><circle cx="14" cy="14" r="2"/><path d="M9 6v3M4 12l2-2M14 12l-2-2"/></svg><span>DNS代理[UDP]</span></a>
+      <a class="nav-item" href="dns-http-proxies.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="4" r="2"/><circle cx="4" cy="14" r="2"/><circle cx="14" cy="14" r="2"/><path d="M9 6v3M4 12l2-2M14 12l-2-2"/></svg><span>DNS代理[HTTP]</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">监控</div>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h3l2-6 3 10 2-7 1.5 3H16"/></svg><span>指标总览</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.5"/><path d="M12 12l4 4"/></svg><span>指标查询</span></a>
+      <a class="nav-item" href="clickhouse-config.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="9" cy="4.5" rx="6.5" ry="2.5"/><path d="M2.5 4.5v9c0 1.4 2.9 2.5 6.5 2.5s6.5-1.1 6.5-2.5v-9M2.5 9c0 1.4 2.9 2.5 6.5 2.5s6.5-1.1 6.5-2.5"/></svg><span>ClickHouse 配置</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">运维管理</div>
+      <a class="nav-item active" href="edge-client.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l7 7-7 7-7-7z"/></svg><span>Edge直连</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>数据导入</span></a>
+      <a class="nav-item" href="tools.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h8v8H5V7zM7 7V5h4v2"/></svg><span>工具箱</span></a>
+      <a class="nav-item" href="edge-autostart.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6-4 6 4v8l-6 4-6-4V6zM3 6l6 4m0 0l6-4m-6 4v8"/></svg><span>自启动管理</span></a>
+      <a class="nav-item" href="ansible-inventory.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="12" height="14" rx="1"/><path d="M6 6h6M6 9.5h6M6 13h4"/></svg><span>Ansible 主机清单</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6-4 6 4v8l-6 4-6-4V6zM3 6l6 4m0 0l6-4m-6 4v8"/></svg><span>节点任务</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="6" height="6" rx="1"/><rect x="10" y="10" width="6" height="6" rx="1"/><path d="M5 8v3a2 2 0 002 2h3"/></svg><span>中继区域管理</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">系统管理</div>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l5 3v6l-5 3-5-3V5l5-3z"/></svg><span>插件管理</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9a3 3 0 100-6 3 3 0 000 6zM3 16c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg><span>用户管理</span></a>
+      <a class="nav-item" href="plugin-switches.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9h8a4 4 0 010 8H5a4 4 0 010-8zM5 15a2 2 0 110-4 2 2 0 010 4z"/></svg><span>插件开关</span></a>
+    </div>
+  </nav>
+</aside>
+<div class="main-area">
+<header class="top-header"><div class="top-header-breadcrumb"><a href="index.html">首页</a><span>/</span><span>运维管理</span><span>/</span><span>Edge 直连</span></div><div class="top-header-actions"><div class="h-search"><input type="text" placeholder="搜索功能或页面..."><svg class="s-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div><div class="header-user"><div class="header-avatar">管</div><span>管理员</span></div></div></header>
+<div class="content-area">
+
+  <!-- ══════════ 页头：工具页无页面级动作（#90）；徽标 = 补充维度 ══════════ -->
+  <div class="page-header" style="margin-bottom:16px;">
+    <div>
+      <h1>Edge 直连<span class="ph-inline"><span class="ph-lite lite-accent"><b>8</b> 类资源</span></span></h1>
+      <p>直接连接边缘节点进行调试和数据查询</p>
+    </div>
+  </div>
+
+  <!-- 调试横幅（a-alert 的自绘 token 化；可关闭） -->
+  <div class="ec-warn">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3L2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/></svg>
+    <div><b>调试模式</b>&nbsp;&nbsp;<span>此处操作绕过正常同步流程，直接修改边缘节点数据</span></div>
+    <button class="ec-close" title="关闭提醒">&times;</button>
+  </div>
+
+  <!-- ══════════ 连接条（l5-toolbar 骨架）：模式 → 集群 → 节点 → 查询/取消 → 已连接 + 归属提示 ══════════ -->
+  <div class="l5-card" style="margin-bottom:16px;">
+    <div class="l5-toolbar nowrap">
+      <select class="l5-select" style="width:130px;" title="按集群选择：从集群节点清单中选；手动输入：直填 IP:管理端口"><option>按集群选择</option><option>手动输入</option></select>
+      <div style="width:120px; flex-shrink:0;"><select class="l5-select" style="width:100%;"><option>生产集群A</option></select></div>
+      <select class="l5-select" style="width:220px;"><option>选择边缘节点</option><option selected>192.168.0.14:16620</option><option>192.168.0.15:16620</option></select>
+      <button class="btn btn-primary"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg> 查询</button>
+      <button class="tool-btn" disabled title="当前没有进行中的查询" style="opacity:.45;cursor:not-allowed">取消查询</button>
+      <span class="t-spacer"></span>
+      <span class="ec-conn"><span class="pill pill-run"><span class="dot"></span>已连接</span><span class="c-mono c-strong">192.168.0.14:16620</span></span>
+      <span class="ec-hint" title="同 IP 可能属于多个集群时，按所选集群上下文消解（edge-direct-relay）；悬停可查看详情">归属：集群「生产集群A」</span>
+    </div>
+  </div>
+
+  <!-- ══════════ 资源卡：tab 条 + tab 工具条 + grid-table（主视图 = 上游 tab） ══════════ -->
+  <div class="l5-card">
+    <div class="ec-tabs">
+      <button class="ec-tab active">上游<span class="ec-tabn">3</span></button>
+      <button class="ec-tab">路由<span class="ec-tabn">12</span></button>
+      <button class="ec-tab">全局规则<span class="ec-tabn">2</span></button>
+      <button class="ec-tab">插件组<span class="ec-tabn">5</span></button>
+      <button class="ec-tab">插件元数据<span class="ec-tabn">9</span></button>
+      <button class="ec-tab">插件列表<span class="ec-tabn">14</span></button>
+      <button class="ec-tab">四层代理<span class="ec-tabn">4</span></button>
+      <button class="ec-tab">SSL 证书<span class="ec-tabn">2</span></button>
+    </div>
+    <div class="ec-tabbar">
+      <button class="btn btn-primary btn-sm">添加上游</button>
+      <div class="l5-search"><input type="text" placeholder="搜索上游..." style="width:150px;"><svg class="s-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>
+      <span class="spacer"></span>
+    </div>
+    <div class="l5-table-wrap"><table class="l5-table" style="min-width:860px"><colgroup><col style="width:40px"><col style="width:280px"><col style="width:160px"><col style="width:110px"><col style="width:100px"><col style="width:200px"></colgroup><thead><tr><th class="c-c">#</th><th class="resizable">ID</th><th class="resizable">名称</th><th class="resizable">类型</th><th class="resizable">节点数</th><th class="resizable">操作</th></tr></thead><tbody>
+      <tr><td class="c-c"><span class="c-idx">1</span></td><td class="nw"><span class="c-mono c-dim" title="4f9a3c2e-1b7d-4e8a-9f01-2c3d5e6f8a9b">4f9a3c2e-1b7d-4e8a-9f01-2c3d5e6f8a9b</span></td><td class="nw"><span class="c-strong">payment-pool</span></td><td class="nw">roundrobin</td><td class="nw">3 个节点</td><td class="ops-cell"><div class="ops">
+        <button class="op-btn" title="查看原始 JSON"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4l-5 8 5 8M16 4l5 8-5 8"/></svg>JSON</button>
+        <button class="op-btn" title="编辑上游"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="4" height="16" rx="1"/><rect x="10" y="4" width="4" height="16" rx="1"/><rect x="17" y="4" width="4" height="16" rx="1"/></svg>编辑</button>
+        <button class="op-btn" title="删除上游" style="color:var(--danger)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg>删除</button>
+      </div></td></tr>
+      <tr><td class="c-c"><span class="c-idx">2</span></td><td class="nw"><span class="c-mono c-dim" title="8e21bd45-90aa-4c17-b3e2-77aa01fe4c60">8e21bd45-90aa-4c17-b3e2-77aa01fe4c60</span></td><td class="nw"><span class="c-strong">static-assets</span></td><td class="nw">chash</td><td class="nw">2 个节点</td><td class="ops-cell"><div class="ops">
+        <button class="op-btn" title="查看原始 JSON"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4l-5 8 5 8M16 4l5 8-5 8"/></svg>JSON</button>
+        <button class="op-btn" title="编辑上游"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="4" height="16" rx="1"/><rect x="10" y="4" width="4" height="16" rx="1"/><rect x="17" y="4" width="4" height="16" rx="1"/></svg>编辑</button>
+        <button class="op-btn" title="删除上游" style="color:var(--danger)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg>删除</button>
+      </div></td></tr>
+      <tr><td class="c-c"><span class="c-idx">3</span></td><td class="nw"><span class="c-mono c-dim" title="c07d9e12-4f6b-4d93-a5c8-e91b02f7d3aa">c07d9e12-4f6b-4d93-a5c8-e91b02f7d3aa</span></td><td class="nw"><span class="c-strong">edge-log</span></td><td class="nw">roundrobin</td><td class="nw">1 个节点</td><td class="ops-cell"><div class="ops">
+        <button class="op-btn" title="查看原始 JSON"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4l-5 8 5 8M16 4l5 8-5 8"/></svg>JSON</button>
+        <button class="op-btn" title="编辑上游"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="4" height="16" rx="1"/><rect x="10" y="4" width="4" height="16" rx="1"/><rect x="17" y="4" width="4" height="16" rx="1"/></svg>编辑</button>
+        <button class="op-btn" title="删除上游" style="color:var(--danger)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg>删除</button>
+      </div></td></tr>
+    </tbody></table></div>
+  </div>
+
+  <!-- ══════════ 注记：其余 7 tab 同构（列差异清单） ══════════ -->
+  <div class="ec-annot"><b>其余 7 个 Tab 同构</b>（同款 tab 工具条 + grid-table + JSON/编辑/删除操作，仅列不同）：路由（ID/名称/URI/方法 tags/上游）· 全局规则（ID/描述/插件数）· 插件组（ID/描述/插件数/Labels/Hosts）· 插件元数据（插件名称/配置）· 插件列表（插件名称，无操作列）· 四层代理（ID/名称/端口/协议/Server·Remote Addr/SNI/上游节点）· SSL 证书（名称/SNI/类型/状态）</div>
+
+  <!-- ══════════ 弹窗样张 1：JSON 查看（640px，调试高频动作） ══════════ -->
+  <div class="ec-annot"><b>弹窗样张 · JSON 查看</b>（640px）· 只读原始对象，供与 Edge 侧数据比对；等宽 11.5px + 最大高滚动</div>
+  <div class="ec-modal">
+    <div class="ec-mh"><h2>上游 JSON · payment-pool</h2><button class="ec-mx">&times;</button></div>
+    <div class="ec-mb">
+<pre class="ec-pre">{
+  "id": "4f9a3c2e-1b7d-4e8a-9f01-2c3d5e6f8a9b",
+  "type": "roundrobin",
+  "name": "payment-pool",
+  "nodes": {
+    "192.168.1.21:8080": 1,
+    "192.168.1.22:8080": 1,
+    "192.168.1.23:8080": 1
+  },
+  "create_time": 1732512000,
+  "update_time": 1732598400
+}</pre>
+    </div>
+    <div class="ec-mf"><button class="btn btn-secondary">关闭</button></div>
+  </div>
+
+  <!-- ══════════ 弹窗样张 2：添加上游（modal 壳 + debug-note 调试警示） ══════════ -->
+  <div class="ec-annot"><b>弹窗样张 · 添加上游</b>（modal 壳）· 每张资源弹窗自带「调试模式」警示条（修改直接写入边缘节点，绕过平台同步流程）；页脚动词 = 创建/保存</div>
+  <div class="ec-modal">
+    <div class="ec-mh"><h2>添加上游</h2><button class="ec-mx">&times;</button></div>
+    <div class="ec-mb">
+      <div class="ec-note"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M12 11v5"/></svg>调试模式：修改将直接写入边缘节点，绕过平台同步流程</div>
+      <div class="ec-field"><label>名称</label><input class="ec-input" placeholder="上游名称" value="payment-pool"></div>
+      <div class="ec-field"><label>类型</label><select class="ec-input"><option>roundrobin</option><option>chash</option><option>least_conn</option></select></div>
+      <div class="ec-field" style="align-items: flex-start;"><label>节点</label>
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 6px;">
+          <input class="ec-input" placeholder="192.168.1.21:8080" value="192.168.1.21:8080">
+          <input class="ec-input" placeholder="192.168.1.22:8080" value="192.168.1.22:8080">
+          <button class="link-btn" style="align-self: flex-start;">+ 添加节点</button>
+        </div>
+      </div>
+    </div>
+    <div class="ec-mf"><button class="btn btn-secondary">取消</button><button class="btn btn-primary">创建</button></div>
+  </div>
+
+</div>
+</div>
+</div>
+<div class="l5-prop-tag">方案 C · <b>Edge 直连</b></div>
+</body>
+</html>

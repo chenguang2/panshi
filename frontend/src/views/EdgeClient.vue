@@ -1,70 +1,105 @@
 <template>
   <div class="edge-client">
-    <PageHeader title="Edge 直连" description="直接连接边缘节点进行调试和数据查询" />
-    <a-alert
-      message="调试模式"
-      description="此处操作绕过正常同步流程，直接修改边缘节点数据"
-      type="warning"
-      show-icon
-      closable
-      style="margin-bottom: 16px"
-    />
-
-    <div class="edge-filter-bar">
-      <select v-model="inputMode" class="form-input" style="width: 130px">
-        <option value="cluster">按集群选择</option>
-        <option value="manual">手动输入</option>
-      </select>
-
-      <template v-if="inputMode === 'cluster'">
-        <ClusterSelect
-          v-model="selectedClusterId"
-          :clusters="clusters"
-          placeholder="选择集群"
-          style="width: 200px"
-          @change="onClusterChange"
-        />
-        <select
-          v-model="selectedNode"
-          class="form-input"
-          style="width: 250px"
-          :disabled="!selectedClusterId"
-          @change="onNodeChange"
-        >
-          <option value="">选择边缘节点</option>
-          <option
-            v-for="node in clusterNodes"
-            :key="node.ip + ':' + node.management_port"
-            :value="node.ip + ':' + node.management_port"
-          >
-            {{ node.ip }}:{{ node.management_port }}
-          </option>
-        </select>
+    <PageHeader title="Edge 直连" description="直接连接边缘节点进行调试和数据查询">
+      <template #stats>
+        <PageStatBadges :items="[{ value: 8, label: '类资源' }]" />
       </template>
-
-      <template v-else>
-        <input
-          v-model="manualNode"
-          class="form-input"
-          placeholder="192.168.0.14:16620"
-          style="width: 250px"
-          @keyup.enter="startQuery"
-        />
-      </template>
-
-      <button class="btn btn-primary" @click="startQuery" :disabled="loading"><SearchOutlined /> 查询</button>
-      <button class="btn btn-ghost" @click="cancelQuery" :disabled="!loading"><CloseCircleOutlined /> 取消查询</button>
-      <span v-if="loadedNode" class="text-muted text-sm" style="margin-left: auto">
-        已连接: {{ loadedNode }}{{ loadedNodeRouteText }}
-      </span>
-      <span
-        v-if="ipHint"
-        class="text-muted text-sm"
-        style="margin-left: 12px"
-        :title="ipHint.title"
-        data-test="ip-hint"
-        >{{ ipHint.text }}</span
+    </PageHeader>
+    <div v-if="!bannerDismissed" class="ec-warn">
+      <svg
+        width="15"
+        height="15"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
       >
+        <path d="M12 3L2 20h20L12 3z" />
+        <path d="M12 10v4M12 17h.01" />
+      </svg>
+      <div><b>调试模式</b>&nbsp;&nbsp;<span>此处操作绕过正常同步流程，直接修改边缘节点数据</span></div>
+      <button class="ec-close" title="关闭提醒" @click="bannerDismissed = true">&times;</button>
+    </div>
+
+    <div class="l5-card" style="margin-bottom: 16px">
+      <div class="l5-toolbar nowrap">
+        <select
+          v-model="inputMode"
+          class="l5-select"
+          style="width: 130px"
+          title="按集群选择：从集群节点清单中选；手动输入：直填 IP:管理端口"
+        >
+          <option value="cluster">按集群选择</option>
+          <option value="manual">手动输入</option>
+        </select>
+
+        <template v-if="inputMode === 'cluster'">
+          <div style="width: 120px; flex-shrink: 0">
+            <ClusterSelect
+              v-model="selectedClusterId"
+              :clusters="clusters"
+              placeholder="选择集群"
+              style="width: 100%"
+              @change="onClusterChange"
+            />
+          </div>
+          <select
+            v-model="selectedNode"
+            class="l5-select"
+            style="width: 220px"
+            :disabled="!selectedClusterId"
+            @change="onNodeChange"
+          >
+            <option value="">选择边缘节点</option>
+            <option
+              v-for="node in clusterNodes"
+              :key="node.ip + ':' + node.management_port"
+              :value="node.ip + ':' + node.management_port"
+            >
+              {{ node.ip }}:{{ node.management_port }}
+            </option>
+          </select>
+        </template>
+
+        <template v-else>
+          <input
+            v-model="manualNode"
+            class="form-input"
+            placeholder="192.168.0.14:16620"
+            style="width: 220px"
+            @keyup.enter="startQuery"
+          />
+        </template>
+
+        <button class="btn btn-primary" @click="startQuery" :disabled="loading">
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <circle cx="11" cy="11" r="7" />
+            <path d="M21 21l-4.3-4.3" />
+          </svg>
+          查询
+        </button>
+        <button class="tool-btn" @click="cancelQuery" :disabled="!loading">取消查询</button>
+        <span class="t-spacer"></span>
+        <span v-if="loadedNode" class="ec-conn">
+          <span class="pill pill-run"><span class="dot"></span>已连接</span>
+          <span class="c-mono c-strong">{{ loadedNode }}{{ loadedNodeRouteText }}</span>
+        </span>
+        <span v-if="ipHint" class="ec-hint" :title="ipHint.title" data-test="ip-hint">{{ ipHint.text }}</span>
+        <button class="tool-btn" title="恢复当前 Tab 表格的默认列宽与列序" @click="resetActiveTableWidths">
+          重置列宽
+        </button>
+      </div>
     </div>
 
     <!-- 查询失败聚合反馈（edge-client-ux-review-fixes 1.4） -->
@@ -87,415 +122,812 @@
       @close="queryPartial = ''"
     />
 
-    <a-tabs v-model:activeKey="activeTab" style="margin-top: 16px">
-      <a-tab-pane key="upstreams" tab="上游">
-        <div class="table-toolbar">
-          <button class="btn btn-primary" @click="showUpstreamModal('create')"><PlusOutlined /> 添加上游</button>
-          <SearchInput v-model="upstreamSearch" placeholder="搜索上游..." :width="240" />
+    <div class="table-container l5-card" style="margin-top: 16px">
+      <div class="ec-tabs">
+        <button
+          v-for="t in workbenchTabs"
+          :key="t.key"
+          class="ec-tab"
+          :class="{ active: activeTab === t.key }"
+          @click="activeTab = t.key"
+        >
+          {{ t.label }}<span class="ec-tabn">{{ t.count }}</span>
+        </button>
+      </div>
+      <div v-show="activeTab === 'upstreams'" class="ec-pane">
+        <div class="ec-tabbar">
+          <button class="btn btn-primary btn-sm" @click="showUpstreamModal('create')">添加上游</button>
+          <SearchInput v-model="upstreamSearch" placeholder="搜索上游..." :width="150" />
         </div>
-        <div class="table-container">
-          <a-table
-            :columns="upstreamColumns"
-            :data-source="
-              upstreamSearch
-                ? upstreams.filter(
-                    (u) =>
-                      (u.value?.name || '').includes(upstreamSearch) || (u.value?.id || '').includes(upstreamSearch),
-                  )
-                : upstreams
-            "
-            :loading="loading"
-            :pagination="false"
-            rowKey="key"
-          >
-            <template #emptyText>
-              <div class="ec-empty-guide">{{ emptyGuideText }}</div>
+        <a-table
+          :columns="columnWiring.upstreams.columns"
+          class="ec-upstreams-table grid-table"
+          :scroll="{ x: columnWiring.upstreams.scrollX }"
+          :table-layout="'fixed'"
+          :data-source="
+            upstreamSearch
+              ? upstreams.filter(
+                  (u) => (u.value?.name || '').includes(upstreamSearch) || (u.value?.id || '').includes(upstreamSearch),
+                )
+              : upstreams
+          "
+          :loading="loading"
+          :pagination="false"
+          rowKey="key"
+        >
+          <template #headerCell="{ column, title }">
+            <span
+              class="th-resize-wrap"
+              :class="columnWiring.upstreams.wrapClass(column)"
+              @mousedown="columnWiring.upstreams.startColumnMove($event, column)"
+            >
+              <span>{{ title }}</span>
+              <span
+                v-if="String(column.key) !== 'index'"
+                class="col-resize-handle"
+                @mousedown="columnWiring.upstreams.startColumnResize($event, column)"
+              />
+            </span>
+          </template>
+          <template #emptyText>
+            <div class="ec-empty-guide">{{ emptyGuideText }}</div>
+          </template>
+          <template #bodyCell="{ column, record, index }">
+            <template v-if="column.key === 'index'">
+              <span class="text-muted">{{ index + 1 }}</span>
             </template>
-            <template #bodyCell="{ column, record, index }">
-              <template v-if="column.key === 'index'">
-                <span class="text-muted">{{ index + 1 }}</span>
-              </template>
-              <template v-if="column.key === 'id'">
-                <span style="font-size: 12px">{{ record.value?.id }}</span>
-              </template>
-              <template v-if="column.key === 'name'">
-                {{ record.value?.name || '-' }}
-              </template>
-              <template v-if="column.key === 'type'">
-                {{ record.value?.type || '-' }}
-              </template>
-              <template v-if="column.key === 'nodes'">
-                <span v-if="record.value?.nodes"> {{ getNodeCount(record.value.nodes) }} 个节点 </span>
-                <span v-else>-</span>
-              </template>
-              <template v-if="column.key === 'actions'">
-                <div class="node-actions-wrap">
-                  <button class="btn btn-ghost btn-sm" @click="showUpstreamJson(record)">JSON</button>
-                  <button class="btn btn-ghost btn-sm" @click="showUpstreamModal('edit', record)">编辑</button>
-                  <button class="btn btn-ghost btn-sm" style="color: var(--danger)" @click="deleteUpstream(record)">
-                    删除
-                  </button>
-                </div>
-              </template>
+            <template v-if="column.key === 'id'">
+              <span class="c-mono c-dim" :title="record.value?.id">{{ record.value?.id }}</span>
             </template>
-          </a-table>
-        </div>
-      </a-tab-pane>
+            <template v-if="column.key === 'name'">
+              {{ record.value?.name || '-' }}
+            </template>
+            <template v-if="column.key === 'type'">
+              {{ record.value?.type || '-' }}
+            </template>
+            <template v-if="column.key === 'nodes'">
+              <span v-if="record.value?.nodes"> {{ getNodeCount(record.value.nodes) }} 个节点 </span>
+              <span v-else>-</span>
+            </template>
+            <template v-if="column.key === 'actions'">
+              <div class="ops">
+                <button class="op-btn" title="查看原始 JSON" @click="showUpstreamJson(record)">
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M8 4l-5 8 5 8M16 4l5 8-5 8" /></svg
+                  >JSON
+                </button>
+                <button class="op-btn" title="编辑上游" @click="showUpstreamModal('edit', record)">
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <rect x="3" y="4" width="4" height="16" rx="1" />
+                    <rect x="10" y="4" width="4" height="16" rx="1" />
+                    <rect x="17" y="4" width="4" height="16" rx="1" /></svg
+                  >编辑
+                </button>
+                <button class="op-btn op-danger" title="删除上游" @click="deleteUpstream(record)">
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" /></svg
+                  >删除
+                </button>
+              </div>
+            </template>
+          </template>
+        </a-table>
+      </div>
 
-      <a-tab-pane key="routes" tab="路由">
-        <div class="table-toolbar">
-          <button class="btn btn-primary" @click="showRouteModal('create')"><PlusOutlined /> 添加路由</button>
-          <SearchInput v-model="routeSearch" placeholder="搜索路由..." :width="240" />
+      <div v-show="activeTab === 'routes'" class="ec-pane">
+        <div class="ec-tabbar">
+          <button class="btn btn-primary btn-sm" @click="showRouteModal('create')">添加路由</button>
+          <SearchInput v-model="routeSearch" placeholder="搜索路由..." :width="150" />
         </div>
-        <div class="table-container">
-          <a-table
-            :columns="routeColumns"
-            :data-source="
-              routeSearch
-                ? routes.filter(
-                    (r) => (r.value?.name || '').includes(routeSearch) || (r.value?.uri || '').includes(routeSearch),
-                  )
-                : routes
-            "
-            :loading="loading"
-            :pagination="false"
-            rowKey="key"
-          >
-            <template #emptyText>
-              <div class="ec-empty-guide">{{ emptyGuideText }}</div>
+        <a-table
+          :columns="columnWiring.routes.columns"
+          class="ec-routes-table grid-table"
+          :scroll="{ x: columnWiring.routes.scrollX }"
+          :table-layout="'fixed'"
+          :data-source="
+            routeSearch
+              ? routes.filter(
+                  (r) => (r.value?.name || '').includes(routeSearch) || (r.value?.uri || '').includes(routeSearch),
+                )
+              : routes
+          "
+          :loading="loading"
+          :pagination="false"
+          rowKey="key"
+        >
+          <template #headerCell="{ column, title }">
+            <span
+              class="th-resize-wrap"
+              :class="columnWiring.routes.wrapClass(column)"
+              @mousedown="columnWiring.routes.startColumnMove($event, column)"
+            >
+              <span>{{ title }}</span>
+              <span
+                v-if="String(column.key) !== 'index'"
+                class="col-resize-handle"
+                @mousedown="columnWiring.routes.startColumnResize($event, column)"
+              />
+            </span>
+          </template>
+          <template #emptyText>
+            <div class="ec-empty-guide">{{ emptyGuideText }}</div>
+          </template>
+          <template #bodyCell="{ column, record, index }">
+            <template v-if="column.key === 'index'">
+              <span class="text-muted">{{ index + 1 }}</span>
             </template>
-            <template #bodyCell="{ column, record, index }">
-              <template v-if="column.key === 'index'">
-                <span class="text-muted">{{ index + 1 }}</span>
-              </template>
-              <template v-if="column.key === 'id'">
-                <span style="font-size: 12px">{{ record.value?.id }}</span>
-              </template>
-              <template v-if="column.key === 'name'">
-                {{ record.value?.name || '-' }}
-              </template>
-              <template v-if="column.key === 'uri'">
-                {{ record.value?.uri || record.value?.uris?.[0] || '-' }}
-              </template>
-              <template v-if="column.key === 'methods'">
+            <template v-if="column.key === 'id'">
+              <span class="c-mono c-dim" :title="record.value?.id">{{ record.value?.id }}</span>
+            </template>
+            <template v-if="column.key === 'name'">
+              {{ record.value?.name || '-' }}
+            </template>
+            <template v-if="column.key === 'uri'">
+              {{ record.value?.uri || record.value?.uris?.[0] || '-' }}
+            </template>
+            <template v-if="column.key === 'methods'">
+              <div class="methods-tags">
                 <a-tag v-for="m in record.value?.methods || []" :key="m" color="blue">{{ m }}</a-tag>
-              </template>
-              <template v-if="column.key === 'upstream'">
-                {{ record.value?.upstream_id || '-' }}
-              </template>
-              <template v-if="column.key === 'actions'">
-                <div class="node-actions-wrap">
-                  <button class="btn btn-ghost btn-sm" @click="showRouteJson(record)">JSON</button>
-                  <button class="btn btn-ghost btn-sm" @click="showRouteModal('edit', record)">编辑</button>
-                  <button class="btn btn-ghost btn-sm" style="color: var(--danger)" @click="deleteRoute(record)">
-                    删除
-                  </button>
-                </div>
-              </template>
+              </div>
             </template>
-          </a-table>
-        </div>
-      </a-tab-pane>
-
-      <a-tab-pane key="globalRules" tab="全局规则">
-        <div class="table-toolbar">
-          <button class="btn btn-primary" @click="showGlobalRuleModal('create')"><PlusOutlined /> 添加规则</button>
-          <SearchInput v-model="globalRuleSearch" placeholder="搜索规则..." :width="240" />
-        </div>
-        <div class="table-container">
-          <a-table
-            :columns="globalRuleColumns"
-            :data-source="
-              globalRuleSearch
-                ? globalRules.filter(
-                    (r) =>
-                      (r.value?.desc || '').includes(globalRuleSearch) ||
-                      (r.value?.id || '').includes(globalRuleSearch),
-                  )
-                : globalRules
-            "
-            :loading="loading"
-            :pagination="false"
-            rowKey="key"
-          >
-            <template #emptyText>
-              <div class="ec-empty-guide">{{ emptyGuideText }}</div>
+            <template v-if="column.key === 'upstream'">
+              {{ record.value?.upstream_id || '-' }}
             </template>
-            <template #bodyCell="{ column, record, index }">
-              <template v-if="column.key === 'index'">
-                <span class="text-muted">{{ index + 1 }}</span>
-              </template>
-              <template v-if="column.key === 'id'">
-                <span style="font-size: 12px">{{ record.value?.id }}</span>
-              </template>
-              <template v-if="column.key === 'desc'">
-                {{ record.value?.desc || '-' }}
-              </template>
-              <template v-if="column.key === 'plugins'">
-                <a-tag v-if="record.value?.plugins">{{ Object.keys(record.value.plugins).length }} 个插件</a-tag>
-                <span v-else>-</span>
-              </template>
-              <template v-if="column.key === 'actions'">
-                <div class="node-actions-wrap">
-                  <button class="btn btn-ghost btn-sm" @click="showGlobalRuleJson(record)">JSON</button>
-                  <button class="btn btn-ghost btn-sm" @click="showGlobalRuleModal('edit', record)">编辑</button>
-                  <button class="btn btn-ghost btn-sm" style="color: var(--danger)" @click="deleteGlobalRule(record)">
-                    删除
-                  </button>
-                </div>
-              </template>
-            </template>
-          </a-table>
-        </div>
-      </a-tab-pane>
-
-      <a-tab-pane key="pluginConfigs" tab="插件组">
-        <div class="table-toolbar">
-          <button class="btn btn-primary" @click="showPluginConfigModal('create')"><PlusOutlined /> 添加插件组</button>
-          <SearchInput v-model="pluginConfigSearch" placeholder="搜索插件组..." :width="240" />
-        </div>
-        <div class="table-container">
-          <a-table
-            :columns="pluginConfigColumns"
-            :data-source="
-              pluginConfigSearch
-                ? pluginConfigs.filter(
-                    (p) =>
-                      (p.value?.desc || '').includes(pluginConfigSearch) ||
-                      (p.value?.id || '').includes(pluginConfigSearch),
-                  )
-                : pluginConfigs
-            "
-            :loading="loading"
-            :pagination="false"
-            rowKey="key"
-          >
-            <template #emptyText>
-              <div class="ec-empty-guide">{{ emptyGuideText }}</div>
-            </template>
-            <template #bodyCell="{ column, record, index }">
-              <template v-if="column.key === 'index'">
-                <span class="text-muted">{{ index + 1 }}</span>
-              </template>
-              <template v-if="column.key === 'id'">
-                <span style="font-size: 12px">{{ record.value?.id }}</span>
-              </template>
-              <template v-if="column.key === 'desc'">
-                {{ record.value?.desc || '-' }}
-              </template>
-              <template v-if="column.key === 'plugins'">
-                <a-tag v-if="record.value?.plugins">{{ Object.keys(record.value.plugins).length }} 个插件</a-tag>
-                <span v-else>-</span>
-              </template>
-              <template v-if="column.key === 'labels'">
-                <span v-if="record.value?.labels">{{ Object.keys(record.value.labels).length }}</span>
-                <span v-else>-</span>
-              </template>
-              <template v-if="column.key === 'hosts'">
-                <span v-if="record.value?.hosts">{{ record.value.hosts.length }}</span>
-                <span v-else>-</span>
-              </template>
-              <template v-if="column.key === 'actions'">
-                <div class="node-actions-wrap">
-                  <button class="btn btn-ghost btn-sm" @click="showPluginConfigJson(record)">JSON</button>
-                  <button class="btn btn-ghost btn-sm" @click="showPluginConfigModal('edit', record)">编辑</button>
-                  <button class="btn btn-ghost btn-sm" style="color: var(--danger)" @click="deletePluginConfig(record)">
-                    删除
-                  </button>
-                </div>
-              </template>
-            </template>
-          </a-table>
-        </div>
-      </a-tab-pane>
-
-      <a-tab-pane key="pluginMetadata" tab="插件元数据">
-        <div class="table-toolbar">
-          <button class="btn btn-primary" @click="showPluginMetadataModal('create')">
-            <PlusOutlined /> 添加插件元数据
-          </button>
-          <button class="btn btn-ghost" @click="reloadPlugins" :disabled="reloadingPlugins">
-            <ReloadOutlined /> 重新加载
-          </button>
-          <SearchInput v-model="pluginMetadataSearch" placeholder="搜索..." :width="200" />
-        </div>
-        <div class="table-container">
-          <a-table
-            :columns="pluginMetadataColumns"
-            :data-source="
-              pluginMetadataSearch
-                ? pluginMetadataList.filter((m) => (m.key || '').includes(pluginMetadataSearch))
-                : pluginMetadataList
-            "
-            :loading="loading"
-            :pagination="false"
-            rowKey="key"
-          >
-            <template #emptyText>
-              <div class="ec-empty-guide">{{ emptyGuideText }}</div>
-            </template>
-            <template #bodyCell="{ column, record, index }">
-              <template v-if="column.key === 'index'">
-                <span class="text-muted">{{ index + 1 }}</span>
-              </template>
-              <template v-if="column.key === 'name'">
-                <span style="font-size: 12px">{{ record.key?.split('/').pop() || '-' }}</span>
-              </template>
-              <template v-if="column.key === 'config'">
-                <pre class="json-viewer-inline">{{ JSON.stringify(record.value, null, 2) }}</pre>
-              </template>
-              <template v-if="column.key === 'actions'">
-                <div class="node-actions-wrap">
-                  <button class="btn btn-ghost btn-sm" @click="showPluginMetadataJson(record)">JSON</button>
-                  <button class="btn btn-ghost btn-sm" @click="showPluginMetadataModal('edit', record)">编辑</button>
-                  <button
-                    class="btn btn-ghost btn-sm"
-                    style="color: var(--danger)"
-                    @click="deletePluginMetadata(record)"
+            <template v-if="column.key === 'actions'">
+              <div class="ops">
+                <button class="op-btn" title="查看原始 JSON" @click="showRouteJson(record)">
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
                   >
-                    删除
-                  </button>
-                </div>
-              </template>
+                    <path d="M8 4l-5 8 5 8M16 4l5 8-5 8" /></svg
+                  >JSON
+                </button>
+                <button class="op-btn" title="编辑路由" @click="showRouteModal('edit', record)">
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <rect x="3" y="4" width="4" height="16" rx="1" />
+                    <rect x="10" y="4" width="4" height="16" rx="1" />
+                    <rect x="17" y="4" width="4" height="16" rx="1" /></svg
+                  >编辑
+                </button>
+                <button class="op-btn op-danger" title="删除路由" @click="deleteRoute(record)">
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" /></svg
+                  >删除
+                </button>
+              </div>
             </template>
-          </a-table>
-        </div>
-      </a-tab-pane>
+          </template>
+        </a-table>
+      </div>
 
-      <a-tab-pane key="pluginList" tab="插件列表">
-        <div class="table-container">
-          <a-table
-            :columns="pluginListColumns"
-            :data-source="pluginList"
-            :loading="loading"
-            :pagination="false"
-            :row-key="(_record: any, index: number) => index"
-          >
-            <template #emptyText>
-              <div class="ec-empty-guide">{{ emptyGuideText }}</div>
-            </template>
-            <template #bodyCell="{ column, record, index }">
-              <template v-if="column.key === 'index'">
-                <span class="text-muted">{{ index + 1 }}</span>
-              </template>
-              <template v-if="column.key === 'name'">
-                <span style="font-size: 12px">{{ record }}</span>
-              </template>
-            </template>
-          </a-table>
+      <div v-show="activeTab === 'globalRules'" class="ec-pane">
+        <div class="ec-tabbar">
+          <button class="btn btn-primary btn-sm" @click="showGlobalRuleModal('create')">添加规则</button>
+          <SearchInput v-model="globalRuleSearch" placeholder="搜索规则..." :width="150" />
         </div>
-      </a-tab-pane>
-      <a-tab-pane key="streamRoutes" tab="四层代理">
-        <div class="table-toolbar">
-          <button class="btn btn-primary stream-route-add-btn" @click="showStreamRouteModal('create')">
-            <PlusOutlined /> 添加四层代理
+        <a-table
+          :columns="columnWiring.globalRules.columns"
+          class="ec-globalRules-table grid-table"
+          :scroll="{ x: columnWiring.globalRules.scrollX }"
+          :table-layout="'fixed'"
+          :data-source="
+            globalRuleSearch
+              ? globalRules.filter(
+                  (r) =>
+                    (r.value?.desc || '').includes(globalRuleSearch) || (r.value?.id || '').includes(globalRuleSearch),
+                )
+              : globalRules
+          "
+          :loading="loading"
+          :pagination="false"
+          rowKey="key"
+        >
+          <template #headerCell="{ column, title }">
+            <span
+              class="th-resize-wrap"
+              :class="columnWiring.globalRules.wrapClass(column)"
+              @mousedown="columnWiring.globalRules.startColumnMove($event, column)"
+            >
+              <span>{{ title }}</span>
+              <span
+                v-if="String(column.key) !== 'index'"
+                class="col-resize-handle"
+                @mousedown="columnWiring.globalRules.startColumnResize($event, column)"
+              />
+            </span>
+          </template>
+          <template #emptyText>
+            <div class="ec-empty-guide">{{ emptyGuideText }}</div>
+          </template>
+          <template #bodyCell="{ column, record, index }">
+            <template v-if="column.key === 'index'">
+              <span class="text-muted">{{ index + 1 }}</span>
+            </template>
+            <template v-if="column.key === 'id'">
+              <span class="c-mono c-dim" :title="record.value?.id">{{ record.value?.id }}</span>
+            </template>
+            <template v-if="column.key === 'desc'">
+              {{ record.value?.desc || '-' }}
+            </template>
+            <template v-if="column.key === 'plugins'">
+              <a-tag v-if="record.value?.plugins">{{ Object.keys(record.value.plugins).length }} 个插件</a-tag>
+              <span v-else>-</span>
+            </template>
+            <template v-if="column.key === 'actions'">
+              <div class="ops">
+                <button class="op-btn" title="查看原始 JSON" @click="showGlobalRuleJson(record)">
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M8 4l-5 8 5 8M16 4l5 8-5 8" /></svg
+                  >JSON
+                </button>
+                <button class="op-btn" title="编辑全局规则" @click="showGlobalRuleModal('edit', record)">
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <rect x="3" y="4" width="4" height="16" rx="1" />
+                    <rect x="10" y="4" width="4" height="16" rx="1" />
+                    <rect x="17" y="4" width="4" height="16" rx="1" /></svg
+                  >编辑
+                </button>
+                <button class="op-btn op-danger" title="删除全局规则" @click="deleteGlobalRule(record)">
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" /></svg
+                  >删除
+                </button>
+              </div>
+            </template>
+          </template>
+        </a-table>
+      </div>
+
+      <div v-show="activeTab === 'pluginConfigs'" class="ec-pane">
+        <div class="ec-tabbar">
+          <button class="btn btn-primary btn-sm" @click="showPluginConfigModal('create')">添加插件组</button>
+          <SearchInput v-model="pluginConfigSearch" placeholder="搜索插件组..." :width="150" />
+        </div>
+        <a-table
+          :columns="columnWiring.pluginConfigs.columns"
+          class="ec-pluginConfigs-table grid-table"
+          :scroll="{ x: columnWiring.pluginConfigs.scrollX }"
+          :table-layout="'fixed'"
+          :data-source="
+            pluginConfigSearch
+              ? pluginConfigs.filter(
+                  (p) =>
+                    (p.value?.desc || '').includes(pluginConfigSearch) ||
+                    (p.value?.id || '').includes(pluginConfigSearch),
+                )
+              : pluginConfigs
+          "
+          :loading="loading"
+          :pagination="false"
+          rowKey="key"
+        >
+          <template #headerCell="{ column, title }">
+            <span
+              class="th-resize-wrap"
+              :class="columnWiring.pluginConfigs.wrapClass(column)"
+              @mousedown="columnWiring.pluginConfigs.startColumnMove($event, column)"
+            >
+              <span>{{ title }}</span>
+              <span
+                v-if="String(column.key) !== 'index'"
+                class="col-resize-handle"
+                @mousedown="columnWiring.pluginConfigs.startColumnResize($event, column)"
+              />
+            </span>
+          </template>
+          <template #emptyText>
+            <div class="ec-empty-guide">{{ emptyGuideText }}</div>
+          </template>
+          <template #bodyCell="{ column, record, index }">
+            <template v-if="column.key === 'index'">
+              <span class="text-muted">{{ index + 1 }}</span>
+            </template>
+            <template v-if="column.key === 'id'">
+              <span class="c-mono c-dim" :title="record.value?.id">{{ record.value?.id }}</span>
+            </template>
+            <template v-if="column.key === 'desc'">
+              {{ record.value?.desc || '-' }}
+            </template>
+            <template v-if="column.key === 'plugins'">
+              <a-tag v-if="record.value?.plugins">{{ Object.keys(record.value.plugins).length }} 个插件</a-tag>
+              <span v-else>-</span>
+            </template>
+            <template v-if="column.key === 'labels'">
+              <span v-if="record.value?.labels">{{ Object.keys(record.value.labels).length }}</span>
+              <span v-else>-</span>
+            </template>
+            <template v-if="column.key === 'hosts'">
+              <span v-if="record.value?.hosts">{{ record.value.hosts.length }}</span>
+              <span v-else>-</span>
+            </template>
+            <template v-if="column.key === 'actions'">
+              <div class="ops">
+                <button class="op-btn" title="查看原始 JSON" @click="showPluginConfigJson(record)">
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M8 4l-5 8 5 8M16 4l5 8-5 8" /></svg
+                  >JSON
+                </button>
+                <button class="op-btn" title="编辑插件组" @click="showPluginConfigModal('edit', record)">
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <rect x="3" y="4" width="4" height="16" rx="1" />
+                    <rect x="10" y="4" width="4" height="16" rx="1" />
+                    <rect x="17" y="4" width="4" height="16" rx="1" /></svg
+                  >编辑
+                </button>
+                <button class="op-btn op-danger" title="删除插件组" @click="deletePluginConfig(record)">
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" /></svg
+                  >删除
+                </button>
+              </div>
+            </template>
+          </template>
+        </a-table>
+      </div>
+
+      <div v-show="activeTab === 'pluginMetadata'" class="ec-pane">
+        <div class="ec-tabbar">
+          <button class="btn btn-primary btn-sm" @click="showPluginMetadataModal('create')">添加插件元数据</button>
+          <button class="tool-btn" @click="reloadPlugins" :disabled="reloadingPlugins">
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M21 12a9 9 0 11-2.64-6.36" />
+              <path d="M21 3v6h-6" />
+            </svg>
+            重新加载
           </button>
-          <SearchInput v-model="streamRouteSearch" placeholder="搜索四层代理..." :width="200" />
+          <SearchInput v-model="pluginMetadataSearch" placeholder="搜索..." :width="150" />
         </div>
-        <div class="table-container">
-          <a-table
-            :columns="streamRouteColumns"
-            :data-source="
-              streamRouteSearch
-                ? streamRoutes.filter(
-                    (r) =>
-                      (r.value?.name || '').includes(streamRouteSearch) ||
-                      (r.value?.id || '').includes(streamRouteSearch),
-                  )
-                : streamRoutes
-            "
-            :loading="loading"
-            :pagination="false"
-            rowKey="key"
-          >
-            <template #emptyText>
-              <div class="ec-empty-guide">{{ emptyGuideText }}</div>
+        <a-table
+          :columns="columnWiring.pluginMetadata.columns"
+          class="ec-pluginMetadata-table grid-table"
+          :scroll="{ x: columnWiring.pluginMetadata.scrollX }"
+          :table-layout="'fixed'"
+          :data-source="
+            pluginMetadataSearch
+              ? pluginMetadataList.filter((m) => (m.key || '').includes(pluginMetadataSearch))
+              : pluginMetadataList
+          "
+          :loading="loading"
+          :pagination="false"
+          rowKey="key"
+        >
+          <template #headerCell="{ column, title }">
+            <span
+              class="th-resize-wrap"
+              :class="columnWiring.pluginMetadata.wrapClass(column)"
+              @mousedown="columnWiring.pluginMetadata.startColumnMove($event, column)"
+            >
+              <span>{{ title }}</span>
+              <span
+                v-if="String(column.key) !== 'index'"
+                class="col-resize-handle"
+                @mousedown="columnWiring.pluginMetadata.startColumnResize($event, column)"
+              />
+            </span>
+          </template>
+          <template #emptyText>
+            <div class="ec-empty-guide">{{ emptyGuideText }}</div>
+          </template>
+          <template #bodyCell="{ column, record, index }">
+            <template v-if="column.key === 'index'">
+              <span class="text-muted">{{ index + 1 }}</span>
             </template>
-            <template #bodyCell="{ column, record, index }">
-              <template v-if="column.key === 'index'">
-                <span class="text-muted">{{ index + 1 }}</span>
-              </template>
-              <template v-if="column.key === 'id'">
-                <span style="font-size: 12px">{{ record.value?.id }}</span>
-              </template>
-              <template v-if="column.key === 'name'">
-                {{ record.value?.name || '-' }}
-              </template>
-              <template v-if="column.key === 'server_port'">
-                <span class="text-mono">{{ record.value?.server_port }}</span>
-              </template>
-              <template v-if="column.key === 'scheme'">
-                {{ record.value?.upstream?.scheme || 'tcp' }}
-              </template>
-              <template v-if="column.key === 'server_addr'">
-                {{ record.value?.server_addr || '-' }}
-              </template>
-              <template v-if="column.key === 'remote_addr'">
-                {{ record.value?.remote_addr || '-' }}
-              </template>
-              <template v-if="column.key === 'sni'">
-                {{ record.value?.sni || '-' }}
-              </template>
-              <template v-if="column.key === 'upstream_nodes'">
-                <span v-if="record.value?.upstream?.nodes"
-                  >{{ Object.keys(record.value.upstream.nodes).length }} 个节点</span
+            <template v-if="column.key === 'name'">
+              <span style="font-size: 12px">{{ record.key?.split('/').pop() || '-' }}</span>
+            </template>
+            <template v-if="column.key === 'config'">
+              <pre class="json-viewer-inline">{{ JSON.stringify(record.value, null, 2) }}</pre>
+            </template>
+            <template v-if="column.key === 'actions'">
+              <div class="ops">
+                <button class="op-btn" title="查看原始 JSON" @click="showPluginMetadataJson(record)">
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M8 4l-5 8 5 8M16 4l5 8-5 8" /></svg
+                  >JSON
+                </button>
+                <button class="op-btn" title="编辑插件元数据" @click="showPluginMetadataModal('edit', record)">
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <rect x="3" y="4" width="4" height="16" rx="1" />
+                    <rect x="10" y="4" width="4" height="16" rx="1" />
+                    <rect x="17" y="4" width="4" height="16" rx="1" /></svg
+                  >编辑
+                </button>
+                <button class="op-btn op-danger" title="删除插件元数据" @click="deletePluginMetadata(record)">
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" /></svg
+                  >删除
+                </button>
+              </div>
+            </template>
+          </template>
+        </a-table>
+      </div>
+
+      <div v-show="activeTab === 'pluginList'" class="ec-pane">
+        <a-table
+          :columns="columnWiring.pluginList.columns"
+          class="ec-pluginList-table grid-table"
+          :scroll="{ x: columnWiring.pluginList.scrollX }"
+          :table-layout="'fixed'"
+          :data-source="pluginList"
+          :loading="loading"
+          :pagination="false"
+          :row-key="(_record: any, index: number) => index"
+        >
+          <template #headerCell="{ column, title }">
+            <span
+              class="th-resize-wrap"
+              :class="columnWiring.pluginList.wrapClass(column)"
+              @mousedown="columnWiring.pluginList.startColumnMove($event, column)"
+            >
+              <span>{{ title }}</span>
+              <span
+                v-if="String(column.key) !== 'index'"
+                class="col-resize-handle"
+                @mousedown="columnWiring.pluginList.startColumnResize($event, column)"
+              />
+            </span>
+          </template>
+          <template #emptyText>
+            <div class="ec-empty-guide">{{ emptyGuideText }}</div>
+          </template>
+          <template #bodyCell="{ column, record, index }">
+            <template v-if="column.key === 'index'">
+              <span class="text-muted">{{ index + 1 }}</span>
+            </template>
+            <template v-if="column.key === 'name'">
+              <span style="font-size: 12px">{{ record }}</span>
+            </template>
+          </template>
+        </a-table>
+      </div>
+
+      <div v-show="activeTab === 'streamRoutes'" class="ec-pane">
+        <div class="ec-tabbar">
+          <button class="btn btn-primary btn-sm stream-route-add-btn" @click="showStreamRouteModal('create')">
+            添加四层代理
+          </button>
+          <SearchInput v-model="streamRouteSearch" placeholder="搜索四层代理..." :width="150" />
+        </div>
+        <a-table
+          :columns="columnWiring.streamRoutes.columns"
+          class="ec-streamRoutes-table grid-table"
+          :scroll="{ x: columnWiring.streamRoutes.scrollX }"
+          :table-layout="'fixed'"
+          :data-source="
+            streamRouteSearch
+              ? streamRoutes.filter(
+                  (r) =>
+                    (r.value?.name || '').includes(streamRouteSearch) ||
+                    (r.value?.id || '').includes(streamRouteSearch),
+                )
+              : streamRoutes
+          "
+          :loading="loading"
+          :pagination="false"
+          rowKey="key"
+        >
+          <template #headerCell="{ column, title }">
+            <span
+              class="th-resize-wrap"
+              :class="columnWiring.streamRoutes.wrapClass(column)"
+              @mousedown="columnWiring.streamRoutes.startColumnMove($event, column)"
+            >
+              <span>{{ title }}</span>
+              <span
+                v-if="String(column.key) !== 'index'"
+                class="col-resize-handle"
+                @mousedown="columnWiring.streamRoutes.startColumnResize($event, column)"
+              />
+            </span>
+          </template>
+          <template #emptyText>
+            <div class="ec-empty-guide">{{ emptyGuideText }}</div>
+          </template>
+          <template #bodyCell="{ column, record, index }">
+            <template v-if="column.key === 'index'">
+              <span class="text-muted">{{ index + 1 }}</span>
+            </template>
+            <template v-if="column.key === 'id'">
+              <span class="c-mono c-dim" :title="record.value?.id">{{ record.value?.id }}</span>
+            </template>
+            <template v-if="column.key === 'name'">
+              {{ record.value?.name || '-' }}
+            </template>
+            <template v-if="column.key === 'server_port'">
+              <span class="text-mono">{{ record.value?.server_port }}</span>
+            </template>
+            <template v-if="column.key === 'scheme'">
+              {{ record.value?.upstream?.scheme || 'tcp' }}
+            </template>
+            <template v-if="column.key === 'server_addr'">
+              {{ record.value?.server_addr || '-' }}
+            </template>
+            <template v-if="column.key === 'remote_addr'">
+              {{ record.value?.remote_addr || '-' }}
+            </template>
+            <template v-if="column.key === 'sni'">
+              {{ record.value?.sni || '-' }}
+            </template>
+            <template v-if="column.key === 'upstream_nodes'">
+              <span v-if="record.value?.upstream?.nodes"
+                >{{ Object.keys(record.value.upstream.nodes).length }} 个节点</span
+              >
+              <span v-else>-</span>
+            </template>
+            <template v-if="column.key === 'actions'">
+              <div class="ops">
+                <button class="op-btn" title="查看原始 JSON" @click="showStreamRouteJson(record)">
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M8 4l-5 8 5 8M16 4l5 8-5 8" /></svg
+                  >JSON
+                </button>
+                <button
+                  class="op-btn stream-route-edit-btn"
+                  title="编辑四层代理"
+                  @click="showStreamRouteModal('edit', record)"
                 >
-                <span v-else>-</span>
-              </template>
-              <template v-if="column.key === 'actions'">
-                <div class="node-actions-wrap">
-                  <button class="btn btn-ghost btn-sm" @click="showStreamRouteJson(record)">JSON</button>
-                  <button
-                    class="btn btn-ghost btn-sm stream-route-edit-btn"
-                    @click="showStreamRouteModal('edit', record)"
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
                   >
-                    编辑
-                  </button>
-                  <button class="btn btn-ghost btn-sm" style="color: var(--danger)" @click="deleteStreamRoute(record)">
-                    删除
-                  </button>
-                </div>
-              </template>
+                    <rect x="3" y="4" width="4" height="16" rx="1" />
+                    <rect x="10" y="4" width="4" height="16" rx="1" />
+                    <rect x="17" y="4" width="4" height="16" rx="1" /></svg
+                  >编辑
+                </button>
+                <button class="op-btn op-danger" title="删除四层代理" @click="deleteStreamRoute(record)">
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" /></svg
+                  >删除
+                </button>
+              </div>
             </template>
-          </a-table>
+          </template>
+        </a-table>
+      </div>
+
+      <div v-show="activeTab === 'ssl'" class="ec-pane">
+        <div class="ec-tabbar">
+          <SearchInput v-model="sslSearch" placeholder="搜索 SSL 证书..." :width="150" />
         </div>
-      </a-tab-pane>
-      <a-tab-pane key="ssl" tab="SSL 证书">
-        <div class="table-toolbar">
-          <SearchInput v-model="sslSearch" placeholder="搜索 SSL 证书..." :width="200" />
-        </div>
-        <div class="table-container">
-          <a-table
-            :columns="sslColumns"
-            :data-source="sslDisplay"
-            :loading="loading"
-            :pagination="sslPagination"
-            @change="handleSslTableChange"
-            size="small"
-            rowKey="key"
-          >
-            <template #emptyText>
-              <div class="ec-empty-guide">{{ emptyGuideText }}</div>
+        <a-table
+          :columns="columnWiring.ssl.columns"
+          class="ec-ssl-table grid-table"
+          :scroll="{ x: columnWiring.ssl.scrollX }"
+          :table-layout="'fixed'"
+          :data-source="sslDisplay"
+          :loading="loading"
+          :pagination="sslPagination"
+          @change="handleSslTableChange"
+          size="small"
+          rowKey="key"
+        >
+          <template #headerCell="{ column, title }">
+            <span
+              class="th-resize-wrap"
+              :class="columnWiring.ssl.wrapClass(column)"
+              @mousedown="columnWiring.ssl.startColumnMove($event, column)"
+            >
+              <span>{{ title }}</span>
+              <span
+                v-if="String(column.key) !== 'index'"
+                class="col-resize-handle"
+                @mousedown="columnWiring.ssl.startColumnResize($event, column)"
+              />
+            </span>
+          </template>
+          <template #emptyText>
+            <div class="ec-empty-guide">{{ emptyGuideText }}</div>
+          </template>
+          <template #bodyCell="{ column, record, index }">
+            <template v-if="column.key === 'index'">{{ index + 1 }}</template>
+            <template v-if="column.key === 'name'">{{ record.value?.id || record.key?.split('/').pop() }}</template>
+            <template v-if="column.key === 'snis'">{{ (record.value?.snis || []).join(', ') }}</template>
+            <template v-if="column.key === 'type'">{{ record.value?.type || '-' }}</template>
+            <template v-if="column.key === 'status'">{{ record.value?.status === 1 ? '启用' : '禁用' }}</template>
+            <template v-if="column.key === 'actions'">
+              <div class="ops">
+                <button class="op-btn" title="查看原始 JSON" @click="showSslJson(record)">
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M8 4l-5 8 5 8M16 4l5 8-5 8" /></svg
+                  >JSON
+                </button>
+                <button class="op-btn op-danger" title="删除 SSL 证书" @click="deleteSslCert(record)">
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" /></svg
+                  >删除
+                </button>
+              </div>
             </template>
-            <template #bodyCell="{ column, record, index }">
-              <template v-if="column.key === 'index'">{{ index + 1 }}</template>
-              <template v-if="column.key === 'name'">{{ record.value?.id || record.key?.split('/').pop() }}</template>
-              <template v-if="column.key === 'snis'">{{ (record.value?.snis || []).join(', ') }}</template>
-              <template v-if="column.key === 'type'">{{ record.value?.type || '-' }}</template>
-              <template v-if="column.key === 'status'">{{ record.value?.status === 1 ? '启用' : '禁用' }}</template>
-              <template v-if="column.key === 'actions'">
-                <div class="node-actions-wrap">
-                  <button class="btn btn-ghost btn-sm" @click="showSslJson(record)">JSON</button>
-                  <button class="btn btn-ghost btn-sm" style="color: var(--danger)" @click="deleteSslCert(record)">
-                    删除
-                  </button>
-                </div>
-              </template>
-            </template>
-          </a-table>
-        </div>
-      </a-tab-pane>
-    </a-tabs>
+          </template>
+        </a-table>
+      </div>
+    </div>
 
     <!-- 上游 Modal -->
     <div class="modal-overlay" :style="{ display: upstreamModalVisible ? 'flex' : 'none' }">
@@ -505,7 +937,21 @@
           <button class="modal-close" @click="upstreamModalVisible = false">&times;</button>
         </div>
         <div class="modal-body">
-          <div class="debug-note"><InfoOutlined /> 调试模式：修改将直接写入边缘节点，绕过平台同步流程</div>
+          <div class="debug-note">
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 8h.01M12 11v5" /></svg
+            >调试模式：修改将直接写入边缘节点，绕过平台同步流程
+          </div>
           <div class="form-group">
             <label class="form-label">名称</label>
             <input v-model="upstreamForm.name" class="form-input" placeholder="上游名称" />
@@ -574,7 +1020,21 @@
           <button class="modal-close" @click="routeModalVisible = false">&times;</button>
         </div>
         <div class="modal-body">
-          <div class="debug-note"><InfoOutlined /> 调试模式：修改将直接写入边缘节点，绕过平台同步流程</div>
+          <div class="debug-note">
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 8h.01M12 11v5" /></svg
+            >调试模式：修改将直接写入边缘节点，绕过平台同步流程
+          </div>
           <div class="form-group">
             <label class="form-label">名称</label>
             <input v-model="routeForm.name" class="form-input" placeholder="路由名称" />
@@ -750,7 +1210,21 @@
           <button class="modal-close" @click="streamRouteModalVisible = false">&times;</button>
         </div>
         <div class="modal-body">
-          <div class="debug-note"><InfoOutlined /> 调试模式：修改将直接写入边缘节点，绕过平台同步流程</div>
+          <div class="debug-note">
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 8h.01M12 11v5" /></svg
+            >调试模式：修改将直接写入边缘节点，绕过平台同步流程
+          </div>
           <div class="stream-route-hint">
             直连写入 Edge 节点，绕过平台同步流程；如需纳入平台管理，请在集群侧创建后发布。
           </div>
@@ -865,7 +1339,21 @@
           <button class="modal-close" @click="globalRuleModalVisible = false">&times;</button>
         </div>
         <div class="modal-body">
-          <div class="debug-note"><InfoOutlined /> 调试模式：修改将直接写入边缘节点，绕过平台同步流程</div>
+          <div class="debug-note">
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 8h.01M12 11v5" /></svg
+            >调试模式：修改将直接写入边缘节点，绕过平台同步流程
+          </div>
           <div class="form-group">
             <label class="form-label">规则ID</label>
             <input
@@ -907,7 +1395,21 @@
           <button class="modal-close" @click="pluginConfigModalVisible = false">&times;</button>
         </div>
         <div class="modal-body">
-          <div class="debug-note"><InfoOutlined /> 调试模式：修改将直接写入边缘节点，绕过平台同步流程</div>
+          <div class="debug-note">
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 8h.01M12 11v5" /></svg
+            >调试模式：修改将直接写入边缘节点，绕过平台同步流程
+          </div>
           <div class="form-group">
             <label class="form-label">配置ID</label>
             <input
@@ -949,7 +1451,21 @@
           <button class="modal-close" @click="pluginMetadataModalVisible = false">&times;</button>
         </div>
         <div class="modal-body">
-          <div class="debug-note"><InfoOutlined /> 调试模式：修改将直接写入边缘节点，绕过平台同步流程</div>
+          <div class="debug-note">
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 8h.01M12 11v5" /></svg
+            >调试模式：修改将直接写入边缘节点，绕过平台同步流程
+          </div>
           <div class="form-group">
             <label class="form-label">插件名称</label>
             <input
@@ -983,20 +1499,16 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, watch, onUnmounted, computed } from 'vue'
+import PageStatBadges from '@/components/PageStatBadges.vue'
+import { useColumnConfig, resolveOrderedColumns, applyColumnWidths } from '@/composables/useColumnConfig'
+import { useColumnDragColumns } from '@/composables/useColumnDragColumns'
 import ClusterSelect from '@/components/ClusterSelect.vue'
 import { message } from 'ant-design-vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
 import { showOverlayModal } from '@/composables/useOverlayModal'
 import { paginationProps } from '@/composables/usePagination'
 import { PAGE_SIZE_TABLE } from '@/constants'
-import {
-  InfoOutlined,
-  ReloadOutlined,
-  PlusOutlined,
-  CloseCircleOutlined,
-  SearchOutlined,
-  WarningOutlined,
-} from '@ant-design/icons-vue'
+import { WarningOutlined } from '@ant-design/icons-vue'
 import api from '@/api'
 import PageHeader from '@/components/PageHeader.vue'
 import RouteAdvancedMatch from '@/components/RouteAdvancedMatch.vue'
@@ -1021,7 +1533,70 @@ import {
 } from '@/utils/edgeColumns'
 import SearchInput from '@/components/SearchInput.vue'
 
+const bannerDismissed = ref(false)
+
+/** 资源卡 tab 定义：计数 = 各资源当前已加载数据集（edge-client-page-restyle 角标契约） */
+const workbenchTabs = computed(() => [
+  { key: 'upstreams', label: '上游', count: upstreams.value.length },
+  { key: 'routes', label: '路由', count: routes.value.length },
+  { key: 'globalRules', label: '全局规则', count: globalRules.value.length },
+  { key: 'pluginConfigs', label: '插件组', count: pluginConfigs.value.length },
+  { key: 'pluginMetadata', label: '插件元数据', count: pluginMetadataList.value.length },
+  { key: 'pluginList', label: '插件列表', count: pluginList.value.length },
+  { key: 'streamRoutes', label: '四层代理', count: streamRoutes.value.length },
+  { key: 'ssl', label: 'SSL 证书', count: sslList.value.length },
+])
+
 const inputMode = ref<'cluster' | 'manual'>('cluster')
+
+// ── 每表列拖拽接线（edge-client-page-restyle 设计页 th resizable 承诺）：
+//    宽度/顺序经 useColumnConfig 按表分键持久化（与三列表页 <res>_standalone 同约定），
+//    表格固定布局 + scroll.x（列宽严格生效、拖拽可靠），长内容裁剪/换行消除侵占。 ──
+const EC_TABLE_DEFS = [
+  { key: 'upstreams', cols: upstreamColumns },
+  { key: 'routes', cols: routeColumns },
+  { key: 'globalRules', cols: globalRuleColumns },
+  { key: 'pluginConfigs', cols: pluginConfigColumns },
+  { key: 'pluginMetadata', cols: pluginMetadataColumns },
+  { key: 'pluginList', cols: pluginListColumns },
+  { key: 'streamRoutes', cols: streamRouteColumns },
+  { key: 'ssl', cols: sslColumns },
+]
+const columnWiring: Record<string, any> = reactive({})
+for (const def of EC_TABLE_DEFS) {
+  const keys = def.cols.map((c) => String(c.key))
+  const cfg = useColumnConfig({
+    key: `edge_client_${def.key}`,
+    defaultColumns: [...keys],
+    allColumns: [...keys],
+    defaultSearchVisible: true,
+  })
+  const ordered = computed(() => resolveOrderedColumns(def.cols as any, cfg.columnOrder.value))
+  const wired = computed(() => applyColumnWidths(ordered.value as any, cfg.columnWidths.value))
+  const drag = useColumnDragColumns({
+    columns: () => def.cols,
+    orderedKeys: () => ordered.value.map((c) => String(c.key)),
+    getWidth: (k) => cfg.columnWidths.value[k],
+    setColumnWidth: cfg.setColumnWidth,
+    setColumnOrder: cfg.setColumnOrder,
+    tableSelector: `.ec-${def.key}-table`,
+    fixedKeys: ['index', 'actions'],
+  })
+  columnWiring[def.key] = {
+    columns: wired,
+    wrapClass: drag.wrapClass,
+    startColumnResize: drag.startColumnResize,
+    startColumnMove: drag.startColumnMove,
+    resetWidths: cfg.resetWidths,
+    scrollX: def.cols.reduce((a, c) => a + Number(c.width || 0), 0),
+  }
+}
+/** 重置当前活动 Tab 表格的列宽/列序（连接条右簇入口；本页无列配置弹窗） */
+function resetActiveTableWidths() {
+  const def = EC_TABLE_DEFS.find((d) => d.key === activeTab.value)
+  if (def) columnWiring[def.key]?.resetWidths()
+}
+
 const clusters = ref<any[]>([])
 const selectedClusterId = ref<number | string>('')
 const clusterNodes = ref<any[]>([])
@@ -1470,8 +2045,12 @@ const loadAllData = async () => {
     ])
     const failedCount = failedLabels.length
     if (failedCount === 8 || results.every((r) => !r)) {
-      // 全失败：不设「已连接」，清数据 + 错误横幅（edge-client-ux-review-fixes 1.1）
+      // 全失败：不设「已连接」，清数据 + 错误横幅（edge-client-ux-review-fixes 1.1）；
+      // 同时清掉上一节点残留的连接标注——旧「已连接」描述的是已被 clearAllData 清空的连接，
+      // 保留它会让指示器在查询失败后继续声称「已连接」（edge-client-page-restyle bugfix）
       clearAllData()
+      loadedNode.value = ''
+      routeInfo.value = {}
       queryError.value = `节点不可达或端口错误（${ip}:${port}），请检查后重试`
     } else {
       loadedNode.value = `${ip}:${port}`
@@ -2342,14 +2921,14 @@ watch(selectedNode, async (_newNode) => {
 .debug-note {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   margin: 0 0 12px;
-  padding: 8px 12px;
-  background: #e6f7ff;
-  border: 1px solid #91d5ff;
-  border-radius: 6px;
-  color: #096dd9;
-  font-size: 13px;
+  padding: 7px 10px;
+  background: oklch(85% 0.12 85 / 20%);
+  border: 1px dashed oklch(70% 0.14 80 / 50%);
+  border-radius: var(--radius-md);
+  color: oklch(45% 0.09 70);
+  font-size: 12px;
 }
 
 /* ── 四层代理添加/编辑弹窗的作用域提示 ── */
@@ -2365,13 +2944,6 @@ watch(selectedNode, async (_newNode) => {
 }
 
 /* ── Filter bar (节点选择器) ── */
-.edge-filter-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-}
 
 .text-muted {
   color: var(--muted);
@@ -2381,20 +2953,8 @@ watch(selectedNode, async (_newNode) => {
 }
 
 /* ── Table toolbar per tab ── */
-.table-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
-}
 
 /* ── Action button group in table rows ── */
-.node-actions-wrap {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-  flex-wrap: nowrap;
-}
 
 /* ── Plugin config cards in route modal ── */
 .plugin-config-card:hover {
@@ -2442,5 +3002,133 @@ watch(selectedNode, async (_newNode) => {
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-all;
+}
+
+/* ── edge-client-page-restyle：调试横幅 / 连接条右簇 / 资源卡 tab 条（基准 proposal-c/edge-client.html）── */
+.ec-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 14px;
+  margin-bottom: 16px;
+  background: oklch(85% 0.12 85 / 25%);
+  border: 1px solid oklch(70% 0.14 80 / 55%);
+  border-radius: var(--radius-lg);
+}
+.ec-warn svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: oklch(50% 0.12 70);
+}
+.ec-warn b {
+  font-size: 13px;
+  color: oklch(45% 0.11 70);
+}
+.ec-warn span {
+  font-size: 12px;
+  color: oklch(45% 0.09 70);
+}
+.ec-warn .ec-close {
+  margin-left: auto;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: oklch(50% 0.12 70);
+  font-size: 16px;
+  line-height: 1;
+  border-radius: var(--radius-sm);
+}
+.ec-warn .ec-close:hover {
+  background: oklch(70% 0.14 80 / 25%);
+}
+.ec-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+.ec-tab {
+  position: relative;
+  padding: 11px 12px;
+  line-height: 1.4;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+.ec-tab:hover {
+  color: var(--fg);
+  background: var(--bg);
+}
+.ec-tab.active {
+  color: var(--accent);
+  font-weight: 600;
+}
+.ec-tab.active::after {
+  content: '';
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: -1px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 2px 2px 0 0;
+}
+.ec-tabn {
+  font-size: 10.5px;
+  color: oklch(50% 0.018 240 / 60%);
+  margin-left: 4px;
+  font-family: var(--font-mono);
+}
+.ec-tab.active .ec-tabn {
+  color: var(--accent);
+  opacity: 0.7;
+}
+.ec-tabbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+}
+.ec-pane {
+  /* tab 内容区：v-show 切换，样式占位（结构语义） */
+}
+.ec-conn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.ec-hint {
+  font-size: 11.5px;
+  color: oklch(50% 0.018 240 / 70%);
+  border-bottom: 1px dashed oklch(50% 0.018 240 / 35%);
+  cursor: help;
+}
+
+/* ── 列拖拽接线配套（fixed 布局 + scroll.x）：长内容裁剪替代溢出侵占；方法标签换行 ── */
+.table-container :deep(.ant-table-tbody > tr > td) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.methods-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.methods-tags :deep(.ant-tag) {
+  margin-inline-end: 0;
 }
 </style>

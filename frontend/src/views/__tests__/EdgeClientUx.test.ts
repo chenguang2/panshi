@@ -5,6 +5,10 @@
  * 未选节点提示、手动输入直读（不依赖 blur）、编辑弹窗调试警示、SearchOutlined。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { setActivePinia, createPinia } from 'pinia'
+
+// 文件级兜底：useColumnConfig → useAuthStore 需要活动 Pinia（每个 describe 前置生效）
+beforeEach(() => setActivePinia(createPinia()))
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createWebHistory } from 'vue-router'
 
@@ -133,7 +137,7 @@ describe('批 1：查询反馈与正确性', () => {
     const vm = wrapper.vm as any
     vm.inputMode = 'manual'
     await wrapper.vm.$nextTick()
-    const input = wrapper.find('.edge-filter-bar input.form-input')
+    const input = wrapper.find('.l5-toolbar input.form-input')
     await input.setValue('10.255.255.1:11999')
     mockApiResults([
       '/upstreams',
@@ -150,10 +154,46 @@ describe('批 1：查询反馈与正确性', () => {
     await flushPromises()
     await flushPromises()
     // 不设已连接
-    expect(wrapper.text()).not.toContain('已连接:')
+    expect(wrapper.text()).not.toContain('已连接')
     // 错误横幅
     expect(wrapper.text()).toContain('节点不可达或端口错误')
     expect(wrapper.text()).toContain('10.255.255.1:11999')
+  })
+
+  it('成功后查失败地址 → 旧「已连接」标注必须消失（不残留上一节点）', async () => {
+    const wrapper = await mountPage()
+    const vm = wrapper.vm as any
+    vm.inputMode = 'manual'
+    await wrapper.vm.$nextTick()
+    const input = wrapper.find('.l5-toolbar input.form-input')
+    // 第一次：全成功 → 已连接出现
+    mockApiResults([])
+    await input.setValue('192.168.0.14:16620')
+    let queryBtn = wrapper.findAll('button').find((b) => b.text().includes('查询') && !b.text().includes('取消'))!
+    await queryBtn.trigger('click')
+    await flushPromises()
+    await flushPromises()
+    expect(wrapper.text()).toContain('已连接')
+    expect(wrapper.text()).toContain('192.168.0.14:16620')
+    // 第二次：全失败 → 旧连接标注必须消失（数据已被清空，指示器不得残留）
+    mockApiResults([
+      '/upstreams',
+      '/routes',
+      '/global_rules',
+      '/plugin_configs',
+      '/plugin_metadata',
+      '/plugins',
+      '/stream-routes',
+      '/ssl',
+    ])
+    await input.setValue('10.255.255.1:11999')
+    queryBtn = wrapper.findAll('button').find((b) => b.text().includes('查询') && !b.text().includes('取消'))!
+    await queryBtn.trigger('click')
+    await flushPromises()
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('已连接')
+    expect(wrapper.text()).not.toContain('192.168.0.14:16620')
+    expect(wrapper.text()).toContain('节点不可达或端口错误')
   })
 
   it('部分失败：成功类别展示 + warning 横幅列类别', async () => {
@@ -161,7 +201,7 @@ describe('批 1：查询反馈与正确性', () => {
     const vm = wrapper.vm as any
     vm.inputMode = 'manual'
     await wrapper.vm.$nextTick()
-    const input = wrapper.find('.edge-filter-bar input.form-input')
+    const input = wrapper.find('.l5-toolbar input.form-input')
     await input.setValue('192.168.0.14:16620')
     mockApiResults(['/routes', '/ssl'])
     const queryBtn = wrapper.findAll('button').find((b) => b.text().includes('查询') && !b.text().includes('取消'))!
@@ -169,7 +209,8 @@ describe('批 1：查询反馈与正确性', () => {
     await flushPromises()
     await flushPromises()
     // 已连接正常设置
-    expect(wrapper.text()).toContain('已连接: 192.168.0.14:16620')
+    expect(wrapper.text()).toContain('已连接')
+    expect(wrapper.text()).toContain('192.168.0.14:16620')
     // warning 横幅列失败类别
     expect(wrapper.text()).toContain('2 类配置获取失败')
     expect(wrapper.text()).toContain('路由')
@@ -183,7 +224,7 @@ describe('批 1：查询反馈与正确性', () => {
     const vm = wrapper.vm as any
     vm.inputMode = 'manual'
     await wrapper.vm.$nextTick()
-    const input = wrapper.find('.edge-filter-bar input.form-input')
+    const input = wrapper.find('.l5-toolbar input.form-input')
     await input.setValue('192.168.0.14:16620')
     mockApiResults([])
     // 不触发 blur——直接点查询
@@ -200,7 +241,7 @@ describe('批 1：查询反馈与正确性', () => {
     const vm = wrapper.vm as any
     vm.inputMode = 'manual'
     await wrapper.vm.$nextTick()
-    const input = wrapper.find('.edge-filter-bar input.form-input')
+    const input = wrapper.find('.l5-toolbar input.form-input')
     await input.setValue('no-colon-address')
     mockApi.get.mockClear()
     const queryBtn = wrapper.findAll('button').find((b) => b.text().includes('查询') && !b.text().includes('取消'))!
@@ -231,13 +272,14 @@ describe('批 2/3：警示与观感', () => {
     const vm = wrapper.vm as any
     vm.inputMode = 'manual'
     await wrapper.vm.$nextTick()
-    const input = wrapper.find('.edge-filter-bar input.form-input')
+    const input = wrapper.find('.l5-toolbar input.form-input')
     expect(input.attributes('placeholder')).toBe('192.168.0.14:16620')
   })
 })
 
 describe('直连页集群上下文中继（edge-direct-relay 批 2）', () => {
   beforeEach(() => {
+    setActivePinia(createPinia())
     vi.clearAllMocks()
     document.body.innerHTML = ''
     mockApi.get.mockResolvedValue({ data: {} })
@@ -268,7 +310,7 @@ describe('直连页集群上下文中继（edge-direct-relay 批 2）', () => {
     const vm = wrapper.vm as any
     vm.inputMode = 'manual'
     await wrapper.vm.$nextTick()
-    const input = wrapper.find('.edge-filter-bar input.form-input')
+    const input = wrapper.find('.l5-toolbar input.form-input')
     await input.setValue('192.168.0.14:16620')
     mockAllSuccess()
     const base = mockApi.get.mockImplementation.bind(mockApi.get)
@@ -290,8 +332,18 @@ describe('直连页集群上下文中继（edge-direct-relay 批 2）', () => {
     const ipInfoCall = mockApi.get.mock.calls.find((c: any[]) => String(c[0]).includes('/edge-client/ip-info'))!
     expect(ipInfoCall).toBeTruthy()
     expect(ipInfoCall[1]?.params).toEqual({ ip: '192.168.0.14' })
-     
-    console.log('[probe] get calls:', JSON.stringify(mockApi.get.mock.calls.map((c: any[]) => [String(c[0]).replace(/^.*\/nodes/, '/nodes').slice(0, 40), c[1]?.params])))
+
+    console.log(
+      '[probe] get calls:',
+      JSON.stringify(
+        mockApi.get.mock.calls.map((c: any[]) => [
+          String(c[0])
+            .replace(/^.*\/nodes/, '/nodes')
+            .slice(0, 40),
+          c[1]?.params,
+        ]),
+      ),
+    )
     // 歧义分支文案：IP 歧义 + 冲突明细 + 消解指引
     expect(wrapper.text()).toContain('IP 歧义：test/qqq、test-2/bj')
     expect(wrapper.text()).toContain('可从集群下拉选择以经中继')
@@ -302,13 +354,15 @@ describe('直连页集群上下文中继（edge-direct-relay 批 2）', () => {
     const vm = wrapper.vm as any
     vm.inputMode = 'manual'
     await wrapper.vm.$nextTick()
-    const input = wrapper.find('.edge-filter-bar input.form-input')
+    const input = wrapper.find('.l5-toolbar input.form-input')
     await input.setValue('10.99.99.99:9180')
     mockAllSuccess()
     const base = mockApi.get.mockImplementation.bind(mockApi.get)
     mockApi.get.mockImplementation((url: string, config?: any) => {
       if (url.includes('/edge-client/ip-info'))
-        return Promise.resolve({ data: { clusters: [], relay_state: 'none', conflict_detail: null, management_ports: [] } })
+        return Promise.resolve({
+          data: { clusters: [], relay_state: 'none', conflict_detail: null, management_ports: [] },
+        })
       return base(url, config)
     })
     const queryBtn = wrapper.findAll('button').find((b) => b.text().includes('查询') && !b.text().includes('取消'))!

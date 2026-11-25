@@ -48,21 +48,24 @@ describe('EdgeClient.vue - 已连接节点路径标注', () => {
   it('route=relay → 已连接后显示（经中继）', async () => {
     const wrapper = await mountAndQuery({ upstreams: [], route: 'relay', relay_via: 'http://10.10.1.1:8443' })
     const text = wrapper.text()
-    expect(text).toContain(`已连接: ${NODE}（经中继）`)
+    expect(text).toContain('已连接')
+    expect(text).toContain(`${NODE}（经中继）`)
     expect(text).toContain('（经中继）')
   })
 
   it('route=direct → 显示（直连）', async () => {
     const wrapper = await mountAndQuery({ upstreams: [], route: 'direct' })
     const text = wrapper.text()
-    expect(text).toContain(`已连接: ${NODE}（直连）`)
+    expect(text).toContain('已连接')
+    expect(text).toContain(`${NODE}（直连）`)
     expect(text).toContain('（直连）')
   })
 
   it('无 route 字段 → 不显示任何标注（向后兼容）', async () => {
     const wrapper = await mountAndQuery({ upstreams: [] })
     const text = wrapper.text()
-    expect(text).toContain(`已连接: ${NODE}`)
+    expect(text).toContain('已连接')
+    expect(text).toContain(NODE)
     expect(text).not.toContain('（经中继）')
     expect(text).not.toContain('（直连）')
   })

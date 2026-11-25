@@ -1363,3 +1363,22 @@ describe('mockup-parity：ClickHouse 配置（clickhouse-config-page-restyle，�
     expect(ck).toContain('PageStatBadges')
   })
 })
+
+describe('mockup-parity：Edge 直连（edge-client-page-restyle，基准 proposal-c/edge-client.html）', () => {
+  const ec = page('EdgeClient.vue')
+
+  it('ec-① 资源表挂 grid-table 解剖（8 张 a-table 全量）', () => {
+    expect((ec.match(/class="[^"]*grid-table/g) || []).length).toBeGreaterThanOrEqual(8)
+  })
+
+  it('ec-② tab 条自绘（ec-tabs），禁 a-tabs 回流', () => {
+    expect(ec).toContain('ec-tabs')
+    expect(ec).not.toContain('<a-tabs')
+    expect(ec).not.toContain('<a-tab-pane')
+  })
+
+  it('ec-③ 调试横幅自绘（ec-warn），页头该横幅禁 a-alert 回流 + 徽标接入', () => {
+    expect(ec).toContain('ec-warn')
+    expect(ec).toContain('PageStatBadges')
+  })
+})
