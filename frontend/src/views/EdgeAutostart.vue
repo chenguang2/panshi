@@ -4,6 +4,9 @@
       title="自启动管理"
       description="管理 Edge 节点开机自启动（systemd）。启用：写入 /etc/systemd/system/edge.service 并 enable（覆盖同名文件）；禁用：取消防开机自启，服务文件保留可随时重新启用；root 凭据仅本次使用，不保存"
     >
+      <template #stats>
+        <PageStatBadges :items="headerStatItems" />
+      </template>
       <template #actions>
         <router-link
           v-if="canViewAudit"
@@ -14,88 +17,179 @@
       </template>
     </PageHeader>
 
-    <div class="toolbar">
-      <select
-        v-model="groupFilter"
-        :title="groupFilter.startsWith('__') ? '' : groupFilter"
-        class="form-input"
-        style="width: 140px"
-        @change="onGroupChange"
+    <div ref="cardRef" class="table-container l5-card">
+      <!-- 工具条（共享 TableToolbar，与节点管理同构）：「刷新」= 读库重载（真实状态同步走批量查询状态） -->
+      <TableToolbar
+        v-model:mode="viewMode"
+        class="as-filter-bar nowrap"
+        :count="filteredNodes.length"
+        count-unit="个节点"
+        :show-count="false"
+        :show-mode="true"
+        :refreshing="loading"
+        @refresh="loadNodes"
       >
-        <option value="__all__">全部分组</option>
-        <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
-        <option value="__ung__">未分组</option>
-      </select>
-      <ClusterSelect
-        v-model="clusterFilter"
-        :clusters="filteredClusters"
-        allow-all
-        style="width: 200px"
-        @change="loadNodes"
-      />
-      <SearchInput v-model="ipSearch" :width="200" placeholder="搜索节点 IP" />
-      <a-select v-model:value="statusFilter" style="width: 140px" placeholder="全部状态" allow-clear>
-        <a-select-option value="enabled">已启用</a-select-option>
-        <a-select-option value="disabled">已禁用</a-select-option>
-        <a-select-option value="not_configured">未配置</a-select-option>
-        <a-select-option value="permission_denied">查询受限</a-select-option>
-        <a-select-option value="unknown">查询失败</a-select-option>
-        <a-select-option value="not_queried">未查询</a-select-option>
-      </a-select>
-      <a-button @click="loadNodes">
-        <a-tooltip
-          title="重新读取数据库中已记录的自启动状态（不触达节点）；要获取节点真实状态请使用「批量查询状态」"
-          placement="top"
-        >
-          <span>重载</span>
-        </a-tooltip>
-      </a-button>
-      <div class="toolbar-sep"></div>
-      <a-button
-        class="batch-query"
-        size="small"
-        :disabled="!batchTargetNodes.length || batchState.running"
-        @click="openBatchQuery"
-      >
-        批量查询状态（{{ batchTargetNodes.length }} 台）
-      </a-button>
-      <a-button
-        size="small"
-        :disabled="!batchTargetNodes.length || batchState.running"
-        @click="openBatchCredential('enable')"
-      >
-        批量启用（{{ batchTargetNodes.length }} 台）
-      </a-button>
-      <a-button
-        size="small"
-        danger
-        :disabled="!batchTargetNodes.length || batchState.running"
-        @click="openBatchCredential('disable')"
-      >
-        批量禁用（{{ batchTargetNodes.length }} 台）
-      </a-button>
-    </div>
+        <template #filters>
+          <SearchInput v-if="autostartSearchVisible" v-model="ipSearch" :width="150" placeholder="搜索节点 IP" />
+          <select
+            v-model="groupFilter"
+            :title="groupFilter.startsWith('__') ? '' : groupFilter"
+            class="l5-select"
+            style="width: 104px"
+            @change="onGroupChange"
+          >
+            <option value="__all__">全部分组</option>
+            <option v-for="g in groupOptions" :key="g" :value="g">{{ g }}</option>
+            <option value="__ung__">未分组</option>
+          </select>
+          <ClusterSelect
+            v-model="clusterFilter"
+            :clusters="filteredClusters"
+            allow-all
+            style="width: 120px"
+            @change="loadNodes"
+          />
+        </template>
+        <template #config>
+          <a-popover v-model:open="autostartColumnPopoverVisible" trigger="click" placement="bottomLeft">
+            <template #title>选择显示列</template>
+            <template #content>
+              <div style="min-width: 320px">
+                <div style="font-weight: 500; margin-bottom: 8px">显示字段</div>
+                <a-checkbox-group
+                  v-model:value="autostartColumnsSelected"
+                  style="display: flex; flex-wrap: wrap; gap: 8px"
+                >
+                  <div v-for="col in popoverColumns" :key="col.key" style="margin-bottom: 4px">
+                    <a-checkbox :value="col.key">{{ col.title }}</a-checkbox>
+                  </div>
+                </a-checkbox-group>
+                <a-divider style="margin: 12px 0" />
+                <div style="font-weight: 500; margin-bottom: 8px">搜索</div>
+                <a-checkbox v-model:checked="autostartSearchVisible">显示搜索框</a-checkbox>
+                <a-divider style="margin: 12px 0" />
+                <div class="as-pop-hint">拖动表头右缘可调整列宽，拖动表头整格可调整列序</div>
+                <div style="display: flex; justify-content: flex-end; margin-top: 12px">
+                  <button class="btn btn-primary btn-sm" @click="handleResetColumnWidths">重置列宽</button>
+                </div>
+              </div>
+            </template>
+            <button class="btn btn-secondary btn-sm">
+              <StrokeIcon name="sliders" :size="13" />
+              列配置
+              <StrokeIcon name="chevronDown" :size="10" />
+            </button>
+          </a-popover>
+        </template>
+        <template #mode-extra>
+          <button
+            v-if="viewMode === 'group'"
+            type="button"
+            class="tool-btn fold-all-btn"
+            :title="pageHasFolded ? '展开当页全部分组' : '收起当页全部分组'"
+            @click="toggleFoldAll"
+          >
+            <StrokeIcon :name="pageHasFolded ? 'expandAll' : 'collapseAll'" :size="13" />
+            <span class="fold-all-label">{{ pageHasFolded ? '全部展开' : '全部收起' }}</span>
+          </button>
+        </template>
+      </TableToolbar>
 
-    <div class="table-container">
+      <!-- 状态 chips 行（filter-architecture 单一形态；计数为前端聚合，点击与原下拉过滤同语义） -->
+      <div class="l5-chiprow" data-test="status-chip-row">
+        <span class="chiprow-label">状态</span>
+        <div class="f-chips">
+          <button
+            v-for="c in statusChips"
+            :key="c.key"
+            type="button"
+            class="f-chip chip-status"
+            :class="{ active: (statusFilter || '') === c.key, empty: !c.count }"
+            @click="statusFilter = c.key || undefined"
+          >
+            {{ c.label }}<span class="f-count">{{ c.count }}</span>
+          </button>
+        </div>
+        <span class="t-spacer"></span>
+      </div>
+
+      <!-- 批量条（nodes 同构）：批量作用于「选中优先，否则当前筛选全量」（spec 契约，未选时按钮不禁用） -->
+      <div class="l5-batchbar" :class="{ 'has-sel': selectedRowKeys.length > 0 }">
+        <span class="b-count">已选 {{ selectedRowKeys.length }} 项</span>
+        <span class="b-sep"></span>
+        <button
+          class="btn btn-ghost btn-sm batch-query"
+          :disabled="!batchTargetNodes.length || batchState.running"
+          @click="openBatchQuery"
+        >
+          <StrokeIcon name="pulse" /> 批量查询状态
+        </button>
+        <button
+          class="btn btn-ghost btn-sm"
+          :disabled="!batchTargetNodes.length || batchState.running"
+          @click="openBatchCredential('enable')"
+        >
+          <StrokeIcon name="play" /> 批量启用
+        </button>
+        <button
+          class="btn btn-danger btn-sm"
+          :disabled="!batchTargetNodes.length || batchState.running"
+          @click="openBatchCredential('disable')"
+        >
+          <StrokeIcon name="pause" /> 批量禁用
+        </button>
+        <span class="b-spacer"></span>
+        <button class="btn btn-secondary btn-sm" :disabled="!selectedRowKeys.length" @click="onSelectionChange([])">
+          清除选择
+        </button>
+      </div>
+
       <a-table
-        :data-source="pagedNodes"
-        :columns="columns"
+        :data-source="displayRows"
+        :columns="visibleAutostartColumns"
         :loading="loading"
-        :pagination="paginationProps({ page, pageSize, total: filteredNodes.length }, '个节点')"
-        :row-selection="{ selectedRowKeys, onChange: onSelectionChange }"
-        row-key="id"
+        :pagination="false"
+        :row-key="(record: any) => record.key ?? record.id"
+        :row-selection="rowSelection"
+        :custom-row="asCustomRow"
+        :scroll="{ x: minTableWidth }"
+        :table-layout="'fixed'"
         size="middle"
-        @change="onTableChange"
+        class="autostart-table grid-table"
       >
-        <template #bodyCell="{ column, record, index }">
-          <template v-if="column.key === 'index'">
-            {{ (page - 1) * pageSize + index + 1 }}
+        <template #headerCell="{ column, title }">
+          <span class="th-resize-wrap" :class="asWrapClass(column)" @mousedown="startColumnMove($event, column)">
+            <span>{{ title }}</span>
+            <span
+              v-if="String(column.key) !== 'index'"
+              class="col-resize-handle"
+              @mousedown="startColumnResize($event, column)"
+            />
+          </span>
+        </template>
+        <template #bodyCell="{ column, record }">
+          <!-- 组标记行（list-page-cluster-grouping）：整行 colspan 由列 customCell 控制 -->
+          <template v-if="isGroupHeaderRow(record)">
+            <ClusterGroupRow :row="record" @toggle="toggleFold(record.groupKey)">
+              <template #note>勾选节点后可用上方批量操作</template>
+            </ClusterGroupRow>
+          </template>
+          <template v-else-if="column.key === 'index'">
+            <span class="c-idx">{{ (page - 1) * pageSize + sequenceOf(record) }}</span>
+          </template>
+          <template v-else-if="column.key === 'ip'">
+            <span class="text-mono c-strong">{{ record.ip }}</span>
+          </template>
+          <template v-else-if="column.key === 'cluster'">
+            <span class="cl-cell" :class="clusterHueClass(record.cluster_id)"
+              ><span class="cl-dot"></span><span class="cl-name">{{ record.cluster_name || '-' }}</span></span
+            >
           </template>
           <template v-else-if="column.key === 'status'">
             <a-tooltip :title="statusTagTooltip(record)">
-              <a-tag :color="statusTag(record).color" :class="{ 'autostart-tag-outline': statusTag(record).outline }">{{
-                statusTag(record).label
-              }}</a-tag>
+              <span class="pill" :class="pillClass(record)"
+                ><span class="dot"></span>{{ statusTag(record).label }}</span
+              >
             </a-tooltip>
             <!-- meta 行恒渲染（无记录显示 —）：行高全表一致，翻页表格总高不漂移、分页条不跳动
                  （对齐上游管理 `|| '-'` 模式；条件渲染会让每页行高混排不同 → 分页条弹开） -->
@@ -111,46 +205,82 @@
           </template>
           <template v-else-if="column.key === 'edge_path'">
             <a-tooltip :title="record.edge_path">
-              <span class="edge-path-cell">{{ record.edge_path }}</span>
+              <span class="edge-path-cell c-mono c-dim">{{ record.edge_path }}</span>
             </a-tooltip>
           </template>
-          <template v-else-if="column.key !== 'action'">
-            {{ record[column.key] }}
-          </template>
-          <template v-else-if="column.key === 'action'">
-            <a-tooltip :title="actionDisabledReason(record)" placement="topLeft">
-              <span class="op-wrap">
-                <a-button size="small" :disabled="!!actionDisabledReason(record)" @click="openAction(record, 'enable')">
-                  启用
-                </a-button>
-              </span>
-            </a-tooltip>
-            <a-tooltip :title="actionDisabledReason(record)" placement="topLeft">
-              <span class="op-wrap">
-                <a-button
-                  size="small"
-                  danger
-                  style="margin-left: 6px"
-                  :disabled="!!actionDisabledReason(record)"
-                  @click="openAction(record, 'disable')"
-                  >禁用</a-button
+          <template v-else-if="column.key === 'actions'">
+            <span class="ops">
+              <button
+                class="op-btn"
+                :disabled="!!actionDisabledReason(record)"
+                :title="actionDisabledReason(record) ?? '启用自启动'"
+                @click="openAction(record, 'enable')"
+              >
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
                 >
-              </span>
-            </a-tooltip>
-            <a-tooltip :title="actionDisabledReason(record)" placement="topLeft">
-              <span class="op-wrap">
-                <a-button
-                  size="small"
-                  style="margin-left: 6px"
-                  :disabled="!!actionDisabledReason(record)"
-                  @click="openAction(record, 'status')"
-                  >查询状态</a-button
+                  <path d="M7 4l13 8-13 8z" /></svg
+                >启用
+              </button>
+              <button
+                class="op-btn op-danger"
+                :disabled="!!actionDisabledReason(record)"
+                :title="actionDisabledReason(record) ?? '禁用自启动（重启后 Edge 不再自动拉起）'"
+                @click="openAction(record, 'disable')"
+              >
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
                 >
-              </span>
-            </a-tooltip>
+                  <rect x="6" y="4" width="4" height="16" rx="1" />
+                  <rect x="14" y="4" width="4" height="16" rx="1" /></svg
+                >禁用
+              </button>
+              <button
+                class="op-btn"
+                :disabled="!!actionDisabledReason(record)"
+                :title="actionDisabledReason(record) ?? '查询自启动状态'"
+                @click="openAction(record, 'status')"
+              >
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg
+                >查询状态
+              </button>
+            </span>
           </template>
         </template>
       </a-table>
+
+      <!-- 分页条（ListPager，#54）：表外独立分页，表格 `:pagination="false"`（组标记行不占页容量） -->
+      <ListPager
+        :page="page"
+        :page-size="pageSize"
+        :total="filteredNodes.length"
+        unit="个节点"
+        @change="handlePagerChange"
+      />
     </div>
 
     <!-- 高级参数 / root 凭据抽屉（启用/禁用，参考路由插件编辑抽屉风格） -->
@@ -419,13 +549,28 @@
 import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
 import { message } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'
+import PageStatBadges from '@/components/PageStatBadges.vue'
 import ClusterSelect from '@/components/ClusterSelect.vue'
+import { clusterHueClass } from '@/utils/clusterHue'
 import NodeExecutionResultDrawer from '@/components/NodeExecutionResultDrawer.vue'
 import { useInstallStream } from '@/composables/useInstallStream'
 import { routeLabel } from '@/composables/useClusterUtils'
-import { paginationProps } from '@/composables/usePagination'
 import { formatDateTime } from '@/utils/format'
 import { useAuthStore } from '@/stores/auth'
+import TableToolbar from '@/components/TableToolbar.vue'
+import ClusterGroupRow from '@/components/ClusterGroupRow.vue'
+import ListPager from '@/components/ListPager.vue'
+import StrokeIcon from '@/components/StrokeIcon.vue'
+import { useColumnConfig } from '@/composables/useColumnConfig'
+import { useColumnDragColumns } from '@/composables/useColumnDragColumns'
+import { useFitColumnWidths, toDesignWidths, SELECTION_COLUMN_WIDTH } from '@/composables/useFitColumnWidths'
+import {
+  useListClusterGrouping,
+  isGroupHeaderRow,
+  type ClusterGroupChip,
+  type ListViewMode,
+} from '@/composables/useListClusterGrouping'
+import { compareNodeIp } from '@/utils/listGroupSorters'
 import {
   mapAutostartStatus,
   autostartActionLabel,
@@ -478,12 +623,148 @@ const defaultRunUser = ref('')
 
 const columns = [
   { title: '#', key: 'index', width: 45 },
-  { title: '集群', key: 'cluster_name', width: 140 },
+  { title: '集群', key: 'cluster', width: 124 },
   { title: '节点 IP', key: 'ip', width: 140 },
-  { title: 'Edge 目录', key: 'edge_path', ellipsis: true },
-  { title: '自启动状态', key: 'status', width: 220 },
-  { title: '操作', key: 'action', width: 260 },
+  { title: 'Edge 目录', key: 'edge_path' },
+  { title: '自启动状态', key: 'status', width: 200 },
+  { title: '操作', key: 'actions', width: 240 },
 ]
+const ALL_COLUMN_KEYS = ['index', 'cluster', 'ip', 'edge_path', 'status', 'actions']
+
+// ── 视图模式（nodes 同构）：分组默认 / 平铺切换；分组视图集群列隐藏（组头承担集群身份）──
+const viewMode = ref<ListViewMode>('group')
+
+// ── 列个性化（column-personalization 共享件）：显隐 + 拖宽 + 拖序，存储键独立 ──
+const {
+  popoverVisible: autostartColumnPopoverVisible,
+  columnsSelected: autostartColumnsSelected,
+  searchVisible: autostartSearchVisible,
+  columnWidths: autostartColumnWidths,
+  setColumnWidth: setAutostartColumnWidth,
+  resetWidths: resetAutostartColumnWidths,
+  columnOrder: autostartColumnOrder,
+  setColumnOrder: setAutostartColumnOrder,
+} = useColumnConfig({
+  key: 'edge_autostart',
+  defaultColumns: [...ALL_COLUMN_KEYS],
+  allColumns: [...ALL_COLUMN_KEYS],
+  defaultSearchVisible: true,
+})
+
+const orderedColumns = computed(() => {
+  const stored = autostartColumnOrder.value
+  const seq = stored.length ? stored : columns.map((c) => String(c.key))
+  const known = new Map(columns.map((c) => [String(c.key), c]))
+  const out: Array<Record<string, unknown>> = []
+  const seen = new Set<string>()
+  for (const k of seq) {
+    const c = known.get(k)
+    if (c && !seen.has(k)) {
+      out.push(c as Record<string, unknown>)
+      seen.add(k)
+    }
+  }
+  for (const [k, c] of known) if (!seen.has(k)) out.push(c as Record<string, unknown>)
+  return out
+})
+
+const popoverColumns = computed(() =>
+  columns
+    .filter((c) => c.key !== 'index' && c.key !== 'cluster')
+    .map((c) => ({ key: String(c.key), title: String(c.title) })),
+)
+
+// 列宽自适应（r6 方案 A，与 nodes 同源）：容器宽 ≥ 设计总宽原样用设计值，窄时等比收缩
+const cardRef = ref<HTMLElement | null>(null)
+const designWidths = () => {
+  const base = toDesignWidths(columns)
+  // 集群列仅平铺视图参与（分组视图由组头承担集群身份）
+  if (viewMode.value === 'flat') return base
+  const { cluster: _cluster, ...rest } = base
+  return rest
+}
+const { widths: fittedColumnWidths, minTableWidth } = useFitColumnWidths({
+  designWidths,
+  containerRef: cardRef,
+  overrides: () => autostartColumnWidths.value,
+  reserved: () => SELECTION_COLUMN_WIDTH,
+  flexKey: 'edge_path',
+  minWidths: () => ({
+    ...(viewMode.value === 'flat' ? { cluster: 116 } : {}),
+    index: 45,
+    ip: 110,
+    status: 150,
+    actions: 220,
+  }),
+})
+
+const visibleAutostartColumns = computed(() => {
+  const selected = new Set(autostartColumnsSelected.value)
+  const cols = orderedColumns.value.filter((c) => {
+    const k = String(c.key)
+    if (k === 'index') return true
+    // 集群列仅平铺视图存在（分组视图由组头承担），不进列配置弹窗
+    if (k === 'cluster') return viewMode.value === 'flat'
+    return selected.has(k)
+  })
+  const groupMode = viewMode.value === 'group'
+  return cols.map((c, i) => ({
+    ...c,
+    width: fittedColumnWidths.value[String(c.key)] ?? (c.width as number | undefined),
+    fixed: groupMode ? undefined : c.fixed,
+    customCell: (record: unknown) => groupHeaderCellProps(record, i === 0),
+  }))
+})
+
+// 列拖拽手势（调宽 + 移动）共享 composable，与三列表页同源
+const {
+  wrapClass: asWrapClass,
+  startColumnResize,
+  startColumnMove,
+} = useColumnDragColumns({
+  columns: () => columns as never[],
+  orderedKeys: () => orderedColumns.value.map((c) => String(c.key)),
+  getWidth: (key) => autostartColumnWidths.value[key],
+  setColumnWidth: setAutostartColumnWidth,
+  setColumnOrder: setAutostartColumnOrder,
+  tableSelector: '.autostart-table',
+  fixedKeys: ['index', 'ip', 'actions'],
+})
+
+function handleResetColumnWidths(): void {
+  resetAutostartColumnWidths()
+  autostartColumnPopoverVisible.value = false
+}
+
+/** 组标记行单元格协议（contract 10.6）：首列整行 colSpan（+1 补选择列宽），其余列隐藏 */
+function groupHeaderCellProps(record: unknown, isFirst: boolean): Record<string, unknown> {
+  if (!isGroupHeaderRow(record)) return {}
+  return isFirst ? { colSpan: visibleAutostartColumns.value.length + 1 } : { class: 'l5-group-cell-hidden' }
+}
+/** 组标记行整行类（样式见 style.css .l5-group-row 段） */
+function asCustomRow(record: unknown): Record<string, unknown> {
+  return isGroupHeaderRow(record) ? { class: 'l5-group-row' } : {}
+}
+
+/** 组头状态分布徽章（节点页 nodeGroupChips 同构）：真实态 ok/warn、失败态 bad */
+function autostartGroupChips(rows: Array<Record<string, unknown>>): ClusterGroupChip[] {
+  const count = (pred: (s: string) => boolean) =>
+    rows.filter((r) => typeof r.autostart_status === 'string' && pred(r.autostart_status as string)).length
+  const notQueried = rows.filter((r) => !r.autostart_status).length
+  const chips: ClusterGroupChip[] = []
+  const enabled = count((s) => s === 'enabled')
+  const disabledCnt = count((s) => s === 'disabled')
+  const notCfg = count((s) => s === 'not_configured')
+  const denied = count((s) => s === 'permission_denied')
+  const failed = count((s) => s === 'unknown')
+  if (enabled) chips.push({ label: `${enabled} 已启用`, tone: 'ok' })
+  if (disabledCnt) chips.push({ label: `${disabledCnt} 已禁用`, tone: 'warn' })
+  if (notCfg) chips.push({ label: `${notCfg} 未配置`, tone: 'warn' })
+  if (denied) chips.push({ label: `${denied} 查询受限`, tone: 'bad' })
+  if (failed) chips.push({ label: `${failed} 查询失败`, tone: 'bad' })
+  if (notQueried) chips.push({ label: `${notQueried} 未查询` })
+  return chips
+}
 
 /** 前端内存过滤（IP 搜索 + 状态筛选 + 集群已由 loadNodes 过滤） */
 const filteredNodes = computed(() => {
@@ -506,6 +787,17 @@ const pagedNodes = computed(() => {
   return filteredNodes.value.slice(start, start + pageSize.value)
 })
 
+// ── 分组/平铺（list-page-cluster-grouping，与节点管理同源）：分组默认，组头带状态分布徽章；
+//    组标记行混入 dataSource（表格 :pagination="false"，分页走外置 ListPager，#290 裁决）──
+const { displayRows, sequenceOf, isRowSelectable, toggleFold, pageHasFolded, toggleFoldAll } = useListClusterGrouping({
+  rows: () => pagedNodes.value,
+  unit: '节点',
+  mode: viewMode,
+  // 组内固定序 = IP 数值序（与节点页同款）；仅分组模式生效
+  sortWithinGroup: compareNodeIp as (a: Record<string, unknown>, b: Record<string, unknown>) => number,
+  chips: autostartGroupChips,
+})
+
 // 筛选收窄后页码越界 → 回夹到最后一页（避免空页）
 watch(
   () => filteredNodes.value.length,
@@ -515,22 +807,17 @@ watch(
   },
 )
 
-async function onTableChange(p: { current?: number; pageSize?: number }) {
-  // 翻页前记录分页条视口位置：末页行数不满页时（如 39 节点 = 20+19）表格总高变化，
-  // 分页条会位移/弹出视口——渲染后按位移补偿 scrollBy 钉位（2026-10-29 用户实测「点第一页页面跳了」）
-  const rect = document.querySelector('.ant-pagination')?.getBoundingClientRect() ?? null
+/** 分页条事件（ListPager）：表外独立分页，表格本身 `:pagination="false"`（组标记行不占页容量）。
+ *  保留「分页条钉位」补偿（2026-10-29 用户实测「点第一页页面跳了」）：末页行数不满页时
+ *  表格总高变化，渲染后按分页条位移 scrollBy 钉位（仅分页条在视口内时生效）。 */
+async function handlePagerChange(nextPage: number, nextPageSize: number) {
+  const rect = document.querySelector('.l5-pager')?.getBoundingClientRect() ?? null
   const pagerVisible = rect != null && rect.top < window.innerHeight && rect.bottom > 0
-  // antdv 的 change 事件恒带 pageSize：仅在 pageSize 实际变化（用户改每页条数）时才回第 1 页，
-  // 否则翻页动作会被「pageSize 未变也重置」吞掉——点击页码永远无反应（2026-10-27 用户实测）
-  if (p.pageSize && p.pageSize !== pageSize.value) {
-    pageSize.value = p.pageSize
-    page.value = 1
-  } else if (p.current) {
-    page.value = p.current
-  }
+  page.value = nextPage
+  if (nextPageSize && nextPageSize !== pageSize.value) pageSize.value = nextPageSize
   if (!pagerVisible || !rect) return
   await nextTick()
-  const after = document.querySelector('.ant-pagination')?.getBoundingClientRect()
+  const after = document.querySelector('.l5-pager')?.getBoundingClientRect()
   if (!after) return
   const delta = after.top - rect.top
   if (delta !== 0) window.scrollBy(0, delta)
@@ -601,6 +888,66 @@ function classifyFailure(logs: string[], fallback: string): string {
 function statusTag(record: any): AutostartTagInfo {
   return mapAutostartStatus(record.autostart_status, record.autostart_record?.updated_at)
 }
+
+/** 状态胶囊类（autostart-page-restyle 六态视觉：真实态实底 + 色点，失败态虚线描边，未查询灰实底） */
+function pillClass(record: any): string {
+  switch (record.autostart_status) {
+    case 'enabled':
+      return 'as-enabled'
+    case 'disabled':
+      return 'as-disabled'
+    case 'not_configured':
+      return 'as-notcfg'
+    case 'permission_denied':
+      return 'as-denied'
+    case 'unknown':
+      return 'as-failed'
+    default:
+      return 'as-unset'
+  }
+}
+
+/** 页头统计徽标（补充维度）：去重集群数 + 未配置台数，均取当前已加载数据集 */
+const headerStatItems = computed(() => {
+  const clusterIds = new Set(nodes.value.map((n: any) => n.cluster_id))
+  const notConfigured = nodes.value.filter((n: any) => n.autostart_status === 'not_configured').length
+  return [
+    { value: clusterIds.size, label: '个集群' },
+    { value: notConfigured, label: '台未配置', tone: 'warn' as const },
+  ]
+})
+
+/** 状态 chips（filter-architecture 单一形态）：计数基于集群/IP 过滤后的同一数据源（不含状态过滤自身） */
+const STATUS_CHIP_DEFS: Array<{ key: string; label: string }> = [
+  { key: '', label: '全部' },
+  { key: 'enabled', label: '已启用' },
+  { key: 'disabled', label: '已禁用' },
+  { key: 'not_configured', label: '未配置' },
+  { key: 'permission_denied', label: '查询受限' },
+  { key: 'unknown', label: '查询失败' },
+  { key: 'not_queried', label: '未查询' },
+]
+
+const statusChips = computed(() => {
+  const kw = ipSearch.value.trim()
+  const base = nodes.value.filter((n: any) => !kw || String(n.ip).includes(kw))
+  const counts: Record<string, number> = {
+    '': base.length,
+    enabled: 0,
+    disabled: 0,
+    not_configured: 0,
+    permission_denied: 0,
+    unknown: 0,
+    not_queried: 0,
+  }
+  for (const n of base) {
+    const s = n.autostart_status as string | null
+    if (s === null || s === undefined) counts.not_queried++
+    else if (s in counts) counts[s]++
+    else counts.unknown++
+  }
+  return STATUS_CHIP_DEFS.map((d) => ({ ...d, count: counts[d.key] }))
+})
 
 /** 状态 tag tooltip：七日过期提示 + 状态 hint + 最近操作记录（action/rc/时间/脱敏命令） */
 function statusTagTooltip(record: any): string | null {
@@ -950,6 +1297,12 @@ const selectedRowKeys = ref<Array<number>>([])
 function onSelectionChange(keys: Array<number>) {
   selectedRowKeys.value = keys
 }
+const rowSelection = computed(() => ({
+  selectedRowKeys: selectedRowKeys.value,
+  onChange: onSelectionChange,
+  // antd 传给 getCheckboxProps 的是**记录本身**（不是 { record }）；组标记行不可勾选（#93②）
+  getCheckboxProps: (rec: unknown) => ({ disabled: !isRowSelectable(rec) }),
+}))
 
 /** 决策点 4：有勾选仅对选中节点执行，无勾选对当前筛选结果全量 */
 const batchTargetNodes = computed<any[]>(() => {
@@ -1138,22 +1491,73 @@ onMounted(async () => {
   await loadClusters()
   await loadNodes()
 })
+
+// 视图模式供测试/调试显式钉位（nodes contract 10.2 同款：组件测试用 vm.viewMode='flat' 钉平铺场景）
+defineExpose({ viewMode })
 </script>
 
 <style scoped>
-.toolbar {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 20px;
-  align-items: center;
+/* 列配置弹层提示行（nodes pop-hint 同款语义） */
+.as-pop-hint {
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--bg);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  padding: 7px 10px;
 }
 
-/* 单节点操作与批量入口之间的分隔线 */
-.toolbar-sep {
-  width: 1px;
-  height: 22px;
-  background: var(--border);
+/* 状态胶囊六态（autostart-page-restyle，基准 proposal-c/edge-autostart.html）：
+   真实态实底 + 色点；失败态透明底虚线描边（与真实态分层）；未查询灰实底非失败语义 */
+.pill.as-enabled {
+  background: oklch(55% 0.15 145 / 12%);
+  color: var(--success);
 }
+.pill.as-enabled .dot {
+  background: var(--success);
+}
+.pill.as-disabled {
+  background: oklch(65% 0.15 85 / 14%);
+  color: oklch(57% 0.13 70);
+}
+.pill.as-disabled .dot {
+  background: var(--warning);
+}
+.pill.as-notcfg,
+.pill.as-unset {
+  background: oklch(50% 0.018 240 / 8%);
+  color: var(--muted);
+}
+.pill.as-notcfg .dot,
+.pill.as-unset .dot {
+  background: oklch(50% 0.018 240 / 55%);
+}
+.pill.as-denied {
+  background: transparent;
+  border: 1px dashed oklch(65% 0.15 85 / 45%);
+  color: oklch(57% 0.13 70);
+}
+.pill.as-denied .dot {
+  background: var(--warning);
+}
+.pill.as-failed {
+  background: transparent;
+  border: 1px dashed oklch(55% 0.18 28 / 40%);
+  color: var(--danger);
+}
+.pill.as-failed .dot {
+  background: var(--danger);
+}
+
+/* 操作列「禁用」为危险操作样式（spec：操作按钮层级；其余动作走全局 .op-btn ghost） */
+.ops .op-btn.op-danger {
+  color: var(--danger);
+}
+.ops .op-btn.op-danger:disabled:hover {
+  color: var(--danger);
+}
+
+/* 单节点操作与批量入口之间的分隔线（语义已由共享 .v-sep 承担，此行保留占位说明） */
 
 /* 批量汇总面板 */
 .batch-progress-text {
@@ -1197,11 +1601,7 @@ onMounted(async () => {
   line-height: 1.4;
 }
 
-/* 失败态（查询受限/查询失败）：透明底描边，与填充色的真实态区分层级 */
-.autostart-tag-outline {
-  background: transparent !important;
-  border-style: dashed !important;
-}
+/* 失败态（查询受限/查询失败）虚线描边语义已并入 .pill.as-denied / .as-failed */
 
 /* Edge 目录列省略 */
 .edge-path-cell {
@@ -1213,13 +1613,7 @@ onMounted(async () => {
   vertical-align: bottom;
 }
 
-/* 禁用按钮的 tooltip 感知包裹层（antdv 禁用按钮不接收鼠标事件） */
-.op-wrap {
-  display: inline-block;
-}
-.op-wrap .ant-btn-disabled {
-  cursor: not-allowed;
-}
+/* 禁用按钮的 tooltip 语义已由原生 title 承担（预检原因随按钮 title 显示） */
 
 /* 参考路由插件编辑抽屉（PluginEditorDrawer）的 field-block 风格 */
 .field-block {
@@ -1234,7 +1628,7 @@ onMounted(async () => {
 }
 .field-block-title {
   display: block;
-  font-size: 16px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--fg);
   margin-bottom: 2px;

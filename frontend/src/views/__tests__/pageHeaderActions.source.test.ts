@@ -37,6 +37,7 @@ const PAGES: Array<[string, string]> = [
   ['ClusterList.vue', 'clusters.html'],
   ['EdgeEnv.vue', 'edge-env.html'],
   ['Tools.vue', 'tools.html'],
+  ['EdgeAutostart.vue', 'edge-autostart.html'],
 ]
 
 function read(file: string): string {

@@ -1486,6 +1486,14 @@ body.col-move-dragging * {
   width: 13px;
   height: 13px;
 }
+.tool-btn.danger {
+  color: var(--danger);
+}
+.tool-btn.danger:hover {
+  border-color: oklch(55% 0.18 28 / 45%);
+  background: oklch(55% 0.18 28 / 8%);
+  color: var(--danger);
+}
 /* mockup 无禁用态：刷新 loading 期间需要视觉反馈，按 .op-btn:disabled 同款弱化 */
 .tool-btn:disabled {
   opacity: 0.45;

@@ -75,7 +75,7 @@ async function mountAttached() {
   return mount(EdgeAutostart, { attachTo: document.body, global: { plugins: [Antd, router], components: stubs } })
 }
 
-describe('EdgeAutostart 客户端分页切片', () => {
+describe('EdgeAutostart 客户端分页切片（ListPager 迁移后：表格 :pagination=false，切片由本页负责）', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
@@ -87,20 +87,28 @@ describe('EdgeAutostart 客户端分页切片', () => {
     }))
   })
 
-  it('25 节点首页渲染 20 行（paginationProps total=25 为服务端形态，切片由本页负责）', async () => {
+  /** 分组视图默认开（nodes 同构）；分页切片断言在平铺态钉位（contract 10.2 vm.viewMode） */
+  async function mountFlat() {
     const wrapper = await mountView()
     await flushPromises()
+    ;(wrapper.vm as any).viewMode = 'flat'
+    await flushPromises()
+    return wrapper
+  }
+
+  it('25 节点首页渲染 20 行；表格 :pagination=false（分页走外置 ListPager）', async () => {
+    const wrapper = await mountFlat()
     const table = wrapper.findComponent({ name: 'ATable' })
-    expect(table.props('pagination')).toMatchObject({ total: 25, current: 1, pageSize: 20 })
+    expect(table.props('pagination')).toBe(false)
     expect(table.props('dataSource')).toHaveLength(20)
+    expect(wrapper.find('.l5-pager').exists()).toBe(true)
   })
 
   it('翻页后数据源切换为第二片（5 行），序号跨页连续', async () => {
-    const wrapper = await mountView()
+    const wrapper = await mountFlat()
     await flushPromises()
     const vm = wrapper.vm as any
-    // antdv change 事件恒带 pageSize（真实事件形状）：翻页不得被「pageSize 未变也重置」吞掉
-    vm.onTableChange({ current: 2, pageSize: 20 })
+    vm.handlePagerChange(2, 20)
     await flushPromises()
     const table = wrapper.findComponent({ name: 'ATable' })
     const rows = table.props('dataSource') as Array<Record<string, unknown>>
@@ -108,29 +116,32 @@ describe('EdgeAutostart 客户端分页切片', () => {
     expect(rows[0].id).toBe(21)
   })
 
-  it('改每页条数（pageSize 实际变化）→ 回第 1 页并按新条数切片', async () => {
-    const wrapper = await mountView()
+  it('改每页条数（ListPager 回第 1 页语义）→ page=1 并按新条数切片', async () => {
+    const wrapper = await mountFlat()
     await flushPromises()
     const vm = wrapper.vm as any
-    vm.onTableChange({ current: 2, pageSize: 20 })
+    vm.handlePagerChange(2, 20)
     await flushPromises()
-    vm.onTableChange({ current: 2, pageSize: 50 })
+    // ListPager onSizeChange 固定 emit change(1, newSize)
+    vm.handlePagerChange(1, 50)
     await flushPromises()
+    const vm2 = wrapper.vm as any
+    expect(vm2.page).toBe(1)
+    expect(vm2.pageSize).toBe(50)
     const table = wrapper.findComponent({ name: 'ATable' })
-    expect(table.props('pagination')).toMatchObject({ current: 1, pageSize: 50 })
     expect(table.props('dataSource')).toHaveLength(25)
   })
 
   it('筛选收窄后页码越界 → 回夹到最后一页，不出现空页', async () => {
-    const wrapper = await mountView()
+    const wrapper = await mountFlat()
     await flushPromises()
     const vm = wrapper.vm as any
-    vm.onTableChange({ current: 2 })
+    vm.handlePagerChange(2, 20)
     await flushPromises()
     vm.ipSearch = '10.0.0.25'
     await flushPromises()
+    expect(vm.page).toBe(1)
     const table = wrapper.findComponent({ name: 'ATable' })
-    expect(table.props('pagination')).toMatchObject({ current: 1 })
     expect(table.props('dataSource')).toHaveLength(1)
   })
 })
@@ -201,7 +212,7 @@ describe('EdgeAutostart 翻页分页条钉位', () => {
     realGBCR = Element.prototype.getBoundingClientRect
     // 仅拦 .ant-pagination 的 rect（可控分页条位置），其余元素走原生（jsdom 全零）
     vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
-      if (typeof this.className === 'string' && this.className.includes('ant-pagination')) {
+      if (typeof this.className === 'string' && this.className.includes('l5-pager')) {
         return { top: pagerTop, bottom: pagerTop + 32, height: 32 } as unknown as DOMRect
       }
       return realGBCR.call(this)
@@ -218,7 +229,7 @@ describe('EdgeAutostart 翻页分页条钉位', () => {
     const wrapper = await mountAttached()
     await flushPromises()
     const vm = wrapper.vm as any
-    const flip = vm.onTableChange({ current: 2, pageSize: 20 })
+    const flip = vm.handlePagerChange(2, 20)
     // 布局变化后分页条下移 67px（模拟回首页多一行）
     pagerTop = 567
     await flip
@@ -232,7 +243,7 @@ describe('EdgeAutostart 翻页分页条钉位', () => {
     await flushPromises()
     const vm = wrapper.vm as any
     pagerTop = 2067
-    await vm.onTableChange({ current: 2, pageSize: 20 })
+    await vm.handlePagerChange(2, 20)
     expect(window.scrollBy).not.toHaveBeenCalled()
     wrapper.unmount()
   })

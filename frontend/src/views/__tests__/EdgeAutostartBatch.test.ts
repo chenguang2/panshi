@@ -127,8 +127,10 @@ describe('批量入口（决策点 4：选中优先，否则筛选全量）', ()
     expect(vm.batchTargetNodes).toHaveLength(2)
     expect(vm.batchTargetNodes.map((n: any) => n.id)).toEqual([1, 3])
 
-    // 按钮文案动态显示影响节点数
-    expect(wrapper.find('.batch-query').text()).toContain('2 台')
+    // 批量条形态（nodes 同构）：勾选数由「已选 N 项」承担；批量按钮按 spec 语义保持可用
+    // （选中优先，否则当前筛选全量——影响面在凭据抽屉的 alert 文案中宣示）
+    expect(wrapper.find('.l5-batchbar .b-count').text()).toBe('已选 2 项')
+    expect(wrapper.find('.batch-query').attributes('disabled')).toBeUndefined()
   })
 
   it('筛选结果为空 → 批量按钮禁用', async () => {

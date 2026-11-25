@@ -1313,3 +1313,33 @@ describe('mockup-parity：工具箱工作台（tools-page-restyle，基准 propo
     expect(tools).not.toMatch(/tb-btn-clear[^>]*>当前时间</)
   })
 })
+
+describe('mockup-parity：自启动管理（autostart-page-restyle，基准 proposal-c/edge-autostart.html）', () => {
+  const autostart = page('EdgeAutostart.vue')
+
+  it('as-① 状态下拉退场：禁「全部状态」回流，状态筛选为 chips 行（l5-chiprow）', () => {
+    expect(autostart).not.toContain('全部状态')
+    expect(autostart).toContain('l5-chiprow')
+    expect(autostart).toContain('f-chip chip-status')
+  })
+
+  it('as-② 页头统计徽标必须接入（设计页 .ph-inline 两枚）', () => {
+    expect(autostart).toContain('PageStatBadges')
+  })
+
+  it('as-③ 状态胶囊带色点结构（.pill.as-* 六态）+ 集群列色相（cl-cell，平铺）', () => {
+    expect(autostart).toContain('class="pill"')
+    expect(autostart).toContain('cl-cell')
+  })
+
+  it('as-④ nodes 同构骨架：grid-table 表格 + ListPager + 批量条 + 分组|平铺 seg', () => {
+    expect(autostart).toContain('grid-table')
+    expect(autostart).toContain('<ListPager')
+    expect(autostart).toContain('l5-batchbar')
+    expect(autostart).toContain(':show-mode="true"')
+  })
+
+  it('as-⑤ 文案对齐全站：按钮为「刷新」，禁「重载」回流', () => {
+    expect(autostart).not.toMatch(/>重载</)
+  })
+})
