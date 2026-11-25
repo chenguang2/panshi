@@ -194,7 +194,7 @@ beforeEach(() => {
 describe('EdgeImport 批 1：连接测试反馈', () => {
   it('adminKey placeholder 说明留空回退语义', async () => {
     const wrapper = await mountPage()
-    const keyInput = wrapper.find('.a-input-password')
+    const keyInput = wrapper.find('input[type="password"]')
     expect(keyInput.attributes('placeholder')).toContain('留空')
   })
 
@@ -202,7 +202,7 @@ describe('EdgeImport 批 1：连接测试反馈', () => {
     const wrapper = await mountPage()
     // 手动触发集群选择（ClusterSelect 组件契约填值）
     await pickCluster(wrapper, 4)
-    const nodeSelect = wrapper.findAll('.a-select')[1]
+    const nodeSelect = wrapper.find('select.ei-input')
     await nodeSelect.setValue('2')
     await flushPromises()
     // 触发测试连接且挂起（延迟 resolve）
@@ -237,7 +237,7 @@ describe('EdgeImport 批 1：连接测试反馈', () => {
 async function reachStep2() {
   const wrapper = await mountPage()
   await pickCluster(wrapper, 4)
-  const nodeSelect = wrapper.findAll('.a-select')[1]
+  const nodeSelect = wrapper.find('select.ei-input')
   await nodeSelect.setValue('2')
   await flushPromises()
   const testBtn = buttons(wrapper).find((b) => b.text().includes('测试连接'))!
@@ -321,7 +321,7 @@ describe('EdgeImport 批 3：预览交互', () => {
     expect(tables.length).toBeGreaterThanOrEqual(1)
     const text = wrapper.text()
     expect(text).toContain('插件组：0 个')
-    expect(wrapper.findAll('.section-card').length).toBe(7) // 7 张卡仍在（含空态单行）
+    expect(wrapper.findAll('.ei-sec').length).toBe(7) // 7 张卡仍在（含空态单行）
   })
 
   it('全选/全不选快捷项作用全部勾选', async () => {

@@ -1,17 +1,29 @@
 <template>
   <div class="edge-import">
     <PageHeader title="Edge 数据导入" description="从 Edge 节点批量导入配置数据到本地数据库" />
-    <a-steps :current="currentStep" style="margin-bottom: 24px">
-      <a-step title="选择节点" />
-      <a-step title="选择配置" />
-      <a-step title="预览导入" />
-    </a-steps>
+    <div class="ei-steps">
+      <div class="ei-step" :class="{ done: Number(currentStep) > 0, active: Number(currentStep) === 0 }">
+        <span class="ei-dot">{{ Number(currentStep) > 0 ? '✓' : '1' }}</span
+        ><span class="ei-label">选择节点</span>
+      </div>
+      <div class="ei-line" :class="{ done: Number(currentStep) > 0 }"></div>
+      <div class="ei-step" :class="{ done: Number(currentStep) > 1, active: Number(currentStep) === 1 }">
+        <span class="ei-dot">{{ Number(currentStep) > 1 ? '✓' : '2' }}</span
+        ><span class="ei-label">选择配置</span>
+      </div>
+      <div class="ei-line" :class="{ done: Number(currentStep) > 1 }"></div>
+      <div class="ei-step" :class="{ active: Number(currentStep) === 2 }">
+        <span class="ei-dot">3</span><span class="ei-label">预览导入</span>
+      </div>
+    </div>
 
     <!-- Step 0: 选择节点 -->
-    <div v-if="currentStep === 0">
-      <a-card title="选择源节点">
-        <a-form layout="vertical">
-          <a-form-item label="所属集群" required>
+    <div v-if="(currentStep as number) === 0">
+      <div class="l5-card">
+        <div class="ei-cardhead"><h3>选择源节点</h3></div>
+        <div style="padding: 18px 16px 14px">
+          <div class="ei-field">
+            <label class="req">所属集群</label>
             <ClusterSelect
               :model-value="selectedClusterId"
               :clusters="clusters"
@@ -20,167 +32,244 @@
               @update:model-value="onClusterFieldChange"
               @change="onClusterChange"
             />
-          </a-form-item>
+          </div>
 
-          <a-form-item label="目标节点" required>
-            <a-select
-              v-model:value="selectedNodeId"
-              placeholder="请选择节点..."
-              style="width: 400px"
-              :loading="loadingNodes"
-              :disabled="!selectedClusterId"
-            >
-              <a-select-option v-for="node in nodes" :key="node.id" :value="node.id">
+          <div class="ei-field">
+            <label class="req">目标节点</label>
+            <select v-model="selectedNodeId" class="ei-input" style="width: 400px" :disabled="!selectedClusterId">
+              <option :value="null">请选择节点...</option>
+              <option v-for="node in nodes" :key="node.id" :value="node.id">
                 {{ node.ip }}:{{ node.management_port }} ({{ node.edge_path }})
-              </a-select-option>
-            </a-select>
-          </a-form-item>
+              </option>
+            </select>
+          </div>
 
-          <a-form-item label="节点 Admin Key">
-            <div style="display: flex; gap: 8px">
-              <a-input-password
-                v-model:value="adminKey"
-                placeholder="留空则使用节点已配置的 Admin Key"
-                style="max-width: 300px"
-              />
-              <a-button
-                type="primary"
-                :loading="testingConnection"
-                :disabled="!selectedNodeId"
-                @click="handleTestConnection"
-              >
-                测试连接
-              </a-button>
-            </div>
+          <div class="ei-field">
+            <label>节点 Admin Key</label>
+            <input
+              v-model="adminKey"
+              type="password"
+              class="ei-input"
+              style="width: 300px"
+              placeholder="留空则使用节点已配置的 Admin Key"
+              autocomplete="new-password"
+            />
+            <button
+              class="btn btn-primary"
+              :disabled="testingConnection || !selectedNodeId"
+              @click="handleTestConnection"
+            >
+              {{ testingConnection ? '测试中…' : '测试连接' }}
+            </button>
             <div v-if="testingConnection" class="testing-hint">
               正在连接节点并统计配置数据，约需数秒至 1 分钟（视节点网络而定）……
             </div>
-          </a-form-item>
-        </a-form>
+          </div>
 
-        <a-alert v-if="connectionTested" type="success" show-icon closable style="margin-top: 8px">
-          <template #message>
-            <strong>连接成功</strong>
-          </template>
-          <template #description>
+          <div v-if="connectionTested" class="ei-ok">
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="9" />
+              <path d="M8 12l3 3 5-6" />
+            </svg>
             <div>
-              节点: {{ connectionResult?.node || '-' }}{{ connectionRouteText }} · 版本:
-              {{ connectionResult?.version || '-' }} · 响应时间: {{ connectionResult?.response_time_ms || '-' }}ms
+              <div class="t">连接成功</div>
+              <div class="d">
+                节点: {{ connectionResult?.node || '-' }}{{ connectionRouteText }} · 版本:
+                {{ connectionResult?.version || '-' }} · 响应时间: {{ connectionResult?.response_time_ms || '-' }}ms
+              </div>
+              <div class="ei-counts">
+                <span class="ei-count"
+                  >路由 <b>{{ connectionResult?.route_count }}</b></span
+                >
+                <span class="ei-count"
+                  >上游 <b>{{ connectionResult?.upstream_count }}</b></span
+                >
+                <span class="ei-count"
+                  >插件 <b>{{ connectionResult?.plugin_count }}</b></span
+                >
+                <span class="ei-count"
+                  >插件组 <b>{{ connectionResult?.plugin_config_count }}</b></span
+                >
+                <span class="ei-count"
+                  >全局规则 <b>{{ connectionResult?.global_rule_count }}</b></span
+                >
+                <span class="ei-count"
+                  >插件元数据 <b>{{ connectionResult?.plugin_metadata_count }}</b></span
+                >
+                <span class="ei-count"
+                  >四层代理 <b>{{ connectionResult?.stream_proxy_count }}</b></span
+                >
+                <span class="ei-count"
+                  >SSL 证书 <b>{{ connectionResult?.ssl_certificate_count }}</b></span
+                >
+              </div>
             </div>
-            <div style="margin-top: 4px">
-              路由: {{ connectionResult?.route_count }} 条 · 上游: {{ connectionResult?.upstream_count }} 个 · 插件:
-              {{ connectionResult?.plugin_count }} 个 · 插件组: {{ connectionResult?.plugin_config_count }} 个 ·
-              全局规则: {{ connectionResult?.global_rule_count }} 个 · 插件元数据:
-              {{ connectionResult?.plugin_metadata_count }} 个 · 四层代理: {{ connectionResult?.stream_proxy_count }} 个
-              · SSL 证书: {{ connectionResult?.ssl_certificate_count }} 个
-            </div>
-          </template>
-        </a-alert>
+          </div>
 
-        <a-alert v-if="connectionError" type="error" show-icon closable style="margin-top: 8px">
-          <template #message>
-            <strong>连接失败</strong>
-          </template>
-          <template #description>
+          <div v-if="connectionError" class="ei-fail">
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 8v5M12 16.5h.01" />
+            </svg>
             {{ connectionError }}
-          </template>
-        </a-alert>
-      </a-card>
+          </div>
+        </div>
+      </div>
 
       <div class="step-actions">
         <span class="tip-host" title="请先完成连接测试">
-          <a-button type="primary" :disabled="!connectionTested" @click="goToStep(1)"> 下一步 </a-button>
+          <button class="btn btn-primary" :disabled="!connectionTested" @click="goToStep(1)">下一步</button>
         </span>
       </div>
     </div>
 
     <!-- Step 1: 选择配置 -->
-    <div v-if="currentStep === 1">
-      <a-card title="选择要导入的配置类型">
-        <p style="font-size: 13px; color: var(--muted); margin-bottom: 16px">
-          选择需要从 Edge 节点导入到管理平台的配置类型
-        </p>
-        <div class="config-types">
-          <div
-            v-for="ct in configTypes"
-            :key="ct.key"
-            class="config-type-card"
-            :class="{ selected: selections[ct.key as keyof typeof selections] }"
-            @click="toggleConfigType(ct.key)"
-          >
-            <span class="ct-check">✓</span>
-            <component :is="ct.icon" class="ct-icon" />
-            <div class="ct-name">{{ ct.label }}</div>
+    <div v-if="(currentStep as number) === 1">
+      <div class="l5-card">
+        <div class="ei-cardhead">
+          <h3>选择要导入的配置类型</h3>
+          <span class="ei-sub">选择需要从 Edge 节点导入到管理平台的配置类型</span>
+        </div>
+        <div style="padding: 16px 16px 18px">
+          <div class="ei-types">
+            <div
+              v-for="ct in configTypes"
+              :key="ct.key"
+              class="ei-ct"
+              :class="{ selected: selections[ct.key as keyof typeof selections] }"
+              @click="toggleConfigType(ct.key)"
+            >
+              <span class="ck">✓</span>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.7"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                v-html="EC_TYPE_ICONS[ct.key]"
+              />
+              <span class="n">{{ ct.label }}</span>
+            </div>
+          </div>
+          <div class="step-actions" style="justify-content: space-between">
+            <button class="btn btn-secondary" @click="goToStep(0)">上一步</button>
+            <button class="btn btn-primary" :disabled="!hasSelection" @click="goToStep(2)">下一步 — 预览</button>
           </div>
         </div>
-      </a-card>
-      <div class="step-actions" style="justify-content: space-between">
-        <a-button @click="goToStep(0)">上一步</a-button>
-        <a-button type="primary" :disabled="!hasSelection" @click="goToStep(2)"> 下一步 — 预览 </a-button>
       </div>
     </div>
 
     <!-- Step 2: 预览导入 -->
-    <div v-if="currentStep === 2">
+    <div v-if="(currentStep as number) === 2">
       <!-- 获取警告 -->
-      <a-alert
-        v-if="previewData?.warnings && previewData.warnings.length > 0"
-        type="warning"
-        show-icon
-        closable
-        style="margin-bottom: 16px"
-      >
-        <template #message>
-          <strong>部分数据获取失败</strong>
-        </template>
-        <template #description>
-          <div v-for="(w, i) in previewData.warnings" :key="i">{{ w }}</div>
-          <div style="margin-top: 4px; font-size: 12px">失败的数据无法导入，其他数据可正常导入。</div>
-        </template>
-      </a-alert>
+      <div v-if="previewData?.warnings && previewData.warnings.length > 0" class="ei-warn" style="margin-bottom: 12px">
+        <svg
+          width="15"
+          height="15"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M12 3L2 20h20L12 3z" />
+          <path d="M12 10v4M12 17h.01" />
+        </svg>
+        <div>
+          <b>部分数据获取失败</b>
+          <div style="margin-top: 2px">
+            <div v-for="(w, i) in previewData.warnings" :key="i">{{ w }}</div>
+            <div style="margin-top: 4px; font-size: 11px">失败的数据无法导入，其他数据可正常导入。</div>
+          </div>
+        </div>
+      </div>
 
       <!-- 插件摘要 -->
-      <a-alert
+      <div
         v-if="previewData?.plugin_summary && previewData.plugin_summary.unknown_count > 0"
-        type="warning"
-        show-icon
-        style="margin-bottom: 16px"
+        class="ei-warn"
+        style="margin-bottom: 12px"
       >
-        <template #message>
-          <strong>插件识别提示</strong>
-        </template>
-        <template #description>
-          已识别 {{ previewData.plugin_summary.known_count }} 个已知插件，发现
-          {{ previewData.plugin_summary.unknown_count }} 个新插件（
-          {{ previewData.plugin_summary.unknown_plugin_names.join('、') }}
-          ），新插件将存入数据库，可在 JSON 编辑器中查看修改。
-        </template>
-      </a-alert>
+        <svg
+          width="15"
+          height="15"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 8h.01M12 11v5" />
+        </svg>
+        <div>
+          <b>插件识别提示</b>
+          <div style="margin-top: 2px">
+            已识别 {{ previewData.plugin_summary.known_count }} 个已知插件，发现
+            {{ previewData.plugin_summary.unknown_count }} 个新插件（
+            {{ previewData.plugin_summary.unknown_plugin_names.join('、') }}
+            ），新插件将存入数据库，可在 JSON 编辑器中查看修改。
+          </div>
+        </div>
+      </div>
 
       <!-- 冲突提示 -->
-      <a-alert
+      <div
         v-if="previewData?.conflicts && previewData.conflicts.length > 0"
-        type="warning"
-        show-icon
-        style="margin-bottom: 16px"
+        class="ei-warn"
+        style="margin-bottom: 10px"
       >
-        <template #message>
-          <strong>冲突提示</strong>
-        </template>
-        <template #description> 发现 {{ previewData.conflicts.length }} 项冲突 </template>
-      </a-alert>
+        <svg
+          width="15"
+          height="15"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M12 3L2 20h20L12 3z" />
+          <path d="M12 10v4M12 17h.01" />
+        </svg>
+        <div>
+          <b>冲突提示</b>
+          <div style="margin-top: 2px">发现 {{ previewData.conflicts.length }} 项冲突</div>
+        </div>
+      </div>
 
       <!-- 冲突详情 -->
-      <a-card
+      <div
         v-if="previewData?.conflicts && previewData.conflicts.length > 0"
-        size="small"
-        style="margin-bottom: 16px"
+        class="l5-card"
+        style="margin-bottom: 12px"
       >
-        <template #title>
-          <a @click="showConflicts = !showConflicts">
+        <div class="ei-cardhead">
+          <button class="link-btn" @click="showConflicts = !showConflicts">
             {{ showConflicts ? '收起冲突详情' : '展开冲突详情' }}
-          </a>
-        </template>
+          </button>
+        </div>
         <div v-if="showConflicts">
           <a-table
             :columns="conflictColumns"
@@ -188,6 +277,7 @@
             :pagination="false"
             :rowKey="(r: any) => `${r.type}-${r.resource}`"
             size="small"
+            class="grid-table"
           >
             <template #bodyCell="{ column, record }">
               <template v-if="column.key === 'type'">
@@ -205,37 +295,38 @@
             </template>
           </a-table>
         </div>
-      </a-card>
+      </div>
 
       <!-- 导入项选择（v-for 统一结构；空数据 section 单行提示——tools-ux 同款降噪） -->
-      <div class="section-toolbar">
-        <span class="text-muted text-sm">勾选要导入的配置类型：</span>
-        <button class="btn-link" @click="setAllSections(true)">全选</button>
-        <button class="btn-link" @click="setAllSections(false)">全不选</button>
+      <div class="ei-toolbar">
+        <span>勾选要导入的配置类型：</span>
+        <button class="link-btn" @click="setAllSections(true)">全选</button>
+        <button class="link-btn" @click="setAllSections(false)">全不选</button>
       </div>
       <div class="section-list">
-        <div v-for="sec in sectionDefs" :key="sec.key" class="section-card">
-          <div class="section-header">
+        <div v-for="sec in sectionDefs" :key="sec.key" class="ei-sec">
+          <div class="ei-sec-h">
             <a-checkbox v-model:checked="selections[sec.key]" />
-            <span class="section-title"
+            <span class="ei-sec-t"
               >{{ sec.label }}（{{ (previewData?.[sec.dataKey] || []).length }} {{ sec.unit }}）</span
             >
             <template v-if="(previewData?.[sec.dataKey] || []).length > 0">
-              <a-button size="small" @click="expandedSections[sec.key] = !expandedSections[sec.key]">
+              <button class="btn btn-secondary btn-sm" @click="expandedSections[sec.key] = !expandedSections[sec.key]">
                 {{ expandedSections[sec.key] ? '收起详情' : '预览详情' }}
-              </a-button>
+              </button>
             </template>
           </div>
-          <div v-if="(previewData?.[sec.dataKey] || []).length === 0" class="section-empty">
+          <div v-if="(previewData?.[sec.dataKey] || []).length === 0" class="ei-sec-empty">
             {{ sec.label }}：0 {{ sec.unit }}（节点上无此类配置）
           </div>
-          <div v-else-if="expandedSections[sec.key]" class="section-body">
+          <div v-else-if="expandedSections[sec.key]" class="ei-sec-b">
             <a-table
               :columns="sec.columns"
               :data-source="previewData?.[sec.dataKey] || []"
               :pagination="false"
               :rowKey="sec.rowKey"
               size="small"
+              class="grid-table"
             >
               <template #bodyCell="{ column, record }">
                 <template v-if="column.key === 'nodes'">
@@ -289,9 +380,12 @@
       </div>
 
       <div class="step-actions">
-        <a-button @click="goToStep(1)">上一步</a-button>
-        <a-button @click="confirmCancel">取消</a-button>
-        <a-button type="primary" :loading="importing" @click="confirmImport"> 确认导入 </a-button>
+        <button class="btn btn-secondary" @click="goToStep(1)">上一步</button>
+        <button class="btn btn-secondary" @click="confirmCancel">取消</button>
+        <span style="flex: 1"></span>
+        <button class="btn btn-primary" :disabled="importing" @click="confirmImport">
+          {{ importing ? '导入中…' : '确认导入' }}
+        </button>
       </div>
     </div>
   </div>
@@ -302,13 +396,6 @@ import { ref, reactive, computed, onMounted, h } from 'vue'
 import ClusterSelect from '@/components/ClusterSelect.vue'
 import { message } from 'ant-design-vue'
 import { useRouter } from 'vue-router'
-import {
-  CloudUploadOutlined,
-  BranchesOutlined,
-  PropertySafetyOutlined,
-  BlockOutlined,
-  AppstoreOutlined,
-} from '@ant-design/icons-vue'
 import api from '@/api'
 import { testConnection, getPreview, executeImport } from '@/api/edgeImport'
 import PageHeader from '@/components/PageHeader.vue'
@@ -369,14 +456,27 @@ const expandedSections = reactive({
 
 const showConflicts = ref(false)
 
+/** 类型图标 = 内联 svg path（页面内静态常量；StrokeIcon 近义：server/swap/blocks/shieldCheck/braces/columns/lock） */
+const EC_TYPE_ICONS: Record<string, string> = {
+  upstreams:
+    '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
+  routes: '<path d="M4 7h12M4 12h8M4 17h12M16 12l3-3M19 9v6l3-3-3-3"/>',
+  plugin_configs:
+    '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+  global_rules: '<path d="M12 3l7 3v5c0 4-3 7.5-7 9-4-1.5-7-5-7-9V6l7-3z"/>',
+  plugin_metadata: '<path d="M8 4l-5 8 5 8M16 4l5 8-5 8"/>',
+  stream_proxy: '<rect x="3" y="3" width="18" height="6" rx="1"/><rect x="3" y="15" width="18" height="6" rx="1"/>',
+  ssl_certificates: '<rect x="5" y="10" width="14" height="10" rx="1.5"/><path d="M8.5 10V7a3.5 3.5 0 017 0v3"/>',
+}
+
 const configTypes = [
-  { key: 'upstreams', label: '上游服务', icon: CloudUploadOutlined },
-  { key: 'routes', label: '路由规则', icon: BranchesOutlined },
-  { key: 'plugin_configs', label: '插件组', icon: BlockOutlined },
-  { key: 'global_rules', label: '全局规则', icon: PropertySafetyOutlined },
-  { key: 'plugin_metadata', label: '插件元数据', icon: AppstoreOutlined },
-  { key: 'stream_proxy', label: '四层代理', icon: CloudUploadOutlined },
-  { key: 'ssl_certificates', label: 'SSL 证书', icon: PropertySafetyOutlined },
+  { key: 'upstreams', label: '上游服务' },
+  { key: 'routes', label: '路由规则' },
+  { key: 'plugin_configs', label: '插件组' },
+  { key: 'global_rules', label: '全局规则' },
+  { key: 'plugin_metadata', label: '插件元数据' },
+  { key: 'stream_proxy', label: '四层代理' },
+  { key: 'ssl_certificates', label: 'SSL 证书' },
 ]
 
 function toggleConfigType(key: string) {
@@ -672,11 +772,11 @@ function showImportResult(result: ImportResponse | null, error: string) {
           'div',
           {
             style:
-              'background:#f6ffed;border:1px solid #b7eb8f;border-radius:6px;padding:12px 16px;margin-bottom:12px;',
+              'background: oklch(55% 0.15 145 / 8%);border:1px solid oklch(55% 0.15 145 / 30%);border-radius:8px;padding:12px 16px;margin-bottom:12px;',
           },
           [
-            h('div', { style: 'font-weight:600;margin-bottom:8px;color:#52c41a;' }, '✅ 导入完成'),
-            ...lines.map((l) => h('div', { style: 'font-size:13px;line-height:1.8;' }, l)),
+            h('div', { style: 'font-weight:600;margin-bottom:8px;color: var(--success);' }, '✅ 导入完成'),
+            ...lines.map((l) => h('div', { style: 'font-size:12.5px;line-height:1.8;' }, l)),
           ],
         ),
         h('div', { style: 'margin-top:8px;' }, [
@@ -706,11 +806,11 @@ function showImportResult(result: ImportResponse | null, error: string) {
           'div',
           {
             style:
-              'background:#fff2f0;border:1px solid #ffccc7;border-radius:6px;padding:12px 16px;margin-bottom:12px;',
+              'background: oklch(55% 0.18 28 / 8%);border:1px solid oklch(55% 0.18 28 / 30%);border-radius:8px;padding:12px 16px;margin-bottom:12px;',
           },
           [
-            h('div', { style: 'font-weight:600;color:#ff4d4f;margin-bottom:4px;' }, '❌ 导入失败'),
-            h('div', { style: 'font-size:13px;' }, result.message || '导入过程中出现错误，请重试。'),
+            h('div', { style: 'font-weight:600;color: var(--danger);margin-bottom:4px;' }, '❌ 导入失败'),
+            h('div', { style: 'font-size:12.5px;' }, result.message || '导入过程中出现错误，请重试。'),
           ],
         ),
       )
@@ -722,13 +822,13 @@ function showImportResult(result: ImportResponse | null, error: string) {
           'div',
           {
             style:
-              'background:#e6f7ff;border:1px solid #91d5ff;border-radius:6px;padding:12px 16px;margin-bottom:12px;',
+              'background: oklch(56% 0.16 210 / 8%);border:1px solid oklch(56% 0.16 210 / 30%);border-radius:8px;padding:12px 16px;margin-bottom:12px;',
           },
           [
-            h('div', { style: 'font-weight:600;color:#1890ff;margin-bottom:4px;' }, 'ℹ️ 插件信息'),
+            h('div', { style: 'font-weight:600;color: var(--accent);margin-bottom:4px;' }, 'ℹ️ 插件信息'),
             h(
               'div',
-              { style: 'font-size:13px;' },
+              { style: 'font-size:12.5px;' },
               `新发现 ${result.plugin_summary.unknown_count} 个插件（${result.plugin_summary.unknown_plugin_names.join('、')}），已存入数据库。`,
             ),
           ],
@@ -742,11 +842,12 @@ function showImportResult(result: ImportResponse | null, error: string) {
       h(
         'div',
         {
-          style: 'background:#fff2f0;border:1px solid #ffccc7;border-radius:6px;padding:12px 16px;margin-bottom:12px;',
+          style:
+            'background: oklch(55% 0.18 28 / 8%);border:1px solid oklch(55% 0.18 28 / 30%);border-radius:8px;padding:12px 16px;margin-bottom:12px;',
         },
         [
-          h('div', { style: 'font-weight:600;color:#ff4d4f;margin-bottom:4px;' }, '❌ 导入失败'),
-          h('div', { style: 'font-size:13px;' }, error),
+          h('div', { style: 'font-weight:600;color: var(--danger);margin-bottom:4px;' }, '❌ 导入失败'),
+          h('div', { style: 'font-size:12.5px;' }, error),
         ],
       ),
     )
@@ -998,30 +1099,6 @@ onMounted(() => {
   color: var(--fg) !important;
 }
 
-.config-types {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 12px;
-  margin-bottom: 24px;
-}
-.config-type-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 16px;
-  cursor: pointer;
-  transition: all 0.15s;
-  user-select: none;
-  position: relative;
-}
-.config-type-card:hover {
-  border-color: var(--accent);
-  box-shadow: var(--shadow-sm);
-}
-.config-type-card.selected {
-  border-color: var(--accent);
-  background: oklch(56% 0.16 210 / 6%);
-}
 .config-type-card .ct-check {
   display: none;
   float: right;
@@ -1093,5 +1170,290 @@ onMounted(() => {
 }
 :deep(.ant-steps .ant-steps-item-tail) {
   display: none;
+}
+
+/* ── edge-import-page-restyle：向导步条 / 连接反馈横幅 / 配置类型可选卡 / section 卡 ── */
+.ei-steps {
+  display: flex;
+  align-items: center;
+  padding: 4px 0 20px;
+}
+.ei-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ei-dot {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  border: 1.5px solid oklch(50% 0.018 240 / 30%);
+  color: var(--muted);
+  background: var(--surface);
+}
+.ei-step.done .ei-dot {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+.ei-step.active .ei-dot {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.ei-label {
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.ei-step.done .ei-label,
+.ei-step.active .ei-label {
+  color: var(--fg);
+  font-weight: 600;
+}
+.ei-step.active .ei-label {
+  color: var(--accent);
+}
+.ei-line {
+  flex: 1;
+  height: 1.5px;
+  background: oklch(50% 0.018 240 / 18%);
+  margin: 0 12px;
+  min-width: 60px;
+}
+.ei-line.done {
+  background: var(--accent);
+  opacity: 0.55;
+}
+.ei-cardhead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.ei-cardhead h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.ei-cardhead .ei-sub {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.ei-field {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.ei-field > label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg);
+  width: 110px;
+  text-align: right;
+  flex-shrink: 0;
+}
+.ei-field > label.req::before {
+  content: '*';
+  color: var(--danger);
+  margin-right: 4px;
+}
+.ei-input {
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  font-size: 12.5px;
+  color: var(--fg);
+  outline: none;
+}
+.ei-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-bg);
+}
+.ei-input::placeholder {
+  color: oklch(50% 0.018 240 / 45%);
+}
+.ei-ok {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 4px;
+  padding: 12px 14px;
+  background: oklch(55% 0.15 145 / 8%);
+  border: 1px solid oklch(55% 0.15 145 / 30%);
+  border-radius: var(--radius-lg);
+}
+.ei-ok svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--success);
+}
+.ei-ok .t {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--success);
+}
+.ei-ok .d {
+  font-size: 12.5px;
+  color: var(--fg);
+  margin-top: 2px;
+}
+.ei-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.ei-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: oklch(50% 0.018 240 / 6%);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--muted);
+}
+.ei-count b {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--fg);
+}
+.ei-fail {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+  padding: 11px 14px;
+  background: oklch(55% 0.18 28 / 8%);
+  border: 1px solid oklch(55% 0.18 28 / 30%);
+  border-radius: var(--radius-lg);
+  font-size: 12.5px;
+  color: var(--danger);
+}
+.ei-types {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 10px;
+}
+.ei-ct {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 8px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.ei-ct:hover {
+  border-color: var(--accent);
+}
+.ei-ct svg {
+  width: 22px;
+  height: 22px;
+  color: var(--muted);
+}
+.ei-ct .n {
+  font-size: 12.5px;
+  color: var(--fg);
+}
+.ei-ct .ck {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+}
+.ei-ct.selected {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+.ei-ct.selected svg {
+  color: var(--accent);
+}
+.ei-ct.selected .ck {
+  display: flex;
+}
+.ei-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 14px;
+  background: oklch(85% 0.12 85 / 25%);
+  border: 1px solid oklch(70% 0.14 80 / 50%);
+  border-radius: var(--radius-lg);
+}
+.ei-warn svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: oklch(50% 0.12 70);
+}
+.ei-warn b {
+  font-size: 13px;
+  color: oklch(45% 0.11 70);
+}
+.ei-warn span,
+.ei-warn div {
+  font-size: 12px;
+  color: oklch(45% 0.09 70);
+}
+.ei-sec {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin-bottom: 10px;
+}
+.ei-sec-h {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+}
+.ei-sec-t {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.ei-sec-h .btn {
+  margin-left: auto;
+}
+.ei-sec-empty {
+  padding: 0 14px 10px 34px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.ei-sec-b {
+  border-top: 1px solid var(--border);
+}
+.ei-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-size: 12.5px;
+  color: var(--muted);
 }
 </style>

@@ -1382,3 +1382,25 @@ describe('mockup-parity：Edge 直连（edge-client-page-restyle，基准 propos
     expect(ec).toContain('PageStatBadges')
   })
 })
+
+describe('mockup-parity：Edge 数据导入（edge-import-page-restyle，基准 proposal-c/edge-import.html）', () => {
+  const ei = page('EdgeImport.vue')
+
+  it('ei-① 向导步条自绘（ei-steps），禁 a-steps 回流', () => {
+    expect(ei).toContain('ei-steps')
+    expect(ei).not.toContain('<a-steps')
+    expect(ei).not.toContain('<a-step ')
+  })
+
+  it('ei-② 连接反馈与警告横幅 token 化：禁 a-alert 回流', () => {
+    expect(ei).toContain('ei-ok')
+    expect(ei).toContain('ei-counts')
+    expect(ei).toContain('ei-warn')
+    expect(ei).not.toContain('<a-alert')
+  })
+
+  it('ei-③ 配置类型可选卡网格（ei-types）', () => {
+    expect(ei).toContain('ei-types')
+    expect(ei).toContain('ei-ct')
+  })
+})

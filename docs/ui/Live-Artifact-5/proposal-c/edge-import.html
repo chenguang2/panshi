@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Edge 数据导入 · 方案 C 网关控制台感 — 磐石网关管理平台</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+/* —— 本页专属解剖（Edge 数据导入）：向导页（本站首个 steps 形态）。
+   向导步条 + 分步内容卡 + 计数 chips + section 列表；状态色只绑定实测连接/导入结果 —— */
+.page-header h1 { font-size: 21px; }
+
+/* 向导步条（a-steps 的自绘 token 化） */
+.ei-steps { display: flex; align-items: center; padding: 4px 0 20px; }
+.ei-step { display: flex; align-items: center; gap: 8px; }
+.ei-dot {
+  width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 600; font-family: var(--font-mono);
+  border: 1.5px solid oklch(50% 0.018 240 / 30%); color: var(--muted); background: var(--surface);
+}
+.ei-step.done .ei-dot { border-color: var(--accent); background: var(--accent); color: #fff; }
+.ei-step.active .ei-dot { border-color: var(--accent); color: var(--accent); }
+.ei-label { font-size: 13px; color: var(--muted); white-space: nowrap; }
+.ei-step.done .ei-label, .ei-step.active .ei-label { color: var(--fg); font-weight: 600; }
+.ei-step.active .ei-label { color: var(--accent); }
+.ei-line { flex: 1; height: 1.5px; background: oklch(50% 0.018 240 / 18%); margin: 0 12px; min-width: 60px; }
+.ei-line.done { background: var(--accent); opacity: .55; }
+
+/* 分步动作条 */
+.ei-actions { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
+.ei-actions .spacer { flex: 1; }
+.ei-tip { font-size: 11.5px; color: var(--muted); }
+
+/* 表单（Step 0） */
+.ei-field { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.ei-field > label { font-size: 12px; font-weight: 600; color: var(--fg); width: 110px; text-align: right; flex-shrink: 0; }
+.ei-field .req::before { content: '*'; color: var(--danger); margin-right: 4px; }
+.ei-input { height: 32px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); font-size: 12.5px; color: var(--fg); outline: none; }
+.ei-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
+.ei-input::placeholder { color: oklch(50% 0.018 240 / 45%); }
+
+/* 连接成功横幅 + 计数 chips */
+.ei-ok {
+  display: flex; align-items: flex-start; gap: 10px; margin-top: 4px;
+  padding: 12px 14px; background: oklch(55% 0.15 145 / 8%);
+  border: 1px solid oklch(55% 0.15 145 / 30%); border-radius: var(--radius-lg);
+}
+.ei-ok svg { flex-shrink: 0; margin-top: 2px; color: var(--success); }
+.ei-ok .t { font-size: 13px; font-weight: 600; color: var(--success); }
+.ei-ok .d { font-size: 12.5px; color: var(--fg); margin-top: 2px; }
+.ei-counts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.ei-count {
+  display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 9px;
+  border-radius: 999px; background: oklch(50% 0.018 240 / 6%); border: 1px solid var(--border);
+  font-size: 11px; color: var(--muted);
+}
+.ei-count b { font-family: var(--font-mono); font-weight: 600; color: var(--fg); }
+
+/* 失败横幅 */
+.ei-fail {
+  display: flex; align-items: center; gap: 10px; margin-top: 4px;
+  padding: 11px 14px; background: oklch(55% 0.18 28 / 8%);
+  border: 1px solid oklch(55% 0.18 28 / 30%); border-radius: var(--radius-lg);
+  font-size: 12.5px; color: var(--danger);
+}
+
+/* Step 1：配置类型可选卡 */
+.ei-types { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 10px; }
+.ei-ct {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 16px 8px 12px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-md); cursor: pointer; transition: all .12s;
+}
+.ei-ct:hover { border-color: var(--accent); }
+.ei-ct svg { width: 22px; height: 22px; color: var(--muted); }
+.ei-ct .n { font-size: 12.5px; color: var(--fg); }
+.ei-ct .ck {
+  position: absolute; top: 8px; left: 8px; width: 18px; height: 18px; border-radius: 50%;
+  display: none; align-items: center; justify-content: center;
+  background: var(--accent); color: #fff; font-size: 11px;
+}
+.ei-ct.selected { border-color: var(--accent); background: var(--accent-bg); }
+.ei-ct.selected svg { color: var(--accent); }
+.ei-ct.selected .ck { display: flex; }
+
+/* 警告横幅（Step 2） */
+.ei-warn {
+  display: flex; align-items: flex-start; gap: 10px; margin-bottom: 12px;
+  padding: 11px 14px; background: oklch(85% 0.12 85 / 25%);
+  border: 1px solid oklch(70% 0.14 80 / 50%); border-radius: var(--radius-lg);
+}
+.ei-warn svg { flex-shrink: 0; margin-top: 1px; color: oklch(50% 0.12 70); }
+.ei-warn b { font-size: 13px; color: oklch(45% 0.11 70); }
+.ei-warn span, .ei-warn div { font-size: 12px; color: oklch(45% 0.09 70); }
+
+/* section 卡（导入项） */
+.ei-sec { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); margin-bottom: 10px; }
+.ei-sec-h { display: flex; align-items: center; gap: 10px; padding: 10px 14px; }
+.ei-sec-h input[type="checkbox"] { width: 14px; height: 14px; }
+.ei-sec-t { font-size: 13px; font-weight: 600; color: var(--fg); }
+.ei-sec-h .btn { margin-left: auto; }
+.ei-sec-empty { padding: 0 14px 10px 34px; font-size: 12px; color: var(--muted); }
+.ei-sec-b { border-top: 1px solid var(--border); }
+.ei-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 12.5px; color: var(--muted); }
+
+/* 样张注记与弹窗 */
+.ei-annot { font-size: 11px; color: var(--muted); margin: 24px 0 6px 2px; }
+.ei-annot b { color: var(--fg); font-weight: 600; }
+.ei-modal { width: 560px; max-width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); }
+.ei-mh { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--accent-bg); border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+.ei-mh h2 { margin: 0; font-size: 14px; font-weight: 600; color: var(--fg); }
+.ei-mx { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border: none; background: transparent; cursor: pointer; color: var(--muted); font-size: 20px; line-height: 1; border-radius: var(--radius-sm); }
+.ei-mx:hover { background: var(--bg); color: var(--fg); }
+.ei-mb { padding: 16px 20px; font-size: 13px; color: var(--fg); line-height: 1.7; }
+.ei-mb .okbox { background: oklch(55% 0.15 145 / 8%); border: 1px solid oklch(55% 0.15 145 / 30%); border-radius: var(--radius-md); padding: 12px 16px; margin-bottom: 12px; }
+.ei-mb .okbox .t { font-weight: 600; color: var(--success); margin-bottom: 6px; }
+.ei-mb .okbox div { font-size: 12.5px; line-height: 1.8; color: var(--fg); }
+.ei-mb .links { margin-top: 8px; display: flex; gap: 16px; }
+.ei-mb .links a { color: var(--accent); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; font-size: 12.5px; }
+.ei-mf { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<div class="app-layout">
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="sidebar-logo-icon">磐</div>
+    <span class="sidebar-logo-text">磐石</span>
+    <span class="sidebar-logo-version">v1.0</span>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">核心功能</div>
+      <a class="nav-item" href="overview.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h5v5H3v-5zm7 0h5v5h-5v-5z"/></svg><span>概览</span></a>
+      <a class="nav-item" href="clusters.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h14v5H2V3zm0 7h14v5H2v-5z"/></svg><span>集群管理</span></a>
+      <a class="nav-item" href="routes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l5-7v5h9v4H7v5l-5-7z"/></svg><span>路由管理</span></a>
+      <a class="nav-item" href="upstreams.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>上游管理</span></a>
+      <a class="nav-item" href="nodes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3a2 2 0 110 4 2 2 0 010-4zM3.5 14a2 2 0 110-4 2 2 0 010 4zM14.5 14a2 2 0 110-4 2 2 0 010 4z"/></svg><span>节点管理</span></a>
+      <a class="nav-item" href="plugin-groups.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h12v5H3v-5z"/></svg><span>插件组</span></a>
+      <a class="nav-item" href="plugin-metadata.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h8l3 3v9a1 1 0 01-1 1H5a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M9 7v4M9 13v-1"/></svg><span>插件元数据</span></a>
+      <a class="nav-item" href="global-rules.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l6 3v4c0 3-2.5 5.5-6 7-3.5-1.5-6-4-6-7V5l6-3z"/></svg><span>全局规则</span></a>
+      <a class="nav-item" href="static-resources.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3a1 1 0 011-1h6l4 4v10a1 1 0 01-1 1H6a1 1 0 01-1-1V3zM11 2v4h4"/></svg><span>静态资源</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">证书管理</div>
+      <a class="nav-item" href="ca-certs.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="12.5" r="2.5"/><path d="M8 12.5h7M13 12.5v2.5M15 12.5v2.5"/></svg><span>CA 根证书</span></a>
+      <a class="nav-item" href="server-certs.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="10" height="8" rx="1"/><path d="M6.5 8V6a2.5 2.5 0 015 0v2"/></svg><span>服务器证书</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">边缘网络</div>
+      <a class="nav-item" href="edge-env.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="2.5"/><path d="M9 3v2M9 13v2M3 9h2M13 9h2M4.5 4.5l1.5 1.5M12 12l1.5 1.5M4.5 13.5l1.5-1.5M12 6l1.5-1.5"/></svg><span>edge.env 配置</span></a>
+      <a class="nav-item" href="stream-proxies.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="12" height="4" rx="1"/><rect x="4" y="7" width="10" height="4" rx="1"/><rect x="5" y="12" width="8" height="4" rx="1"/></svg><span>四层代理</span></a>
+      <a class="nav-item" href="dns-udp-proxies.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="4" r="2"/><circle cx="4" cy="14" r="2"/><circle cx="14" cy="14" r="2"/><path d="M9 6v3M4 12l2-2M14 12l-2-2"/></svg><span>DNS代理[UDP]</span></a>
+      <a class="nav-item" href="dns-http-proxies.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="4" r="2"/><circle cx="4" cy="14" r="2"/><circle cx="14" cy="14" r="2"/><path d="M9 6v3M4 12l2-2M14 12l-2-2"/></svg><span>DNS代理[HTTP]</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">监控</div>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h3l2-6 3 10 2-7 1.5 3H16"/></svg><span>指标总览</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.5"/><path d="M12 12l4 4"/></svg><span>指标查询</span></a>
+      <a class="nav-item" href="clickhouse-config.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="9" cy="4.5" rx="6.5" ry="2.5"/><path d="M2.5 4.5v9c0 1.4 2.9 2.5 6.5 2.5s6.5-1.1 6.5-2.5v-9M2.5 9c0 1.4 2.9 2.5 6.5 2.5s6.5-1.1 6.5-2.5"/></svg><span>ClickHouse 配置</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">运维管理</div>
+      <a class="nav-item" href="edge-client.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l7 7-7 7-7-7z"/></svg><span>Edge直连</span></a>
+      <a class="nav-item active" href="edge-import.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>数据导入</span></a>
+      <a class="nav-item" href="tools.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h8v8H5V7zM7 7V5h4v2"/></svg><span>工具箱</span></a>
+      <a class="nav-item" href="edge-autostart.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6-4 6 4v8l-6 4-6-4V6zM3 6l6 4m0 0l6-4m-6 4v8"/></svg><span>自启动管理</span></a>
+      <a class="nav-item" href="ansible-inventory.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="12" height="14" rx="1"/><path d="M6 6h6M6 9.5h6M6 13h4"/></svg><span>Ansible 主机清单</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6-4 6 4v8l-6 4-6-4V6zM3 6l6 4m0 0l6-4m-6 4v8"/></svg><span>节点任务</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="6" height="6" rx="1"/><rect x="10" y="10" width="6" height="6" rx="1"/><path d="M5 8v3a2 2 0 002 2h3"/></svg><span>中继区域管理</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">系统管理</div>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l5 3v6l-5 3-5-3V5l5-3z"/></svg><span>插件管理</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9a3 3 0 100-6 3 3 0 000 6zM3 16c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg><span>用户管理</span></a>
+      <a class="nav-item" href="plugin-switches.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9h8a4 4 0 010 8H5a4 4 0 010-8zM5 15a2 2 0 110-4 2 2 0 010 4z"/></svg><span>插件开关</span></a>
+    </div>
+  </nav>
+</aside>
+<div class="main-area">
+<header class="top-header"><div class="top-header-breadcrumb"><a href="index.html">首页</a><span>/</span><span>运维管理</span><span>/</span><span>Edge 数据导入</span></div><div class="top-header-actions"><div class="h-search"><input type="text" placeholder="搜索功能或页面..."><svg class="s-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div><div class="header-user"><div class="header-avatar">管</div><span>管理员</span></div></div></header>
+<div class="content-area">
+
+  <!-- ══════════ 页头（向导页：无动作无徽标） ══════════ -->
+  <div class="page-header" style="margin-bottom:12px;">
+    <div>
+      <h1>Edge 数据导入</h1>
+      <p>从 Edge 节点批量导入配置数据到本地数据库</p>
+    </div>
+  </div>
+
+  <!-- 向导步条（a-steps 自绘 token 化）：完成=accent 勾 / 活动=accent 线框 / 待办=muted -->
+  <div class="ei-steps">
+    <div class="ei-step done"><span class="ei-dot">✓</span><span class="ei-label">选择节点</span></div>
+    <div class="ei-line done"></div>
+    <div class="ei-step active"><span class="ei-dot">2</span><span class="ei-label">选择配置</span></div>
+    <div class="ei-line"></div>
+    <div class="ei-step"><span class="ei-dot">3</span><span class="ei-label">预览导入</span></div>
+  </div>
+
+  <!-- ══════════ 主视图 = Step 1 选择配置（含已完成 Step 0 的语义；Step 0/2 见样张段） ══════════ -->
+  <div class="l5-card">
+    <div class="ck-cardhead" style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border);">
+      <h3 style="margin:0;font-size:13px;font-weight:600;color:var(--fg);">选择要导入的配置类型</h3>
+      <span style="font-size:11.5px;color:var(--muted);">选择需要从 Edge 节点导入到管理平台的配置类型</span>
+    </div>
+    <div style="padding:16px 16px 18px;">
+      <div class="ei-types">
+        <div class="ei-ct selected"><span class="ck">✓</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg><span class="n">上游服务</span></div>
+        <div class="ei-ct selected"><span class="ck">✓</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h12M4 12h8M4 17h12M16 12l3-3v0M19 9v6l3-3-3-3z"/></svg><span class="n">路由规则</span></div>
+        <div class="ei-ct selected"><span class="ck">✓</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span class="n">插件组</span></div>
+        <div class="ei-ct selected"><span class="ck">✓</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4-3 7.5-7 9-4-1.5-7-5-7-9V6l7-3z"/></svg><span class="n">全局规则</span></div>
+        <div class="ei-ct"><span class="ck">✓</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4l-5 8 5 8M16 4l5 8-5 8"/></svg><span class="n">插件元数据</span></div>
+        <div class="ei-ct"><span class="ck">✓</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="6" rx="1"/><rect x="3" y="15" width="18" height="6" rx="1"/></svg><span class="n">四层代理</span></div>
+        <div class="ei-ct"><span class="ck">✓</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10" width="14" height="10" rx="1.5"/><path d="M8.5 10V7a3.5 3.5 0 017 0v3"/></svg><span class="n">SSL 证书</span></div>
+      </div>
+      <div class="ei-actions">
+        <button class="btn btn-secondary">上一步</button>
+        <span class="spacer"></span>
+        <button class="btn btn-primary">下一步 — 预览</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ 样张段 ══════════ -->
+
+  <!-- Step 0 样张 -->
+  <div class="ei-annot"><b>Step 0 样张 · 选择节点</b>（进页默认步）·「下一步」需先通过连接测试（禁用态）；连接成功横幅的 8 类计数升级为 mono 计数 chips（原 a-alert 一句话密排）；「（经中继）」路由标注与 Edge 直连同语言</div>
+  <div class="l5-card">
+    <div class="ck-cardhead" style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border);">
+      <h3 style="margin:0;font-size:13px;font-weight:600;color:var(--fg);">选择源节点</h3>
+    </div>
+    <div style="padding:18px 16px 14px;">
+      <div class="ei-field">
+        <label class="req">所属集群</label>
+        <select class="ei-input" style="width:400px;"><option>请选择集群...</option><option selected>test</option></select>
+      </div>
+      <div class="ei-field">
+        <label class="req">目标节点</label>
+        <select class="ei-input" style="width:400px;"><option selected>192.168.0.14:16620 (/opt/edge)</option><option>192.168.0.15:16620 (/opt/edge)</option></select>
+      </div>
+      <div class="ei-field">
+        <label>节点 Admin Key</label>
+        <input class="ei-input" type="password" style="width:300px;" placeholder="留空则使用节点已配置的 Admin Key">
+        <button class="btn btn-primary">测试连接</button>
+      </div>
+      <div class="ei-ok">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg>
+        <div>
+          <div class="t">连接成功</div>
+          <div class="d">节点: 192.168.0.14:16620<span style="color:var(--muted)">（经中继）</span> · 版本: 3.13.0 · 响应时间: 42ms</div>
+          <div class="ei-counts">
+            <span class="ei-count">路由 <b>12</b></span>
+            <span class="ei-count">上游 <b>5</b></span>
+            <span class="ei-count">插件 <b>9</b></span>
+            <span class="ei-count">插件组 <b>5</b></span>
+            <span class="ei-count">全局规则 <b>2</b></span>
+            <span class="ei-count">插件元数据 <b>9</b></span>
+            <span class="ei-count">四层代理 <b>4</b></span>
+            <span class="ei-count">SSL 证书 <b>2</b></span>
+          </div>
+        </div>
+      </div>
+      <div class="ei-actions"><span class="spacer"></span><button class="btn btn-primary">下一步</button></div>
+    </div>
+  </div>
+
+  <!-- Step 2 样张 -->
+  <div class="ei-annot"><b>Step 2 样张 · 预览导入</b>（核心价值步）· 三种警告横幅统一 warn 语言（获取失败/插件识别/冲突提示）+ 冲突详情折叠卡 + 7 个导入项 section 卡（勾选 + 计数 + 空数据单行降噪 + 展开预览表格）</div>
+  <div class="l5-card" style="margin-bottom:12px;">
+    <div class="ei-warn" style="margin-bottom:0;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3L2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/></svg>
+      <div><b>部分数据获取失败</b><div style="margin-top:2px;">插件元数据获取失败：403 无权限 · SSL 证书获取失败：连接超时<div style="margin-top:4px;font-size:11px;">失败的数据无法导入，其他数据可正常导入。</div></div></div>
+    </div>
+  </div>
+  <div class="l5-card" style="margin-bottom:12px;">
+    <div class="ei-warn" style="margin-bottom:0;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M12 11v5"/></svg>
+      <div><b>插件识别提示</b><div style="margin-top:2px;">已识别 9 个已知插件，发现 2 个新插件（custom-ratelimit、log-json-v2），新插件将存入数据库，可在 JSON 编辑器中查看修改。</div></div>
+    </div>
+  </div>
+  <div class="l5-card" style="margin-bottom:12px;">
+    <div class="ei-warn" style="margin-bottom:10px;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3L2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/></svg>
+      <div><b>冲突提示</b><div style="margin-top:2px;">发现 3 项冲突</div></div>
+    </div>
+    <div class="l5-table-wrap"><table class="l5-table" style="min-width:760px"><colgroup><col style="width:110px"><col style="width:240px"><col><col style="width:280px"></colgroup><thead><tr><th class="resizable">类型</th><th class="resizable">资源</th><th class="resizable">原因</th><th class="resizable">处理方式</th></tr></thead><tbody>
+      <tr><td>上游</td><td class="nw"><span class="c-mono c-dim" title="payment-pool">payment-pool</span></td><td>与现有上游名称冲突</td><td>跳过该上游，可稍后在平台手动合并</td></tr>
+      <tr><td>路由</td><td class="nw"><span class="c-mono c-dim">/api/payment/*</span></td><td>URI 与现有路由重复</td><td>跳过该路由</td></tr>
+      <tr><td>插件组</td><td class="nw"><span class="c-mono c-dim">rate-limit-group</span></td><td>ID 已存在（保留 Edge UUID 策略）</td><td>跳过该插件组</td></tr>
+    </tbody></table></div>
+    <div style="padding:0 16px 14px;">
+      <div class="ei-toolbar">勾选要导入的配置类型：<button class="link-btn">全选</button><button class="link-btn">全不选</button></div>
+      <div class="ei-sec">
+        <div class="ei-sec-h"><input type="checkbox" checked><span class="ei-sec-t">路由（12 条）</span><button class="btn btn-secondary btn-sm">收起详情</button></div>
+        <div class="ei-sec-b"><div class="l5-table-wrap"><table class="l5-table" style="min-width:820px"><colgroup><col style="width:40px"><col style="width:180px"><col style="width:170px"><col style="width:200px"><col style="width:180px"><col style="width:110px"></colgroup><thead><tr><th class="c-c">#</th><th class="resizable">ID</th><th class="resizable">名称</th><th class="resizable">URI</th><th class="resizable">方法</th><th class="resizable">上游</th></tr></thead><tbody>
+          <tr><td class="c-c"><span class="c-idx">1</span></td><td class="nw"><span class="c-mono c-dim" title="8e21bd45-90aa-4c17-b3e2-77aa01fe4c60">8e21bd45-90aa-4c17-b3e2-77aa01fe4c60</span></td><td class="nw">payment-api</td><td class="nw"><span class="c-mono c-dim">/api/payment/*</span></td><td><div class="methods-tags" style="display:flex;flex-wrap:wrap;gap:4px;"><span class="ps-tag ps-pub">GET</span><span class="ps-tag ps-pub">POST</span></div></td><td class="nw"><span class="c-mono c-dim">payment-pool</span></td></tr>
+          <tr><td class="c-c"><span class="c-idx">2</span></td><td class="nw"><span class="c-mono c-dim" title="c07d9e12-4f6b-4d93-a5c8-e91b02f7d3aa">c07d9e12-4f6b-4d93-a5c8-e91b02f7d3aa</span></td><td class="nw">static-route</td><td class="nw"><span class="c-mono c-dim">/static/*</span></td><td><span class="ps-tag ps-pub">GET</span></td><td class="nw"><span class="c-mono c-dim">static-assets</span></td></tr>
+        </tbody></table></div></div>
+      </div>
+      <div class="ei-sec">
+        <div class="ei-sec-h"><input type="checkbox"><span class="ei-sec-t">插件元数据（0 个）</span></div>
+        <div class="ei-sec-empty">插件元数据：0 个（节点上无此类配置）</div>
+      </div>
+      <div class="ei-actions">
+        <button class="btn btn-secondary">上一步</button>
+        <button class="btn btn-secondary">取消</button>
+        <span class="spacer"></span>
+        <button class="btn btn-primary">确认导入</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 弹窗样张 1：确认导入摘要 -->
+  <div class="ei-annot"><b>弹窗样张 · 确认导入</b>（560px 摘要 overlay）· 摘要句按勾选类型动态拼接；冲突项自动跳过语义明示</div>
+  <div class="ei-modal">
+    <div class="ei-mh"><h2>确认导入</h2><button class="ei-mx">&times;</button></div>
+    <div class="ei-mb">将导入以下配置到本地数据库：<b>上游 5 个、路由 12 条、插件组 5 个、全局规则 2 个</b>。冲突项将自动跳过，不影响其余数据。</div>
+    <div class="ei-mf"><button class="btn btn-secondary">取消</button><button class="btn btn-primary">确认导入</button></div>
+  </div>
+
+  <!-- 弹窗样张 2：导入完成结果 -->
+  <div class="ei-annot"><b>弹窗样张 · 导入完成</b>（结果 overlay）· 绿框计数明细 + 冲突跳过分项；「继续导入」重置向导、「查看集群详情」跳转集群页（原 antd 硬编码绿的 token 化）</div>
+  <div class="ei-modal">
+    <div class="ei-mh"><h2>导入结果</h2><button class="ei-mx">&times;</button></div>
+    <div class="ei-mb">
+      <div class="okbox">
+        <div class="t">✅ 导入完成</div>
+        <div>上游：5 个</div>
+        <div>路由：12 条</div>
+        <div>插件组：5 个</div>
+        <div>全局规则：2 个</div>
+        <div>插件元数据：9 个</div>
+        <div>四层代理：4 个</div>
+        <div>SSL 证书：2 张</div>
+        <div>跳过：3 项（冲突）· 上游跳过 1 个 · 路由跳过 1 条 · 插件组跳过 1 个</div>
+      </div>
+      <div class="links"><a>继续导入 →</a><a>查看集群详情 →</a></div>
+    </div>
+    <div class="ei-mf"><button class="btn btn-secondary">关闭</button></div>
+  </div>
+
+</div>
+</div>
+</div>
+<div class="l5-prop-tag">方案 C · <b>Edge 数据导入</b></div>
+</body>
+</html>
