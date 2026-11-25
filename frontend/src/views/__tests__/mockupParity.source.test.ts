@@ -1291,3 +1291,25 @@ describe('mockup-parity r12：⋯ 触发器形态统一 + 发布→⋯ 8px 间�
     )
   })
 })
+
+describe('mockup-parity：工具箱工作台（tools-page-restyle，基准 proposal-c/tools.html）', () => {
+  const tools = page('Tools.vue')
+
+  it('tools-① 布局壳退场：禁 a-layout-sider 回流，工作台为单卡 flex（tb-workbench）', () => {
+    expect(tools).not.toContain('a-layout-sider')
+    expect(tools).not.toContain('<a-layout')
+    expect(tools).toContain('tb-workbench')
+    expect(tools).toContain('tb-rail')
+  })
+
+  it('tools-② 页头统计徽标必须接入（设计页 .ph-inline 有两枚）', () => {
+    expect(tools).toContain('PageStatBadges')
+  })
+
+  it('tools-③ 按钮语义分离：当前时间=tb-btn-ghost、清空=tb-btn-clear，不得共用一类', () => {
+    expect(tools).toContain('tb-btn-ghost')
+    expect(tools).toContain('tb-btn-clear')
+    // 中性填充动作不得再挂清空的危险色类（tools-ux 时代 .btn-clear 一类两用）
+    expect(tools).not.toMatch(/tb-btn-clear[^>]*>当前时间</)
+  })
+})

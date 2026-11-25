@@ -1,671 +1,726 @@
 <template>
-  <a-layout class="tools-layout">
-    <!-- 左侧导航栏（图标+文字） -->
-    <a-layout-sider width="132" class="tools-sider">
-      <div class="icon-list">
+  <div class="tools-page">
+    <PageHeader
+      title="工具箱"
+      description="日常开发调试的本地工具集：编解码、格式化、对比与配置生成，全部在浏览器本地完成，输入不出本机。"
+    >
+      <template #stats>
+        <PageStatBadges :items="headerStatItems" />
+      </template>
+    </PageHeader>
+
+    <!-- 工作台：工具栏 + 工作区同卡一体（proposal-c/tools.html 解剖，tools-page-restyle） -->
+    <div class="l5-card tb-workbench">
+      <aside class="tb-rail">
         <div
           v-for="tool in tools"
           :key="tool.key"
-          class="nav-item"
+          class="tb-tool"
           :class="{ active: activeTool === tool.key }"
+          :title="tool.label"
           @click="activeTool = tool.key"
         >
-          <component :is="tool.icon" />
-          <span class="nav-label">{{ tool.shortLabel }}</span>
+          <StrokeIcon :name="tool.icon" :size="17" />
+          <span class="tb-tlabel">{{ tool.shortLabel }}</span>
         </div>
-      </div>
-    </a-layout-sider>
+      </aside>
 
-    <!-- 右侧工作区 -->
-    <a-layout-content class="tools-content">
-      <!-- Lua 互转 -->
-      <div v-if="activeTool === 'lua'" class="tool-panel">
-        <div class="tool-header">
-          <span>Lua 函数 ↔ 配置字符串</span>
-          <span class="tool-hint">用于插件 pre_functions 配置与 Lua 函数体的双向转换</span>
-          <span class="spacer"></span>
-          <button class="btn-help" @click="openHelp"><QuestionCircleOutlined /> 帮助</button>
-          <button class="btn-clear" @click="clearTool('lua')">清空</button>
-        </div>
-        <div class="dual-panel">
-          <div class="panel-left">
-            <div class="panel-label">Lua 函数体</div>
-            <a-textarea
-              v-model:value="luaInput"
-              :rows="textareaRows"
-              placeholder="输入完整 Lua 函数定义，例如：function(conf, ctx) ngx.log(ngx.ERR, 'hello') end"
-            />
-            <div class="copy-row">
-              <a-button size="small" class="copy-btn" @click="copyToClipboard(luaInput)">复制</a-button>
-              <a-button size="small" class="copy-btn" @click="pasteFromClipboard((v) => (luaInput = v), $event)"
-                >粘贴</a-button
-              >
+      <section class="tb-stage">
+        <!-- Lua 互转 -->
+        <div v-if="activeTool === 'lua'" class="tb-view">
+          <div class="tb-head">
+            <div class="tb-headline">
+              <span class="tb-title">Lua 函数 ↔ 配置字符串</span>
+              <span class="tb-hint">用于插件 pre_functions 配置与 Lua 函数体的双向转换</span>
+            </div>
+            <span class="t-spacer"></span>
+            <button class="tb-btn-help" @click="openHelp"><StrokeIcon name="help" :size="13" />帮助</button>
+            <button class="tb-btn-clear" @click="clearTool('lua')">清空</button>
+          </div>
+          <div class="tb-dual">
+            <div class="tb-pane">
+              <div class="tb-plabel">Lua 函数体</div>
+              <a-textarea
+                v-model:value="luaInput"
+                :rows="textareaRows"
+                class="tb-ta"
+                placeholder="输入完整 Lua 函数定义，例如：function(conf, ctx) ngx.log(ngx.ERR, 'hello') end"
+              />
+              <div class="tb-copyrow">
+                <button class="tb-mini" @click="copyToClipboard(luaInput)">复制</button>
+                <button class="tb-mini" @click="pasteFromClipboard((v) => (luaInput = v), $event)">粘贴</button>
+              </div>
+            </div>
+            <div class="tb-mid">
+              <button class="btn btn-primary" @click="handleLuaEncode">转换为字符串 →</button>
+              <button class="btn btn-secondary" @click="handleLuaDecode">← 转换为函数</button>
+            </div>
+            <div class="tb-pane">
+              <div class="tb-plabel">配置字符串</div>
+              <a-textarea
+                v-model:value="luaOutput"
+                :rows="textareaRows"
+                class="tb-ta"
+                placeholder="或在此粘贴配置字符串进行反向转换"
+              />
+              <div class="tb-copyrow">
+                <button class="tb-mini" @click="copyToClipboard(luaOutput)">复制</button>
+                <button class="tb-mini" @click="pasteFromClipboard((v) => (luaOutput = v), $event)">粘贴</button>
+              </div>
             </div>
           </div>
-          <div class="panel-actions">
-            <a-button type="primary" @click="handleLuaEncode">转换为字符串 →</a-button>
-            <a-button @click="handleLuaDecode">← 转换为函数</a-button>
-          </div>
-          <div class="panel-right">
-            <div class="panel-label">配置字符串</div>
-            <a-textarea v-model:value="luaOutput" :rows="textareaRows" placeholder="或在此粘贴配置字符串进行反向转换" />
-            <div class="copy-row">
-              <a-button size="small" class="copy-btn" @click="copyToClipboard(luaOutput)">复制</a-button>
-              <a-button size="small" class="copy-btn" @click="pasteFromClipboard((v) => (luaOutput = v), $event)"
-                >粘贴</a-button
-              >
-            </div>
-          </div>
         </div>
-      </div>
 
-      <!-- URL 编解码 -->
-      <div v-if="activeTool === 'url'" class="tool-panel">
-        <div class="tool-header">
-          <span>URL 编解码</span>
-          <span class="tool-hint">encodeURIComponent 语义，适用于 URL 参数转义与还原</span>
-          <span class="spacer"></span>
-          <button class="btn-help" @click="openHelp"><QuestionCircleOutlined /> 帮助</button>
-          <button class="btn-clear" @click="clearTool('url')">清空</button>
-        </div>
-        <div class="dual-panel">
-          <div class="panel-left">
-            <div class="panel-label">原文</div>
-            <a-textarea v-model:value="urlInput" :rows="textareaRows" placeholder="粘贴原文进行编码" />
-            <div class="copy-row">
-              <a-button size="small" class="copy-btn" @click="copyToClipboard(urlInput)">复制</a-button>
-              <a-button size="small" class="copy-btn" @click="pasteFromClipboard((v) => (urlInput = v), $event)"
-                >粘贴</a-button
-              >
+        <!-- URL 编解码 -->
+        <div v-if="activeTool === 'url'" class="tb-view">
+          <div class="tb-head">
+            <div class="tb-headline">
+              <span class="tb-title">URL 编解码</span>
+              <span class="tb-hint">encodeURIComponent 语义，适用于 URL 参数转义与还原</span>
+            </div>
+            <span class="t-spacer"></span>
+            <button class="tb-btn-help" @click="openHelp"><StrokeIcon name="help" :size="13" />帮助</button>
+            <button class="tb-btn-clear" @click="clearTool('url')">清空</button>
+          </div>
+          <div class="tb-dual">
+            <div class="tb-pane">
+              <div class="tb-plabel">原文</div>
+              <a-textarea v-model:value="urlInput" :rows="textareaRows" class="tb-ta" placeholder="粘贴原文进行编码" />
+              <div class="tb-copyrow">
+                <button class="tb-mini" @click="copyToClipboard(urlInput)">复制</button>
+                <button class="tb-mini" @click="pasteFromClipboard((v) => (urlInput = v), $event)">粘贴</button>
+              </div>
+            </div>
+            <div class="tb-mid">
+              <button class="btn btn-primary" @click="urlOutput = toolsUrl.encode(urlInput)">编码 →</button>
+              <button class="btn btn-secondary" @click="urlInput = toolsUrl.decode(urlOutput)">← 解码</button>
+            </div>
+            <div class="tb-pane">
+              <div class="tb-plabel">编码串</div>
+              <a-textarea
+                v-model:value="urlOutput"
+                :rows="textareaRows"
+                class="tb-ta"
+                placeholder="粘贴编码串进行反向解码"
+              />
+              <div class="tb-copyrow">
+                <button class="tb-mini" @click="copyToClipboard(urlOutput)">复制</button>
+                <button class="tb-mini" @click="pasteFromClipboard((v) => (urlOutput = v), $event)">粘贴</button>
+              </div>
             </div>
           </div>
-          <div class="panel-actions">
-            <a-button type="primary" @click="urlOutput = toolsUrl.encode(urlInput)">编码 →</a-button>
-            <a-button @click="urlInput = toolsUrl.decode(urlOutput)">← 解码</a-button>
-          </div>
-          <div class="panel-right">
-            <div class="panel-label">编码串</div>
-            <a-textarea v-model:value="urlOutput" :rows="textareaRows" placeholder="粘贴编码串进行反向解码" />
-            <div class="copy-row">
-              <a-button size="small" class="copy-btn" @click="copyToClipboard(urlOutput)">复制</a-button>
-              <a-button size="small" class="copy-btn" @click="pasteFromClipboard((v) => (urlOutput = v), $event)"
-                >粘贴</a-button
-              >
-            </div>
-          </div>
         </div>
-      </div>
 
-      <!-- JSON 格式化 -->
-      <div v-if="activeTool === 'json'" class="tool-panel">
-        <div class="tool-header">
-          <span>JSON 格式化</span>
-          <span class="spacer"></span>
-          <button class="btn-help" @click="openHelp"><QuestionCircleOutlined /> 帮助</button>
-          <button class="btn-clear" @click="clearTool('json')">清空</button>
-        </div>
-        <div class="dual-panel">
-          <div class="panel-left">
-            <div class="panel-label">输入</div>
-            <a-textarea
-              v-model:value="jsonInput"
-              :rows="textareaRows"
-              placeholder='输入 JSON 字符串，例如：{"name":"test"}'
-            />
-            <div class="copy-row">
-              <a-button size="small" class="copy-btn" @click="copyToClipboard(jsonInput)">复制</a-button>
-              <a-button size="small" class="copy-btn" @click="pasteFromClipboard((v) => (jsonInput = v), $event)"
-                >粘贴</a-button
-              >
+        <!-- JSON 格式化 -->
+        <div v-if="activeTool === 'json'" class="tb-view">
+          <div class="tb-head">
+            <div class="tb-headline">
+              <span class="tb-title">JSON 格式化</span>
+            </div>
+            <span class="t-spacer"></span>
+            <button class="tb-btn-help" @click="openHelp"><StrokeIcon name="help" :size="13" />帮助</button>
+            <button class="tb-btn-clear" @click="clearTool('json')">清空</button>
+          </div>
+          <div class="tb-dual">
+            <div class="tb-pane">
+              <div class="tb-plabel">输入</div>
+              <a-textarea
+                v-model:value="jsonInput"
+                :rows="textareaRows"
+                class="tb-ta"
+                placeholder='输入 JSON 字符串，例如：{"name":"test"}'
+              />
+              <div class="tb-copyrow">
+                <button class="tb-mini" @click="copyToClipboard(jsonInput)">复制</button>
+                <button class="tb-mini" @click="pasteFromClipboard((v) => (jsonInput = v), $event)">粘贴</button>
+              </div>
+            </div>
+            <div class="tb-mid">
+              <button class="btn btn-primary" @click="jsonOutput = toolsJson.format(jsonInput)">格式化 →</button>
+              <button class="btn btn-secondary" @click="jsonOutput = toolsJson.minify(jsonInput)">压缩 →</button>
+            </div>
+            <div class="tb-pane">
+              <div class="tb-plabel">结果</div>
+              <a-textarea
+                v-model:value="jsonOutput"
+                :rows="textareaRows"
+                class="tb-ta"
+                readonly
+                placeholder="格式化或压缩结果将显示在此"
+              />
+              <div class="tb-copyrow">
+                <button class="tb-mini" @click="copyToClipboard(jsonOutput)">复制</button>
+                <button class="tb-mini" @click="pasteFromClipboard((v) => (jsonOutput = v), $event)">粘贴</button>
+              </div>
             </div>
           </div>
-          <div class="panel-actions">
-            <a-button type="primary" @click="jsonOutput = toolsJson.format(jsonInput)">格式化 →</a-button>
-            <a-button @click="jsonOutput = toolsJson.minify(jsonInput)">压缩 →</a-button>
-          </div>
-          <div class="panel-right">
-            <div class="panel-label">结果</div>
-            <a-textarea
-              v-model:value="jsonOutput"
-              :rows="textareaRows"
-              readonly
-              placeholder="格式化或压缩结果将显示在此"
-            />
-            <div class="copy-row">
-              <a-button size="small" class="copy-btn" @click="copyToClipboard(jsonOutput)">复制</a-button>
-              <a-button size="small" class="copy-btn" @click="pasteFromClipboard((v) => (jsonOutput = v), $event)"
-                >粘贴</a-button
-              >
-            </div>
-          </div>
         </div>
-      </div>
 
-      <!-- SM4 加解密 -->
-      <div v-if="activeTool === 'sm4'" class="tool-panel">
-        <div class="tool-header">
-          <span>SM4 加解密（ECB + PKCS7）</span>
-          <span class="tool-hint">用于调试平台 ↔ Edge 通道的加密链路</span>
-          <span class="spacer"></span>
-          <button class="btn-help" @click="openHelp"><QuestionCircleOutlined /> 帮助</button>
-          <button class="btn-clear" @click="clearTool('sm4')">清空</button>
-        </div>
-        <div v-if="sm4KeyWarn" class="sm4-warn">⚠ {{ sm4KeyWarn }}</div>
-        <div class="sm4-key-row">
-          <span class="key-label">密钥：</span>
-          <a-input-password v-model:value="sm4Key" placeholder="SM4 密钥（16 字符）" style="width: 260px" />
-          <a-button
-            size="small"
-            title="恢复为 Edge 通道默认 SM4 密钥（调试平台↔Edge 加密链路用）"
-            @click="sm4Key = 'a16bc20453da220f'"
-            >恢复默认</a-button
-          >
-        </div>
-        <div class="dual-panel">
-          <div class="panel-left">
-            <div class="panel-label">明文</div>
-            <a-textarea v-model:value="sm4Plaintext" :rows="textareaRows" placeholder="输入明文" />
-            <div class="copy-row">
-              <a-button size="small" class="copy-btn" @click="copyToClipboard(sm4Plaintext)">复制</a-button>
-              <a-button size="small" class="copy-btn" @click="pasteFromClipboard((v) => (sm4Plaintext = v), $event)"
-                >粘贴</a-button
-              >
+        <!-- SM4 加解密 -->
+        <div v-if="activeTool === 'sm4'" class="tb-view">
+          <div class="tb-head">
+            <div class="tb-headline">
+              <span class="tb-title">SM4 加解密（ECB + PKCS7）</span>
+              <span class="tb-hint">用于调试平台 ↔ Edge 通道的加密链路</span>
             </div>
+            <span class="t-spacer"></span>
+            <button class="tb-btn-help" @click="openHelp"><StrokeIcon name="help" :size="13" />帮助</button>
+            <button class="tb-btn-clear" @click="clearTool('sm4')">清空</button>
           </div>
-          <div class="panel-actions">
-            <a-button type="primary" @click="sm4Ciphertext = toolsSm4.encrypt(sm4Plaintext, sm4Key)">加密 →</a-button>
-            <a-button @click="sm4Plaintext = toolsSm4.decrypt(sm4Ciphertext, sm4Key)">← 解密</a-button>
+          <div v-if="sm4KeyWarn" class="tb-warn">
+            <StrokeIcon name="warnOutline" :size="14" />
+            <span>{{ sm4KeyWarn }}</span>
           </div>
-          <div class="panel-right">
-            <div class="panel-label">密文（Base64）</div>
-            <a-textarea v-model:value="sm4Ciphertext" :rows="textareaRows" placeholder="输入 Base64 密文" />
-            <div class="copy-row">
-              <a-button size="small" class="copy-btn" @click="copyToClipboard(sm4Ciphertext)">复制</a-button>
-              <a-button size="small" class="copy-btn" @click="pasteFromClipboard((v) => (sm4Ciphertext = v), $event)"
-                >粘贴</a-button
-              >
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Base64 编解码 -->
-      <div v-if="activeTool === 'base64'" class="tool-panel">
-        <div class="tool-header">
-          <span>Base64 编解码</span>
-          <span class="tool-hint">UTF-8 安全编码（btoa/unescape 链），适用于文本与密文互转</span>
-          <span class="spacer"></span>
-          <button class="btn-help" @click="openHelp"><QuestionCircleOutlined /> 帮助</button>
-          <button class="btn-clear" @click="clearTool('base64')">清空</button>
-        </div>
-        <div class="dual-panel">
-          <div class="panel-left">
-            <div class="panel-label">原文</div>
-            <a-textarea v-model:value="base64Input" :rows="textareaRows" placeholder="粘贴原文进行编码" />
-            <div class="copy-row">
-              <a-button size="small" class="copy-btn" @click="copyToClipboard(base64Input)">复制</a-button>
-              <a-button size="small" class="copy-btn" @click="pasteFromClipboard((v) => (base64Input = v), $event)"
-                >粘贴</a-button
-              >
-            </div>
-          </div>
-          <div class="panel-actions">
-            <a-button type="primary" @click="base64Output = toolsBase64.encode(base64Input)">编码 →</a-button>
-            <a-button @click="base64Input = toolsBase64.decode(base64Output)">← 解码</a-button>
-          </div>
-          <div class="panel-right">
-            <div class="panel-label">编码串</div>
-            <a-textarea v-model:value="base64Output" :rows="textareaRows" placeholder="粘贴编码串进行反向解码" />
-            <div class="copy-row">
-              <a-button size="small" class="copy-btn" @click="copyToClipboard(base64Output)">复制</a-button>
-              <a-button size="small" class="copy-btn" @click="pasteFromClipboard((v) => (base64Output = v), $event)"
-                >粘贴</a-button
-              >
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- YAML 格式化 -->
-      <div v-if="activeTool === 'yaml'" class="tool-panel">
-        <div class="tool-header">
-          <span>YAML 格式化</span>
-          <span class="tool-hint">格式化工具有序 key 但会丢弃 YAML 注释</span>
-          <span class="spacer"></span>
-          <button class="btn-help" @click="openHelp"><QuestionCircleOutlined /> 帮助</button>
-          <button class="btn-clear" @click="clearTool('yaml')">清空</button>
-        </div>
-        <div class="dual-panel">
-          <div class="panel-left">
-            <div class="panel-label">输入</div>
-            <a-textarea v-model:value="yamlInput" :rows="textareaRows" placeholder="输入 YAML 内容" />
-            <div class="copy-row">
-              <a-button size="small" class="copy-btn" @click="copyToClipboard(yamlInput)">复制</a-button>
-              <a-button size="small" class="copy-btn" @click="pasteFromClipboard((v) => (yamlInput = v), $event)"
-                >粘贴</a-button
-              >
-            </div>
-          </div>
-          <div class="panel-actions">
-            <a-button type="primary" @click="yamlOutput = toolsYaml.format(yamlInput)">格式化 →</a-button>
-          </div>
-          <div class="panel-right">
-            <div class="panel-label">结果</div>
-            <a-textarea v-model:value="yamlOutput" :rows="textareaRows" readonly placeholder="格式化结果将显示在此" />
-            <div class="copy-row">
-              <a-button size="small" class="copy-btn" @click="copyToClipboard(yamlOutput)">复制</a-button>
-              <a-button size="small" class="copy-btn" @click="pasteFromClipboard((v) => (yamlOutput = v), $event)"
-                >粘贴</a-button
-              >
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- JSON 对比 -->
-      <div v-if="activeTool === 'diff'" class="tool-panel">
-        <div class="tool-header">
-          <span>JSON 数据对比</span>
-          <span class="tool-hint">先格式化归一（键序无关）再逐行对比</span>
-          <span class="spacer"></span>
-          <button class="btn-help" @click="openHelp"><QuestionCircleOutlined /> 帮助</button>
-          <button class="btn-clear" @click="clearTool('diff')">清空</button>
-        </div>
-        <div class="dual-panel">
-          <div class="panel-left">
-            <div class="panel-label">JSON A</div>
-            <a-textarea v-model:value="diffInputA" :rows="textareaRows" placeholder='输入 JSON A，如 {"name":"test"}' />
-            <div class="copy-row">
-              <a-button size="small" class="copy-btn" @click="copyToClipboard(diffInputA)">复制</a-button>
-              <a-button size="small" class="copy-btn" @click="pasteFromClipboard((v) => (diffInputA = v), $event)"
-                >粘贴</a-button
-              >
-            </div>
-          </div>
-          <div class="panel-actions">
-            <a-button @click="formatBoth">两边格式化</a-button>
-            <a-button type="primary" @click="handleDiff" :disabled="!diffInputA || !diffInputB">对比</a-button>
-          </div>
-          <div class="panel-right">
-            <div class="panel-label">JSON B</div>
-            <a-textarea
-              v-model:value="diffInputB"
-              :rows="textareaRows"
-              placeholder='输入 JSON B，如 {"name":"test2"}'
-            />
-            <div class="copy-row">
-              <a-button size="small" class="copy-btn" @click="copyToClipboard(diffInputB)">复制</a-button>
-              <a-button size="small" class="copy-btn" @click="pasteFromClipboard((v) => (diffInputB = v), $event)"
-                >粘贴</a-button
-              >
-            </div>
-          </div>
-        </div>
-        <div v-if="diffError" class="diff-error">{{ diffError }}</div>
-        <div v-if="diffResultHtml" class="diff-result-box">
-          <div class="panel-label" style="margin: 12px 12px 0; color: #aaa">差异结果（红=删除/旧值，绿=新增/新值）</div>
-          <div class="dl-wrap" v-html="diffResultHtml"></div>
-        </div>
-      </div>
-
-      <!-- 时间戳转换 -->
-      <div v-if="activeTool === 'timestamp'" class="tool-panel">
-        <div class="tool-header">
-          <span>时间戳转换</span>
-          <span class="tool-hint">无时区后缀字符串按 UTC 解析（平台存储约定）；北京时间 = UTC+8</span>
-          <span class="spacer"></span>
-          <button class="btn-help" @click="openHelp"><QuestionCircleOutlined /> 帮助</button>
-          <button class="btn-clear" @click="fillNow">当前时间</button>
-          <button class="btn-clear" @click="clearTool('timestamp')">清空</button>
-        </div>
-        <div class="single-input-row">
-          <a-textarea
-            v-model:value="tsInput"
-            :rows="2"
-            placeholder="粘贴 epoch（10 位秒 / 13 位毫秒）或日期时间（如 2026-10-30 08:00:00），输入即算"
-          />
-        </div>
-        <div v-if="parsedTime.error" class="diff-error">{{ parsedTime.error }}</div>
-        <div v-else-if="parsedTime.epochMs" class="result-grid">
-          <div class="rg-row">
-            <span class="rg-key">识别为</span><span class="rg-val">{{ parsedTime.detected }}</span>
-          </div>
-          <div class="rg-row rg-hl">
-            <span class="rg-key">北京时间</span><span class="rg-val">{{ parsedTime.beijing }}</span>
-          </div>
-          <div class="rg-row">
-            <span class="rg-key">UTC</span><span class="rg-val">{{ parsedTime.utc }}</span>
-          </div>
-          <div class="rg-row">
-            <span class="rg-key">epoch 秒</span><span class="rg-val">{{ parsedTime.epochSec }}</span>
-          </div>
-          <div class="rg-row">
-            <span class="rg-key">epoch 毫秒</span><span class="rg-val">{{ parsedTime.epochMs }}</span>
-          </div>
-          <div class="rg-row">
-            <span class="rg-key">ISO 8601</span><span class="rg-val">{{ parsedTime.iso }}</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- JWT 解码 -->
-      <div v-if="activeTool === 'jwt'" class="tool-panel">
-        <div class="tool-header">
-          <span>JWT 解码</span>
-          <span class="tool-hint">纯解码查看内容，不验证签名（签名校验需服务端密钥）</span>
-          <span class="spacer"></span>
-          <button class="btn-help" @click="openHelp"><QuestionCircleOutlined /> 帮助</button>
-          <button class="btn-clear" @click="clearTool('jwt')">清空</button>
-        </div>
-        <div class="single-input-row">
-          <a-textarea v-model:value="jwtInput" :rows="3" placeholder="粘贴 JWT token（三段 . 分隔），输入即算" />
-        </div>
-        <div v-if="decodedJwt.error" class="diff-error">{{ decodedJwt.error }}</div>
-        <template v-else-if="decodedJwt.payload">
-          <div class="jwt-block">
-            <div class="panel-label">Header</div>
-            <pre class="jwt-pre">{{ pretty(decodedJwt.header) }}</pre>
-          </div>
-          <div class="jwt-block">
-            <div class="panel-label">Payload</div>
-            <pre class="jwt-pre">{{ pretty(decodedJwt.payload) }}</pre>
-          </div>
-          <div v-if="expInfo" class="result-grid">
-            <div class="rg-row rg-hl">
-              <span class="rg-key">exp（过期时间）</span>
-              <span class="rg-val">
-                {{ expInfo.beijing }}
-                <span class="exp-tag" :class="expInfo.expired ? 'is-expired' : 'is-alive'">
-                  {{ expInfo.expired ? '已过期' : `剩余 ${expInfo.remainMin} 分钟` }}
-                </span>
-              </span>
-            </div>
-          </div>
-          <div class="tool-hint" style="margin-top: 10px">签名段已省略（验签需服务端密钥，解码用途是查看内容）</div>
-        </template>
-      </div>
-
-      <!-- YAML ↔ JSON 互转 -->
-      <div v-if="activeTool === 'convert'" class="tool-panel">
-        <div class="tool-header">
-          <span>YAML ↔ JSON 互转</span>
-          <span class="tool-hint">edge.env（YAML）与插件配置（JSON）两域配置互看互转</span>
-          <span class="spacer"></span>
-          <button class="btn-help" @click="openHelp"><QuestionCircleOutlined /> 帮助</button>
-          <button class="btn-clear" @click="clearTool('convert')">清空</button>
-        </div>
-        <div class="dual-panel">
-          <div class="panel-left">
-            <div class="panel-label">YAML</div>
-            <a-textarea v-model:value="convertInput" :rows="textareaRows" placeholder="在此粘贴 YAML" />
-            <div class="copy-row">
-              <a-button size="small" class="copy-btn" @click="copyToClipboard(convertInput)">复制</a-button>
-              <a-button size="small" class="copy-btn" @click="pasteFromClipboard((v) => (convertInput = v), $event)"
-                >粘贴</a-button
-              >
-            </div>
-          </div>
-          <div class="panel-actions">
-            <a-button type="primary" @click="convertToJson">转 JSON →</a-button>
-            <a-button @click="convertToYaml">← 转 YAML</a-button>
-          </div>
-          <div class="panel-right">
-            <div class="panel-label">JSON</div>
-            <a-textarea v-model:value="convertOutput" :rows="textareaRows" placeholder="在此粘贴 JSON" />
-            <div class="copy-row">
-              <a-button size="small" class="copy-btn" @click="copyToClipboard(convertOutput)">复制</a-button>
-              <a-button size="small" class="copy-btn" @click="pasteFromClipboard((v) => (convertOutput = v), $event)"
-                >粘贴</a-button
-              >
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 文本 Diff -->
-      <div v-if="activeTool === 'textdiff'" class="tool-panel">
-        <div class="tool-header">
-          <span>文本 Diff</span>
-          <span class="tool-hint">逐行对比纯文本（配置文件、清单等），不做键序归一化</span>
-          <span class="spacer"></span>
-          <button class="btn-help" @click="openHelp"><QuestionCircleOutlined /> 帮助</button>
-          <button class="btn-clear" @click="clearTool('textdiff')">清空</button>
-        </div>
-        <div class="dual-panel">
-          <div class="panel-left">
-            <div class="panel-label">文本 A</div>
-            <a-textarea v-model:value="textDiffA" :rows="textareaRows" placeholder="输入原始文本" />
-            <div class="copy-row">
-              <a-button size="small" class="copy-btn" @click="copyToClipboard(textDiffA)">复制</a-button>
-              <a-button size="small" class="copy-btn" @click="pasteFromClipboard((v) => (textDiffA = v), $event)"
-                >粘贴</a-button
-              >
-            </div>
-          </div>
-          <div class="panel-actions">
-            <a-button type="primary" @click="handleTextDiff" :disabled="!textDiffA || !textDiffB">对比</a-button>
-          </div>
-          <div class="panel-right">
-            <div class="panel-label">文本 B</div>
-            <a-textarea v-model:value="textDiffB" :rows="textareaRows" placeholder="输入对比文本" />
-            <div class="copy-row">
-              <a-button size="small" class="copy-btn" @click="copyToClipboard(textDiffB)">复制</a-button>
-              <a-button size="small" class="copy-btn" @click="pasteFromClipboard((v) => (textDiffB = v), $event)"
-                >粘贴</a-button
-              >
-            </div>
-          </div>
-        </div>
-        <div v-if="textDiffError" class="diff-error">{{ textDiffError }}</div>
-        <div v-if="textDiffHtml" class="diff-result-box">
-          <div class="panel-label" style="margin: 12px 12px 0; color: #aaa">差异结果（红=删除，绿=新增）</div>
-          <div class="dl-wrap" v-html="textDiffHtml"></div>
-        </div>
-      </div>
-
-      <!-- IPv4/CIDR 计算器 -->
-      <div v-if="activeTool === 'ipcalc'" class="tool-panel">
-        <div class="tool-header">
-          <span>IPv4/CIDR 计算器</span>
-          <span class="tool-hint">仅 IPv4；节点白名单、中继网段规划、子网换算</span>
-          <span class="spacer"></span>
-          <button class="btn-help" @click="openHelp"><QuestionCircleOutlined /> 帮助</button>
-          <button class="btn-clear" @click="clearTool('ipcalc')">清空</button>
-        </div>
-        <div class="single-input-row">
-          <a-textarea
-            v-model:value="ipInput"
-            :rows="2"
-            placeholder="输入 IPv4 地址或网段（如 192.168.1.10/24），缺省前缀按 /32，输入即算"
-          />
-        </div>
-        <div v-if="ipResult.error" class="diff-error">{{ ipResult.error }}</div>
-        <div v-else-if="ipResult.ip" class="result-grid">
-          <div class="rg-row rg-hl">
-            <span class="rg-key">IP / 前缀</span
-            ><span class="rg-val"
-              >{{ ipResult.ip }}/{{ ipResult.prefix
-              }}<span v-if="ipResult.isPrivate" class="exp-tag is-alive" style="margin-left: 8px">私网段</span></span
+          <div class="tb-keyrow">
+            <span class="key-label">密钥：</span>
+            <a-input-password v-model:value="sm4Key" placeholder="SM4 密钥（16 字符）" class="tb-keyinp" />
+            <button
+              class="tb-mini"
+              title="恢复为 Edge 通道默认 SM4 密钥（调试平台↔Edge 加密链路用）"
+              @click="sm4Key = 'a16bc20453da220f'"
             >
+              恢复默认
+            </button>
           </div>
-          <div class="rg-row">
-            <span class="rg-key">子网掩码</span
-            ><span class="rg-val">{{ ipResult.mask }}（{{ ipResult.wildcard }}）</span>
+          <div class="tb-dual">
+            <div class="tb-pane">
+              <div class="tb-plabel">明文</div>
+              <a-textarea v-model:value="sm4Plaintext" :rows="textareaRows" class="tb-ta" placeholder="输入明文" />
+              <div class="tb-copyrow">
+                <button class="tb-mini" @click="copyToClipboard(sm4Plaintext)">复制</button>
+                <button class="tb-mini" @click="pasteFromClipboard((v) => (sm4Plaintext = v), $event)">粘贴</button>
+              </div>
+            </div>
+            <div class="tb-mid">
+              <button class="btn btn-primary" @click="sm4Ciphertext = toolsSm4.encrypt(sm4Plaintext, sm4Key)">
+                加密 →
+              </button>
+              <button class="btn btn-secondary" @click="sm4Plaintext = toolsSm4.decrypt(sm4Ciphertext, sm4Key)">
+                ← 解密
+              </button>
+            </div>
+            <div class="tb-pane">
+              <div class="tb-plabel">密文（Base64）</div>
+              <a-textarea
+                v-model:value="sm4Ciphertext"
+                :rows="textareaRows"
+                class="tb-ta"
+                placeholder="输入 Base64 密文"
+              />
+              <div class="tb-copyrow">
+                <button class="tb-mini" @click="copyToClipboard(sm4Ciphertext)">复制</button>
+                <button class="tb-mini" @click="pasteFromClipboard((v) => (sm4Ciphertext = v), $event)">粘贴</button>
+              </div>
+            </div>
           </div>
-          <div class="rg-row">
-            <span class="rg-key">网络地址</span><span class="rg-val">{{ ipResult.network }}</span>
-          </div>
-          <div class="rg-row">
-            <span class="rg-key">广播地址</span><span class="rg-val">{{ ipResult.broadcast }}</span>
-          </div>
-          <div class="rg-row">
-            <span class="rg-key">可用主机范围</span
-            ><span class="rg-val">{{ ipResult.firstHost }} - {{ ipResult.lastHost }}</span>
-          </div>
-          <div class="rg-row">
-            <span class="rg-key">可用主机数</span
-            ><span class="rg-val">{{ ipResult.usableHosts }}（共 {{ ipResult.totalHosts }} 个地址）</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- 哈希计算 -->
-      <div v-if="activeTool === 'hash'" class="tool-panel">
-        <div class="tool-header">
-          <span>哈希计算</span>
-          <span class="tool-hint">文件/备份校验、口令指纹比对；输出小写十六进制</span>
-          <span class="spacer"></span>
-          <button class="btn-help" @click="openHelp"><QuestionCircleOutlined /> 帮助</button>
-          <button class="btn-clear" @click="clearTool('hash')">清空</button>
-        </div>
-        <div class="single-input-row">
-          <a-textarea v-model:value="hashInput" :rows="4" placeholder="输入要计算哈希的文本，输入即算" />
-        </div>
-        <div v-if="hashResults" class="result-grid">
-          <div v-for="row in hashResults" :key="row.name" class="rg-row">
-            <span class="rg-key">{{ row.name }}</span>
-            <span class="rg-val">{{ row.value || '—' }}</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Keepalived 配置生成 -->
-      <div v-if="activeTool === 'keepalived'" class="tool-panel ka-panel">
-        <div class="tool-header">
-          <span>Keepalived 配置生成</span>
-          <span class="tool-hint">多节点 VRRP 高可用（单播 + VIP）全套配置与部署命令，纯前端生成</span>
-          <span class="spacer"></span>
-          <button class="btn-help" @click="openHelp"><QuestionCircleOutlined /> 帮助</button>
-          <button class="btn-clear" @click="clearTool('keepalived')">清空</button>
         </div>
 
-        <div class="ka-form">
-          <div class="ka-grid">
-            <div class="ka-row">
+        <!-- Base64 编解码 -->
+        <div v-if="activeTool === 'base64'" class="tb-view">
+          <div class="tb-head">
+            <div class="tb-headline">
+              <span class="tb-title">Base64 编解码</span>
+              <span class="tb-hint">UTF-8 安全编码（btoa/unescape 链），适用于文本与密文互转</span>
+            </div>
+            <span class="t-spacer"></span>
+            <button class="tb-btn-help" @click="openHelp"><StrokeIcon name="help" :size="13" />帮助</button>
+            <button class="tb-btn-clear" @click="clearTool('base64')">清空</button>
+          </div>
+          <div class="tb-dual">
+            <div class="tb-pane">
+              <div class="tb-plabel">原文</div>
+              <a-textarea
+                v-model:value="base64Input"
+                :rows="textareaRows"
+                class="tb-ta"
+                placeholder="粘贴原文进行编码"
+              />
+              <div class="tb-copyrow">
+                <button class="tb-mini" @click="copyToClipboard(base64Input)">复制</button>
+                <button class="tb-mini" @click="pasteFromClipboard((v) => (base64Input = v), $event)">粘贴</button>
+              </div>
+            </div>
+            <div class="tb-mid">
+              <button class="btn btn-primary" @click="base64Output = toolsBase64.encode(base64Input)">编码 →</button>
+              <button class="btn btn-secondary" @click="base64Input = toolsBase64.decode(base64Output)">← 解码</button>
+            </div>
+            <div class="tb-pane">
+              <div class="tb-plabel">编码串</div>
+              <a-textarea
+                v-model:value="base64Output"
+                :rows="textareaRows"
+                class="tb-ta"
+                placeholder="粘贴编码串进行反向解码"
+              />
+              <div class="tb-copyrow">
+                <button class="tb-mini" @click="copyToClipboard(base64Output)">复制</button>
+                <button class="tb-mini" @click="pasteFromClipboard((v) => (base64Output = v), $event)">粘贴</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- YAML 格式化 -->
+        <div v-if="activeTool === 'yaml'" class="tb-view">
+          <div class="tb-head">
+            <div class="tb-headline">
+              <span class="tb-title">YAML 格式化</span>
+              <span class="tb-hint">格式化工具有序 key 但会丢弃 YAML 注释</span>
+            </div>
+            <span class="t-spacer"></span>
+            <button class="tb-btn-help" @click="openHelp"><StrokeIcon name="help" :size="13" />帮助</button>
+            <button class="tb-btn-clear" @click="clearTool('yaml')">清空</button>
+          </div>
+          <div class="tb-dual">
+            <div class="tb-pane">
+              <div class="tb-plabel">输入</div>
+              <a-textarea v-model:value="yamlInput" :rows="textareaRows" class="tb-ta" placeholder="输入 YAML 内容" />
+              <div class="tb-copyrow">
+                <button class="tb-mini" @click="copyToClipboard(yamlInput)">复制</button>
+                <button class="tb-mini" @click="pasteFromClipboard((v) => (yamlInput = v), $event)">粘贴</button>
+              </div>
+            </div>
+            <div class="tb-mid">
+              <button class="btn btn-primary" @click="yamlOutput = toolsYaml.format(yamlInput)">格式化 →</button>
+            </div>
+            <div class="tb-pane">
+              <div class="tb-plabel">结果</div>
+              <a-textarea
+                v-model:value="yamlOutput"
+                :rows="textareaRows"
+                class="tb-ta"
+                readonly
+                placeholder="格式化结果将显示在此"
+              />
+              <div class="tb-copyrow">
+                <button class="tb-mini" @click="copyToClipboard(yamlOutput)">复制</button>
+                <button class="tb-mini" @click="pasteFromClipboard((v) => (yamlOutput = v), $event)">粘贴</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- JSON 对比 -->
+        <div v-if="activeTool === 'diff'" class="tb-view">
+          <div class="tb-head">
+            <div class="tb-headline">
+              <span class="tb-title">JSON 数据对比</span>
+              <span class="tb-hint">先格式化归一（键序无关）再逐行对比</span>
+            </div>
+            <span class="t-spacer"></span>
+            <button class="tb-btn-help" @click="openHelp"><StrokeIcon name="help" :size="13" />帮助</button>
+            <button class="tb-btn-clear" @click="clearTool('diff')">清空</button>
+          </div>
+          <div class="tb-dual tb-dual-diff">
+            <div class="tb-pane">
+              <div class="tb-plabel">JSON A</div>
+              <a-textarea
+                v-model:value="diffInputA"
+                :rows="textareaRows"
+                class="tb-ta"
+                placeholder='输入 JSON A，如 {"name":"test"}'
+              />
+              <div class="tb-copyrow">
+                <button class="tb-mini" @click="copyToClipboard(diffInputA)">复制</button>
+                <button class="tb-mini" @click="pasteFromClipboard((v) => (diffInputA = v), $event)">粘贴</button>
+              </div>
+            </div>
+            <div class="tb-mid">
+              <button class="btn btn-secondary" @click="formatBoth">两边格式化</button>
+              <button class="btn btn-primary" :disabled="!diffInputA || !diffInputB" @click="handleDiff">对比</button>
+            </div>
+            <div class="tb-pane">
+              <div class="tb-plabel">JSON B</div>
+              <a-textarea
+                v-model:value="diffInputB"
+                :rows="textareaRows"
+                class="tb-ta"
+                placeholder='输入 JSON B，如 {"name":"test2"}'
+              />
+              <div class="tb-copyrow">
+                <button class="tb-mini" @click="copyToClipboard(diffInputB)">复制</button>
+                <button class="tb-mini" @click="pasteFromClipboard((v) => (diffInputB = v), $event)">粘贴</button>
+              </div>
+            </div>
+          </div>
+          <div v-if="diffError" class="diff-error">{{ diffError }}</div>
+          <div v-if="diffResultHtml" class="diff-result-box">
+            <div class="tb-difflegend">差异结果（红=删除/旧值，绿=新增/新值）</div>
+            <div class="dl-wrap" v-html="diffResultHtml"></div>
+          </div>
+        </div>
+
+        <!-- 时间戳转换 -->
+        <div v-if="activeTool === 'timestamp'" class="tb-view">
+          <div class="tb-head">
+            <div class="tb-headline">
+              <span class="tb-title">时间戳转换</span>
+              <span class="tb-hint">无时区后缀字符串按 UTC 解析（平台存储约定）；北京时间 = UTC+8</span>
+            </div>
+            <span class="t-spacer"></span>
+            <button class="tb-btn-help" @click="openHelp"><StrokeIcon name="help" :size="13" />帮助</button>
+            <button class="tb-btn-ghost" @click="fillNow">当前时间</button>
+            <button class="tb-btn-clear" @click="clearTool('timestamp')">清空</button>
+          </div>
+          <div class="tb-single">
+            <a-textarea
+              v-model:value="tsInput"
+              :rows="2"
+              class="tb-ta tb-ta-fixed"
+              placeholder="粘贴 epoch（10 位秒 / 13 位毫秒）或日期时间（如 2026-10-30 08:00:00），输入即算"
+            />
+          </div>
+          <div v-if="parsedTime.error" class="diff-error">{{ parsedTime.error }}</div>
+          <div v-else-if="parsedTime.epochMs" class="tb-result">
+            <div class="tb-rg">
+              <span class="rg-k">识别为</span><span class="rg-v">{{ parsedTime.detected }}</span>
+            </div>
+            <div class="tb-rg rg-hl">
+              <span class="rg-k">北京时间</span><span class="rg-v">{{ parsedTime.beijing }}</span>
+            </div>
+            <div class="tb-rg">
+              <span class="rg-k">UTC</span><span class="rg-v">{{ parsedTime.utc }}</span>
+            </div>
+            <div class="tb-rg">
+              <span class="rg-k">epoch 秒</span><span class="rg-v">{{ parsedTime.epochSec }}</span>
+            </div>
+            <div class="tb-rg">
+              <span class="rg-k">epoch 毫秒</span><span class="rg-v">{{ parsedTime.epochMs }}</span>
+            </div>
+            <div class="tb-rg">
+              <span class="rg-k">ISO 8601</span><span class="rg-v">{{ parsedTime.iso }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- JWT 解码 -->
+        <div v-if="activeTool === 'jwt'" class="tb-view">
+          <div class="tb-head">
+            <div class="tb-headline">
+              <span class="tb-title">JWT 解码</span>
+              <span class="tb-hint">纯解码查看内容，不验证签名（签名校验需服务端密钥）</span>
+            </div>
+            <span class="t-spacer"></span>
+            <button class="tb-btn-help" @click="openHelp"><StrokeIcon name="help" :size="13" />帮助</button>
+            <button class="tb-btn-clear" @click="clearTool('jwt')">清空</button>
+          </div>
+          <div class="tb-single">
+            <a-textarea
+              v-model:value="jwtInput"
+              :rows="3"
+              class="tb-ta tb-ta-fixed"
+              placeholder="粘贴 JWT token（三段 . 分隔），输入即算"
+            />
+          </div>
+          <div v-if="decodedJwt.error" class="diff-error">{{ decodedJwt.error }}</div>
+          <template v-else-if="decodedJwt.payload">
+            <div class="tb-block">
+              <div class="tb-plabel">Header</div>
+              <pre class="tb-pre">{{ pretty(decodedJwt.header) }}</pre>
+            </div>
+            <div class="tb-block">
+              <div class="tb-plabel">Payload</div>
+              <pre class="tb-pre">{{ pretty(decodedJwt.payload) }}</pre>
+            </div>
+            <div v-if="expInfo" class="tb-result tb-exprow">
+              <div class="tb-rg rg-hl">
+                <span class="rg-k">exp（过期时间）</span>
+                <span class="rg-v">
+                  {{ expInfo.beijing }}
+                  <span class="exp-tag" :class="expInfo.expired ? 'is-expired' : 'is-alive'">
+                    {{ expInfo.expired ? '已过期' : `剩余 ${expInfo.remainMin} 分钟` }}
+                  </span>
+                </span>
+              </div>
+            </div>
+            <div class="tool-hint tb-foot-hint">签名段已省略（验签需服务端密钥，解码用途是查看内容）</div>
+          </template>
+        </div>
+
+        <!-- YAML ↔ JSON 互转 -->
+        <div v-if="activeTool === 'convert'" class="tb-view">
+          <div class="tb-head">
+            <div class="tb-headline">
+              <span class="tb-title">YAML ↔ JSON 互转</span>
+              <span class="tb-hint">edge.env（YAML）与插件配置（JSON）两域配置互看互转</span>
+            </div>
+            <span class="t-spacer"></span>
+            <button class="tb-btn-help" @click="openHelp"><StrokeIcon name="help" :size="13" />帮助</button>
+            <button class="tb-btn-clear" @click="clearTool('convert')">清空</button>
+          </div>
+          <div class="tb-dual">
+            <div class="tb-pane">
+              <div class="tb-plabel">YAML</div>
+              <a-textarea v-model:value="convertInput" :rows="textareaRows" class="tb-ta" placeholder="在此粘贴 YAML" />
+              <div class="tb-copyrow">
+                <button class="tb-mini" @click="copyToClipboard(convertInput)">复制</button>
+                <button class="tb-mini" @click="pasteFromClipboard((v) => (convertInput = v), $event)">粘贴</button>
+              </div>
+            </div>
+            <div class="tb-mid">
+              <button class="btn btn-primary" @click="convertToJson">转 JSON →</button>
+              <button class="btn btn-secondary" @click="convertToYaml">← 转 YAML</button>
+            </div>
+            <div class="tb-pane">
+              <div class="tb-plabel">JSON</div>
+              <a-textarea
+                v-model:value="convertOutput"
+                :rows="textareaRows"
+                class="tb-ta"
+                placeholder="在此粘贴 JSON"
+              />
+              <div class="tb-copyrow">
+                <button class="tb-mini" @click="copyToClipboard(convertOutput)">复制</button>
+                <button class="tb-mini" @click="pasteFromClipboard((v) => (convertOutput = v), $event)">粘贴</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 文本 Diff -->
+        <div v-if="activeTool === 'textdiff'" class="tb-view">
+          <div class="tb-head">
+            <div class="tb-headline">
+              <span class="tb-title">文本 Diff</span>
+              <span class="tb-hint">逐行对比纯文本（配置文件、清单等），不做键序归一化</span>
+            </div>
+            <span class="t-spacer"></span>
+            <button class="tb-btn-help" @click="openHelp"><StrokeIcon name="help" :size="13" />帮助</button>
+            <button class="tb-btn-clear" @click="clearTool('textdiff')">清空</button>
+          </div>
+          <div class="tb-dual tb-dual-diff">
+            <div class="tb-pane">
+              <div class="tb-plabel">文本 A</div>
+              <a-textarea v-model:value="textDiffA" :rows="textareaRows" class="tb-ta" placeholder="输入原始文本" />
+              <div class="tb-copyrow">
+                <button class="tb-mini" @click="copyToClipboard(textDiffA)">复制</button>
+                <button class="tb-mini" @click="pasteFromClipboard((v) => (textDiffA = v), $event)">粘贴</button>
+              </div>
+            </div>
+            <div class="tb-mid">
+              <button class="btn btn-primary" :disabled="!textDiffA || !textDiffB" @click="handleTextDiff">对比</button>
+            </div>
+            <div class="tb-pane">
+              <div class="tb-plabel">文本 B</div>
+              <a-textarea v-model:value="textDiffB" :rows="textareaRows" class="tb-ta" placeholder="输入对比文本" />
+              <div class="tb-copyrow">
+                <button class="tb-mini" @click="copyToClipboard(textDiffB)">复制</button>
+                <button class="tb-mini" @click="pasteFromClipboard((v) => (textDiffB = v), $event)">粘贴</button>
+              </div>
+            </div>
+          </div>
+          <div v-if="textDiffError" class="diff-error">{{ textDiffError }}</div>
+          <div v-if="textDiffHtml" class="diff-result-box">
+            <div class="tb-difflegend">差异结果（红=删除，绿=新增）</div>
+            <div class="dl-wrap" v-html="textDiffHtml"></div>
+          </div>
+        </div>
+
+        <!-- IPv4/CIDR 计算器 -->
+        <div v-if="activeTool === 'ipcalc'" class="tb-view">
+          <div class="tb-head">
+            <div class="tb-headline">
+              <span class="tb-title">IPv4/CIDR 计算器</span>
+              <span class="tb-hint">仅 IPv4；节点白名单、中继网段规划、子网换算</span>
+            </div>
+            <span class="t-spacer"></span>
+            <button class="tb-btn-help" @click="openHelp"><StrokeIcon name="help" :size="13" />帮助</button>
+            <button class="tb-btn-clear" @click="clearTool('ipcalc')">清空</button>
+          </div>
+          <div class="tb-single">
+            <a-textarea
+              v-model:value="ipInput"
+              :rows="2"
+              class="tb-ta tb-ta-fixed"
+              placeholder="输入 IPv4 地址或网段（如 192.168.1.10/24），缺省前缀按 /32，输入即算"
+            />
+          </div>
+          <div v-if="ipResult.error" class="diff-error">{{ ipResult.error }}</div>
+          <div v-else-if="ipResult.ip" class="tb-result">
+            <div class="tb-rg rg-hl">
+              <span class="rg-k">IP / 前缀</span
+              ><span class="rg-v"
+                >{{ ipResult.ip }}/{{ ipResult.prefix
+                }}<span v-if="ipResult.isPrivate" class="exp-tag is-alive tb-inline-tag">私网段</span></span
+              >
+            </div>
+            <div class="tb-rg">
+              <span class="rg-k">子网掩码</span><span class="rg-v">{{ ipResult.mask }}（{{ ipResult.wildcard }}）</span>
+            </div>
+            <div class="tb-rg">
+              <span class="rg-k">网络地址</span><span class="rg-v">{{ ipResult.network }}</span>
+            </div>
+            <div class="tb-rg">
+              <span class="rg-k">广播地址</span><span class="rg-v">{{ ipResult.broadcast }}</span>
+            </div>
+            <div class="tb-rg">
+              <span class="rg-k">可用主机范围</span
+              ><span class="rg-v">{{ ipResult.firstHost }} - {{ ipResult.lastHost }}</span>
+            </div>
+            <div class="tb-rg">
+              <span class="rg-k">可用主机数</span
+              ><span class="rg-v">{{ ipResult.usableHosts }}（共 {{ ipResult.totalHosts }} 个地址）</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 哈希计算 -->
+        <div v-if="activeTool === 'hash'" class="tb-view">
+          <div class="tb-head">
+            <div class="tb-headline">
+              <span class="tb-title">哈希计算</span>
+              <span class="tb-hint">文件/备份校验、口令指纹比对；输出小写十六进制</span>
+            </div>
+            <span class="t-spacer"></span>
+            <button class="tb-btn-help" @click="openHelp"><StrokeIcon name="help" :size="13" />帮助</button>
+            <button class="tb-btn-clear" @click="clearTool('hash')">清空</button>
+          </div>
+          <div class="tb-single">
+            <a-textarea
+              v-model:value="hashInput"
+              :rows="4"
+              class="tb-ta tb-ta-fixed"
+              placeholder="输入要计算哈希的文本，输入即算"
+            />
+          </div>
+          <div v-if="hashResults" class="tb-result">
+            <div v-for="row in hashResults" :key="row.name" class="tb-rg">
+              <span class="rg-k">{{ row.name }}</span>
+              <span class="rg-v">{{ row.value || '—' }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Keepalived 配置生成 -->
+        <div v-if="activeTool === 'keepalived'" class="tb-view ka-view">
+          <div class="tb-head">
+            <div class="tb-headline">
+              <span class="tb-title">Keepalived 配置生成</span>
+              <span class="tb-hint">多节点 VRRP 高可用（单播 + VIP）全套配置与部署命令，纯前端生成</span>
+            </div>
+            <span class="t-spacer"></span>
+            <button class="tb-btn-help" @click="openHelp"><StrokeIcon name="help" :size="13" />帮助</button>
+            <button class="tb-btn-clear" @click="clearTool('keepalived')">清空</button>
+          </div>
+
+          <div class="tb-kaform">
+            <div class="tb-field tb-field-vip">
               <label>VIP 地址</label>
               <a-input v-model:value="kaVip" placeholder="10.128.216.154" />
             </div>
+            <div class="tb-field">
+              <label>节点 IP 列表（每行一条：节点IP 网卡名，空格分隔，2–8 个）</label>
+              <a-textarea
+                v-model:value="kaNodesText"
+                :rows="4"
+                class="tb-ta tb-ta-fixed tb-nodes"
+                placeholder="10.128.216.160 ens7&#10;10.128.216.161 eth1&#10;10.128.216.162 bond0"
+              />
+            </div>
+            <a-checkbox v-model:checked="kaAdvanced">高级参数</a-checkbox>
+            <div v-show="kaAdvanced" class="tb-grid3">
+              <div class="tb-field">
+                <label>VIP 掩码位</label>
+                <a-input-number v-model:value="kaMaskBits" :min="8" :max="32" />
+              </div>
+              <div class="tb-field">
+                <label>VRRP 组 ID</label>
+                <a-input-number v-model:value="kaVrrpId" :min="1" :max="255" />
+              </div>
+              <div class="tb-field">
+                <label>认证密码（前 8 字符生效）</label>
+                <a-input v-model:value="kaAuthPass" placeholder="12345678" />
+              </div>
+              <div class="tb-field">
+                <label>优先级起始</label>
+                <a-input-number v-model:value="kaPriorityStart" :min="1" :max="255" />
+              </div>
+              <div class="tb-field">
+                <label>优先级步长</label>
+                <a-input-number v-model:value="kaPriorityStep" :min="1" :max="50" />
+              </div>
+              <div class="tb-field">
+                <label>router_id 前缀</label>
+                <a-input v-model:value="kaRouterIdPrefix" placeholder="EDGE_DNS_" />
+              </div>
+              <div class="tb-field">
+                <label>健康检查端口</label>
+                <a-input-number v-model:value="kaCheckPort" :min="1" :max="65535" />
+              </div>
+            </div>
           </div>
-          <div class="ka-row ka-col">
-            <label>节点 IP 列表（每行一条：节点IP 网卡名，空格分隔，2–8 个）</label>
-            <a-textarea
-              v-model:value="kaNodesText"
-              :rows="4"
-              placeholder="10.128.216.160 ens7&#10;10.128.216.161 eth1&#10;10.128.216.162 bond0"
-            />
+
+          <div v-for="e in kaValidation.errors" :key="'e' + e" class="diff-error">{{ e }}</div>
+          <div v-for="w in kaValidation.warnings" :key="'w' + w" class="tb-warnline">
+            <StrokeIcon name="warnOutline" :size="13" />
+            <span>{{ w }}</span>
           </div>
-          <a-checkbox v-model:checked="kaAdvanced">高级参数</a-checkbox>
-          <div v-show="kaAdvanced" class="ka-grid ka-grid-3">
-            <div class="ka-row">
-              <label>VIP 掩码位</label>
-              <a-input-number v-model:value="kaMaskBits" :min="8" :max="32" />
+
+          <template v-if="kaResult">
+            <div class="tb-group-title">共用脚本<span class="g-note">所有节点一致，写入 /etc/keepalived/</span></div>
+            <div v-for="f in kaSharedFiles" :key="f.key" class="tb-file">
+              <div class="tb-file-head">
+                <span class="tb-fname">{{ f.filename }} · {{ f.title }}</span>
+                <span class="t-spacer"></span>
+                <button class="tb-mini" @click="copyToClipboard(f.content)">复制</button>
+                <button class="tb-mini" @click="downloadFile(f.filename, f.content)">下载</button>
+              </div>
+              <pre class="tb-pre tb-file-pre">{{ f.content }}</pre>
             </div>
-            <div class="ka-row">
-              <label>VRRP 组 ID</label>
-              <a-input-number v-model:value="kaVrrpId" :min="1" :max="255" />
+
+            <div class="tb-group-title">
+              各节点配置（{{ kaNodes.length }} 节点；conf 差异仅五处：router_id / priority / unicast_src_ip /
+              unicast_peer / 网卡名）
             </div>
-            <div class="ka-row">
-              <label>认证密码（前 8 字符生效）</label>
-              <a-input v-model:value="kaAuthPass" placeholder="12345678" />
+            <a-collapse>
+              <a-collapse-panel
+                v-for="n in kaNodeGroups"
+                :key="n.ip"
+                :header="`Edge-${n.index + 1} · ${n.ip}（conf + 防火墙放行）`"
+              >
+                <div v-for="f in n.files" :key="f.key" class="tb-file">
+                  <div class="tb-file-head">
+                    <span class="tb-fname">{{ f.filename }}</span>
+                    <span class="t-spacer"></span>
+                    <button class="tb-mini" @click="copyToClipboard(f.content)">复制</button>
+                    <button class="tb-mini" @click="downloadFile(f.filename, f.content)">下载</button>
+                  </div>
+                  <pre class="tb-pre tb-file-pre">{{ f.content }}</pre>
+                </div>
+              </a-collapse-panel>
+            </a-collapse>
+
+            <div class="tb-group-title">部署手册<span class="g-note">所有节点</span></div>
+            <div class="tb-file">
+              <div class="tb-file-head">
+                <span class="tb-fname">keepalived-deploy-manual.md</span>
+                <span class="t-spacer"></span>
+                <button class="tb-mini" @click="copyToClipboard(kaResult.handbook)">复制</button>
+                <button class="tb-mini" @click="downloadFile('keepalived-deploy-manual.md', kaResult.handbook)">
+                  下载
+                </button>
+              </div>
+              <pre class="tb-pre tb-file-pre">{{ kaResult.handbook }}</pre>
             </div>
-            <div class="ka-row">
-              <label>优先级起始</label>
-              <a-input-number v-model:value="kaPriorityStart" :min="1" :max="255" />
-            </div>
-            <div class="ka-row">
-              <label>优先级步长</label>
-              <a-input-number v-model:value="kaPriorityStep" :min="1" :max="50" />
-            </div>
-            <div class="ka-row">
-              <label>router_id 前缀</label>
-              <a-input v-model:value="kaRouterIdPrefix" placeholder="EDGE_DNS_" />
-            </div>
-            <div class="ka-row">
-              <label>健康检查端口</label>
-              <a-input-number v-model:value="kaCheckPort" :min="1" :max="65535" />
-            </div>
-          </div>
+          </template>
         </div>
 
-        <div v-for="e in kaValidation.errors" :key="'e' + e" class="diff-error">{{ e }}</div>
-        <div v-for="w in kaValidation.warnings" :key="'w' + w" class="ka-warn">{{ w }}</div>
-
-        <template v-if="kaResult">
-          <h4 class="ka-group">共用脚本（所有节点一致，写入 /etc/keepalived/）</h4>
-          <div v-for="f in kaSharedFiles" :key="f.key" class="ka-file">
-            <div class="ka-file-head">
-              <span class="ka-fname">{{ f.filename }} · {{ f.title }}</span>
-              <span class="spacer"></span>
-              <button class="btn-clear" @click="copyToClipboard(f.content)">复制</button>
-              <button class="btn-clear" @click="downloadFile(f.filename, f.content)">下载</button>
-            </div>
-            <pre class="ka-pre">{{ f.content }}</pre>
-          </div>
-
-          <h4 class="ka-group">
-            各节点配置（{{ kaNodes.length }} 节点；conf 差异仅五处：router_id / priority / unicast_src_ip / unicast_peer
-            / 网卡名）
-          </h4>
-          <a-collapse>
-            <a-collapse-panel
-              v-for="n in kaNodeGroups"
-              :key="n.ip"
-              :header="`Edge-${n.index + 1} · ${n.ip}（conf + 防火墙放行）`"
-            >
-              <div v-for="f in n.files" :key="f.key" class="ka-file">
-                <div class="ka-file-head">
-                  <span class="ka-fname">{{ f.filename }}</span>
-                  <span class="spacer"></span>
-                  <button class="btn-clear" @click="copyToClipboard(f.content)">复制</button>
-                  <button class="btn-clear" @click="downloadFile(f.filename, f.content)">下载</button>
-                </div>
-                <pre class="ka-pre">{{ f.content }}</pre>
-              </div>
-            </a-collapse-panel>
-          </a-collapse>
-
-          <h4 class="ka-group">部署手册（所有节点）</h4>
-          <div class="ka-file">
-            <div class="ka-file-head">
-              <span class="ka-fname">keepalived-deploy-manual.md</span>
-              <span class="spacer"></span>
-              <button class="btn-clear" @click="copyToClipboard(kaResult.handbook)">复制</button>
-              <button class="btn-clear" @click="downloadFile('keepalived-deploy-manual.md', kaResult.handbook)">
-                下载
-              </button>
-            </div>
-            <pre class="ka-pre">{{ kaResult.handbook }}</pre>
-          </div>
-        </template>
-      </div>
-
-      <!-- 帮助抽屉（tools-help-drawer）：文档跟随 activeTool，关闭回到操作现场 -->
-      <ToolHelpDrawer :open="helpOpen" :tool-key="activeTool" :tool-label="activeToolLabel" @close="helpOpen = false" />
-    </a-layout-content>
-  </a-layout>
+        <!-- 帮助抽屉（tools-help-drawer）：文档跟随 activeTool，关闭回到操作现场 -->
+        <ToolHelpDrawer
+          :open="helpOpen"
+          :tool-key="activeTool"
+          :tool-label="activeToolLabel"
+          @close="helpOpen = false"
+        />
+      </section>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
-import {
-  CodeOutlined,
-  LinkOutlined,
-  FileTextOutlined,
-  LockOutlined,
-  BlockOutlined,
-  SnippetsOutlined,
-  ColumnWidthOutlined,
-  ClockCircleOutlined,
-  KeyOutlined,
-  SwapOutlined,
-  DiffOutlined,
-  GlobalOutlined,
-  SafetyCertificateOutlined,
-  ClusterOutlined,
-  QuestionCircleOutlined,
-} from '@ant-design/icons-vue'
 import { luaToConfigString, configStringToLua } from '@/utils/tools/lua'
 import * as toolsUrl from '@/utils/tools/url'
 import * as toolsJson from '@/utils/tools/json'
@@ -680,6 +735,10 @@ import { parseCidr, type CidrResult } from '@/utils/tools/ip'
 import { md5, shaHex } from '@/utils/tools/hash'
 import { textLineDiff } from '@/utils/tools/textdiff'
 import ToolHelpDrawer from '@/components/ToolHelpDrawer.vue'
+import PageHeader from '@/components/PageHeader.vue'
+import PageStatBadges from '@/components/PageStatBadges.vue'
+import StrokeIcon from '@/components/StrokeIcon.vue'
+import type { StrokeIconName } from '@/components/StrokeIcon.vue'
 import {
   KEEPALIVED_DEFAULTS,
   generateKeepalivedConfig,
@@ -693,25 +752,33 @@ interface ToolItem {
   label: string
   /** 导航栏短名（132px 栏宽下不折行） */
   shortLabel: string
-  icon: any
+  /** StrokeIcon 设计线稿图标名（tools-page-restyle：antd 圈形图标退场） */
+  icon: StrokeIconName
 }
 
 const tools: ToolItem[] = [
-  { key: 'lua', label: 'Lua 互转', shortLabel: 'Lua 互转', icon: CodeOutlined },
-  { key: 'url', label: 'URL 编解码', shortLabel: 'URL', icon: LinkOutlined },
-  { key: 'json', label: 'JSON 格式化', shortLabel: 'JSON', icon: FileTextOutlined },
-  { key: 'sm4', label: 'SM4 加解密', shortLabel: 'SM4', icon: LockOutlined },
-  { key: 'base64', label: 'Base64 编解码', shortLabel: 'Base64', icon: BlockOutlined },
-  { key: 'yaml', label: 'YAML 格式化', shortLabel: 'YAML', icon: SnippetsOutlined },
-  { key: 'diff', label: 'JSON 对比', shortLabel: 'JSON 对比', icon: ColumnWidthOutlined },
-  { key: 'timestamp', label: '时间戳转换', shortLabel: '时间戳', icon: ClockCircleOutlined },
-  { key: 'jwt', label: 'JWT 解码', shortLabel: 'JWT', icon: KeyOutlined },
-  { key: 'convert', label: 'YAML↔JSON 互转', shortLabel: '互转', icon: SwapOutlined },
-  { key: 'textdiff', label: '文本 Diff', shortLabel: '文本对比', icon: DiffOutlined },
-  { key: 'ipcalc', label: 'IPv4/CIDR 计算器', shortLabel: 'IP/CIDR', icon: GlobalOutlined },
-  { key: 'hash', label: '哈希计算', shortLabel: '哈希', icon: SafetyCertificateOutlined },
-  { key: 'keepalived', label: 'Keepalived 配置', shortLabel: 'Keepalived', icon: ClusterOutlined },
+  { key: 'lua', label: 'Lua 互转', shortLabel: 'Lua 互转', icon: 'code' },
+  { key: 'url', label: 'URL 编解码', shortLabel: 'URL', icon: 'link' },
+  { key: 'json', label: 'JSON 格式化', shortLabel: 'JSON', icon: 'braces' },
+  { key: 'sm4', label: 'SM4 加解密', shortLabel: 'SM4', icon: 'lock' },
+  { key: 'base64', label: 'Base64 编解码', shortLabel: 'Base64', icon: 'blocks' },
+  { key: 'yaml', label: 'YAML 格式化', shortLabel: 'YAML', icon: 'fileText' },
+  { key: 'diff', label: 'JSON 对比', shortLabel: 'JSON 对比', icon: 'columns' },
+  { key: 'timestamp', label: '时间戳转换', shortLabel: '时间戳', icon: 'clock' },
+  { key: 'jwt', label: 'JWT 解码', shortLabel: 'JWT', icon: 'key' },
+  { key: 'convert', label: 'YAML↔JSON 互转', shortLabel: '互转', icon: 'swap' },
+  { key: 'textdiff', label: '文本 Diff', shortLabel: '文本对比', icon: 'fileDiff' },
+  { key: 'ipcalc', label: 'IPv4/CIDR 计算器', shortLabel: 'IP/CIDR', icon: 'globe' },
+  { key: 'hash', label: '哈希计算', shortLabel: '哈希', icon: 'shieldCheck' },
+  { key: 'keepalived', label: 'Keepalived 配置', shortLabel: 'Keepalived', icon: 'server' },
 ]
+
+// 页头统计徽标（tools-page-restyle）：首枚 = 工具清单长度（组件保证首项 accent），
+// 次枚 = 「全部工具纯本地转换、零网络请求」的静态事实，非运行时统计
+const headerStatItems = computed(() => [
+  { value: tools.length, label: '个工具' },
+  { value: 0, label: '外发请求' },
+])
 
 const TOOL_KEYS = tools.map((t) => t.key)
 
@@ -1146,403 +1213,578 @@ async function pasteFromClipboard(setter: (text: string) => void, evt?: Event): 
 </script>
 
 <style scoped>
-.tools-layout {
+/* ===== 工具箱工作台（tools-page-restyle）=====
+   视觉基准 docs/ui/Live-Artifact-5/proposal-c/tools.html，类名与设计页同名（tb-*）便于逐元素量测；
+   守卫 mockupParity.source.test.ts tools 段。 */
+.tools-page {
   height: calc(100vh - 96px);
-  background: transparent;
-}
-
-.tools-sider {
-  background: var(--bg) !important;
-  border-right: 1px solid var(--border);
-  padding-top: 12px;
-}
-
-.icon-list {
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  gap: 4px;
+  min-height: 0;
 }
 
-/* 导航项：图标+文字（tools-ux-review-fixes 2.1，56px 纯图标辨识度不足） */
-.nav-item {
+/* 工作台外壳：工具栏 + 工作区同卡一体（单层描边，.l5-card 为全站卡片壳） */
+.tb-workbench {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+/* 工具栏：132px 图标+文字（tools-ux-review-fixes 2.1 的 IA 不变） */
+.tb-rail {
+  width: 132px;
+  flex-shrink: 0;
+  background: var(--bg);
+  border-right: 1px solid var(--border);
+  border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+  padding: 10px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  overflow-y: auto;
+}
+
+.tb-tool {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 3px;
-  padding: 9px 4px;
-  border-radius: 8px;
-  cursor: pointer;
+  padding: 7px 4px 6px;
+  border-radius: var(--radius-md);
   color: var(--muted);
-  font-size: 18px;
-  transition: all 0.2s;
+  cursor: pointer;
+  transition: all 0.12s;
+  user-select: none;
+  flex-shrink: 0;
 }
 
-.nav-label {
-  font-size: 12px;
-  line-height: 1;
+.tb-tool .tb-tlabel {
+  font-size: 11px;
+  line-height: 1.2;
   white-space: nowrap;
 }
 
-.nav-item:hover {
-  background: oklch(56% 0.16 210 / 10%);
+.tb-tool:hover {
+  background: oklch(56% 0.16 210 / 8%);
   color: var(--accent);
 }
 
-.nav-item.active {
+.tb-tool.active {
   background: var(--accent);
   color: #fff;
+  font-weight: 500;
 }
 
-.tool-panel {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  padding: 24px;
-}
-
-.tools-content {
-  padding: 24px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-}
-.tools-content .tool-panel {
+/* 工作区：面板本体（外壳卡片的白色区域，不嵌第二层卡片） */
+.tb-stage {
   flex: 1;
+  min-width: 0;
+  padding: 16px 18px 18px;
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
+}
+
+.tb-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
   min-height: 0;
 }
-/* 长内容工具（keepalived）：面板随内容自然增高，滚动交给 .tools-content（其余工具保持 flex:1 内部滚动布局不变） */
-.tools-content .tool-panel.ka-panel {
+
+/* 长内容工具（keepalived）：随内容自然增高，滚动交给 .tb-stage */
+.tb-view.ka-view {
   flex: 0 0 auto;
 }
-.tools-content .tool-panel .dual-panel {
-  flex: 1;
-  align-items: stretch;
-  min-height: 0;
-}
-.tools-content .tool-panel .panel-left,
-.tools-content .tool-panel .panel-right {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-.tools-content .tool-panel .panel-left :deep(.ant-form-item),
-.tools-content .tool-panel .panel-right :deep(.ant-form-item) {
-  flex: 1;
-}
-.tools-content .tool-panel .panel-left :deep(textarea),
-.tools-content .tool-panel .panel-right :deep(textarea) {
-  flex: 1;
-  min-height: 100px;
-}
-/* SM4 has key row above, adjust */
-.tools-content .tool-panel .sm4-key-row + .dual-panel {
-  flex: 1;
-  min-height: 0;
-}
 
-.tool-header {
-  font-size: 16px;
-  font-weight: 500;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--border);
-  color: var(--fg);
+/* 面板头：标题 + 用途提示 + 帮助 / 清空 */
+.tb-head {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 14px;
+  flex-shrink: 0;
 }
 
-.tool-header .spacer {
-  flex: 1;
+.tb-headline {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
-/* 面板清空按钮（tools-ux-review-fixes 2.4） */
-.btn-clear {
-  border: 1px solid var(--border);
-  background: transparent;
+.tb-title {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--fg);
+  white-space: nowrap;
+}
+
+.tb-hint {
+  font-size: 12px;
   color: var(--muted);
-  border-radius: 6px;
-  padding: 3px 12px;
-  font-size: 12px;
-  font-weight: 400;
-  cursor: pointer;
+  min-width: 0;
 }
 
-.btn-clear:hover {
-  color: var(--danger, #dc2626);
-  border-color: var(--danger, #dc2626);
+.tb-head .t-spacer {
+  flex: 1 1 12px;
 }
 
-/* 头部帮助按钮（tools-help-drawer）：accent 弱底色，与清空按钮同尺寸族 */
-.btn-help {
-  border: 1px solid transparent;
-  background: oklch(56% 0.16 210 / 10%);
-  color: var(--accent);
-  border-radius: 6px;
-  padding: 3px 12px;
-  font-size: 12px;
-  font-weight: 400;
-  cursor: pointer;
+/* 三按钮语义分离：帮助=accent 弱底 / ghost=中性填充动作（当前时间等）/ clear=清空（危险色 hover） */
+.tb-btn-help {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.12s;
+  flex-shrink: 0;
 }
-
-.btn-help:hover {
+.tb-btn-help:hover {
   background: oklch(56% 0.16 210 / 18%);
 }
 
-/* SM4 短密钥警告条（tools-ux-review-fixes 2.3） */
-.sm4-warn {
-  background: #fffbeb;
-  border: 1px solid #fde68a;
-  color: #92400e;
-  border-radius: 8px;
-  padding: 9px 14px;
-  font-size: 13px;
-  font-weight: 400;
-  margin-bottom: 12px;
-}
-
-/* 时间戳/JWT 单输入行（tools-new-utilities） */
-.single-input-row {
-  margin-bottom: 14px;
-}
-
-.single-input-row :deep(textarea) {
-  font-family: ui-monospace, monospace;
-  width: 100%;
-}
-
-/* 转换结果对照表（时间戳 / exp 行共用） */
-.result-grid {
+.tb-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 10px;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.12s;
+  flex-shrink: 0;
+}
+.tb-btn-ghost:hover {
+  color: var(--accent);
+  border-color: oklch(56% 0.16 210 / 45%);
+  background: var(--accent-bg);
 }
 
-.rg-row {
+.tb-btn-clear {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.12s;
+  flex-shrink: 0;
+}
+.tb-btn-clear:hover {
+  color: var(--danger);
+  border-color: oklch(55% 0.18 28 / 45%);
+  background: oklch(55% 0.18 28 / 8%);
+}
+
+/* 双栏对转 */
+.tb-dual {
+  display: flex;
+  gap: 14px;
+  align-items: stretch;
+}
+
+/* 双栏撑满工作区（文本区等高拉伸，行为同改造前） */
+.tb-view .tb-dual {
+  flex: 1;
+  min-height: 0;
+}
+
+.tb-dual-diff {
+  flex: 1 1 auto;
+}
+
+.tb-pane {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.tb-plabel {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  margin-bottom: 6px;
+  flex-shrink: 0;
+}
+
+/* 文本区：机器文本一律等宽（值用 mono 约定）；两级选择器压过 antd .ant-input 同权重默认 */
+.tb-ta,
+.tb-view .tb-ta,
+.tb-pane :deep(textarea),
+.tb-single :deep(textarea) {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--fg);
+  outline: none;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+
+.tb-view .tb-ta:focus,
+.tb-pane :deep(textarea:focus),
+.tb-single :deep(textarea:focus) {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-bg);
+}
+
+/* 输入即算类单输入：行高由 rows 决定，不参与双栏拉伸 */
+.tb-single {
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+
+.tb-view .tb-pane :deep(textarea) {
+  flex: 1;
+  min-height: 100px;
+}
+
+/* 复制/粘贴 mini 按钮 */
+.tb-copyrow {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  flex-shrink: 0;
+}
+
+.tb-mini {
+  height: 24px;
+  padding: 0 10px;
+  font-size: 11.5px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+.tb-mini:hover {
+  color: var(--accent);
+  border-color: oklch(56% 0.16 210 / 45%);
+  background: var(--accent-bg);
+}
+
+/* 中部动作按钮列 */
+.tb-mid {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  padding-top: 26px;
+}
+
+/* 输入即算结果格：容器化逐行分隔，主行 accent 强调 */
+.tb-result {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--surface);
+  flex-shrink: 0;
+}
+
+.tb-rg {
   display: flex;
   align-items: baseline;
-  gap: 16px;
-  padding: 8px 14px;
+  gap: 12px;
+  padding: 7px 12px;
   border-bottom: 1px solid var(--border);
-  font-size: 13px;
+  font-size: 12.5px;
 }
-
-.rg-row:last-child {
+.tb-rg:last-child {
   border-bottom: none;
 }
 
-.rg-row.rg-hl {
-  background: #f0f9ff;
-}
-
-.rg-key {
-  width: 110px;
-  flex-shrink: 0;
+.rg-k {
+  flex: 0 0 96px;
   color: var(--muted);
+  font-size: 11.5px;
+  white-space: nowrap;
 }
 
-.rg-val {
-  font-family: ui-monospace, monospace;
+.rg-v {
+  font-family: var(--font-mono);
+  color: var(--fg);
   word-break: break-all;
 }
 
-/* JWT 展示块 */
-.jwt-block {
-  margin-bottom: 14px;
+.tb-rg.rg-hl {
+  background: oklch(56% 0.16 210 / 6%);
 }
-
-.jwt-block .panel-label {
-  margin-bottom: 6px;
-}
-
-/* Keepalived 配置生成 */
-.ka-form {
-  margin-bottom: 12px;
-}
-
-.ka-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px 16px;
-}
-
-.ka-grid-3 .ka-row {
-  width: calc((100% - 32px) / 3);
-}
-
-.ka-row {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 220px;
-}
-
-.ka-row label {
-  font-size: 12px;
-  color: var(--muted);
+.tb-rg.rg-hl .rg-k {
+  color: var(--accent);
   font-weight: 600;
 }
 
-.ka-row.ka-col {
-  margin-top: 2px;
+.tb-exprow {
+  margin-top: 12px;
 }
 
-.ka-warn {
-  margin-top: 8px;
-  padding: 8px 12px;
-  font-size: 12px;
-  color: var(--warning);
-  background: oklch(80% 0.15 85 / 10%);
-  border: 1px solid oklch(80% 0.15 85 / 45%);
-  border-radius: 6px;
-}
-
-.ka-group {
-  margin: 18px 0 8px;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--fg);
-}
-
-.ka-file {
-  border: 1px solid var(--border);
-  border-radius: 8px;
+/* JWT 解码块 */
+.tb-block {
   margin-bottom: 10px;
-  overflow: hidden;
+  flex-shrink: 0;
 }
 
-.ka-file-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
+.tb-pre {
+  margin: 0;
   background: var(--bg);
-  border-bottom: 1px solid var(--border);
-}
-
-.ka-fname {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--fg);
-  font-family: var(--mono);
-}
-
-.ka-pre {
-  margin: 0;
-  padding: 10px 12px;
-  font-size: 12px;
-  line-height: 1.55;
-  font-family: var(--mono);
-  color: var(--fg);
-  background: var(--surface);
-  white-space: pre-wrap;
-  word-break: break-all;
-  max-height: 420px;
-  overflow: auto;
-}
-
-.jwt-pre {
-  background: var(--bg, #f5f7fa);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px 14px;
-  font-size: 13px;
-  line-height: 1.5;
-  overflow: auto;
-  max-height: 220px;
-  margin: 0;
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.65;
+  color: var(--fg);
   white-space: pre-wrap;
   word-break: break-all;
+  overflow: auto;
 }
 
+.tb-file .tb-pre.tb-file-pre {
+  border: none;
+  border-radius: 0;
+  max-height: 420px;
+}
+
+.tb-foot-hint {
+  margin-top: 10px;
+}
+
+/* 徽标（exp 剩余/已过期、私网段）：token 配色 */
 .exp-tag {
   display: inline-block;
   margin-left: 8px;
   padding: 1px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-family: inherit;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .exp-tag.is-expired {
-  background: #fee2e2;
-  color: #b91c1c;
+  background: oklch(55% 0.18 28 / 12%);
+  color: var(--danger);
 }
 
 .exp-tag.is-alive {
-  background: #dcfce7;
-  color: #15803d;
+  background: oklch(55% 0.15 145 / 12%);
+  color: var(--success);
 }
 
-.tool-hint {
-  font-size: 12px;
-  font-weight: 400;
-  color: var(--muted);
-}
-
-.dual-panel {
+/* SM4：黄色警示条（非阻断）+ 密钥行 */
+.tb-warn {
   display: flex;
-  gap: 16px;
   align-items: flex-start;
-}
-
-.panel-left,
-.panel-right {
-  flex: 1;
-  min-width: 0;
-}
-
-.panel-label {
-  font-size: 13px;
-  color: var(--muted);
-  margin-bottom: 6px;
-}
-
-.copy-row {
-  display: flex;
   gap: 8px;
-  margin-top: 8px;
-}
-
-.panel-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-top: 24px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  border-radius: var(--radius-md);
+  font-size: 12.5px;
+  line-height: 1.55;
+  background: oklch(65% 0.15 85 / 8%);
+  border: 1px solid oklch(65% 0.15 85 / 20%);
+  color: oklch(57% 0.13 70);
   flex-shrink: 0;
-  align-items: center;
+}
+.tb-warn :deep(svg) {
+  flex-shrink: 0;
+  margin-top: 2px;
 }
 
-.sm4-key-row {
+.tb-keyrow {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 .key-label {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--muted);
   white-space: nowrap;
 }
 
-:deep(.ant-card) {
-  background: var(--surface) !important;
-  border-color: var(--border) !important;
+.tb-keyrow .tb-keyinp {
+  width: 260px;
 }
-:deep(.ant-select-selector) {
-  background: var(--surface) !important;
-  border: 1px solid var(--border) !important;
+
+/* 差异结果图例行（摘要行由 v-html 的 .dl-summary 承担，见文末全局块） */
+.tb-difflegend {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 12px 12px 0;
 }
-:deep(.ant-select-selection-item) {
-  color: var(--fg) !important;
+
+/* Keepalived 生成器表单 */
+.tb-kaform {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 4px;
+  flex-shrink: 0;
+}
+
+.tb-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.tb-field > label {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.tb-field-vip :deep(.ant-input) {
+  width: 280px;
+}
+
+.tb-nodes {
+  height: 84px;
+  min-height: 84px;
+}
+
+.tb-grid3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px 14px;
+}
+
+.tb-grid3 :deep(.ant-input-number) {
+  width: 100%;
+}
+
+.tb-warnline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 12.5px;
+  color: oklch(57% 0.13 70);
+}
+.tb-warnline :deep(svg) {
+  flex-shrink: 0;
+}
+
+/* 生成物分组标题 + 文件卡片 */
+.tb-group-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--fg);
+  margin: 16px 0 8px;
+  flex-shrink: 0;
+}
+
+.tb-group-title .g-note {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.tb-file {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  margin-bottom: 10px;
+  background: var(--surface);
+}
+
+.tb-file-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.tb-fname {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tb-file-head .t-spacer {
+  flex: 1;
+}
+
+/* 折叠（各节点配置）：antd 行为保留，仅对齐设计形态 */
+.tb-view :deep(.ant-collapse) {
+  background: transparent;
+  border: none;
+}
+
+.tb-view :deep(.ant-collapse-item) {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+
+.tb-view :deep(.ant-collapse-header) {
+  padding: 8px 10px;
+  font-size: 12.5px;
+  color: var(--fg);
+}
+
+.tb-view :deep(.ant-collapse-content) {
+  background: var(--surface);
+  border: none;
+}
+
+.tb-view :deep(.ant-collapse-content-box) {
+  padding: 10px;
+}
+
+/* JWT 脚注等次要提示 */
+.tool-hint {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
 }
 </style>
 

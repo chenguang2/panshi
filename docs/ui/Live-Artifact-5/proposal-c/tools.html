@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>工具箱 · 方案 C 工作台 — 磐石网关管理平台</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+/* —— 本页专属解剖（工具箱）：工作台 = 工具栏 + 工作区；
+   五类面板解剖（双栏对转 / 双栏+差异结果 / 输入即算+结果格 / 解码块 / 密钥行 / 表单生成器）
+   全部走 theme token，不自造颜色 —— */
+.page-header h1 { font-size: 21px; }
+
+/* ══ 主视图：工作台外壳 ══ */
+.tb-workbench { display: flex; align-items: stretch; margin-bottom: 8px; }
+
+/* 工具栏：132px 图标+文字（与实现 tools-ux-review-fixes 2.1 同 IA；56px 纯图标已废弃） */
+.tb-rail { width: 132px; flex-shrink: 0; background: var(--bg); border-right: 1px solid var(--border);
+  border-radius: var(--radius-lg) 0 0 var(--radius-lg); padding: 10px 8px;
+  display: flex; flex-direction: column; gap: 3px; }
+.tb-tool { display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 7px 4px 6px; border-radius: var(--radius-md); color: var(--muted);
+  cursor: pointer; transition: all .12s; user-select: none; }
+.tb-tool svg { width: 17px; height: 17px; flex-shrink: 0; }
+.tb-tool .tb-tlabel { font-size: 11px; line-height: 1.2; white-space: nowrap; }
+.tb-tool:hover { background: oklch(56% 0.16 210 / 8%); color: var(--accent); }
+.tb-tool.active { background: var(--accent); color: #fff; font-weight: 500; }
+
+/* 工作区：即面板本体（外壳卡片的白色区域，不嵌第二层卡片） */
+.tb-stage { flex: 1; min-width: 0; padding: 16px 18px 18px; display: flex; flex-direction: column; }
+
+/* 面板头：标题 + 用途提示 + spacer + 帮助 / 清空（帮助抽屉经「帮助」进入，theme .drawer 形态，设计稿不展开） */
+.tb-head { display: flex; align-items: center; gap: 10px; padding-bottom: 12px;
+  border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+.tb-headline { min-width: 0; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.tb-title { font-family: var(--font-display); font-size: 15px; font-weight: 600; letter-spacing: -0.01em; color: var(--fg); white-space: nowrap; }
+.tb-hint { font-size: 12px; color: var(--muted); min-width: 0; }
+.tb-head .t-spacer { flex: 1 1 12px; }
+.tb-btn-help { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 10px;
+  border: 1px solid transparent; border-radius: var(--radius-md); background: var(--accent-bg);
+  color: var(--accent); font-size: 12px; cursor: pointer; white-space: nowrap; transition: all .12s; }
+.tb-btn-help:hover { background: oklch(56% 0.16 210 / 18%); }
+.tb-btn-help svg { width: 13px; height: 13px; }
+.tb-btn-ghost { display: inline-flex; align-items: center; height: 26px; padding: 0 10px;
+  border: 1px solid var(--border); border-radius: var(--radius-md); background: transparent;
+  color: var(--muted); font-size: 12px; cursor: pointer; white-space: nowrap; transition: all .12s; }
+.tb-btn-ghost:hover { color: var(--accent); border-color: oklch(56% 0.16 210 / 45%); background: var(--accent-bg); }
+.tb-btn-clear { display: inline-flex; align-items: center; height: 26px; padding: 0 10px;
+  border: 1px solid var(--border); border-radius: var(--radius-md); background: transparent;
+  color: var(--muted); font-size: 12px; cursor: pointer; white-space: nowrap; transition: all .12s; }
+.tb-btn-clear:hover { color: var(--danger); border-color: oklch(55% 0.18 28 / 45%); background: oklch(55% 0.18 28 / 8%); }
+
+/* 双栏对转 */
+.tb-dual { display: flex; gap: 14px; align-items: stretch; flex: 1; min-height: 0; }
+.tb-pane { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.tb-plabel { font-size: 12px; font-weight: 500; color: var(--muted); margin-bottom: 6px; }
+.tb-ta { flex: 1; min-height: 208px; padding: 10px 12px; border: 1px solid var(--border);
+  border-radius: var(--radius-md); background: var(--surface); font-family: var(--font-mono);
+  font-size: 12.5px; line-height: 1.7; color: var(--fg); outline: none; resize: none; }
+.tb-ta:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
+.tb-ta::placeholder { font-family: var(--font-body); color: oklch(50% 0.018 240 / 45%); }
+.tb-copyrow { display: flex; gap: 6px; margin-top: 8px; }
+.tb-mini { height: 24px; padding: 0 10px; font-size: 11.5px; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); background: var(--surface); color: var(--muted);
+  cursor: pointer; transition: all .12s; white-space: nowrap; }
+.tb-mini:hover { color: var(--accent); border-color: oklch(56% 0.16 210 / 45%); background: var(--accent-bg); }
+.tb-mid { flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; align-items: center; padding-top: 26px; }
+
+/* 输入即算 + 结果格 */
+.tb-single { margin-bottom: 12px; }
+.tb-single .tb-ta { flex: 0 0 auto; width: 100%; }
+.tb-result { border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; background: var(--surface); }
+.tb-rg { display: flex; align-items: baseline; gap: 12px; padding: 7px 12px; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+.tb-rg:last-child { border-bottom: none; }
+.tb-rg .rg-k { flex: 0 0 96px; color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+.tb-rg .rg-v { font-family: var(--font-mono); color: var(--fg); word-break: break-all; }
+.tb-rg.rg-hl { background: oklch(56% 0.16 210 / 6%); }
+.tb-rg.rg-hl .rg-k { color: var(--accent); font-weight: 600; }
+
+/* 解码块（JWT） */
+.tb-pre { margin: 0; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-md);
+  padding: 10px 12px; font-family: var(--font-mono); font-size: 12px; line-height: 1.65;
+  color: var(--fg); white-space: pre-wrap; word-break: break-all; }
+.tb-block { margin-bottom: 10px; }
+
+/* 密钥行 + 警示条（SM4） */
+.tb-keyrow { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.tb-keyrow .key-label { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.tb-inp { height: 30px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface); font-family: var(--font-mono); font-size: 12.5px; color: var(--fg); outline: none;
+  transition: border-color .15s, box-shadow .15s; }
+.tb-inp:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
+.tb-warn { display: flex; align-items: flex-start; gap: 8px; padding: 8px 12px; margin-bottom: 12px;
+  border-radius: var(--radius-md); font-size: 12.5px; line-height: 1.55;
+  background: oklch(65% 0.15 85 / 8%); border: 1px solid oklch(65% 0.15 85 / 20%); color: oklch(57% 0.13 70); }
+.tb-warn svg { width: 14px; height: 14px; flex-shrink: 0; margin-top: 1px; }
+.tb-error { font-size: 12.5px; color: var(--danger); margin: -6px 0 12px; }
+
+/* 差异结果区（JSON 对比 / 文本 Diff） */
+.tb-diffsum { font-size: 12px; color: var(--muted); margin: 12px 0 6px; }
+.tb-difflines { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-md);
+  overflow: hidden; font-family: var(--font-mono); font-size: 12px; line-height: 1.75; }
+.tb-dl { padding: 0 12px; white-space: pre-wrap; }
+.tb-dl.dl-ctx { color: var(--muted); }
+.tb-dl.dl-del { background: oklch(55% 0.18 28 / 8%); color: var(--danger); }
+.tb-dl.dl-add { background: oklch(55% 0.15 145 / 8%); color: var(--success); }
+
+/* 表单生成器（Keepalived） */
+.tb-kaform { display: flex; flex-direction: column; gap: 12px; margin-bottom: 4px; }
+.tb-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.tb-field > label { font-size: 11.5px; color: var(--muted); }
+.tb-field .tb-inp { width: 280px; }
+.tb-grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 14px; }
+.tb-grid3 .tb-inp { width: 100%; }
+.tb-nodes { height: 84px; flex: 0 0 auto; }
+.tb-warnline { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: oklch(57% 0.13 70); }
+.tb-warnline svg { width: 13px; height: 13px; flex-shrink: 0; }
+.tb-group-title { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600;
+  color: var(--fg); margin: 16px 0 8px; }
+.tb-group-title .g-note { font-size: 11px; font-weight: 400; color: var(--muted); }
+.tb-file { border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; margin-bottom: 10px; background: var(--surface); }
+.tb-file-head { display: flex; align-items: center; gap: 8px; padding: 7px 10px; background: var(--bg); border-bottom: 1px solid var(--border); }
+.tb-file-head .tb-fname { font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tb-file-head .t-spacer { flex: 1; }
+.tb-file .tb-pre { border: none; border-radius: 0; max-height: 200px; overflow: auto; }
+.tb-fold { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--border);
+  border-radius: var(--radius-md); background: var(--bg); font-size: 12.5px; color: var(--fg); cursor: pointer; user-select: none; margin-bottom: 8px; }
+.tb-fold svg { width: 13px; height: 13px; color: var(--muted); }
+.tb-fold .f-note { font-size: 11px; color: var(--muted); }
+
+/* ══ 样张区 ══ */
+.tb-sechead { display: flex; align-items: baseline; gap: 10px; margin: 24px 0 4px; }
+.tb-sechead .t { font-size: 13px; font-weight: 700; color: var(--fg); }
+.tb-sechead .note { font-size: 11.5px; color: var(--muted); }
+.tb-annot { font-size: 11px; color: var(--muted); margin: 14px 0 6px 2px; }
+.tb-annot b { color: var(--fg); font-weight: 600; }
+.tb-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm); padding: 16px 18px 18px; }
+.tb-panel .tb-dual { min-height: 208px; }
+</style>
+</head>
+<body>
+<div class="app-layout">
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="sidebar-logo-icon">磐</div>
+    <span class="sidebar-logo-text">磐石</span>
+    <span class="sidebar-logo-version">v1.0</span>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">核心功能</div>
+      <a class="nav-item" href="overview.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h5v5H3v-5zm7 0h5v5h-5v-5z"/></svg><span>概览</span></a>
+      <a class="nav-item" href="clusters.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h14v5H2V3zm0 7h14v5H2v-5z"/></svg><span>集群管理</span></a>
+      <a class="nav-item" href="routes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l5-7v5h9v4H7v5l-5-7z"/></svg><span>路由管理</span></a>
+      <a class="nav-item" href="upstreams.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>上游管理</span></a>
+      <a class="nav-item" href="nodes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3a2 2 0 110 4 2 2 0 010-4zM3.5 14a2 2 0 110-4 2 2 0 010 4zM14.5 14a2 2 0 110-4 2 2 0 010 4z"/></svg><span>节点管理</span></a>
+      <a class="nav-item" href="plugin-groups.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h12v5H3v-5z"/></svg><span>插件组</span></a>
+      <a class="nav-item" href="plugin-metadata.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h8l3 3v9a1 1 0 01-1 1H5a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M9 7v4M9 13v-1"/></svg><span>插件元数据</span></a>
+      <a class="nav-item" href="global-rules.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l6 3v4c0 3-2.5 5.5-6 7-3.5-1.5-6-4-6-7V5l6-3z"/></svg><span>全局规则</span></a>
+      <a class="nav-item" href="static-resources.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3a1 1 0 011-1h6l4 4v10a1 1 0 01-1 1H6a1 1 0 01-1-1V3zM11 2v4h4"/></svg><span>静态资源</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">证书管理</div>
+      <a class="nav-item" href="ca-certs.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="12.5" r="2.5"/><path d="M8 12.5h7M13 12.5v2.5M15 12.5v2.5"/></svg><span>CA 根证书</span></a>
+      <a class="nav-item" href="server-certs.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="10" height="8" rx="1"/><path d="M6.5 8V6a2.5 2.5 0 015 0v2"/></svg><span>服务器证书</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">边缘网络</div>
+      <a class="nav-item" href="edge-env.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="2.5"/><path d="M9 3v2M9 13v2M3 9h2M13 9h2M4.5 4.5l1.5 1.5M12 12l1.5 1.5M4.5 13.5l1.5-1.5M12 6l1.5-1.5"/></svg><span>edge.env 配置</span></a>
+      <a class="nav-item" href="stream-proxies.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="12" height="4" rx="1"/><rect x="4" y="7" width="10" height="4" rx="1"/><rect x="5" y="12" width="8" height="4" rx="1"/></svg><span>四层代理</span></a>
+      <a class="nav-item" href="dns-udp-proxies.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="4" r="2"/><circle cx="4" cy="14" r="2"/><circle cx="14" cy="14" r="2"/><path d="M9 6v3M4 12l2-2M14 12l-2-2"/></svg><span>DNS代理[UDP]</span></a>
+      <a class="nav-item" href="dns-http-proxies.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="4" r="2"/><circle cx="4" cy="14" r="2"/><circle cx="14" cy="14" r="2"/><path d="M9 6v3M4 12l2-2M14 12l-2-2"/></svg><span>DNS代理[HTTP]</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">运维管理</div>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l7 7-7 7-7-7z"/></svg><span>Edge直连</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>数据导入</span></a>
+      <a class="nav-item active" href="tools.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h8v8H5V7zM7 7V5h4v2"/></svg><span>工具箱</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6-4 6 4v8l-6 4-6-4V6zM3 6l6 4m0 0l6-4m-6 4v8"/></svg><span>自启动管理</span></a>
+      <a class="nav-item" href="ansible-inventory.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="12" height="14" rx="1"/><path d="M6 6h6M6 9.5h6M6 13h4"/></svg><span>Ansible 主机清单</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6-4 6 4v8l-6 4-6-4V6zM3 6l6 4m0 0l6-4m-6 4v8"/></svg><span>节点任务</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="6" height="6" rx="1"/><rect x="10" y="10" width="6" height="6" rx="1"/><path d="M5 8v3a2 2 0 002 2h3"/></svg><span>中继区域管理</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">系统管理</div>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l5 3v6l-5 3-5-3V5l5-3z"/></svg><span>插件管理</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9a3 3 0 100-6 3 3 0 000 6zM3 16c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg><span>用户管理</span></a>
+      <a class="nav-item" href="plugin-switches.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9h8a4 4 0 010 8H5a4 4 0 010-8zM5 15a2 2 0 110-4 2 2 0 010 4z"/></svg><span>插件开关</span></a>
+    </div>
+  </nav>
+</aside>
+<div class="main-area">
+<header class="top-header"><div class="top-header-breadcrumb"><a href="index.html">首页</a><span>/</span><span>运维管理</span><span>/</span><span>工具箱</span></div><div class="top-header-actions"><div class="h-search"><input type="text" placeholder="搜索功能或页面..."><svg class="s-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div><div class="header-user"><div class="header-avatar">管</div><span>管理员</span></div></div></header>
+<div class="content-area">
+
+  <!-- ══════════ 页头：无页级动作（实现亦无） ══════════ -->
+  <div class="page-header" style="margin-bottom:20px;">
+    <div>
+      <h1>工具箱<span class="ph-inline"><span class="ph-lite lite-accent"><b>14</b> 个工具</span><span class="ph-lite"><b>0</b> 外发请求</span></span></h1>
+      <p>日常开发调试的本地工具集：编解码、格式化、对比与配置生成，全部在浏览器本地完成，输入不出本机。</p>
+    </div>
+  </div>
+
+  <!-- ══════════ 主视图：工具栏 + 默认工具（Lua 互转，与实现进页默认态一致） ══════════ -->
+  <div class="l5-card tb-workbench">
+    <aside class="tb-rail">
+      <div class="tb-tool active" title="Lua 互转"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 6 3 12 8 18"/><polyline points="16 6 21 12 16 18"/></svg><span class="tb-tlabel">Lua 互转</span></div>
+      <div class="tb-tool" title="URL 编解码"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 007.5.5l3-3a5 5 0 00-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 00-7.5-.5l-3 3a5 5 0 007 7l1.7-1.7"/></svg><span class="tb-tlabel">URL</span></div>
+      <div class="tb-tool" title="JSON 格式化"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H7a2 2 0 00-2 2v4a2 2 0 01-2 2 2 2 0 012 2v4a2 2 0 002 2h1"/><path d="M16 3h1a2 2 0 012 2v4a2 2 0 002 2 2 2 0 00-2 2v4a2 2 0 01-2 2h-1"/></svg><span class="tb-tlabel">JSON</span></div>
+      <div class="tb-tool" title="SM4 加解密"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg><span class="tb-tlabel">SM4</span></div>
+      <div class="tb-tool" title="Base64 编解码"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span class="tb-tlabel">Base64</span></div>
+      <div class="tb-tool" title="YAML 格式化"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h9l5 5v13a1 1 0 01-1 1H6a1 1 0 01-1-1V3a1 1 0 011-1z"/><path d="M14 2v5h5"/><path d="M9 13h6M9 17h6"/></svg><span class="tb-tlabel">YAML</span></div>
+      <div class="tb-tool" title="JSON 对比"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="7" height="16" rx="1"/><rect x="14" y="4" width="7" height="16" rx="1"/></svg><span class="tb-tlabel">JSON 对比</span></div>
+      <div class="tb-tool" title="时间戳转换"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span class="tb-tlabel">时间戳</span></div>
+      <div class="tb-tool" title="JWT 解码"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M11 12L20 3M16 7l3 3"/></svg><span class="tb-tlabel">JWT</span></div>
+      <div class="tb-tool" title="YAML ↔ JSON 互转"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h13M13 3l4 4-4 4"/><path d="M20 17H7M11 21l-4-4 4-4"/></svg><span class="tb-tlabel">互转</span></div>
+      <div class="tb-tool" title="文本 Diff"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h9l5 5v13a1 1 0 01-1 1H6a1 1 0 01-1-1V3a1 1 0 011-1z"/><path d="M12 10v6M9 13h6"/></svg><span class="tb-tlabel">文本对比</span></div>
+      <div class="tb-tool" title="IPv4/CIDR 计算器"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18"/></svg><span class="tb-tlabel">IP/CIDR</span></div>
+      <div class="tb-tool" title="哈希计算"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 3v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V5l8-3z"/><path d="M9 11l2 2 4-4"/></svg><span class="tb-tlabel">哈希</span></div>
+      <div class="tb-tool" title="Keepalived 配置生成"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="6" rx="1"/><rect x="3" y="14" width="18" height="6" rx="1"/><path d="M7 7h.01M7 17h.01"/></svg><span class="tb-tlabel">Keepalived</span></div>
+    </aside>
+
+    <section class="tb-stage">
+      <div class="tb-head">
+        <div class="tb-headline">
+          <span class="tb-title">Lua 函数 ↔ 配置字符串</span>
+          <span class="tb-hint">用于插件 pre_functions 配置与 Lua 函数体的双向转换</span>
+        </div>
+        <span class="t-spacer"></span>
+        <button class="tb-btn-help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 015 .5c0 1.5-2.5 2-2.5 3.5M12 17h.01"/></svg>帮助</button>
+        <button class="tb-btn-clear">清空</button>
+      </div>
+      <div class="tb-dual">
+        <div class="tb-pane">
+          <div class="tb-plabel">Lua 函数体</div>
+          <textarea class="tb-ta">function(conf, ctx)
+  if not conf.name then
+    return 500, { message = "name required" }
+  end
+  ngx.log(ngx.INFO, "plugin ", conf.name, " hit")
+  return true
+end</textarea>
+          <div class="tb-copyrow"><button class="tb-mini">复制</button><button class="tb-mini">粘贴</button></div>
+        </div>
+        <div class="tb-mid">
+          <button class="btn btn-primary">转换为字符串 →</button>
+          <button class="btn btn-secondary">← 转换为函数</button>
+        </div>
+        <div class="tb-pane">
+          <div class="tb-plabel">配置字符串</div>
+          <textarea class="tb-ta">function(conf, ctx) if not conf.name then return 500, { message = "name required" } end ngx.log(ngx.INFO, "plugin ", conf.name, " hit") return true end</textarea>
+          <div class="tb-copyrow"><button class="tb-mini">复制</button><button class="tb-mini">粘贴</button></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ══════════ 工具形态样张：其余 13 个工具按以下五类解剖套用同一外壳与头部规范 ══════════ -->
+  <div class="tb-sechead">
+    <span class="t">工具形态样张</span>
+    <span class="note">主视图为默认态（Lua 互转）；其余 13 个工具共用同一外壳与头部（标题 + 用途提示 + 帮助 / 清空）。红色错误行（12.5px · --danger）出现在输入框正下方，解析失败时显示——JSON 对比 / 文本 Diff / 时间戳 / JWT / IP·CIDR 均有。</span>
+  </div>
+
+  <!-- 解剖 B：双栏 + 差异结果区 -->
+  <div class="tb-annot"><b>双栏 + 差异结果区</b> · JSON 对比 / 文本 Diff 共用（JSON 对比先归一键序，文本 Diff 逐行原样对比）</div>
+  <section class="tb-panel">
+    <div class="tb-head">
+      <div class="tb-headline">
+        <span class="tb-title">JSON 数据对比</span>
+        <span class="tb-hint">先格式化归一（键序无关）再逐行对比</span>
+      </div>
+      <span class="t-spacer"></span>
+      <button class="tb-btn-help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 015 .5c0 1.5-2.5 2-2.5 3.5M12 17h.01"/></svg>帮助</button>
+      <button class="tb-btn-clear">清空</button>
+    </div>
+    <div class="tb-dual" style="min-height:150px;">
+      <div class="tb-pane">
+        <div class="tb-plabel">JSON A</div>
+        <textarea class="tb-ta">{
+  "name": "test",
+  "timeout": 300,
+  "retries": 2
+}</textarea>
+        <div class="tb-copyrow"><button class="tb-mini">复制</button><button class="tb-mini">粘贴</button></div>
+      </div>
+      <div class="tb-mid">
+        <button class="btn btn-secondary">两边格式化</button>
+        <button class="btn btn-primary">对比</button>
+      </div>
+      <div class="tb-pane">
+        <div class="tb-plabel">JSON B</div>
+        <textarea class="tb-ta">{
+  "name": "test",
+  "timeout": 600,
+  "retries": 2,
+  "verbose": true
+}</textarea>
+        <div class="tb-copyrow"><button class="tb-mini">复制</button><button class="tb-mini">粘贴</button></div>
+      </div>
+    </div>
+    <div class="tb-diffsum">差异结果（红 = 删除 / 旧值，绿 = 新增 / 新值） · 共 3 处差异（+2 新增, -1 删除, ~0 修改）</div>
+    <div class="tb-difflines"><div class="tb-dl dl-ctx">    "name": "test",</div><div class="tb-dl dl-del">-   "timeout": 300,</div><div class="tb-dl dl-add">+   "timeout": 600,</div><div class="tb-dl dl-ctx">    "retries": 2</div><div class="tb-dl dl-add">+   "verbose": true</div><div class="tb-dl dl-ctx">  }</div></div>
+  </section>
+
+  <!-- 解剖 C：输入即算 + 结果格 -->
+  <div class="tb-annot"><b>输入即算 + 结果格</b> · 时间戳 / IPv4·CIDR / 哈希 共用（无动作按钮，输入即出结果）；「北京时间 / IP·前缀」类主行取 accent 6% 底</div>
+  <section class="tb-panel">
+    <div class="tb-head">
+      <div class="tb-headline">
+        <span class="tb-title">时间戳转换</span>
+        <span class="tb-hint">无时区后缀字符串按 UTC 解析（平台存储约定）；北京时间 = UTC+8</span>
+      </div>
+      <span class="t-spacer"></span>
+      <button class="tb-btn-help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 015 .5c0 1.5-2.5 2-2.5 3.5M12 17h.01"/></svg>帮助</button>
+      <button class="tb-btn-ghost">当前时间</button>
+      <button class="tb-btn-clear">清空</button>
+    </div>
+    <div class="tb-single"><textarea class="tb-ta" style="min-height:0;height:56px;">1750000000</textarea></div>
+    <div class="tb-result">
+      <div class="tb-rg"><span class="rg-k">识别为</span><span class="rg-v">10 位秒 epoch</span></div>
+      <div class="tb-rg rg-hl"><span class="rg-k">北京时间</span><span class="rg-v">2025-06-15 23:06:40</span></div>
+      <div class="tb-rg"><span class="rg-k">UTC</span><span class="rg-v">2025-06-15 15:06:40</span></div>
+      <div class="tb-rg"><span class="rg-k">epoch 秒</span><span class="rg-v">1750000000</span></div>
+      <div class="tb-rg"><span class="rg-k">epoch 毫秒</span><span class="rg-v">1750000000000</span></div>
+      <div class="tb-rg"><span class="rg-k">ISO 8601</span><span class="rg-v">2025-06-15T15:06:40Z</span></div>
+    </div>
+  </section>
+
+  <!-- 解剖 D：解码块 + exp 行 -->
+  <div class="tb-annot"><b>解码块 + exp 行</b> · JWT 专用（Header / Payload 分块展示，签名段不出现在结果里）</div>
+  <section class="tb-panel">
+    <div class="tb-head">
+      <div class="tb-headline">
+        <span class="tb-title">JWT 解码</span>
+        <span class="tb-hint">纯解码查看内容，不验证签名（签名校验需服务端密钥）</span>
+      </div>
+      <span class="t-spacer"></span>
+      <button class="tb-btn-help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 015 .5c0 1.5-2.5 2-2.5 3.5M12 17h.01"/></svg>帮助</button>
+      <button class="tb-btn-clear">清空</button>
+    </div>
+    <div class="tb-single"><textarea class="tb-ta" style="min-height:0;height:56px;">eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwicm9sZSI6ImFkbWluIiwiZXhwIjoxNzUwMDAwNjAwfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c</textarea></div>
+    <div class="tb-block">
+      <div class="tb-plabel">Header</div>
+      <pre class="tb-pre">{
+  "alg": "HS256",
+  "typ": "JWT"
+}</pre>
+    </div>
+    <div class="tb-block">
+      <div class="tb-plabel">Payload</div>
+      <pre class="tb-pre">{
+  "sub": "1",
+  "role": "admin",
+  "exp": 1750000600
+}</pre>
+    </div>
+    <div class="tb-result" style="margin-top:12px;">
+      <div class="tb-rg rg-hl"><span class="rg-k">exp（过期时间）</span><span class="rg-v">2025-06-15 23:16:40<span class="badge badge-success" style="margin-left:8px;">剩余 10 分钟</span></span></div>
+    </div>
+    <div class="tb-hint" style="margin-top:10px;">签名段已省略（验签需服务端密钥，解码用途是查看内容）</div>
+  </section>
+
+  <!-- 解剖 E：密钥行 + 双栏 -->
+  <div class="tb-annot"><b>密钥行 + 双栏</b> · SM4 专用（密钥行在双栏之上；短密钥触发黄色警示条，非阻断）</div>
+  <section class="tb-panel">
+    <div class="tb-head">
+      <div class="tb-headline">
+        <span class="tb-title">SM4 加解密（ECB + PKCS7）</span>
+        <span class="tb-hint">用于调试平台 ↔ Edge 通道的加密链路</span>
+      </div>
+      <span class="t-spacer"></span>
+      <button class="tb-btn-help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 015 .5c0 1.5-2.5 2-2.5 3.5M12 17h.01"/></svg>帮助</button>
+      <button class="tb-btn-clear">清空</button>
+    </div>
+    <div class="tb-warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3L2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/></svg>密钥非 16 字节（实际 6 字节），已自动补齐/截断——与 Edge 通道真实加解密行为可能不一致</div>
+    <div class="tb-keyrow">
+      <span class="key-label">密钥：</span>
+      <input class="tb-inp" style="width:260px;" value="abc123">
+      <button class="tb-mini" title="恢复为 Edge 通道默认 SM4 密钥（调试平台↔Edge 加密链路用）">恢复默认</button>
+    </div>
+    <div class="tb-dual" style="min-height:150px;">
+      <div class="tb-pane">
+        <div class="tb-plabel">明文</div>
+        <textarea class="tb-ta">ping-192.168.1.11</textarea>
+        <div class="tb-copyrow"><button class="tb-mini">复制</button><button class="tb-mini">粘贴</button></div>
+      </div>
+      <div class="tb-mid">
+        <button class="btn btn-primary">加密 →</button>
+        <button class="btn btn-secondary">← 解密</button>
+      </div>
+      <div class="tb-pane">
+        <div class="tb-plabel">密文（Base64）</div>
+        <textarea class="tb-ta">U2FsdGVkX1/HsKvZkK3wQm0p9nF7T2yE1aBcDdEeFfG=</textarea>
+        <div class="tb-copyrow"><button class="tb-mini">复制</button><button class="tb-mini">粘贴</button></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 解剖 F：表单生成器 -->
+  <div class="tb-annot"><b>表单生成器</b> · Keepalived 专用（校验警告黄字 / 错误红字；生成物按文件卡片组织，每张带 复制 / 下载）</div>
+  <section class="tb-panel">
+    <div class="tb-head">
+      <div class="tb-headline">
+        <span class="tb-title">Keepalived 配置生成</span>
+        <span class="tb-hint">多节点 VRRP 高可用（单播 + VIP）全套配置与部署命令，纯前端生成</span>
+      </div>
+      <span class="t-spacer"></span>
+      <button class="tb-btn-help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 015 .5c0 1.5-2.5 2-2.5 3.5M12 17h.01"/></svg>帮助</button>
+      <button class="tb-btn-clear">清空</button>
+    </div>
+
+    <div class="tb-kaform">
+      <div class="tb-field">
+        <label>VIP 地址</label>
+        <input class="tb-inp" value="10.128.216.154">
+      </div>
+      <div class="tb-field">
+        <label>节点 IP 列表（每行一条：节点IP 网卡名，空格分隔，2–8 个）</label>
+        <textarea class="tb-ta tb-nodes">10.128.216.160 ens7
+10.128.216.161 eth1
+10.128.216.162 bond0</textarea>
+      </div>
+      <label class="l5-check"><input type="checkbox" checked>高级参数</label>
+      <div class="tb-grid3">
+        <div class="tb-field"><label>VIP 掩码位</label><input class="tb-inp" value="24"></div>
+        <div class="tb-field"><label>VRRP 组 ID</label><input class="tb-inp" value="51"></div>
+        <div class="tb-field"><label>认证密码（前 8 字符生效）</label><input class="tb-inp" value="panshi@vip"></div>
+        <div class="tb-field"><label>优先级起始</label><input class="tb-inp" value="100"></div>
+        <div class="tb-field"><label>优先级步长</label><input class="tb-inp" value="10"></div>
+        <div class="tb-field"><label>router_id 前缀</label><input class="tb-inp" value="EDGE_DNS_"></div>
+        <div class="tb-field"><label>健康检查端口</label><input class="tb-inp" value="9377"></div>
+      </div>
+    </div>
+
+    <div class="tb-warnline" style="margin-top:10px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3L2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/></svg>认证密码仅前 8 字符生效（当前 10 字符）——VRRP 协议限制，超出部分被忽略</div>
+
+    <div class="tb-group-title">共用脚本<span class="g-note">所有节点一致，写入 /etc/keepalived/</span></div>
+    <div class="tb-file">
+      <div class="tb-file-head"><span class="tb-fname">chk_openresty.sh · 健康检查脚本</span><span class="t-spacer"></span><button class="tb-mini">复制</button><button class="tb-mini">下载</button></div>
+      <pre class="tb-pre">#!/bin/bash
+# Edge OpenResty 健康检查（Keepalived track_script 用）
+if ! pgrep -f "bin/openresty" >/dev/null 2>&1; then
+  exit 1
+fi
+exit 0</pre>
+    </div>
+
+    <div class="tb-group-title">各节点配置<span class="g-note">3 节点 · conf 差异仅五处：router_id / priority / unicast_src_ip / unicast_peer / 网卡名</span></div>
+    <div class="tb-fold"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>Edge-1 · 10.128.216.160<span class="f-note">conf + 防火墙放行</span></div>
+    <div class="tb-fold"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>Edge-2 · 10.128.216.161<span class="f-note">conf + 防火墙放行</span></div>
+    <div class="tb-fold"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>Edge-3 · 10.128.216.162<span class="f-note">conf + 防火墙放行</span></div>
+
+    <div class="tb-group-title">部署手册<span class="g-note">所有节点</span></div>
+    <div class="tb-file">
+      <div class="tb-file-head"><span class="tb-fname">keepalived-deploy-manual.md</span><span class="t-spacer"></span><button class="tb-mini">复制</button><button class="tb-mini">下载</button></div>
+      <pre class="tb-pre">## 1. 安装（各节点）
+apt-get install -y keepalived
+
+## 2. 分发配置
+# 共用脚本 → /etc/keepalived/chk_openresty.sh
+# 各节点 keepalived.conf 以 Edge-N 文件为准</pre>
+    </div>
+  </section>
+
+</div>
+</div>
+</div>
+<div class="l5-prop-tag">方案 C · <b>工具箱</b></div>
+</body>
+</html>

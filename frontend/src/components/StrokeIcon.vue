@@ -58,6 +58,29 @@ const ICON_PATHS = {
   // 警示三角（四档警示语义：危险 = 实心三角 + 感叹号，设计 .lp-notice .n-ico）
   warning:
     '<path d="M12 3.2 21.4 20H2.6L12 3.2z" fill="currentColor" stroke="none" /><path d="M12 9.4v4M12 16.6v.1" stroke="#fff" stroke-width="2" stroke-linecap="round" />',
+  // ── 工具箱工作台（tools-page-restyle，取自 proposal-c/tools.html 工具栏原 path） ──
+  code: '<polyline points="8 6 3 12 8 18" /><polyline points="16 6 21 12 16 18" />',
+  link: '<path d="M10 13a5 5 0 007.5.5l3-3a5 5 0 00-7-7l-1.7 1.7" /><path d="M14 11a5 5 0 00-7.5-.5l-3 3a5 5 0 007 7l1.7-1.7" />',
+  braces:
+    '<path d="M8 3H7a2 2 0 00-2 2v4a2 2 0 01-2 2 2 2 0 012 2v4a2 2 0 002 2h1" /><path d="M16 3h1a2 2 0 012 2v4a2 2 0 002 2 2 2 0 00-2 2v4a2 2 0 01-2 2h-1" />',
+  lock: '<rect x="4" y="11" width="16" height="9" rx="2" /><path d="M8 11V7a4 4 0 018 0v4" />',
+  blocks:
+    '<rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />',
+  fileText:
+    '<path d="M6 2h9l5 5v13a1 1 0 01-1 1H6a1 1 0 01-1-1V3a1 1 0 011-1z" /><path d="M14 2v5h5" /><path d="M9 13h6M9 17h6" />',
+  columns: '<rect x="3" y="4" width="7" height="16" rx="1" /><rect x="14" y="4" width="7" height="16" rx="1" />',
+  clock: '<circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />',
+  key: '<circle cx="8" cy="15" r="4" /><path d="M11 12L20 3M16 7l3 3" />',
+  swap: '<path d="M4 7h13M13 3l4 4-4 4" /><path d="M20 17H7M11 21l-4-4 4-4" />',
+  fileDiff: '<path d="M6 2h9l5 5v13a1 1 0 01-1 1H6a1 1 0 01-1-1V3a1 1 0 011-1z" /><path d="M12 10v6M9 13h6" />',
+  globe: '<circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18" />',
+  shieldCheck: '<path d="M12 2l8 3v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V5l8-3z" /><path d="M9 11l2 2 4-4" />',
+  server:
+    '<rect x="3" y="4" width="18" height="6" rx="1" /><rect x="3" y="14" width="18" height="6" rx="1" /><path d="M7 7h.01M7 17h.01" />',
+  // 帮助按钮（工具面板头「帮助」accent 弱底按钮内 13px 问号圆）
+  help: '<circle cx="12" cy="12" r="9" /><path d="M9.5 9a2.5 2.5 0 015 .5c0 1.5-2.5 2-2.5 3.5M12 17h.01" />',
+  // 描边警示三角（工具箱黄色警示条/黄字提醒：非阻断语义与实心 danger 三角区分）
+  warnOutline: '<path d="M12 3L2 20h20L12 3z" /><path d="M12 10v4M12 17h.01" />',
 } as const
 
 /** 实心图标集合（fill=currentColor，无描边） */

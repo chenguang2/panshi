@@ -15,19 +15,12 @@ const mockMessage = { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: 
 vi.mock('ant-design-vue', () => ({ message: mockMessage }))
 
 const stubs = {
-  'a-layout': { template: '<div class="tools-layout"><slot /></div>' },
-  'a-layout-sider': { template: '<div class="tools-sider"><slot /></div>', props: ['width'] },
-  'a-layout-content': { template: '<div class="tools-content"><slot /></div>' },
   'a-tooltip': { template: '<span class="tt"><slot /></span>', props: ['title', 'placement'] },
   'a-textarea': {
     props: ['value', 'placeholder', 'rows', 'readonly'],
     emits: ['update:value'],
     template:
       '<textarea class="a-textarea" :value="value" :readonly="readonly" @input="$emit(\'update:value\', $event.target.value)" />',
-  },
-  'a-button': {
-    template: '<button class="a-btn" :disabled="disabled || undefined" @click="$emit(\'click\')"><slot /></button>',
-    props: ['type', 'size', 'disabled'],
   },
   'a-input-password': {
     props: ['value', 'placeholder'],
@@ -83,7 +76,7 @@ async function mountTools(router = makeRouter(), initial = '/tools') {
 }
 
 function navItems(wrapper: ReturnType<typeof mount>) {
-  return wrapper.findAll('.nav-item')
+  return wrapper.findAll('.tb-tool')
 }
 
 function textareas(wrapper: ReturnType<typeof mount>) {
@@ -103,7 +96,7 @@ describe('Tools 批 1：剪贴板回退与复制语义', () => {
     const wrapper = await mountTools()
     const ta = textareas(wrapper)[0]
     await ta.setValue('hello world')
-    const copyBtn = wrapper.findAll('.copy-row .a-btn').find((b) => b.text() === '复制')!
+    const copyBtn = wrapper.findAll('.tb-copyrow .tb-mini').find((b) => b.text() === '复制')!
     await copyBtn.trigger('click')
     await flushPromises()
     const doc = document as Document & { execCommand: ReturnType<typeof vi.fn> }
@@ -114,7 +107,7 @@ describe('Tools 批 1：剪贴板回退与复制语义', () => {
 
   it('复制空内容提示「没有可复制的内容」且不触发 execCommand', async () => {
     const wrapper = await mountTools()
-    const copyBtn = wrapper.findAll('.copy-row .a-btn').find((b) => b.text() === '复制')!
+    const copyBtn = wrapper.findAll('.tb-copyrow .tb-mini').find((b) => b.text() === '复制')!
     await copyBtn.trigger('click')
     await flushPromises()
     expect(mockMessage.warning).toHaveBeenCalledWith('没有可复制的内容')
@@ -124,7 +117,7 @@ describe('Tools 批 1：剪贴板回退与复制语义', () => {
 
   it('http 下粘贴聚焦输入框并明示 Ctrl+V 引导（不报错）', async () => {
     const wrapper = await mountTools()
-    const pasteBtn = wrapper.findAll('.copy-row .a-btn').find((b) => b.text() === '粘贴')!
+    const pasteBtn = wrapper.findAll('.tb-copyrow .tb-mini').find((b) => b.text() === '粘贴')!
     await pasteBtn.trigger('click')
     await flushPromises()
     expect(mockMessage.info).toHaveBeenCalledWith('浏览器限制剪贴板读取，请点击输入框后按 Ctrl+V 粘贴')
@@ -138,7 +131,7 @@ describe('Tools 批 1：剪贴板回退与复制语义', () => {
     const tas = textareas(wrapper)
     await tas[0].setValue('YAML_INPUT_MARKER: 1')
     // 伪造输出不同值：直接改组件状态不必要——输入 ≠ 输出（输出初始为空）即可区分
-    const inputCopy = wrapper.findAll('.copy-row .a-btn').find((b) => b.text() === '复制')!
+    const inputCopy = wrapper.findAll('.tb-copyrow .tb-mini').find((b) => b.text() === '复制')!
     await inputCopy.trigger('click')
     await flushPromises()
     const doc = document as Document & { execCommand: ReturnType<typeof vi.fn> }
@@ -162,9 +155,9 @@ describe('Tools 批 2：深链 / 短密钥警告 / 清空 / 导航文字', () =>
 
   it('进页读 ?tool= 恢复对应工具；非法值回退 lua', async () => {
     const wrapper = await mountTools(makeRouter(), '/tools?tool=sm4')
-    expect(wrapper.find('.tool-header').text()).toContain('SM4')
+    expect(wrapper.find('.tb-head').text()).toContain('SM4')
     const bad = await mountTools(makeRouter(), '/tools?tool=unknown')
-    expect(bad.find('.tool-header').text()).toContain('Lua')
+    expect(bad.find('.tb-head').text()).toContain('Lua')
   })
 
   it('切换工具更新 URL query（不刷新）', async () => {
@@ -182,15 +175,15 @@ describe('Tools 批 2：深链 / 短密钥警告 / 清空 / 导航文字', () =>
     await keyInput.setValue('short')
     const tas = textareas(wrapper)
     await tas[0].setValue('secret data')
-    const encBtn = wrapper.findAll('.panel-actions .a-btn').find((b) => b.text().includes('加密'))!
+    const encBtn = wrapper.findAll('.tb-mid .btn').find((b) => b.text().includes('加密'))!
     await encBtn.trigger('click')
     await flushPromises()
-    const warn = wrapper.find('.sm4-warn')
+    const warn = wrapper.find('.tb-warn')
     expect(warn.exists()).toBe(true)
     expect(warn.text()).toContain('5 字节')
     expect(warn.text()).toContain('可能不一致')
     // 往返一致不阻断
-    const decBtn = wrapper.findAll('.panel-actions .a-btn').find((b) => b.text().includes('解密'))!
+    const decBtn = wrapper.findAll('.tb-mid .btn').find((b) => b.text().includes('解密'))!
     await decBtn.trigger('click')
     await flushPromises()
     expect(textareas(wrapper)[0].element.value).toBe('secret data')
@@ -200,10 +193,10 @@ describe('Tools 批 2：深链 / 短密钥警告 / 清空 / 导航文字', () =>
     const wrapper = await mountTools(makeRouter(), '/tools?tool=sm4')
     const tas = textareas(wrapper)
     await tas[0].setValue('secret data')
-    const encBtn = wrapper.findAll('.panel-actions .a-btn').find((b) => b.text().includes('加密'))!
+    const encBtn = wrapper.findAll('.tb-mid .btn').find((b) => b.text().includes('加密'))!
     await encBtn.trigger('click')
     await flushPromises()
-    expect(wrapper.find('.sm4-warn').exists()).toBe(false)
+    expect(wrapper.find('.tb-warn').exists()).toBe(false)
   })
 
   it('清空按钮：清当前工具输入与输出', async () => {
@@ -237,7 +230,7 @@ describe('Tools 新工具（tools-new-utilities）', () => {
     const wrapper = await mountTools(makeRouter(), '/tools?tool=timestamp')
     await textareas(wrapper)[0].setValue('2026-10-30 08:00:00')
     await flushPromises()
-    const grid = wrapper.find('.result-grid')
+    const grid = wrapper.find('.tb-result')
     expect(grid.exists()).toBe(true)
     expect(grid.text()).toContain('2026-10-30 16:00:00') // UTC+8
     expect(grid.text()).toContain('按 UTC 解析')
@@ -247,7 +240,7 @@ describe('Tools 新工具（tools-new-utilities）', () => {
     const wrapper = await mountTools(makeRouter(), '/tools?tool=timestamp')
     await textareas(wrapper)[0].setValue('1793331059000')
     await flushPromises()
-    expect(wrapper.find('.result-grid').text()).toContain('毫秒')
+    expect(wrapper.find('.tb-result').text()).toContain('毫秒')
     await textareas(wrapper)[0].setValue('hello')
     await flushPromises()
     expect(wrapper.find('.diff-error').text()).toContain('无法识别的时间格式')
@@ -259,7 +252,7 @@ describe('Tools 新工具（tools-new-utilities）', () => {
     await nowBtn.trigger('click')
     await flushPromises()
     expect(textareas(wrapper)[0].element.value).toMatch(/^\d{13}$/)
-    expect(wrapper.find('.result-grid').exists()).toBe(true)
+    expect(wrapper.find('.tb-result').exists()).toBe(true)
   })
 
   it('JWT：合法 token 解出 header/payload 与 exp 状态', async () => {
@@ -269,7 +262,7 @@ describe('Tools 新工具（tools-new-utilities）', () => {
     const wrapper = await mountTools(makeRouter(), '/tools?tool=jwt')
     await textareas(wrapper)[0].setValue(token)
     await flushPromises()
-    expect(wrapper.find('.jwt-pre').text()).toContain('"alg": "HS256"')
+    expect(wrapper.find('.tb-pre').text()).toContain('"alg": "HS256"')
     const expRow = wrapper.find('.exp-tag')
     expect(expRow.classes()).toContain('is-alive')
     expect(expRow.text()).toContain('分钟')
@@ -293,13 +286,13 @@ describe('Tools 新工具（tools-new-utilities）', () => {
     const tas = textareas(wrapper)
     expect(tas).toHaveLength(2)
     await tas[0].setValue('key: value')
-    const toJson = wrapper.findAll('.panel-actions .a-btn').find((b) => b.text() === '转 JSON →')!
+    const toJson = wrapper.findAll('.tb-mid .btn').find((b) => b.text() === '转 JSON →')!
     await toJson.trigger('click')
     await flushPromises()
     expect(JSON.parse(tas[1].element.value)).toEqual({ key: 'value' })
     // 反向：右框贴 JSON，「← 转 YAML」读右写左
     await tas[1].setValue('{"k2":"v2"}')
-    const toYaml = wrapper.findAll('.panel-actions .a-btn').find((b) => b.text() === '← 转 YAML')!
+    const toYaml = wrapper.findAll('.tb-mid .btn').find((b) => b.text() === '← 转 YAML')!
     await toYaml.trigger('click')
     await flushPromises()
     expect(tas[0].element.value).toContain('k2: v2')
@@ -315,12 +308,12 @@ describe('Tools 新工具（tools-new-utilities）', () => {
     const tas = textareas(wrapper)
     expect(tas).toHaveLength(2)
     await tas[0].setValue('https://example.com?name=张三&age=18')
-    const enc = wrapper.findAll('.panel-actions .a-btn').find((b) => b.text() === '编码 →')!
+    const enc = wrapper.findAll('.tb-mid .btn').find((b) => b.text() === '编码 →')!
     await enc.trigger('click')
     await flushPromises()
     expect(tas[1].element.value).toBe('https%3A%2F%2Fexample.com%3Fname%3D%E5%BC%A0%E4%B8%89%26age%3D18')
     await tas[1].setValue('https%3A%2F%2Fexample.com%3Fname%3D%E5%BC%A0%E4%B8%89%26age%3D18')
-    const dec = wrapper.findAll('.panel-actions .a-btn').find((b) => b.text() === '← 解码')!
+    const dec = wrapper.findAll('.tb-mid .btn').find((b) => b.text() === '← 解码')!
     await dec.trigger('click')
     await flushPromises()
     expect(tas[0].element.value).toBe('https://example.com?name=张三&age=18')
@@ -330,12 +323,12 @@ describe('Tools 新工具（tools-new-utilities）', () => {
     const wrapper = await mountTools(makeRouter(), '/tools?tool=base64')
     const tas = textareas(wrapper)
     await tas[0].setValue('Hello World')
-    const enc = wrapper.findAll('.panel-actions .a-btn').find((b) => b.text() === '编码 →')!
+    const enc = wrapper.findAll('.tb-mid .btn').find((b) => b.text() === '编码 →')!
     await enc.trigger('click')
     await flushPromises()
     expect(tas[1].element.value).toBe('SGVsbG8gV29ybGQ=')
     await tas[1].setValue('SGVsbG8gV29ybGQ=')
-    const dec = wrapper.findAll('.panel-actions .a-btn').find((b) => b.text() === '← 解码')!
+    const dec = wrapper.findAll('.tb-mid .btn').find((b) => b.text() === '← 解码')!
     await dec.trigger('click')
     await flushPromises()
     expect(tas[0].element.value).toBe('Hello World')
@@ -344,7 +337,7 @@ describe('Tools 新工具（tools-new-utilities）', () => {
   it('深链支持新工具 key（timestamp/jwt/convert）', async () => {
     for (const key of ['timestamp', 'jwt', 'convert']) {
       const wrapper = await mountTools(makeRouter(), `/tools?tool=${key}`)
-      expect(wrapper.find('.tool-panel').exists()).toBe(true)
+      expect(wrapper.find('.tb-view').exists()).toBe(true)
     }
   })
 
@@ -354,7 +347,7 @@ describe('Tools 新工具（tools-new-utilities）', () => {
     expect(tas).toHaveLength(2)
     await tas[0].setValue('line1\nline2')
     await tas[1].setValue('line1\nline2-changed')
-    const btn = wrapper.findAll('.panel-actions .a-btn').find((b) => b.text() === '对比')!
+    const btn = wrapper.findAll('.tb-mid .btn').find((b) => b.text() === '对比')!
     await btn.trigger('click')
     await flushPromises()
     expect(wrapper.find('.diff-result-box').text()).toContain('处差异')
@@ -367,7 +360,7 @@ describe('Tools 新工具（tools-new-utilities）', () => {
 
   it('文本 Diff：空输入校验', async () => {
     const wrapper = await mountTools(makeRouter(), '/tools?tool=textdiff')
-    const btn = wrapper.findAll('.panel-actions .a-btn').find((b) => b.text() === '对比')!
+    const btn = wrapper.findAll('.tb-mid .btn').find((b) => b.text() === '对比')!
     expect(btn.attributes('disabled')).toBeDefined()
   })
 
@@ -375,7 +368,7 @@ describe('Tools 新工具（tools-new-utilities）', () => {
     const wrapper = await mountTools(makeRouter(), '/tools?tool=ipcalc')
     await textareas(wrapper)[0].setValue('192.168.1.10/24')
     await flushPromises()
-    const grid = wrapper.find('.result-grid')
+    const grid = wrapper.find('.tb-result')
     expect(grid.text()).toContain('255.255.255.0')
     expect(grid.text()).toContain('192.168.1.1 - 192.168.1.254')
     expect(grid.text()).toContain('254')
@@ -395,21 +388,21 @@ describe('Tools 新工具（tools-new-utilities）', () => {
     await flushPromises()
     await new Promise((r) => setTimeout(r, 50))
     await flushPromises()
-    const grid = wrapper.find('.result-grid')
+    const grid = wrapper.find('.tb-result')
     expect(grid.exists()).toBe(true)
     expect(grid.text()).toContain('900150983cd24fb0d6963f7d28e17f72')
   })
 
   it('哈希：空输入无结果表', async () => {
     const wrapper = await mountTools(makeRouter(), '/tools?tool=hash')
-    expect(wrapper.find('.result-grid').exists()).toBe(false)
+    expect(wrapper.find('.tb-result').exists()).toBe(false)
   })
 })
 
 describe('Tools 批 3：文案', () => {
   it('Lua 按钮文案「转换为字符串 →」/「← 转换为函数」（tools-two-way-panels 方向箭头）', async () => {
     const wrapper = await mountTools()
-    const texts = wrapper.findAll('.panel-actions .a-btn').map((b) => b.text())
+    const texts = wrapper.findAll('.tb-mid .btn').map((b) => b.text())
     expect(texts).toContain('转换为字符串 →')
     expect(texts).toContain('← 转换为函数')
   })
@@ -428,7 +421,7 @@ describe('Tools 批 3：文案', () => {
 
   it('diff 对比按钮文案「两边格式化」', async () => {
     const wrapper = await mountTools(makeRouter(), '/tools?tool=diff')
-    const texts = wrapper.findAll('.panel-actions .a-btn').map((b) => b.text())
+    const texts = wrapper.findAll('.tb-mid .btn').map((b) => b.text())
     expect(texts).toContain('两边格式化')
   })
 
@@ -445,17 +438,17 @@ describe('Tools Keepalived 配置生成（tools-keepalived-generator）', () => 
   }
 
   function fillSample(wrapper: ReturnType<typeof mount>, vip = '10.128.216.154'): void {
-    const inputs = wrapper.findAll('.ka-form .a-input')
+    const inputs = wrapper.findAll('.tb-kaform .a-input')
     ;(inputs[0]!.element as HTMLInputElement).value = vip
     inputs[0]!.trigger('input')
-    const ta = wrapper.find('.ka-form textarea')
+    const ta = wrapper.find('.tb-kaform textarea')
     ;(ta.element as HTMLTextAreaElement).value = '10.128.216.160 ens7\n10.128.216.161 ens7\n10.128.216.162 ens7'
     ta.trigger('input')
   }
 
   it('深链 ?tool=keepalived 显示工具头', async () => {
     const wrapper = await mountKa()
-    expect(wrapper.find('.tool-header').text()).toContain('Keepalived 配置生成')
+    expect(wrapper.find('.tb-head').text()).toContain('Keepalived 配置生成')
   })
 
   it('样例输入：生成 conf / 防火墙 / 手册（关键行断言）', async () => {
@@ -478,15 +471,15 @@ describe('Tools Keepalived 配置生成（tools-keepalived-generator）', () => 
     fillSample(wrapper, '999.1.1.1')
     await flushPromises()
     expect(wrapper.find('.diff-error').text()).toContain('合法 IPv4')
-    expect(wrapper.find('.ka-pre').exists()).toBe(false)
+    expect(wrapper.find('.tb-pre').exists()).toBe(false)
   })
 
   it('黄字提醒（异网段）不阻断生成', async () => {
     const wrapper = await mountKa()
     fillSample(wrapper, '10.128.217.154')
     await flushPromises()
-    expect(wrapper.find('.ka-warn').text()).toContain('网段')
-    expect(wrapper.find('.ka-pre').exists()).toBe(true)
+    expect(wrapper.find('.tb-warnline').text()).toContain('网段')
+    expect(wrapper.find('.tb-pre').exists()).toBe(true)
   })
 
   it('清空按钮重置全部输入', async () => {
@@ -496,17 +489,17 @@ describe('Tools Keepalived 配置生成（tools-keepalived-generator）', () => 
     const clearBtn = wrapper.findAll('button').find((b) => b.text() === '清空')!
     await clearBtn.trigger('click')
     await flushPromises()
-    const inputs = wrapper.findAll('.ka-form .a-input')
+    const inputs = wrapper.findAll('.tb-kaform .a-input')
     expect((inputs[0]!.element as HTMLInputElement).value).toBe('')
-    expect((wrapper.find('.ka-form textarea').element as HTMLTextAreaElement).value).toBe('')
-    expect(wrapper.find('.ka-pre').exists()).toBe(false)
+    expect((wrapper.find('.tb-kaform textarea').element as HTMLTextAreaElement).value).toBe('')
+    expect(wrapper.find('.tb-pre').exists()).toBe(false)
   })
 })
 
 describe('Tools 帮助抽屉（tools-help-drawer）', () => {
   it('工具头部有「帮助」按钮，点击打开抽屉并展示六段文档', async () => {
     const wrapper = await mountTools()
-    const helpBtn = wrapper.find('.btn-help')
+    const helpBtn = wrapper.find('.tb-btn-help')
     expect(helpBtn.exists()).toBe(true)
     expect(helpBtn.text()).toContain('帮助')
     await helpBtn.trigger('click')
@@ -525,7 +518,7 @@ describe('Tools 帮助抽屉（tools-help-drawer）', () => {
 
   it('抽屉内容绑定 activeTool：运行态工具切换后文档跟随（组件契约；真机遮罩下经「关闭→切换→重开」呈现）', async () => {
     const wrapper = await mountTools()
-    await wrapper.find('.btn-help').trigger('click')
+    await wrapper.find('.tb-btn-help').trigger('click')
     await flushPromises()
     await navItems(wrapper)[7].trigger('click') // 时间戳转换
     await flushPromises()
@@ -537,13 +530,13 @@ describe('Tools 帮助抽屉（tools-help-drawer）', () => {
   it('关闭抽屉回到原工具现场，输入不清空', async () => {
     const wrapper = await mountTools(makeRouter(), '/tools?tool=timestamp')
     await textareas(wrapper)[0].setValue('1793331059')
-    await wrapper.find('.btn-help').trigger('click')
+    await wrapper.find('.tb-btn-help').trigger('click')
     await flushPromises()
     await wrapper.find('.th-close').trigger('click')
     await flushPromises()
     expect(wrapper.find('.th-drawer-stub').exists()).toBe(false)
     // 关闭后仍在时间戳工具，输入保留
     expect(textareas(wrapper)[0].element.value).toBe('1793331059')
-    expect(wrapper.find('.result-grid').exists()).toBe(true)
+    expect(wrapper.find('.tb-result').exists()).toBe(true)
   })
 })
