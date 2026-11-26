@@ -668,6 +668,7 @@ tbody td .cell-secondary {
   background: oklch(48% 0.18 28);
 }
 
+.btn:disabled { opacity: .45; cursor: not-allowed; }
 .btn-sm {
   padding: 3px 10px;
   font-size: 12px;

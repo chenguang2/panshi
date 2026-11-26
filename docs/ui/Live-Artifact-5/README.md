@@ -1,6 +1,6 @@
 # Live-Artifact-5 · 设计页（方案 C 定稿）
 
-本目录是磐石 Gateway 前端**页面级设计稿的唯一基线**。基线 = `proposal-c/` 下的 24 张页面 HTML + 共享主题 `theme.css` + 卡片页解剖说明 `CARD-PAGES-DESIGN-BRIEF.md`；入口是根目录的 **`index.html`（设计页目录）**。
+本目录是磐石 Gateway 前端**页面级设计稿的唯一基线**。基线 = `proposal-c/` 下的 25 张页面 HTML + 共享主题 `theme.css` + 卡片页解剖说明 `CARD-PAGES-DESIGN-BRIEF.md`；入口是根目录的 **`index.html`（设计页目录）**。
 
 > 2026-11-21 收敛：旧方案 A/B、工具条三变体页与 proposal-c 内 10 份过程稿已删除，历史仍在 git 里。此后**变体对比稿验证完即删**，不留在基线目录。
 
@@ -20,6 +20,7 @@
 | 运维 | 自启动管理 | `proposal-c/edge-autostart.html` | 列表页（nodes 同构：工具条 + 状态行 + 批量条 + grid-table + ListPager） | `views/EdgeAutostart.vue` |
 | 监控 | ClickHouse 配置 | `proposal-c/clickhouse-config.html` | 配置管理页（健康卡四态 + 连接列表 + 弹窗） | `views/ClickHouseConfig.vue` |
 | 系统 | 数据库管理 | `proposal-c/database-management.html` | 配置管理页（当前库 hero + 连接列表 + 备份/迁移摘要双卡 + 弹窗） | `views/DatabaseManagement.vue` |
+| 系统 | 数据迁移 | `proposal-c/db-migration.html` | 工作台页（状态带 + 流向/风险双栏 + 进度·结果·历史表 + 确认/清理弹窗 + 详情抽屉） | `views/DbMigrationPage.vue` |
 | 运维 | Edge 直连 | `proposal-c/edge-client.html` | 调试工作台（连接条 + tab 条 + grid-table + 弹窗） | `views/EdgeClient.vue` |
 | 运维 | Edge 数据导入 | `proposal-c/edge-import.html` | 向导页（3 步条 + 连接计数 chips + 可选卡 + section 列表） | `views/EdgeImport.vue` |
 | 卡片 | 四层代理 | `proposal-c/stream-proxies.html` | 卡片页 | `views/StreamProxyList.vue` |

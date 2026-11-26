@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数据迁移 · 方案 C 网关控制台感 — 磐石网关管理平台</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+/* —— 本页专属解剖（数据迁移）：迁移工作台 = 状态带 + 迁移任务卡（流向面板 / 风险面板两栏）
+   + 进度样张 + 结果条 + 历史表（外置分页条）+ 确认/清理弹窗 + 详情抽屉。
+   状态色只绑定实测事实（进行中 / 空闲 / 失败），不自造颜色。—— */
+.page-header h1 { font-size: 21px; }
+
+/* 卡头（迁移任务卡 / 历史卡共用） */
+.mig-cardhead { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.mig-cardhead h3 { margin: 0; font-size: 13px; font-weight: 600; color: var(--fg); }
+.mig-cardhead .mig-sub { font-size: 11.5px; color: var(--muted); }
+.mig-cardhead .mig-head-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.mig-body { padding: 14px 16px 16px; }
+
+/* 状态带：当前活动库 / 待重启 / 迁移锁 */
+.mig-band { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg); font-size: 13px; }
+.mig-seg { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.mig-lbl { font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: .04em; white-space: nowrap; }
+.mig-val { font-weight: 600; color: var(--fg); }
+.mig-seg.warn { color: var(--warning); background: oklch(65% .15 85 / 10%); border: 1px solid oklch(65% .15 85 / 30%); border-radius: 6px; padding: 2px 10px; font-size: 12px; }
+.mig-seg.lock { color: oklch(45% .13 210); background: var(--accent-bg); border: 1px solid oklch(56% .16 210 / 30%); border-radius: 6px; padding: 2px 10px; font-size: 12px; flex-wrap: wrap; }
+.mig-lock-tag { color: var(--danger); font-weight: 600; white-space: nowrap; }
+.mig-flow { font-family: var(--font-mono); }
+.mig-time { color: var(--muted); font-family: var(--font-mono); font-size: 11px; white-space: nowrap; }
+
+/* 迁移任务：左流向面板 + 右风险面板 */
+.mig-layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; }
+@media (max-width: 1180px) { .mig-layout { grid-template-columns: 1fr; } }
+
+.flow-panel { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg); padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 12px; }
+.flow-grid { display: grid; grid-template-columns: minmax(0, 1fr) 32px minmax(0, 1fr); gap: 6px 12px; align-items: end; }
+.flow-unit .unit-label { display: block; font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: .04em; margin-bottom: 6px; }
+.mig-select { width: 100%; height: 32px; padding: 0 28px 0 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); font-family: inherit; font-size: 12.5px; color: var(--fg); outline: none; appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position: calc(100% - 15px) 13px, calc(100% - 10px) 13px; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; transition: border-color .15s, box-shadow .15s; }
+.mig-select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
+.mig-select.is-disabled { color: oklch(50% .018 240 / 55%); background-color: var(--bg); }
+.flow-chip { width: 32px; height: 32px; border-radius: 50%; border: 1px solid oklch(56% .16 210 / 35%); background: var(--accent-bg); color: var(--accent); display: flex; align-items: center; justify-content: center; }
+.flow-danger { grid-column: 3; display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--danger); justify-content: flex-end; }
+.control-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding-top: 2px; }
+.control-line .timeout-select { width: 132px; }
+.checkbox-label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--fg); cursor: pointer; }
+.checkbox-label input { width: 14px; height: 14px; accent-color: var(--accent); }
+.migrate-btn { margin-left: auto; }
+.flow-hint { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+
+.risk-panel { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg); padding: 12px 14px 14px; }
+.risk-title { font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: .04em; margin-bottom: 8px; }
+.risk-list { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+.risk-list .danger { color: var(--danger); }
+
+/* 迁移进度（样张） */
+.mig-progress { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.progress-head { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--fg); }
+.progress-head .phase { font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--accent); background: var(--accent-bg); border: 1px solid oklch(56% .16 210 / 22%); border-radius: 4px; padding: 0 6px; }
+.bar { height: 8px; border-radius: 999px; background: oklch(50% .018 240 / 10%); overflow: hidden; }
+.bar > i { display: block; height: 100%; border-radius: 999px; background: var(--accent); }
+.bar.ok > i { background: var(--success); }
+.progress-meta { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.progress-meta b { color: var(--fg); font-weight: 600; }
+.progress-foot { display: flex; justify-content: flex-end; }
+
+/* 迁移结果条 */
+.result-bar { display: flex; align-items: center; gap: 12px; border: 1px solid oklch(55% .15 145 / 28%); background: oklch(55% .15 145 / 8%); border-radius: var(--radius-lg); padding: 10px 14px; }
+.result-badge { width: 22px; height: 22px; border-radius: 50%; background: var(--success); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0; }
+.result-text { font-size: 13px; font-weight: 600; color: var(--fg); }
+.result-meta { font-size: 12px; color: var(--muted); font-family: var(--font-mono); }
+.result-actions { margin-left: auto; display: flex; gap: 8px; }
+
+/* 历史表：方向芯片 + 展开行 */
+.hist-flow { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.hist-arrow { color: var(--muted); font-family: var(--font-mono); }
+.hist-expand-row > td { background: var(--bg); }
+.hist-expand { display: flex; flex-direction: column; gap: 6px; padding: 4px 2px; font-size: 12.5px; }
+.hist-expand .lbl { color: var(--muted); }
+.hist-expand .err { color: var(--danger); }
+.hist-path { font-family: var(--font-mono); font-size: 11.5px; color: var(--fg); }
+.hist-copy { margin-left: 8px; }
+
+/* 样张注记 */
+.mig-annot { font-size: 11px; color: var(--muted); margin: 26px 0 8px 2px; line-height: 1.6; }
+.mig-annot b { color: var(--fg); font-weight: 600; }
+.mig-annot code { font-family: var(--font-mono); font-size: 10.5px; color: var(--fg); }
+
+/* 弹窗样张（与实现同宽：确认迁移 560 / 清理历史 520） */
+.mig-modal { width: 560px; max-width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); }
+.mig-modal.narrow { width: 520px; }
+.mig-mh { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--accent-bg); border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+.mig-mh h2 { margin: 0; font-size: 14px; font-weight: 600; color: var(--fg); }
+.mig-mx { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-sm); border: none; background: transparent; cursor: pointer; color: var(--muted); font-size: 20px; line-height: 1; }
+.mig-mx:hover { background: var(--bg); color: var(--fg); }
+.mig-mb { padding: 20px; }
+.mig-mf { display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--border); }
+.confirm-conn-row { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 8px; flex-wrap: wrap; }
+.confirm-conn-label { font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: .04em; width: 28px; }
+.confirm-conn-meta { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.confirm-notes { margin: 10px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--muted); }
+.cleanup-form { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--fg); }
+.cleanup-input { width: 120px; height: 32px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); font-family: var(--font-mono); font-size: 12.5px; color: var(--fg); text-align: center; }
+.cleanup-preview { margin-top: 12px; font-size: 12.5px; color: var(--muted); line-height: 1.7; }
+.cleanup-preview b { color: var(--fg); font-family: var(--font-mono); }
+
+/* 抽屉样张（迁移详情，与实现同宽 760） */
+.mig-drawer { width: 760px; max-width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); }
+.mig-drawer-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--border); }
+.mig-drawer-head h2 { margin: 0; font-size: 14px; font-weight: 600; }
+.mig-desc { display: grid; grid-template-columns: 120px 1fr 120px 1fr; border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; font-size: 12.5px; }
+.mig-desc > div { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+.mig-desc > div.k { background: var(--bg); color: var(--muted); font-size: 11.5px; font-weight: 600; }
+.mig-desc > div.wide { grid-column: 2 / -1; }
+.mig-desc > div:nth-last-child(-n + 2) { border-bottom: none; }
+.mig-group-label { font-size: 12px; font-weight: 600; color: var(--fg); margin: 14px 0 6px; }
+.mig-next { margin-top: 14px; border-top: 1px dashed var(--border); padding-top: 12px; }
+.mig-next-title { font-size: 12.5px; font-weight: 600; color: var(--fg); margin-bottom: 6px; }
+.mig-next ol { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="app-layout">
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="sidebar-logo-icon">磐</div>
+    <span class="sidebar-logo-text">磐石</span>
+    <span class="sidebar-logo-version">v1.0</span>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">核心功能</div>
+      <a class="nav-item" href="overview.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h5v5H3v-5zm7 0h5v5h-5v-5z"/></svg><span>概览</span></a>
+      <a class="nav-item" href="clusters.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h14v5H2V3zm0 7h14v5H2v-5z"/></svg><span>集群管理</span></a>
+      <a class="nav-item" href="routes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l5-7v5h9v4H7v5l-5-7z"/></svg><span>路由管理</span></a>
+      <a class="nav-item" href="upstreams.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>上游管理</span></a>
+      <a class="nav-item" href="nodes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3a2 2 0 110 4 2 2 0 010-4zM3.5 14a2 2 0 110-4 2 2 0 010 4zM14.5 14a2 2 0 110-4 2 2 0 010 4z"/></svg><span>节点管理</span></a>
+      <a class="nav-item" href="plugin-groups.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h12v5H3v-5z"/></svg><span>插件组</span></a>
+      <a class="nav-item" href="plugin-metadata.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h8l3 3v9a1 1 0 01-1 1H5a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M9 7v4M9 13v-1"/></svg><span>插件元数据</span></a>
+      <a class="nav-item" href="global-rules.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l6 3v4c0 3-2.5 5.5-6 7-3.5-1.5-6-4-6-7V5l6-3z"/></svg><span>全局规则</span></a>
+      <a class="nav-item" href="static-resources.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3a1 1 0 011-1h6l4 4v10a1 1 0 01-1 1H6a1 1 0 01-1-1V3zM11 2v4h4"/></svg><span>静态资源</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">证书管理</div>
+      <a class="nav-item" href="ca-certs.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="12.5" r="2.5"/><path d="M8 12.5h7M13 12.5v2.5M15 12.5v2.5"/></svg><span>CA 根证书</span></a>
+      <a class="nav-item" href="server-certs.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="10" height="8" rx="1"/><path d="M6.5 8V6a2.5 2.5 0 015 0v2"/></svg><span>服务器证书</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">边缘网络</div>
+      <a class="nav-item" href="edge-env.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="2.5"/><path d="M9 3v2M9 13v2M3 9h2M13 9h2M4.5 4.5l1.5 1.5M12 12l1.5 1.5M4.5 13.5l1.5-1.5M12 6l1.5-1.5"/></svg><span>edge.env 配置</span></a>
+      <a class="nav-item" href="stream-proxies.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="12" height="4" rx="1"/><rect x="4" y="7" width="10" height="4" rx="1"/><rect x="5" y="12" width="8" height="4" rx="1"/></svg><span>四层代理</span></a>
+      <a class="nav-item" href="dns-udp-proxies.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="4" r="2"/><circle cx="4" cy="14" r="2"/><circle cx="14" cy="14" r="2"/><path d="M9 6v3M4 12l2-2M14 12l-2-2"/></svg><span>DNS代理[UDP]</span></a>
+      <a class="nav-item" href="dns-http-proxies.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="4" r="2"/><circle cx="4" cy="14" r="2"/><circle cx="14" cy="14" r="2"/><path d="M9 6v3M4 12l2-2M14 12l-2-2"/></svg><span>DNS代理[HTTP]</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">监控</div>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h3l2-6 3 10 2-7 1.5 3H16"/></svg><span>指标总览</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.5"/><path d="M12 12l4 4"/></svg><span>指标查询</span></a>
+      <a class="nav-item" href="clickhouse-config.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="9" cy="4.5" rx="6.5" ry="2.5"/><path d="M2.5 4.5v9c0 1.4 2.9 2.5 6.5 2.5s6.5-1.1 6.5-2.5v-9M2.5 9c0 1.4 2.9 2.5 6.5 2.5s6.5-1.1 6.5-2.5"/></svg><span>ClickHouse 配置</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">运维管理</div>
+      <a class="nav-item" href="edge-client.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l7 7-7 7-7-7z"/></svg><span>Edge直连</span></a>
+      <a class="nav-item" href="edge-import.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>数据导入</span></a>
+      <a class="nav-item" href="tools.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h8v8H5V7zM7 7V5h4v2"/></svg><span>工具箱</span></a>
+      <a class="nav-item" href="edge-autostart.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6-4 6 4v8l-6 4-6-4V6zM3 6l6 4m0 0l6-4m-6 4v8"/></svg><span>自启动管理</span></a>
+      <a class="nav-item" href="ansible-inventory.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="12" height="14" rx="1"/><path d="M6 6h6M6 9.5h6M6 13h4"/></svg><span>Ansible 主机清单</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6-4 6 4v8l-6 4-6-4V6zM3 6l6 4m0 0l6-4m-6 4v8"/></svg><span>节点任务</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="6" height="6" rx="1"/><rect x="10" y="10" width="6" height="6" rx="1"/><path d="M5 8v3a2 2 0 002 2h3"/></svg><span>中继区域管理</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">系统管理</div>
+      <a class="nav-item" href="database-management.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="9" cy="4" rx="6" ry="2.5"/><path d="M3 4v10c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5V4"/><path d="M3 9c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5"/></svg><span>数据库管理</span></a>
+      <a class="nav-item active" href="db-migration.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="9" cy="4" rx="6" ry="2.5"/><path d="M3 4v10c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5V4"/><path d="M12 12h5m0 0-2-2m2 2-2 2"/></svg><span>数据迁移</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h14v5H2V3z"/><path d="M5 5.5h1.5M2 8v7a1 1 0 001 1h12a1 1 0 001-1V8"/><path d="M7 11.5h4"/></svg><span>备份与容灾</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 1.5l6 3v4c0 4-2.5 6.8-6 8-3.5-1.2-6-4-6-8v-4l6-3z"/><path d="M6.5 9l1.8 1.8L12 7.2"/></svg><span>审计日志</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9a3 3 0 100-6 3 3 0 000 6zM3 16c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg><span>用户管理</span></a>
+    </div>
+  </nav>
+</aside>
+<div class="main-area">
+<header class="top-header"><div class="top-header-breadcrumb"><a href="index.html">首页</a><span>/</span><span>系统管理</span><span>/</span><span>数据迁移</span></div><div class="top-header-actions"><div class="h-search"><input type="text" placeholder="搜索功能或页面..."><svg class="s-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div><div class="header-user"><div class="header-avatar">管</div><span>管理员</span></div></div></header>
+<div class="content-area">
+
+  <!-- ══════════ 页头：描述即风险前置（无页面级动作，发起在迁移任务卡内） ══════════ -->
+  <div class="page-header" style="margin-bottom:20px;">
+    <div>
+      <h1>数据迁移</h1>
+      <p>在 SQLite 与 PostgreSQL 之间单向快照迁移，支持实时进度、进行中状态恢复与迁移历史管理；迁移期间全局写暂停，请避开业务高峰。</p>
+    </div>
+  </div>
+
+  <!-- ══════════ 状态带：当前活动库 / 待重启 / 迁移锁（三事实集中，不做整页重复） ══════════ -->
+  <div class="mig-band" style="margin-bottom:16px;">
+    <span class="mig-seg"><span class="mig-lbl">当前活动库</span><span class="lp-tag tech">SQLite</span><span class="mig-val">本机 SQLite（开发）</span></span>
+    <span class="mig-seg"><span class="mig-lbl">可用连接</span><span class="mig-val">3</span></span>
+  </div>
+
+  <!-- ══════════ 迁移任务：左流向面板（源 → 目标 + 超时/日志/发起） + 右风险面板 ══════════ -->
+  <div class="l5-card" style="margin-bottom:16px;">
+    <div class="mig-cardhead">
+      <h3>迁移任务</h3>
+      <span class="mig-sub">单向快照替换：先备份源库，再清空目标库写入</span>
+      <div class="mig-head-actions">
+        <button class="tool-btn">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 11-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+          刷新
+        </button>
+      </div>
+    </div>
+    <div class="mig-body">
+      <div class="mig-layout">
+        <div class="flow-panel">
+          <div class="flow-grid">
+            <div class="flow-unit">
+              <label class="unit-label">源数据库</label>
+              <select class="mig-select"><option>本机 SQLite（开发）</option></select>
+            </div>
+            <div class="flow-chip" aria-hidden="true">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+            </div>
+            <div class="flow-unit">
+              <label class="unit-label">目标数据库</label>
+              <select class="mig-select"><option>生产 PG</option></select>
+            </div>
+            <div class="flow-danger">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 20h16a2 2 0 0 0 1.73-2Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+              替换模式 · 目标库现有数据将被清空覆盖，不可撤销
+            </div>
+          </div>
+          <div class="control-line">
+            <span class="mig-lbl">单阶段超时</span>
+            <select class="mig-select timeout-select"><option>5 分钟（默认）</option></select>
+            <label class="checkbox-label"><input type="checkbox"> 包含日志数据</label>
+            <button class="btn btn-primary migrate-btn">开始迁移</button>
+          </div>
+        </div>
+        <aside class="risk-panel">
+          <div class="risk-title">风险与说明</div>
+          <ul class="risk-list">
+            <li class="danger">替换模式：目标库现有数据将被清空覆盖，不可撤销</li>
+            <li>迁移前自动备份源库，备份保留最近 10 份，超量自动清理</li>
+            <li>迁移期间所有写操作锁定（503），完成后自动恢复</li>
+            <li>静态资源文件存储于服务器磁盘，仅部署该文件的本机可访问；迁移/切换数据库不影响静态资源文件。</li>
+          </ul>
+        </aside>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ 历史迁移记录：grid-table 解剖 + 外置分页条；失败行可展开（失败原因 / 备份路径） ══════════ -->
+  <div class="l5-card" style="margin-bottom:16px;">
+    <div class="mig-cardhead">
+      <h3>历史迁移记录</h3>
+      <span class="mig-sub">仅当前活动库的记录；切换数据库后从零开始记录</span>
+      <div class="mig-head-actions">
+        <span class="ph-lite"><b>6</b> 条</span>
+        <button class="btn btn-secondary btn-sm">清理历史</button>
+      </div>
+    </div>
+    <div class="l5-table-wrap"><table class="l5-table" style="min-width:1070px"><colgroup><col style="width:45px"><col style="width:300px"><col style="width:84px"><col style="width:96px"><col style="width:92px"><col style="width:96px"><col style="width:156px"><col style="width:156px"></colgroup><thead><tr><th class="c-c">#</th><th class="resizable">迁移方向</th><th class="resizable">模式</th><th class="resizable">状态</th><th class="resizable">表数量</th><th class="resizable">时长</th><th class="resizable">开始时间</th><th class="resizable">完成时间</th></tr></thead><tbody>
+      <tr>
+        <td class="c-c"><span class="c-idx">1</span></td>
+        <td class="nw"><span class="hist-flow"><span class="lp-tag">本机 SQLite（开发）</span><span class="hist-arrow">→</span><span class="lp-tag">生产 PG</span></span></td>
+        <td class="nw"><span class="c-dim">替换</span></td>
+        <td class="nw"><span class="pill pill-run"><span class="dot"></span>成功</span></td>
+        <td class="nw"><span class="c-mono">62</span></td>
+        <td class="nw"><span class="c-mono">34.2 秒</span></td>
+        <td class="nw"><span class="c-mono">2025/11/26 10:22:41</span></td>
+        <td class="nw"><span class="c-mono">2025/11/26 10:23:15</span></td>
+      </tr>
+      <tr>
+        <td class="c-c"><span class="c-idx">2</span></td>
+        <td class="nw"><span class="hist-flow"><span class="lp-tag">生产 PG</span><span class="hist-arrow">→</span><span class="lp-tag">本机 SQLite（开发）</span></span></td>
+        <td class="nw"><span class="c-dim">替换</span></td>
+        <td class="nw"><span class="pill pill-run"><span class="dot"></span>成功</span></td>
+        <td class="nw"><span class="c-mono">62</span></td>
+        <td class="nw"><span class="c-mono">28.7 秒</span></td>
+        <td class="nw"><span class="c-mono">2025/11/20 16:05:10</span></td>
+        <td class="nw"><span class="c-mono">2025/11/20 16:05:39</span></td>
+      </tr>
+      <tr class="hist-expand-row">
+        <td class="c-c"><span class="c-idx">3</span></td>
+        <td class="nw"><span class="hist-flow"><span class="lp-tag">本机 SQLite（开发）</span><span class="hist-arrow">→</span><span class="lp-tag">预发 PG</span></span></td>
+        <td class="nw"><span class="c-dim">替换</span></td>
+        <td class="nw"><span class="pill pill-stop"><span class="dot"></span>失败</span></td>
+        <td class="nw"><span class="c-mono">-</span></td>
+        <td class="nw"><span class="c-mono">3.1 秒</span></td>
+        <td class="nw"><span class="c-mono">2025/11/18 09:12:03</span></td>
+        <td class="nw"><span class="c-mono">2025/11/18 09:12:06</span></td>
+      </tr>
+      <tr class="hist-expand-row">
+        <td colspan="8">
+          <div class="hist-expand">
+            <div><span class="lbl">失败原因：</span><span class="err">目标库连接失败：连接被拒绝（host 192.168.100.91:5432）</span></div>
+            <div><span class="lbl">备份路径：</span><code class="hist-path">./data/backups/migration_local_sqlite_to_pg_uat_20251118_091203.zip</code><button class="btn btn-secondary btn-sm hist-copy">复制</button></div>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td class="c-c"><span class="c-idx">4</span></td>
+        <td class="nw"><span class="hist-flow"><span class="lp-tag">本机 SQLite（开发）</span><span class="hist-arrow">→</span><span class="lp-tag">生产 PG</span></span></td>
+        <td class="nw"><span class="c-dim">替换</span></td>
+        <td class="nw"><span class="pill pill-run"><span class="dot"></span>成功</span></td>
+        <td class="nw"><span class="c-mono">60</span></td>
+        <td class="nw"><span class="c-mono">31.5 秒</span></td>
+        <td class="nw"><span class="c-mono">2025/11/12 14:40:22</span></td>
+        <td class="nw"><span class="c-mono">2025/11/12 14:40:54</span></td>
+      </tr>
+      <tr>
+        <td class="c-c"><span class="c-idx">5</span></td>
+        <td class="nw"><span class="hist-flow"><span class="lp-tag">生产 PG</span><span class="hist-arrow">→</span><span class="lp-tag">本机 SQLite（开发）</span></span></td>
+        <td class="nw"><span class="c-dim">替换</span></td>
+        <td class="nw"><span class="pill pill-run"><span class="dot"></span>成功</span></td>
+        <td class="nw"><span class="c-mono">58</span></td>
+        <td class="nw"><span class="c-mono">27.3 秒</span></td>
+        <td class="nw"><span class="c-mono">2025/11/05 09:03:11</span></td>
+        <td class="nw"><span class="c-mono">2025/11/05 09:03:38</span></td>
+      </tr>
+      <tr>
+        <td class="c-c"><span class="c-idx">6</span></td>
+        <td class="nw"><span class="hist-flow"><span class="lp-tag">本机 SQLite（开发）</span><span class="hist-arrow">→</span><span class="lp-tag">预发 PG</span></span></td>
+        <td class="nw"><span class="c-dim">替换</span></td>
+        <td class="nw"><span class="pill pill-run"><span class="dot"></span>成功</span></td>
+        <td class="nw"><span class="c-mono">55</span></td>
+        <td class="nw"><span class="c-mono">26.8 秒</span></td>
+        <td class="nw"><span class="c-mono">2025/10/28 11:12:47</span></td>
+        <td class="nw"><span class="c-mono">2025/10/28 11:13:14</span></td>
+      </tr>
+    </tbody></table></div>
+    <div class="l5-pager">
+      <span class="p-info">共 <b>6</b> 条 · 每页
+        <select class="pager-select"><option>20 条</option></select>
+      </span>
+      <span class="p-nav">
+        <button class="p-btn" disabled><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+        <button class="p-btn active">1</button>
+        <button class="p-btn" disabled><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></button>
+        <span class="p-jump">跳至 <input value="1" /> 页</span>
+      </span>
+    </div>
+  </div>
+
+  <!-- ══════════ 样张：迁移进行中（SSE 实时进度；断开后由 5s 轮询恢复） ══════════ -->
+  <div class="mig-annot"><b>进行中态样张</b> · 迁移发起后替换为进度面板：阶段徽标 + 进度条 + 当前表/行数 + 「断开实时进度」。断开只停实时流，任务在后台继续，刷新页面由 5s 轮询恢复展示（横幅 + 进度）。</div>
+  <div class="mig-progress" style="margin-bottom:16px;">
+    <div class="progress-head"><span class="phase">MIGRATING</span>正在迁移数据 · 表 18 / 62</div>
+    <div class="bar"><i style="width:29%"></i></div>
+    <div class="progress-meta">
+      <span>当前表：<b>ps_route</b></span>
+      <span>已迁移 <b>12,480</b> / <b>30,110</b> 行</span>
+      <span class="c-mono">14:02:36 起</span>
+    </div>
+    <div class="progress-foot"><button class="btn btn-danger btn-sm">断开实时进度</button></div>
+  </div>
+
+  <!-- ══════════ 样张：备份阶段（先备份源库，再进入迁移） ══════════ -->
+  <div class="mig-annot"><b>备份阶段样张</b> · 迁移开始先自动备份源库（保留最近 10 份），此阶段进度按表计数。</div>
+  <div class="mig-progress" style="margin-bottom:16px;">
+    <div class="progress-head"><span class="phase">BACKUP</span>正在备份源库…</div>
+    <div class="bar ok"><i style="width:64%"></i></div>
+    <div class="progress-meta"><span>已备份 <b>40</b> / <b>62</b> 张表</span></div>
+  </div>
+
+  <!-- ══════════ 样张：迁移完成结果条（一行摘要；明细进抽屉） ══════════ -->
+  <div class="mig-annot"><b>完成态样张</b> · 完成只占一行：结论 + 表数/耗时/备份 + 「查看迁移详情」（760 抽屉）+ 「去切换数据库」（本页弹共享切换确认框，不再跳页）。</div>
+  <div class="result-bar" style="margin-bottom:16px;">
+    <span class="result-badge">✓</span>
+    <span class="result-text">迁移完成，共迁移 62 张表</span>
+    <span class="result-meta">34 秒 · 已自动备份源库（保留最近 10 份）</span>
+    <span class="result-actions">
+      <button class="btn btn-secondary btn-sm">查看迁移详情</button>
+      <button class="btn btn-primary btn-sm">去切换数据库</button>
+    </span>
+  </div>
+
+  <!-- ══════════ 样张：迁移锁 + 待重启（状态带的两个附加段） ══════════ -->
+  <div class="mig-annot"><b>锁态 / 待重启样张</b> · 迁移进行中时状态带追加「迁移进行中 源 → 目标 · 写操作已锁定 · 起于」；切换后未重启时追加「切换待重启生效，注意迁移方向」。两段可同时出现。</div>
+  <div class="mig-band" style="margin-bottom:16px;">
+    <span class="mig-seg"><span class="mig-lbl">当前活动库</span><span class="lp-tag tech">PostgreSQL</span><span class="mig-val">生产 PG</span></span>
+    <span class="mig-seg warn">⚠ 切换待重启生效，注意迁移方向</span>
+    <span class="mig-seg lock"><span class="mig-lbl">迁移进行中</span><span class="mig-flow">生产 PG → 预发 PG</span><span class="mig-lock-tag">写操作已锁定</span><span class="mig-time">2025/11/26 14:02:11 起</span></span>
+  </div>
+
+  <!-- ══════════ 样张：切换成功后页面级重启指引横幅（可关闭、固定展示） ══════════ -->
+  <div class="mig-annot"><b>切换后重启指引横幅</b> · 「去切换数据库」成功后固定展示（可手动关闭，刷新后消失），文案与「数据库管理」页待重启指引同源。</div>
+  <div class="alert alert-warning" style="margin-bottom:16px;">
+    <span class="alert-icon">⚠</span>
+    <div class="alert-content">
+      切换待重启生效，当前页面数据仍来自旧库；请按提示完成后端重启（开发环境运行
+      <code style="font-family:var(--font-mono);font-size:11.5px;">develop/linux/start.sh</code>，生产环境执行
+      <code style="font-family:var(--font-mono);font-size:11.5px;">sh stop.sh; sh start.sh</code>）。
+    </div>
+    <button class="mig-mx" style="align-self:center;">&times;</button>
+  </div>
+
+  <!-- ══════════ 样张：可用连接不足（发起按钮禁用 + 出口引导） ══════════ -->
+  <div class="mig-annot"><b>连接不足样张</b> · 可发起迁移至少需要 2 个连接；不足时「开始迁移」禁用并给出唯一出口（去新建连接，携带 <code>?wizard=1</code> 深链直接打开新建弹窗）。</div>
+  <div class="flow-panel" style="max-width:720px; margin-bottom:16px;">
+    <div class="control-line">
+      <span class="mig-lbl">单阶段超时</span>
+      <select class="mig-select timeout-select is-disabled"><option>5 分钟（默认）</option></select>
+      <label class="checkbox-label"><input type="checkbox"> 包含日志数据</label>
+      <button class="btn btn-primary migrate-btn" disabled>开始迁移</button>
+    </div>
+    <div class="flow-hint">
+      <span>可用连接不足：发起迁移需要 2 个连接，当前 1 个</span>
+      <button class="btn btn-secondary btn-sm">去新建连接</button>
+    </div>
+  </div>
+
+  <!-- ══════════ 弹窗样张 · 确认开始迁移（560px；危险确认按钮） ══════════ -->
+  <div class="mig-annot"><b>弹窗样张 · 确认开始迁移</b>（560px）· 发起前二次确认：源/目标连接与地址 + 清空覆盖警示（目标非空为红色警告，空库为信息色）+ 三条执行说明 + 危险确认按钮。<code>单阶段超时</code> 随选择变化。</div>
+  <div class="mig-modal">
+    <div class="mig-mh"><h2>确认开始迁移</h2><button class="mig-mx">&times;</button></div>
+    <div class="mig-mb">
+      <div class="confirm-conn-row"><span class="confirm-conn-label">源</span><strong>本机 SQLite（开发）</strong><span class="confirm-conn-meta">./data/panshi.db</span><span class="badge badge-neutral">当前活动库</span></div>
+      <div class="confirm-conn-row"><span class="confirm-conn-label">目标</span><strong>生产 PG</strong><span class="confirm-conn-meta">192.168.100.90:5432/panshi</span></div>
+      <div class="alert alert-error" style="margin:12px 0 0;">
+        <span class="alert-icon">⚠</span>
+        <div class="alert-content">目标库已有数据：本次迁移为替换模式，目标库现有数据将被清空覆盖，不可撤销。</div>
+      </div>
+      <ul class="confirm-notes">
+        <li>迁移前自动备份源库（备份保留最近 10 份，超量自动清理）</li>
+        <li>迁移期间所有写操作暂被锁定，完成后自动恢复</li>
+        <li>单阶段超时 5 分钟（默认），超时自动中止</li>
+      </ul>
+    </div>
+    <div class="mig-mf">
+      <button class="btn btn-secondary">取消</button>
+      <button class="btn btn-danger">确认开始迁移</button>
+    </div>
+  </div>
+
+  <!-- ══════════ 弹窗样张 · 清理迁移历史（520px；预览数字来自服务端真实总数） ══════════ -->
+  <div class="mig-annot"><b>弹窗样张 · 清理迁移历史</b>（520px）· 保留最近 N 条，其余删除；预览数字取服务端真实总数（不是界面已加载条数），无记录可删时禁用提交。</div>
+  <div class="mig-modal narrow">
+    <div class="mig-mh"><h2>清理迁移历史</h2><button class="mig-mx">&times;</button></div>
+    <div class="mig-mb">
+      <div class="cleanup-form">
+        <span>保留最近</span>
+        <input class="cleanup-input" value="10" />
+        <span>条记录，其余全部删除</span>
+      </div>
+      <div class="cleanup-preview">库内共 <b>18</b> 条，将删除 <b>8</b> 条，保留 <b>10</b> 条（执行中的记录不会被删除）。</div>
+    </div>
+    <div class="mig-mf">
+      <button class="btn btn-secondary">取消</button>
+      <button class="btn btn-danger">确认清理</button>
+    </div>
+  </div>
+
+  <!-- ══════════ 抽屉样张 · 迁移详情（760px；表分组 + 后续切换步骤） ══════════ -->
+  <div class="mig-annot"><b>抽屉样张 · 迁移详情</b>（右侧抽屉 760px）· 汇总四格 + 表明细按「业务表 / 审计与导入日志 / 任务日志」分组（组内滚动）+ 后续启用步骤；未包含日志表时给出勾选提示。</div>
+  <div class="mig-drawer">
+    <div class="mig-drawer-head"><h2>迁移详情</h2><button class="mig-mx">&times;</button></div>
+    <div class="mig-mb">
+      <div class="mig-desc">
+        <div class="k">源数据库</div><div>本机 SQLite（开发）</div>
+        <div class="k">目标数据库</div><div>生产 PG</div>
+        <div class="k">迁移表数</div><div class="c-mono">62</div>
+        <div class="k">耗时</div><div class="c-mono">34 秒</div>
+        <div class="k">备份路径</div><div class="wide hist-path">./data/backups/migration_local_sqlite_to_pg_20251126_102241.zip</div>
+      </div>
+      <div class="mig-group-label">表明细（共 62 张：业务表 48 · 审计与导入日志 8 · 任务日志 6）</div>
+      <div class="l5-table-wrap"><table class="l5-table" style="min-width:520px"><colgroup><col style="width:260px"><col style="width:110px"><col style="width:110px"></colgroup><thead><tr><th>表名</th><th>列数</th><th>行数</th></tr></thead><tbody>
+        <tr><td class="nw"><span class="c-mono">ps_cluster</span></td><td class="nw"><span class="c-mono">12</span></td><td class="nw"><span class="c-mono">18</span></td></tr>
+        <tr><td class="nw"><span class="c-mono">ps_route</span></td><td class="nw"><span class="c-mono">21</span></td><td class="nw"><span class="c-mono">1,596</span></td></tr>
+        <tr><td class="nw"><span class="c-mono">ps_upstream</span></td><td class="nw"><span class="c-mono">18</span></td><td class="nw"><span class="c-mono">412</span></td></tr>
+      </tbody></table></div>
+      <div class="mig-next">
+        <div class="mig-next-title">迁移成功，按以下步骤启用新数据库：</div>
+        <ol>
+          <li>在「连接列表」中找到 <strong>生产 PG</strong>，点击「设为当前」</li>
+          <li>在确认弹窗中点击「确认切换」，然后手动重启后端服务生效</li>
+          <li>重启后刷新页面，「当前数据库」卡片应显示新数据库</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+</div>
+</div>
+</div>
+<script>
+// 与实现同款行为：进页把活动菜单滚到可见（AppSidebar 的 scrollIntoView）
+document.querySelector('.nav-item.active')?.scrollIntoView({ block: 'center' });
+</script>
+<div class="l5-prop-tag">方案 C · <b>数据迁移</b></div>
+</body>
+</html>
