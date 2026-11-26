@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数据库管理 · 方案 C 网关控制台感 — 磐石网关管理平台</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+/* —— 本页专属解剖（数据库管理）：配置管理页 = 当前库 hero + 连接列表 + 两张摘要卡 + 弹窗样张。
+   连接连通性只绑定页面内实测（未验证 / 已连通 / 验证失败），不自造状态色。—— */
+.page-header h1 { font-size: 21px; }
+
+/* 卡头（本页四张卡共用） */
+.db-cardhead { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.db-cardhead h3 { margin: 0; font-size: 13px; font-weight: 600; color: var(--fg); }
+.db-cardhead .db-sub { font-size: 11.5px; color: var(--muted); }
+.db-cardhead .db-head-actions { margin-left: auto; display: flex; gap: 8px; }
+
+/* 当前数据库 hero */
+.db-hero { display: flex; align-items: flex-start; gap: 14px; padding: 16px 20px 18px; }
+.db-verdict { flex-shrink: 0; }
+.db-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.db-name-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.db-name { font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--fg); }
+.db-addr { font-family: var(--font-mono); font-size: 12.5px; color: var(--muted); word-break: break-all; }
+.db-meta { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); flex-wrap: wrap; margin-top: 2px; }
+.db-meta b { font-family: var(--font-mono); color: var(--fg); font-weight: 600; }
+.db-meta .sep { color: oklch(50% 0.018 240 / 35%); }
+
+/* 切换待重启生效警示（与切换弹窗内重启指引同一套文案口径） */
+.db-pending {
+  margin-top: 6px; padding: 9px 12px; font-size: 12.5px; line-height: 1.65;
+  color: var(--warning); background: oklch(65% 0.15 85 / 10%);
+  border: 1px solid oklch(65% 0.15 85 / 32%); border-radius: var(--radius-md);
+}
+.db-pending b { font-weight: 600; }
+.db-pending code {
+  font-family: var(--font-mono); font-size: 11.5px; padding: 0 5px; border-radius: 4px;
+  background: oklch(50% 0.018 240 / 8%); border: 1px solid var(--border); color: var(--fg);
+}
+
+/* 摘要双卡（备份与容灾 / 数据迁移） */
+.db-two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 1180px) { .db-two { grid-template-columns: 1fr; } }
+.db-body { padding: 14px 16px 16px; }
+.db-stats { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg); overflow: hidden; }
+.db-stat { padding: 10px 14px; display: flex; flex-direction: column; gap: 4px; border-right: 1px solid var(--border); }
+.db-stat:last-child { border-right: none; }
+/* 双卡并排时格子改 2×2：半宽卡里 4 列放不下时间戳（会折行） */
+.db-two .db-stats { grid-template-columns: repeat(2, 1fr); }
+.db-two .db-stat { border-bottom: 1px solid var(--border); }
+.db-two .db-stat:nth-child(2n) { border-right: none; }
+.db-two .db-stat:nth-child(n+3) { border-bottom: none; }
+.db-stat-label { font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: .04em; }
+.db-stat-value { font-size: 13px; color: var(--fg); display: flex; align-items: center; gap: 6px; min-height: 22px; flex-wrap: wrap; }
+.db-last { margin-top: 12px; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg); }
+.db-last-label { font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: .04em; margin-bottom: 6px; }
+.db-last-body { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; color: var(--fg); }
+.db-counts { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.db-time { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.db-foot { margin-top: 10px; font-size: 12px; color: var(--muted); }
+.db-muted { color: var(--muted); }
+/* 长内容列（名称/地址/用户名）单行省略：与实现 .cell-ellipsis 同解剖，完整值靠 title */
+.cell-ell { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cell-ell.strong { font-weight: 600; color: var(--fg); }
+/* 当前连接行：左缘 accent 条 + 极淡底（与多选 row-selected 区分，本页无选择语义） */
+.db-current-row td { background: oklch(56% 0.16 210 / 5%); }
+.db-current-row td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+
+/* 危险描边按钮（与实现 btn-danger-outline 同款：仅描边、危险色文字） */
+.btn-danger-outline { background: transparent; border: 1px solid oklch(55% 0.18 28 / 45%); color: var(--danger); }
+.btn-danger-outline:hover { background: oklch(55% 0.18 28 / 8%); border-color: var(--danger); color: var(--danger); }
+
+/* 样张注记 */
+.db-annot { font-size: 11px; color: var(--muted); margin: 26px 0 8px 2px; line-height: 1.6; }
+.db-annot b { color: var(--fg); font-weight: 600; }
+.db-annot code { font-family: var(--font-mono); font-size: 10.5px; color: var(--fg); }
+
+/* 弹窗样张（静态呈现；宽度与实现一致：连接表单 600 / 确认类 480） */
+.db-modal { width: 600px; max-width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); }
+.db-modal.narrow { width: 480px; }
+.db-mh { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--accent-bg); border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+.db-mh h2 { margin: 0; font-size: 14px; font-weight: 600; color: var(--fg); }
+.db-mx { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-sm); border: none; background: transparent; cursor: pointer; color: var(--muted); font-size: 20px; line-height: 1; }
+.db-mx:hover { background: var(--bg); color: var(--fg); }
+.db-mb { padding: 20px; }
+.db-mf { display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--border); }
+.db-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; margin-bottom: 14px; }
+.db-form-row.single { grid-template-columns: 1fr; }
+.db-field { display: flex; flex-direction: column; gap: 6px; }
+.db-label { font-size: 12px; font-weight: 600; color: var(--fg); }
+.db-label .req { color: var(--danger); margin-left: 2px; }
+.db-input, .db-select { width: 100%; height: 32px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); font-family: inherit; font-size: 12.5px; color: var(--fg); outline: none; transition: border-color .15s, box-shadow .15s; }
+.db-select { appearance: none; padding-right: 28px; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position: calc(100% - 15px) 13px, calc(100% - 10px) 13px; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; }
+.db-input:focus, .db-select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
+.db-input::placeholder { color: oklch(50% 0.018 240 / 45%); }
+.db-check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--fg); cursor: pointer; }
+.db-check input { width: 14px; height: 14px; accent-color: var(--accent); }
+.db-field-hint { font-size: 11.5px; color: var(--muted); }
+.db-danger-text { font-size: 13px; line-height: 1.7; color: var(--fg); }
+.db-danger-text b { font-weight: 600; }
+/* 弹窗内行内代码（重启命令等）与非链接等宽片段 */
+.db-mcode { font-family: var(--font-mono); font-size: 11.5px; padding: 0 5px; border-radius: 4px; background: oklch(50% 0.018 240 / 8%); border: 1px solid var(--border); color: var(--fg); }
+</style>
+</head>
+<body>
+<div class="app-layout">
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="sidebar-logo-icon">磐</div>
+    <span class="sidebar-logo-text">磐石</span>
+    <span class="sidebar-logo-version">v1.0</span>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">核心功能</div>
+      <a class="nav-item" href="overview.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h5v5H3v-5zm7 0h5v5h-5v-5z"/></svg><span>概览</span></a>
+      <a class="nav-item" href="clusters.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h14v5H2V3zm0 7h14v5H2v-5z"/></svg><span>集群管理</span></a>
+      <a class="nav-item" href="routes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l5-7v5h9v4H7v5l-5-7z"/></svg><span>路由管理</span></a>
+      <a class="nav-item" href="upstreams.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>上游管理</span></a>
+      <a class="nav-item" href="nodes.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3a2 2 0 110 4 2 2 0 010-4zM3.5 14a2 2 0 110-4 2 2 0 010 4zM14.5 14a2 2 0 110-4 2 2 0 010 4z"/></svg><span>节点管理</span></a>
+      <a class="nav-item" href="plugin-groups.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h5v5H3V3zm7 0h5v5h-5V3zM3 10h12v5H3v-5z"/></svg><span>插件组</span></a>
+      <a class="nav-item" href="plugin-metadata.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h8l3 3v9a1 1 0 01-1 1H5a1 1 0 01-1-1V4a1 1 0 011-1z"/><path d="M9 7v4M9 13v-1"/></svg><span>插件元数据</span></a>
+      <a class="nav-item" href="global-rules.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l6 3v4c0 3-2.5 5.5-6 7-3.5-1.5-6-4-6-7V5l6-3z"/></svg><span>全局规则</span></a>
+      <a class="nav-item" href="static-resources.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3a1 1 0 011-1h6l4 4v10a1 1 0 01-1 1H6a1 1 0 01-1-1V3zM11 2v4h4"/></svg><span>静态资源</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">证书管理</div>
+      <a class="nav-item" href="ca-certs.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="12.5" r="2.5"/><path d="M8 12.5h7M13 12.5v2.5M15 12.5v2.5"/></svg><span>CA 根证书</span></a>
+      <a class="nav-item" href="server-certs.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="10" height="8" rx="1"/><path d="M6.5 8V6a2.5 2.5 0 015 0v2"/></svg><span>服务器证书</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">边缘网络</div>
+      <a class="nav-item" href="edge-env.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="2.5"/><path d="M9 3v2M9 13v2M3 9h2M13 9h2M4.5 4.5l1.5 1.5M12 12l1.5 1.5M4.5 13.5l1.5-1.5M12 6l1.5-1.5"/></svg><span>edge.env 配置</span></a>
+      <a class="nav-item" href="stream-proxies.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="12" height="4" rx="1"/><rect x="4" y="7" width="10" height="4" rx="1"/><rect x="5" y="12" width="8" height="4" rx="1"/></svg><span>四层代理</span></a>
+      <a class="nav-item" href="dns-udp-proxies.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="4" r="2"/><circle cx="4" cy="14" r="2"/><circle cx="14" cy="14" r="2"/><path d="M9 6v3M4 12l2-2M14 12l-2-2"/></svg><span>DNS代理[UDP]</span></a>
+      <a class="nav-item" href="dns-http-proxies.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="4" r="2"/><circle cx="4" cy="14" r="2"/><circle cx="14" cy="14" r="2"/><path d="M9 6v3M4 12l2-2M14 12l-2-2"/></svg><span>DNS代理[HTTP]</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">监控</div>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h3l2-6 3 10 2-7 1.5 3H16"/></svg><span>指标总览</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.5"/><path d="M12 12l4 4"/></svg><span>指标查询</span></a>
+      <a class="nav-item" href="clickhouse-config.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="9" cy="4.5" rx="6.5" ry="2.5"/><path d="M2.5 4.5v9c0 1.4 2.9 2.5 6.5 2.5s6.5-1.1 6.5-2.5v-9M2.5 9c0 1.4 2.9 2.5 6.5 2.5s6.5-1.1 6.5-2.5"/></svg><span>ClickHouse 配置</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">运维管理</div>
+      <a class="nav-item" href="edge-client.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2l7 7-7 7-7-7z"/></svg><span>Edge直连</span></a>
+      <a class="nav-item" href="edge-import.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v10M5 8l4 4 4-4M2 16h14"/></svg><span>数据导入</span></a>
+      <a class="nav-item" href="tools.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h8v8H5V7zM7 7V5h4v2"/></svg><span>工具箱</span></a>
+      <a class="nav-item" href="edge-autostart.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6-4 6 4v8l-6 4-6-4V6zM3 6l6 4m0 0l6-4m-6 4v8"/></svg><span>自启动管理</span></a>
+      <a class="nav-item" href="ansible-inventory.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="2" width="12" height="14" rx="1"/><path d="M6 6h6M6 9.5h6M6 13h4"/></svg><span>Ansible 主机清单</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6-4 6 4v8l-6 4-6-4V6zM3 6l6 4m0 0l6-4m-6 4v8"/></svg><span>节点任务</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="6" height="6" rx="1"/><rect x="10" y="10" width="6" height="6" rx="1"/><path d="M5 8v3a2 2 0 002 2h3"/></svg><span>中继区域管理</span></a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">系统管理</div>
+      <a class="nav-item active" href="database-management.html"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="9" cy="4" rx="6" ry="2.5"/><path d="M3 4v10c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5V4"/><path d="M3 9c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5"/></svg><span>数据库管理</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="9" cy="4" rx="6" ry="2.5"/><path d="M3 4v10c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5V4"/><path d="M12 12h5m0 0-2-2m2 2-2 2"/></svg><span>数据迁移</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h14v5H2V3z"/><path d="M5 5.5h1.5M2 8v7a1 1 0 001 1h12a1 1 0 001-1V8"/><path d="M7 11.5h4"/></svg><span>备份与容灾</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 1.5l6 3v4c0 4-2.5 6.8-6 8-3.5-1.2-6-4-6-8v-4l6-3z"/><path d="M6.5 9l1.8 1.8L12 7.2"/></svg><span>审计日志</span></a>
+      <a class="nav-item" href="#"><svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9a3 3 0 100-6 3 3 0 000 6zM3 16c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg><span>用户管理</span></a>
+    </div>
+  </nav>
+</aside>
+<div class="main-area">
+<header class="top-header"><div class="top-header-breadcrumb"><a href="index.html">首页</a><span>/</span><span>系统管理</span><span>/</span><span>数据库管理</span></div><div class="top-header-actions"><div class="h-search"><input type="text" placeholder="搜索功能或页面..."><svg class="s-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div><div class="header-user"><div class="header-avatar">管</div><span>管理员</span></div></div></header>
+<div class="content-area">
+
+  <!-- ══════════ 页头：唯一页面级动作「新建连接」（主操作恒最右） ══════════ -->
+  <div class="page-header" style="margin-bottom:20px;">
+    <div>
+      <h1>数据库管理<span class="ph-inline"><span class="ph-lite lite-accent"><b>3</b> 条连接</span><span class="ph-lite lite-bad"><b>1</b> 条验证失败</span></span></h1>
+      <p>管理当前系统使用的数据库连接，支持 SQLite / PostgreSQL，提供连接测试、切换与单向快照迁移。</p>
+    </div>
+    <div class="page-header-actions">
+      <button class="btn btn-primary"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg> 新建连接</button>
+    </div>
+  </div>
+
+  <!-- ══════════ 当前数据库（hero：判定 + 技术身份 + 注册表规模；切换需重启生效） ══════════ -->
+  <div class="l5-card" style="margin-bottom:16px;">
+    <div class="db-cardhead"><h3>当前数据库</h3><span class="db-sub">切换写入配置后需重启后端服务才生效；期间页面数据仍来自旧库</span></div>
+    <div class="db-hero">
+      <span class="db-verdict"><span class="pill pill-run" style="height:24px;font-size:12px;"><span class="dot"></span>运行中</span></span>
+      <div class="db-info">
+        <div class="db-name-row">
+          <span class="lp-tag tech">SQLite</span>
+          <span class="db-name">本机 SQLite（开发）</span>
+        </div>
+        <span class="db-addr">./data/panshi.db</span>
+        <div class="db-meta">
+          <span>连接注册表 <b>3</b> 条</span>
+          <span class="sep">·</span>
+          <span>配置版本 <b>v7</b></span>
+          <span class="sep">·</span>
+          <span>切换后 JWT 会话保持不变；目标库为空时仅保留 admin 账号</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ 连接列表（grid-table 解剖；操作层级：设为当前 = 行内主操作 accent） ══════════ -->
+  <div class="l5-card" style="margin-bottom:16px;">
+    <div class="db-cardhead"><h3>连接列表</h3><span class="db-sub">连通性为页面内「测试」结果（刷新后重置）；当前连接不可删除，需先切换</span></div>
+    <div class="l5-table-wrap"><table class="l5-table" style="min-width:1072px"><colgroup><col style="width:45px"><col style="width:96px"><col style="width:171px"><col style="width:104px"><col style="width:220px"><col style="width:96px"><col style="width:74px"><col style="width:266px"></colgroup><thead><tr><th class="c-c">#</th><th class="resizable">状态</th><th class="resizable">名称</th><th class="resizable">类型</th><th class="resizable">地址</th><th class="resizable">用户名</th><th class="resizable">当前</th><th class="resizable">操作</th></tr></thead><tbody>
+      <tr class="db-current-row">
+        <td class="c-c"><span class="c-idx">1</span></td>
+        <td class="nw"><span class="pill pill-run"><span class="dot"></span>已连通</span></td>
+        <td class="nw"><span class="cell-ell strong">本机 SQLite（开发）</span></td>
+        <td class="nw"><span class="lp-tag tech">SQLite</span></td>
+        <td class="nw"><span class="c-mono cell-ell">./data/panshi.db</span></td>
+        <td class="nw"><span class="c-dim">-</span></td>
+        <td class="nw"><span class="pill pill-run"><span class="dot"></span>当前</span></td>
+        <td class="ops-cell"><div class="ops">
+          <button class="op-btn" title="测试该连接（结果仅保留到页面刷新）"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>测试</button>
+          <button class="op-pub" disabled style="opacity:.4;cursor:not-allowed" title="当前连接无需切换">设为当前</button>
+          <button class="op-btn" title="编辑连接"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="4" height="16" rx="1"/><rect x="10" y="4" width="4" height="16" rx="1"/><rect x="17" y="4" width="4" height="16" rx="1"/></svg>编辑</button>
+          <button class="op-btn" disabled style="opacity:.4;cursor:not-allowed" title="当前连接不可删除，请先切换到其他连接"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg>删除</button>
+        </div></td>
+      </tr>
+      <tr>
+        <td class="c-c"><span class="c-idx">2</span></td>
+        <td class="nw"><span class="pill pill-unknown"><span class="dot"></span>未验证</span></td>
+        <td class="nw"><span class="cell-ell strong">生产 PG</span></td>
+        <td class="nw"><span class="lp-tag">PostgreSQL</span></td>
+        <td class="nw"><span class="c-mono cell-ell" title="192.168.100.90:5432/panshi">192.168.100.90:5432/panshi</span></td>
+        <td class="nw"><span class="c-mono c-dim cell-ell">panshi</span></td>
+        <td class="nw"><span class="c-dim">-</span></td>
+        <td class="ops-cell"><div class="ops">
+          <button class="op-btn" title="测试该连接（结果仅保留到页面刷新）"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>测试</button>
+          <button class="op-pub" title="写入配置；重启后端服务后生效">设为当前</button>
+          <button class="op-btn" title="编辑连接（密码留空表示不修改）"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="4" height="16" rx="1"/><rect x="10" y="4" width="4" height="16" rx="1"/><rect x="17" y="4" width="4" height="16" rx="1"/></svg>编辑</button>
+          <button class="op-btn" title="删除连接（仅删配置，不触碰数据库本身）" style="color:var(--danger)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg>删除</button>
+        </div></td>
+      </tr>
+      <tr>
+        <td class="c-c"><span class="c-idx">3</span></td>
+        <td class="nw"><span class="pill pill-stop"><span class="dot"></span>验证失败</span></td>
+        <td class="nw"><span class="cell-ell strong">预发 PG</span></td>
+        <td class="nw"><span class="lp-tag">PostgreSQL</span></td>
+        <td class="nw"><span class="c-mono cell-ell" title="192.168.100.91:5432/panshi_uat">192.168.100.91:5432/panshi_uat</span></td>
+        <td class="nw"><span class="c-mono c-dim cell-ell">panshi</span></td>
+        <td class="nw"><span class="c-dim">-</span></td>
+        <td class="ops-cell"><div class="ops">
+          <button class="op-btn" title="重新测试该连接"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>测试</button>
+          <button class="op-pub" title="写入配置；重启后端服务后生效">设为当前</button>
+          <button class="op-btn" title="编辑连接（密码留空表示不修改）"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="4" height="16" rx="1"/><rect x="10" y="4" width="4" height="16" rx="1"/><rect x="17" y="4" width="4" height="16" rx="1"/></svg>编辑</button>
+          <button class="op-btn" title="删除连接（仅删配置，不触碰数据库本身）" style="color:var(--danger)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg>删除</button>
+        </div></td>
+      </tr>
+    </tbody></table></div>
+  </div>
+
+  <!-- ══════════ 摘要双卡：备份与容灾 / 数据迁移（纯导航入口，均不就地执行） ══════════ -->
+  <div class="db-two">
+    <div class="l5-card">
+      <div class="db-cardhead">
+        <h3>SQLite 备份与容灾</h3>
+        <div class="db-head-actions">
+          <button class="btn btn-primary btn-sm">进入备份管理</button>
+          <button class="btn btn-danger-outline btn-sm">恢复数据</button>
+        </div>
+      </div>
+      <div class="db-body">
+        <div class="db-stats">
+          <div class="db-stat"><div class="db-stat-label">最近成功备份</div><div class="db-stat-value"><span class="db-time">2025/11/25 03:00:12</span></div></div>
+          <div class="db-stat"><div class="db-stat-label">下一轮预计</div><div class="db-stat-value"><span class="db-time">2025/11/26 03:00:00</span></div></div>
+          <div class="db-stat"><div class="db-stat-label">最近状态</div><div class="db-stat-value"><span class="badge badge-success">成功</span></div></div>
+          <div class="db-stat"><div class="db-stat-label">定时调度</div><div class="db-stat-value"><span class="badge badge-success">已启用</span></div></div>
+        </div>
+        <div class="db-last">
+          <div class="db-last-label">最近一次结果</div>
+          <div class="db-last-body">
+            <span class="badge badge-success">成功</span>
+            <span class="db-counts">2/2 目标</span>
+            <span class="db-time">2025/11/25 03:00:12</span>
+          </div>
+        </div>
+        <div class="db-foot">2 个启用位置（另 1 个已停用）</div>
+      </div>
+    </div>
+
+    <div class="l5-card">
+      <div class="db-cardhead">
+        <h3>数据迁移</h3>
+        <div class="db-head-actions">
+          <button class="btn btn-primary btn-sm">开始迁移</button>
+        </div>
+      </div>
+      <div class="db-body">
+        <div class="db-stats">
+          <div class="db-stat"><div class="db-stat-label">当前活动库</div><div class="db-stat-value"><span class="badge badge-neutral">SQLite</span><span>本机 SQLite（开发）</span></div></div>
+          <div class="db-stat"><div class="db-stat-label">最近一次迁移</div><div class="db-stat-value"><span class="badge badge-success">成功</span></div></div>
+          <div class="db-stat"><div class="db-stat-label">迁移状态</div><div class="db-stat-value"><span class="badge badge-success">空闲</span></div></div>
+          <div class="db-stat"><div class="db-stat-label">历史记录</div><div class="db-stat-value"><span class="db-time">12 条</span></div></div>
+        </div>
+        <div class="db-last">
+          <div class="db-last-label">最近一次结果</div>
+          <div class="db-last-body">
+            <span class="badge badge-success">成功</span>
+            <span class="db-counts">62 张表</span>
+            <span class="db-time">2025/11/20 10:22:41 完成</span>
+          </div>
+        </div>
+        <div class="db-foot">迁移与历史管理在「数据迁移」页进行；迁移期间全局写暂停（写请求 503）。</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ 待重启生效态样张（切换已写配置、引擎未重启：hero 判定转 warning + 警示条） ══════════ -->
+  <div class="db-annot"><b>待重启生效态样张</b> · 切换成功后 <code>pending_restart=true</code>：hero 判定胶囊转 warning（<code>pill-warn</code>）+ 三处同时提示——页头第二枚徽标换成 <code>ph-lite lite-warn</code> 的「待重启生效」（页头至多两枚，该态压过「K 条验证失败」）、名称行挂同一徽标、hero 给出重启出口。缺任何一处用户都会误以为切换失败。</div>
+  <div class="l5-card">
+    <div class="db-cardhead"><h3>当前数据库</h3><span class="db-sub">切换写入配置后需重启后端服务才生效；期间页面数据仍来自旧库</span></div>
+    <div class="db-hero">
+      <span class="db-verdict"><span class="pill pill-warn" style="height:24px;font-size:12px;"><span class="dot"></span>待重启</span></span>
+      <div class="db-info">
+        <div class="db-name-row">
+          <span class="lp-tag">PostgreSQL</span>
+          <span class="db-name">生产 PG</span>
+          <span class="ph-lite lite-warn">待重启生效</span>
+        </div>
+        <span class="db-addr">192.168.100.90:5432/panshi</span>
+        <div class="db-pending">
+          <b>切换待重启生效</b>：当前页面数据仍来自旧库。请按提示完成后端重启——开发环境运行
+          <code>develop/linux/start.sh</code>；生产环境执行 <code>sh stop.sh; sh start.sh</code>。重启前页面上的连接增删改只写配置，运行中的引擎仍是旧库。
+        </div>
+        <div class="db-meta">
+          <span>连接注册表 <b>3</b> 条</span>
+          <span class="sep">·</span>
+          <span>配置版本 <b>v8</b></span>
+          <span class="sep">·</span>
+          <span>JWT 会话在重启后仍有效（同一密钥）</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ 弹窗样张 · 新建连接（600px）：类型切换决定中段字段组 ══════════ -->
+  <div class="db-annot"><b>弹窗样张 · 新建连接</b>（600px）· 类型选 <code>SQLite</code> 时中段只有「数据库文件路径」；选 <code>PostgreSQL</code> 时换成为样张所示的 主机/端口/库名/用户名/密码/SSL。编辑态差异：密码占位变「如需修改请输入」，留空即不修改；重名与必填在提交前本地拦截（不发请求）。</div>
+  <div class="db-modal">
+    <div class="db-mh"><h2>新建连接</h2><button class="db-mx">&times;</button></div>
+    <div class="db-mb">
+      <div class="db-form-row">
+        <div class="db-field"><label class="db-label">类型<span class="req">*</span></label><select class="db-select"><option>PostgreSQL</option></select></div>
+        <div class="db-field"><label class="db-label">名称<span class="req">*</span></label><input class="db-input" placeholder="如：生产 PG / 本机 SQLite"></div>
+      </div>
+      <div class="db-form-row">
+        <div class="db-field"><label class="db-label">主机<span class="req">*</span></label><input class="db-input" placeholder="localhost"></div>
+        <div class="db-field"><label class="db-label">端口</label><input class="db-input" placeholder="5432"></div>
+      </div>
+      <div class="db-form-row">
+        <div class="db-field"><label class="db-label">数据库名<span class="req">*</span></label><input class="db-input" placeholder="panshi"></div>
+        <div class="db-field"><label class="db-label">用户名</label><input class="db-input" placeholder="postgres"></div>
+      </div>
+      <div class="db-form-row single">
+        <div class="db-field"><label class="db-label">密码</label><input class="db-input" type="password" placeholder="如需修改请输入"></div>
+      </div>
+      <label class="db-check"><input type="checkbox"> 启用 SSL 连接</label>
+    </div>
+    <div class="db-mf">
+      <button class="btn btn-secondary">取消</button>
+      <button class="btn btn-primary">保存</button>
+    </div>
+  </div>
+
+  <!-- ══════════ 弹窗样张 · 切换数据库确认（480px）：三条后果一次讲清 ══════════ -->
+  <div class="db-annot"><b>弹窗样张 · 切换数据库</b>（480px）· 单独组件 <code>SwitchConnectionModal</code>，迁移页复用同一弹窗（复用时不传当前库名即少一行）；失败时弹窗保持打开可重试，成功后关闭并刷回 hero。</div>
+  <div class="db-modal narrow">
+    <div class="db-mh"><h2>切换数据库</h2><button class="db-mx">&times;</button></div>
+    <div class="db-mb" style="padding-bottom:12px;">
+      <div class="alert alert-warning" style="margin-bottom:0;">
+        <span class="alert-icon">⚠</span>
+        <div class="alert-content">切换后需手动重启后端服务方可生效，期间 JWT 会话保持不变。目标库为空时仅保留 admin 账号，其余会话将失效。</div>
+      </div>
+      <div class="db-foot" style="margin-top:8px;">重启方式：开发环境运行 <code class="db-mcode">develop/linux/start.sh</code>；生产环境执行 <code class="db-mcode">sh stop.sh; sh start.sh</code>。</div>
+      <div style="margin-top:12px;font-size:13px;color:var(--fg);display:flex;align-items:center;gap:6px;">切换至：<b style="font-weight:600;">生产 PG</b><span class="c-mono c-dim">192.168.100.90:5432/panshi</span></div>
+      <div style="margin-top:8px;font-size:13px;color:var(--fg);">当前活动库：<b style="font-weight:600;">本机 SQLite（开发）</b></div>
+    </div>
+    <div class="db-mf">
+      <button class="btn btn-secondary">取消</button>
+      <button class="btn btn-primary">确认切换</button>
+    </div>
+  </div>
+
+  <!-- ══════════ 弹窗样张 · 删除连接确认（480px，危险主操作） ══════════ -->
+  <div class="db-annot"><b>弹窗样张 · 删除连接</b>（480px）· 走全站 <code>showOverlayModal</code>（普通确认层）：文案明确「只删配置、不碰数据库本身」，危险主操作红底；失败时弹窗保持打开并上屏错误。</div>
+  <div class="db-modal narrow">
+    <div class="db-mh"><h2>删除连接</h2><button class="db-mx">&times;</button></div>
+    <div class="db-mb">
+      <div class="db-danger-text">确定删除数据库连接「<b>预发 PG</b>」？该操作仅删除配置，不影响数据库本身。</div>
+    </div>
+    <div class="db-mf">
+      <button class="btn btn-secondary">取消</button>
+      <button class="btn btn-danger">删除</button>
+    </div>
+  </div>
+
+</div>
+</div>
+</div>
+<div class="l5-prop-tag">方案 C · <b>数据库管理</b></div>
+<script>
+// 与实现同款行为：进页把活动菜单滚到可见（AppSidebar 的 scrollIntoView）
+document.querySelector('.nav-item.active')?.scrollIntoView({ block: 'center' });
+</script>
+</body>
+</html>

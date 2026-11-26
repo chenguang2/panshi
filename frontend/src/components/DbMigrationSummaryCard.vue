@@ -1,12 +1,12 @@
 <template>
-  <div class="card db-migration-summary">
-    <div class="card-header">
+  <div class="l5-card db-migration-summary">
+    <div class="dbm-cardhead">
       <h3>数据迁移</h3>
-      <div class="dbm-sum-header-actions">
+      <div class="dbm-head-actions">
         <button class="btn btn-primary btn-sm" @click="goMigration">开始迁移</button>
       </div>
     </div>
-    <div class="card-body">
+    <div class="dbm-body">
       <div v-if="error" class="dbm-sum-error">{{ error }}</div>
       <template v-else-if="loaded">
         <!-- 无连接注册表引导：尚无可用连接（发起迁移需要源与目标两个连接） -->
@@ -145,16 +145,9 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.db-migration-summary {
-  border-left: 3px solid oklch(56% 0.16 210);
-}
-.dbm-sum-header-actions {
-  display: flex;
-  gap: 8px;
-}
 .dbm-sum-stats {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg, 8px);
   background: var(--bg);
@@ -166,15 +159,18 @@ onMounted(async () => {
   flex-direction: column;
   gap: 4px;
   border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
 }
-.dbm-sum-stat:last-child {
+.dbm-sum-stat:nth-child(2n) {
   border-right: none;
+}
+.dbm-sum-stat:nth-last-child(-n + 2) {
+  border-bottom: none;
 }
 .dbm-sum-label {
   font-size: 11px;
   font-weight: 600;
   color: var(--muted);
-  text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 .dbm-sum-value {
@@ -203,7 +199,6 @@ onMounted(async () => {
   font-size: 11px;
   font-weight: 600;
   color: var(--muted);
-  text-transform: uppercase;
   letter-spacing: 0.04em;
   margin-bottom: 6px;
 }
@@ -259,17 +254,5 @@ onMounted(async () => {
 .dbm-sum-error {
   font-size: 12px;
   color: var(--muted);
-}
-
-@media (max-width: 900px) {
-  .dbm-sum-stats {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  .dbm-sum-stat:nth-child(2) {
-    border-right: none;
-  }
-  .dbm-sum-stat:nth-child(-n + 2) {
-    border-bottom: 1px solid var(--border);
-  }
 }
 </style>

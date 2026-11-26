@@ -1,14 +1,14 @@
 <template>
-  <div class="card db-backup-summary">
-    <div class="card-header">
+  <div class="l5-card db-backup-summary">
+    <div class="dbm-cardhead">
       <h3>SQLite 备份与容灾</h3>
-      <div class="dbb-sum-header-actions">
+      <div class="dbm-head-actions">
         <button class="btn btn-primary btn-sm" @click="goManagement">进入备份管理</button>
         <!-- 危险流入口：与备份页常驻层「恢复数据…」同款红色描边 -->
         <button class="btn btn-danger-outline btn-sm" @click="goRestore">恢复数据</button>
       </div>
     </div>
-    <div class="card-body">
+    <div class="dbm-body">
       <div v-if="error" class="dbb-sum-error">{{ error }}</div>
       <template v-else-if="loaded">
         <!-- 无配置引导：尚未配置任何备份位置 -->
@@ -153,16 +153,9 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.db-backup-summary {
-  border-left: 3px solid oklch(56% 0.16 210);
-}
-.dbb-sum-header-actions {
-  display: flex;
-  gap: 8px;
-}
 .dbb-sum-stats {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg, 8px);
   background: var(--bg);
@@ -174,15 +167,18 @@ onMounted(async () => {
   flex-direction: column;
   gap: 4px;
   border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
 }
-.dbb-sum-stat:last-child {
+.dbb-sum-stat:nth-child(2n) {
   border-right: none;
+}
+.dbb-sum-stat:nth-last-child(-n + 2) {
+  border-bottom: none;
 }
 .dbb-sum-label {
   font-size: 11px;
   font-weight: 600;
   color: var(--muted);
-  text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 .dbb-sum-value {
@@ -211,7 +207,6 @@ onMounted(async () => {
   font-size: 11px;
   font-weight: 600;
   color: var(--muted);
-  text-transform: uppercase;
   letter-spacing: 0.04em;
   margin-bottom: 6px;
 }
@@ -284,18 +279,6 @@ onMounted(async () => {
 @keyframes dbb-sum-rotate {
   to {
     transform: rotate(360deg);
-  }
-}
-
-@media (max-width: 900px) {
-  .dbb-sum-stats {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  .dbb-sum-stat:nth-child(2) {
-    border-right: none;
-  }
-  .dbb-sum-stat:nth-child(-n + 2) {
-    border-bottom: 1px solid var(--border);
   }
 }
 </style>

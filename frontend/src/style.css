@@ -1927,6 +1927,13 @@ body.col-move-dragging * {
 .pill-unknown .dot {
   background: oklch(50% 0.018 240 / 55%);
 }
+.pill-warn {
+  background: oklch(65% 0.15 85 / 14%);
+  color: var(--warning);
+}
+.pill-warn .dot {
+  background: var(--warning);
+}
 .pill-disabled {
   background: transparent;
   color: var(--muted);
@@ -4057,3 +4064,142 @@ th.resizable {
 
 /* 面板空态动作按钮：动作区插槽渲染原生 `.btn`（EmptyState），
    antd 口径规则自 2026-11-22 起零命中已删除（面板 Tab 直接渲染独立页组件）。 */
+
+/* ── 数据库管理页解剖（openspec database-management-page-restyle；基准 proposal-c/database-management.html）──
+   三处消费方共享：DatabaseManagement.vue（当前库 hero + 连接列表卡）、DbBackupSummaryCard.vue、
+   DbMigrationSummaryCard.vue。卡头 / 正文 / hero / 双卡并排只在此处定义，页面与组件禁止再各写一套（防漂移）。 */
+.dbm-cardhead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.dbm-cardhead h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.dbm-cardhead .dbm-sub {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.dbm-cardhead .dbm-head-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+.dbm-body {
+  padding: 14px 16px 16px;
+}
+
+/* 摘要双卡并排：窄于 1100px 回落单列；单卡可见时铺满整行（权限/开关单独关闭的场景） */
+.dbm-two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.dbm-two > :only-child {
+  grid-column: 1 / -1;
+}
+@media (max-width: 1100px) {
+  .dbm-two {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 当前库 hero */
+.dbm-hero {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px 20px 18px;
+}
+.dbm-hero-empty {
+  padding: 8px 0;
+}
+.dbm-verdict {
+  flex-shrink: 0;
+}
+.dbm-verdict .pill {
+  height: 24px;
+  font-size: 12px;
+}
+.dbm-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.dbm-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.dbm-name {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.dbm-addr {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--muted);
+  word-break: break-all;
+}
+.dbm-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+.dbm-meta b {
+  font-family: var(--font-mono);
+  color: var(--fg);
+  font-weight: 600;
+}
+.dbm-meta .sep {
+  opacity: 0.35;
+}
+
+/* 切换待重启生效警示（与切换弹窗内重启指引同一套文案口径） */
+.dbm-pending {
+  margin-top: 6px;
+  padding: 9px 12px;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--warning);
+  background: oklch(65% 0.15 85 / 10%);
+  border: 1px solid oklch(65% 0.15 85 / 32%);
+  border-radius: var(--radius-md);
+}
+.dbm-pending b {
+  font-weight: 600;
+}
+.dbm-pending code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: oklch(50% 0.018 240 / 8%);
+  border: 1px solid var(--border);
+  color: var(--fg);
+}
+
+/* 当前连接行：左缘 accent 条 + 淡底（非多选高亮，本页无批量语义）。
+   !important 必要，且选择器须比 `.table-container .ant-table-tbody > tr:not(...) > td`（0,3,2）
+   更具体：全局规则给所有单元格强制 `background: transparent !important`（2026-11-26 实测：
+   仅 (0,2,3) 的选择器会被吃掉，行底色消失只剩左缘条）。 */
+.table-container .grid-table tbody tr.dbm-row-current > td {
+  background: oklch(56% 0.16 210 / 5%) !important;
+}
+.grid-table tbody tr.dbm-row-current > td:first-child {
+  box-shadow: inset 3px 0 0 var(--accent);
+}

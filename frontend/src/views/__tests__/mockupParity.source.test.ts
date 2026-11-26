@@ -1404,3 +1404,51 @@ describe('mockup-parity：Edge 数据导入（edge-import-page-restyle，基准 
     expect(ei).toContain('ei-ct')
   })
 })
+
+describe('mockup-parity：数据库管理（database-management-page-restyle，基准 proposal-c/database-management.html）', () => {
+  const db = page('DatabaseManagement.vue')
+  const backup = readFileSync(resolve(process.cwd(), 'src/components/DbBackupSummaryCard.vue'), 'utf-8')
+  const migration = readFileSync(resolve(process.cwd(), 'src/components/DbMigrationSummaryCard.vue'), 'utf-8')
+
+  it('dbm-① 页头统计徽标接入（设计页 .ph-inline 至多两枚）', () => {
+    expect(db).toContain('PageStatBadges')
+    // 第二枚优先级：待重启 > 验证失败（design D4）
+    expect(db).toContain("label: '待重启生效'")
+    expect(db).toContain("label: '条验证失败'")
+  })
+
+  it('dbm-② 当前数据库 hero 解剖（dbm-hero + 判定胶囊 + 待重启名称行徽标 + 警示条）', () => {
+    expect(db).toContain('dbm-hero')
+    expect(db).toContain('dbm-cardhead')
+    expect(db).toMatch(/class="pill[^"]*"\s*:class="verdictPillClass"/)
+    expect(db).toContain('pending-restart-badge')
+    expect(db).toContain('pending-restart-hint')
+  })
+
+  it('dbm-③ 连接表挂 grid-table 解剖（禁 accent 大写表头旧样式回流）', () => {
+    expect(db).toContain('connection-table grid-table')
+    expect(db).not.toContain('text-transform: uppercase')
+    expect(db).not.toContain('border-bottom: 2px solid var(--accent)')
+  })
+
+  it('dbm-④ 序号列 / 三态胶囊 / 当前行标识 / 行内主操作（禁 a-tag 与 btn-secondary 回流）', () => {
+    expect(db).toContain("{ title: '#', key: 'index', width: 45 }")
+    expect(db).toContain('conn-status-pill')
+    expect(db).toContain('pill-run')
+    expect(db).toContain('pill-stop')
+    expect(db).toContain('pill-unknown')
+    expect(db).toContain('dbm-row-current')
+    expect(db).toMatch(/class="op-pub set-current"/)
+    expect(db).not.toContain('btn-sm btn-secondary set-current')
+    expect(db).not.toContain('conn-status-tag')
+  })
+
+  it('dbm-⑤ 摘要双卡并排（dbm-two）+ 卡内 2×2 统计格 + 共享卡头', () => {
+    expect(db).toContain('dbm-two')
+    for (const src of [backup, migration]) {
+      expect(src).toContain('dbm-cardhead')
+      expect(src).toMatch(/grid-template-columns:\s*repeat\(2,\s*1fr\)/)
+      expect(src).not.toMatch(/grid-template-columns:\s*repeat\(4,\s*1fr\)/)
+    }
+  })
+})

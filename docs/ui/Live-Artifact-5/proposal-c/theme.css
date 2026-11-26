@@ -2271,6 +2271,7 @@ tr.row-disabled {
 .pill-run { background: oklch(55% 0.15 145 / 12%); color: var(--success); } .pill-run .dot { background: var(--success); }
 .pill-stop { background: oklch(55% 0.18 28 / 10%); color: var(--danger); } .pill-stop .dot { background: var(--danger); }
 .pill-unknown { background: oklch(50% 0.018 240 / 8%); color: var(--muted); } .pill-unknown .dot { background: oklch(50% 0.018 240 / 55%); }
+.pill-warn { background: oklch(65% 0.15 85 / 14%); color: var(--warning); } .pill-warn .dot { background: var(--warning); }
 .pill-disabled { background: transparent; color: var(--muted); border: 1px dashed oklch(50% 0.018 240 / 40%); }
 .status-cell { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
 .status-cell .s-row { display: inline-flex; gap: 4px; flex-wrap: wrap; }

@@ -4,42 +4,59 @@
       title="数据库管理"
       description="管理当前系统使用的数据库连接，支持 SQLite / PostgreSQL，提供连接测试、切换与单向快照迁移。"
     >
+      <template #stats>
+        <PageStatBadges :items="headerStatItems" />
+      </template>
       <template #actions>
         <button class="btn btn-primary" @click="openCreateModal"><StrokeIcon name="plus" :size="13" /> 新建连接</button>
       </template>
     </PageHeader>
 
-    <!-- 当前数据库状态卡片 -->
-    <div class="card">
-      <div class="card-header"><h3>当前数据库</h3></div>
-      <div class="card-body">
-        <div class="status-body">
-          <template v-if="status?.active">
-            <span class="status-dot online"></span>
-            <div class="active-info">
-              <div class="active-name">
-                <a-tag :color="status.active.type === 'postgres' ? 'blue' : 'orange'">{{
-                  status.active.type === 'postgres' ? 'PostgreSQL' : 'SQLite'
-                }}</a-tag>
-                <span class="name">{{ status.active.name }}</span>
-                <a-tag v-if="status.pending_restart" color="warning" class="pending-restart-badge">待重启生效</a-tag>
-              </div>
-              <div class="active-address">{{ status.active.display_address || status.active.host }}</div>
-              <div v-if="status.pending_restart" class="pending-restart-hint">
-                切换待重启生效，当前页面数据仍来自旧库；请按提示完成后端重启（开发环境运行
-                <code>develop/linux/start.sh</code>，生产环境执行 <code>sh stop.sh; sh start.sh</code>）。
-              </div>
-            </div>
-          </template>
-          <a-empty v-else description="未配置活动数据库" />
+    <!-- 当前数据库（hero：判定胶囊 + 技术身份 + 注册表规模；切换需重启生效） -->
+    <div class="l5-card">
+      <div class="dbm-cardhead">
+        <h3>当前数据库</h3>
+        <span class="dbm-sub">切换写入配置后需重启后端服务才生效；期间页面数据仍来自旧库</span>
+      </div>
+      <div v-if="!status?.active" class="dbm-hero dbm-hero-empty">
+        <a-empty description="未配置活动数据库" />
+      </div>
+      <div v-else class="dbm-hero">
+        <span class="dbm-verdict">
+          <span class="pill" :class="verdictPillClass"><span class="dot"></span>{{ verdictText }}</span>
+        </span>
+        <div class="dbm-info">
+          <div class="dbm-name-row">
+            <span class="lp-tag tech">{{ typeLabel(status.active.type) }}</span>
+            <span class="dbm-name">{{ status.active.name }}</span>
+            <span v-if="status.pending_restart" class="ph-lite lite-warn pending-restart-badge">待重启生效</span>
+          </div>
+          <span class="dbm-addr">{{ status.active.display_address || status.active.host }}</span>
+          <div v-if="status.pending_restart" class="dbm-pending pending-restart-hint">
+            <b>切换待重启生效</b>：当前页面数据仍来自旧库。请按提示完成后端重启——开发环境运行
+            <code>develop/linux/start.sh</code>；生产环境执行
+            <code>sh stop.sh; sh start.sh</code>。重启前页面上的连接增删改只写配置，运行中的引擎仍是旧库。
+          </div>
+          <div class="dbm-meta">
+            <span
+              >连接注册表 <b>{{ status.connections_count }}</b> 条</span
+            >
+            <span class="sep">·</span>
+            <span
+              >配置版本 <b>v{{ status.version }}</b></span
+            >
+            <span class="sep">·</span>
+            <span>切换后 JWT 会话保持不变；目标库为空时仅保留 admin 账号</span>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- 连接列表 -->
-    <div class="card">
-      <div class="card-header">
+    <!-- 连接列表（grid-table 解剖；操作层级：设为当前 = 行内主操作 accent） -->
+    <div class="table-container l5-card">
+      <div class="dbm-cardhead">
         <h3>连接列表</h3>
+        <span class="dbm-sub">连通性为页面内「测试」结果（刷新后重置）；当前连接不可删除，需先切换</span>
       </div>
       <div class="card-body table-body">
         <a-table
@@ -47,46 +64,105 @@
           :columns="connectionColumns"
           row-key="id"
           :pagination="false"
-          class="connection-table"
+          :scroll="{ x: 1072 }"
+          :table-layout="'fixed'"
+          :row-class-name="rowClassName"
+          class="connection-table grid-table"
         >
-          <template #bodyCell="{ record, column }">
-            <template v-if="column.key === 'status'">
-              <a-tag class="conn-status-tag" :color="statusColor(record)" :title="statusTitle(record)">
-                {{ statusText(record) }}
-              </a-tag>
+          <template #bodyCell="{ record, column, index }">
+            <template v-if="column.key === 'index'">
+              <span class="text-muted">{{ index + 1 }}</span>
             </template>
-            <template v-if="column.key === 'type'">
-              <a-tag :color="record.type === 'postgres' ? 'blue' : 'orange'">{{
-                record.type === 'postgres' ? 'PostgreSQL' : 'SQLite'
-              }}</a-tag>
+            <template v-else-if="column.key === 'status'">
+              <span class="pill conn-status-pill" :class="statusPillClass(record)" :title="statusTitle(record)">
+                <span class="dot"></span>{{ statusText(record) }}
+              </span>
+            </template>
+            <template v-else-if="column.key === 'name'">
+              <span class="cell-ellipsis name-cell" :title="record.name">{{ record.name }}</span>
+            </template>
+            <template v-else-if="column.key === 'type'">
+              <span class="lp-tag" :class="{ tech: isActive(record) }">{{ typeLabel(record.type) }}</span>
             </template>
             <template v-else-if="column.key === 'address'">
-              <span class="addr-cell" :title="record.display_address || ''">{{ record.display_address || '-' }}</span>
+              <span class="mono cell-ellipsis" :title="record.display_address || ''">{{
+                record.display_address || '-'
+              }}</span>
             </template>
             <template v-else-if="column.key === 'username'">
-              <span>{{ record.username || '-' }}</span>
+              <span class="mono text-muted cell-ellipsis" :title="record.username || ''">{{
+                record.username || '-'
+              }}</span>
             </template>
             <template v-else-if="column.key === 'current'">
-              <span v-if="isActive(record)" class="badge badge-success">当前</span>
+              <span v-if="isActive(record)" class="pill pill-run"><span class="dot"></span>当前</span>
               <span v-else class="text-muted">-</span>
             </template>
             <template v-else-if="column.key === 'actions'">
-              <div class="table-actions">
-                <button class="btn btn-secondary btn-sm test-conn-btn" @click="handleTest(record)">测试</button>
+              <div class="ops">
                 <button
-                  class="btn btn-sm btn-secondary set-current"
+                  class="op-btn test-conn-btn"
+                  title="测试该连接（结果仅保留到页面刷新）"
+                  @click="handleTest(record)"
+                >
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                  </svg>
+                  测试
+                </button>
+                <button
+                  class="op-pub set-current"
                   :disabled="isActive(record)"
+                  :title="isActive(record) ? '当前连接无需切换' : '写入配置；重启后端服务后生效'"
                   @click="openSwitchModal(record)"
                 >
                   设为当前
                 </button>
-                <button class="btn btn-secondary btn-sm" @click="openEditModal(record)">编辑</button>
+                <button class="op-btn" title="编辑连接（密码留空表示不修改）" @click="openEditModal(record)">
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <rect x="3" y="4" width="4" height="16" rx="1" />
+                    <rect x="10" y="4" width="4" height="16" rx="1" />
+                    <rect x="17" y="4" width="4" height="16" rx="1" />
+                  </svg>
+                  编辑
+                </button>
                 <span class="tip-host" :title="isActive(record) ? '当前连接不可删除，请先切换到其他连接' : ''">
                   <button
-                    class="btn btn-danger btn-sm delete-conn-btn"
+                    class="op-btn op-danger delete-conn-btn"
                     :disabled="isActive(record)"
+                    title="删除连接（仅删配置，不触碰数据库本身）"
                     @click="handleDelete(record)"
                   >
+                    <svg
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" />
+                    </svg>
                     删除
                   </button>
                 </span>
@@ -97,14 +173,17 @@
       </div>
     </div>
 
-    <!-- SQLite 备份与容灾摘要卡（完整管理在备份与容灾页）：需 db_backup 权限且功能开关开启，
-         任一不满足整卡不渲染（避免无权限 403 / 功能未注册路由的死入口） -->
-    <DbBackupSummaryCard v-if="authStore.hasPermission('db_backup') && featuresStore.has('db_backup')" />
+    <!-- 摘要双卡：备份与容灾 / 数据迁移（纯导航入口，均不就地执行；窄屏回落单列） -->
+    <div class="dbm-two">
+      <!-- SQLite 备份与容灾摘要卡（完整管理在备份与容灾页）：需 db_backup 权限且功能开关开启，
+           任一不满足整卡不渲染（避免无权限 403 / 功能未注册路由的死入口） -->
+      <DbBackupSummaryCard v-if="authStore.hasPermission('db_backup') && featuresStore.has('db_backup')" />
 
-    <!-- 数据迁移摘要卡：纯导航入口（完整迁移 UI 在独立页 /db-migration）。
-         需 db_migration 权限且功能开关开启：门控对齐目标页（权限/路由注册均按 db_migration），
-         只持 database_management 或功能关闭的用户不渲染入口卡，避免点击后被拦截 403/404。 -->
-    <DbMigrationSummaryCard v-if="authStore.hasPermission('db_migration') && featuresStore.has('db_migration')" />
+      <!-- 数据迁移摘要卡：纯导航入口（完整迁移 UI 在独立页 /db-migration）。
+           需 db_migration 权限且功能开关开启：门控对齐目标页（权限/路由注册均按 db_migration），
+           只持 database_management 或功能关闭的用户不渲染入口卡，避免点击后被拦截 403/404。 -->
+      <DbMigrationSummaryCard v-if="authStore.hasPermission('db_migration') && featuresStore.has('db_migration')" />
+    </div>
 
     <!-- 连接编辑 Modal（新增/编辑 4.3） -->
     <div class="modal-overlay" :style="{ display: connModal.open ? 'flex' : 'none' }">
@@ -222,6 +301,7 @@ import StrokeIcon from '@/components/StrokeIcon.vue'
 import { useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'
+import PageStatBadges from '@/components/PageStatBadges.vue'
 import DbBackupSummaryCard from '@/components/DbBackupSummaryCard.vue'
 import DbMigrationSummaryCard from '@/components/DbMigrationSummaryCard.vue'
 import SwitchConnectionModal from '@/components/SwitchConnectionModal.vue'
@@ -247,14 +327,16 @@ const route = useRoute()
 const authStore = useAuthStore()
 const featuresStore = useFeaturesStore()
 
+// 列宽合计 1072 = :scroll.x（1366 视口零行内滚动）；长内容列单行省略 + title 给全值
 const connectionColumns = [
-  { title: '状态', key: 'status', width: 84 },
-  { title: '名称', dataIndex: 'name', key: 'name' },
-  { title: '类型', key: 'type' },
-  { title: '地址', key: 'address' },
-  { title: '用户名', key: 'username' },
-  { title: '当前', key: 'current' },
-  { title: '操作', key: 'actions' },
+  { title: '#', key: 'index', width: 45 },
+  { title: '状态', key: 'status', width: 96 },
+  { title: '名称', key: 'name', width: 171 },
+  { title: '类型', key: 'type', width: 104 },
+  { title: '地址', key: 'address', width: 220 },
+  { title: '用户名', key: 'username', width: 96 },
+  { title: '当前', key: 'current', width: 74 },
+  { title: '操作', key: 'actions', width: 266 },
 ]
 
 interface ConnForm {
@@ -458,11 +540,12 @@ function statusText(record: DbConnection): string {
   return '未验证'
 }
 
-function statusColor(record: DbConnection): string {
+// 2026-11-26 database-management-page-restyle D2：三态胶囊取代 a-tag（语义不变，仍是页面内会话态）
+function statusPillClass(record: DbConnection): string {
   const r = testResults.value[record.id]
-  if (r === 'ok') return 'success'
-  if (r === 'fail') return 'error'
-  return 'default'
+  if (r === 'ok') return 'pill-run'
+  if (r === 'fail') return 'pill-stop'
+  return 'pill-unknown'
 }
 
 function statusTitle(record: DbConnection): string {
@@ -470,6 +553,38 @@ function statusTitle(record: DbConnection): string {
   const base = r === 'ok' ? '已验证连通' : r === 'fail' ? '验证失败' : '尚未测试'
   return `${base}；测试结果仅保留到页面刷新`
 }
+
+/** 类型显示名（两处复用，避免视图内重复三元） */
+function typeLabel(type: DbConnection['type']): string {
+  return type === 'postgres' ? 'PostgreSQL' : 'SQLite'
+}
+
+/** hero 判定胶囊：待重启 = warning（写库未生效），否则运行中 */
+const verdictPillClass = computed(() => (status.value?.pending_restart ? 'pill-warn' : 'pill-run'))
+const verdictText = computed(() => (status.value?.pending_restart ? '待重启' : '运行中'))
+
+/** 当前连接行标识（design D6：专用类，不复用多选选中高亮） */
+function rowClassName(record: DbConnection): string {
+  return isActive(record) ? 'dbm-row-current' : ''
+}
+
+/**
+ * 页头统计徽标（至多两枚，design D4）：首枚恒为条连接；
+ * 第二枚按严重度取「待重启生效」（写库未生效，压过测试失败）或「K 条验证失败」。
+ */
+const headerStatItems = computed(() => {
+  const items: Array<{ value: number | string; label: string; tone?: 'accent' | 'ok' | 'warn' | 'bad' }> = [
+    // 与表格同口径：优先取已加载数据集条数（表头数字必须与可见行数一致），列表失败时回落接口计数
+    { value: connections.value.length || status.value?.connections_count || 0, label: '条连接' },
+  ]
+  if (status.value?.pending_restart) {
+    items.push({ value: 1, label: '待重启生效', tone: 'warn' })
+    return items
+  }
+  const failed = Object.values(testResults.value).filter((v) => v === 'fail').length
+  if (failed > 0) items.push({ value: failed, label: '条验证失败', tone: 'bad' })
+  return items
+})
 
 function openSwitchModal(record: DbConnection) {
   switchModal.connection = record
@@ -536,25 +651,30 @@ defineExpose({
   gap: 20px;
 }
 
-/* ── 连接行状态列三态 tag（db-migration-ux-optimization 8.3，圆点升级文字 tag） ── */
-.status-dot.online {
-  background: #52c41a;
-}
 /* 8.1 字段级标错（PG 主机/数据库名必填前置） */
 .field-error {
   margin: 4px 0 0;
   font-size: 12px;
   color: #ff4d4f;
 }
-/* 地址列省略（2.2） */
-.addr-cell {
-  display: inline-block;
-  max-width: 260px;
+
+/* 长内容列（名称/地址/用户名）：单行省略，完整值走 title——
+   否则真实数据里的长路径与长用户名会折行，行高不再统一（实测 57/77px 混排） */
+.cell-ellipsis {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  vertical-align: bottom;
 }
+.name-cell {
+  font-weight: 600;
+  color: var(--fg);
+}
+.mono {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
 /* SSL 开关（1.3） */
 .form-check {
   display: flex;
@@ -564,92 +684,32 @@ defineExpose({
   color: var(--fg);
   cursor: pointer;
 }
+
 /* 禁用删除 tooltip 宿主 */
 .tip-host {
   display: inline-block;
 }
 
-/* ── 当前数据库 ── */
-.status-body {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.status-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.active-name {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.active-name .name {
-  font-size: 14px;
-  font-weight: 600;
-}
-.active-address {
-  color: var(--muted);
-  font-size: 13px;
-  margin-top: 2px;
-}
-/* 切换待重启生效警示（与切换弹窗内的重启指引同一套文案口径） */
-.pending-restart-hint {
-  margin-top: 8px;
-  font-size: 13px;
-  color: #ad6800;
-  background: rgba(250, 173, 20, 0.12);
-  border: 1px solid rgba(250, 173, 20, 0.45);
-  border-radius: var(--radius-md);
-  padding: 8px 10px;
-}
-.pending-restart-hint code {
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: rgba(0, 0, 0, 0.06);
-  font-size: 12px;
-}
-
-/* ── 连接列表表格（与列表页 table-container 口径一致） ── */
+/* 连接列表：表头/悬停/密度由全局 grid-table 接管（旧 accent 大写表头已删，见 database-management-page-restyle） */
 .table-body {
   padding: 0;
 }
-.connection-table :deep(.ant-table) {
-  background: transparent;
+/* 表头在卡头之下（非卡顶），antd 给首末列表头的 8px 圆角会露出缺口——设计页表头为直角 */
+.connection-table :deep(.ant-table-thead > tr > th:first-child),
+.connection-table :deep(.ant-table-thead > tr > th:last-child) {
+  border-start-start-radius: 0 !important;
+  border-start-end-radius: 0 !important;
 }
-/* 表头/行：保留品牌色底（配置类页面标识），其余机械属性对齐列表页契约（style.css） */
-.connection-table :deep(.ant-table-thead > tr > th) {
-  background: oklch(56% 0.16 210 / 10%);
-  border-bottom: 2px solid var(--accent);
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 12px 8px;
-  white-space: nowrap;
-}
-.connection-table :deep(.ant-table-thead > tr > th::before) {
-  display: none !important;
-}
-.connection-table :deep(.ant-table-tbody > tr > td) {
-  padding: 12px 8px;
-  border-bottom: 1px solid var(--border) !important;
-  color: var(--muted);
-  font-size: 13px;
-  white-space: nowrap;
-}
-.connection-table :deep(.ant-table-tbody > tr:last-child > td) {
-  border-bottom: none !important;
-}
-.connection-table :deep(.ant-table-tbody > tr:hover > td) {
-  background: var(--bg);
-}
-.table-actions {
+.ops {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: nowrap;
+}
+.ops .op-btn.op-danger {
+  color: var(--danger);
+}
+.ops .op-btn.op-danger:disabled:hover {
+  color: var(--danger);
 }
 </style>

@@ -67,10 +67,16 @@ function cardStub() {
 
 function tableStub() {
   return {
-    props: ['dataSource', 'columns', 'rowKey'],
+    props: ['dataSource', 'columns', 'rowKey', 'rowClassName'],
     template: `
       <div class="ant-table">
-        <div v-for="r in dataSource" :key="r[rowKey]" class="table-row">
+        <div
+          v-for="(r, i) in dataSource"
+          :key="r[rowKey]"
+          class="table-row"
+          :class="typeof rowClassName === 'function' ? rowClassName(r, i) : ''"
+        >
+          <slot name="bodyCell" :record="r" :column="{ key: 'index' }" :index="i" />
           <slot name="bodyCell" :record="r" :column="{ key: 'status' }" />
           <slot name="bodyCell" :record="r" :column="{ key: 'type' }" />
           <slot name="bodyCell" :record="r" :column="{ key: 'address' }" />
@@ -300,6 +306,70 @@ describe('DatabaseManagement', () => {
   it('renders the data migration section', async () => {
     const wrapper = await mountPage()
     expect(wrapper.text()).toContain('数据迁移')
+  })
+
+  it('页头统计徽标：条连接 + 验证失败计数（取当前数据集，第二枚按失败数出现）', async () => {
+    mocks.listConnections.mockResolvedValue({
+      data: [conn(), conn({ id: 'conn_2', name: 'PG 库', type: 'postgres', display_address: 'localhost:5432/panshi' })],
+    })
+    const wrapper = await mountPage()
+    let badges = wrapper.findAll('[data-test="page-stat"]')
+    expect(badges.length).toBe(1)
+    expect(badges[0].text()).toContain('2')
+    expect(badges[0].text()).toContain('条连接')
+
+    mocks.testConnection.mockResolvedValue({ data: { success: false, detail: '连接超时' } })
+    await (wrapper.vm as any).handleTest((wrapper.vm as any).connections[1])
+    await wrapper.vm.$nextTick()
+
+    badges = wrapper.findAll('[data-test="page-stat"]')
+    expect(badges.length).toBe(2)
+    expect(badges[1].text()).toContain('1')
+    expect(badges[1].text()).toContain('条验证失败')
+    expect(badges[1].classes()).toContain('lite-bad')
+  })
+
+  it('pending_restart 时页头第二枚徽标为「待重启生效」（优先于验证失败）', async () => {
+    mocks.getStatus.mockResolvedValue({
+      data: { active: conn(), connections_count: 1, version: 3, pending_restart: true },
+    })
+    const wrapper = await mountPage()
+    const badges = wrapper.findAll('[data-test="page-stat"]')
+    expect(badges.length).toBe(2)
+    expect(badges[1].text()).toContain('待重启生效')
+    expect(badges[1].classes()).toContain('lite-warn')
+  })
+
+  it('当前数据库 hero 解剖：判定胶囊 + 名称 + 等宽地址 + 元信息行', async () => {
+    const wrapper = await mountPage()
+    const hero = wrapper.find('.dbm-hero')
+    expect(hero.exists()).toBe(true)
+    const verdict = hero.find('.pill')
+    expect(verdict.text()).toContain('运行中')
+    expect(verdict.classes()).toContain('pill-run')
+    expect(hero.find('.dbm-name').text()).toBe('本地库')
+    expect(hero.find('.dbm-addr').text()).toBe('/data/panshi.db')
+    expect(hero.find('.dbm-meta').text()).toContain('连接注册表')
+    expect(hero.find('.dbm-meta').text()).toContain('v1')
+  })
+
+  it('当前连接行带 dbm-row-current 标识（非多选高亮）', async () => {
+    mocks.listConnections.mockResolvedValue({
+      data: [conn(), conn({ id: 'conn_2', name: 'PG 库', type: 'postgres', display_address: 'localhost:5432/panshi' })],
+    })
+    const wrapper = await mountPage()
+    const rows = wrapper.findAll('.table-row')
+    expect(rows[0].classes()).toContain('dbm-row-current')
+    expect(rows[0].classes()).not.toContain('row-selected')
+    expect(rows[1].classes()).not.toContain('dbm-row-current')
+  })
+
+  it('摘要双卡包在 dbm-two 并排容器中', async () => {
+    const wrapper = await mountPage()
+    const two = wrapper.find('.dbm-two')
+    expect(two.exists()).toBe(true)
+    expect(two.findComponent({ name: 'DbBackupSummaryCard' }).exists()).toBe(true)
+    expect(two.findComponent({ name: 'DbMigrationSummaryCard' }).exists()).toBe(true)
   })
 
   it('only the non-active connection exposes an enabled set-current action', async () => {
@@ -550,47 +620,51 @@ describe('database-mgmt-ux-review-fixes（2026-10-30 UX 评审，裁决全 A）'
     expect(mocks.updateConnection).toHaveBeenCalled()
   })
 
-  it('测试成功后状态列显示绿色「已连通」tag 并披露结果时效', async () => {
+  it('测试成功后状态列显示绿色「已连通」胶囊并披露结果时效', async () => {
     const wrapper = await mountPage()
     mocks.testConnection.mockResolvedValue({ data: { success: true, detail: '连接成功' } })
     await wrapper.vm.handleTest(wrapper.vm.connections[0])
     await wrapper.vm.$nextTick()
-    const tag = wrapper.find('.connection-table .conn-status-tag')
-    expect(tag.exists()).toBe(true)
-    expect(tag.text()).toContain('已连通')
-    expect(tag.classes()).toContain('ant-tag-success')
-    expect(tag.attributes('title')).toContain('已验证连通')
-    expect(tag.attributes('title')).toContain('测试结果仅保留到页面刷新')
+    const pill = wrapper.find('.connection-table .conn-status-pill')
+    expect(pill.exists()).toBe(true)
+    expect(pill.text()).toContain('已连通')
+    expect(pill.classes()).toContain('pill-run')
+    expect(pill.attributes('title')).toContain('已验证连通')
+    expect(pill.attributes('title')).toContain('测试结果仅保留到页面刷新')
   })
 
-  it('测试失败后状态列显示红色「验证失败」tag 并披露结果时效', async () => {
+  it('测试失败后状态列显示红色「验证失败」胶囊并披露结果时效', async () => {
     const wrapper = await mountPage()
     mocks.testConnection.mockResolvedValue({ data: { success: false, detail: '连接超时' } })
     await wrapper.vm.handleTest(wrapper.vm.connections[0])
     await wrapper.vm.$nextTick()
-    const tag = wrapper.find('.connection-table .conn-status-tag')
-    expect(tag.text()).toContain('验证失败')
-    expect(tag.classes()).toContain('ant-tag-error')
-    expect(tag.attributes('title')).toContain('测试结果仅保留到页面刷新')
+    const pill = wrapper.find('.connection-table .conn-status-pill')
+    expect(pill.text()).toContain('验证失败')
+    expect(pill.classes()).toContain('pill-stop')
+    expect(pill.attributes('title')).toContain('测试结果仅保留到页面刷新')
   })
 
-  it('未测试时状态列显示灰色「未验证」tag', async () => {
+  it('未测试时状态列显示灰色「未验证」胶囊', async () => {
     const wrapper = await mountPage()
-    const tag = wrapper.find('.connection-table .conn-status-tag')
-    expect(tag.text()).toContain('未验证')
-    expect(tag.classes()).not.toContain('ant-tag-success')
-    expect(tag.classes()).not.toContain('ant-tag-error')
-    expect(tag.attributes('title')).toContain('尚未测试')
-    expect(tag.attributes('title')).toContain('测试结果仅保留到页面刷新')
+    const pill = wrapper.find('.connection-table .conn-status-pill')
+    expect(pill.text()).toContain('未验证')
+    expect(pill.classes()).toContain('pill-unknown')
+    expect(pill.classes()).not.toContain('pill-run')
+    expect(pill.classes()).not.toContain('pill-stop')
+    expect(pill.attributes('title')).toContain('尚未测试')
+    expect(pill.attributes('title')).toContain('测试结果仅保留到页面刷新')
   })
 
-  it('「设为当前」非当前行为次级按钮', async () => {
+  it('「设为当前」为行内主操作胶囊（op-pub，非页面主操作）', async () => {
+    // 2026-11-26 database-management-page-restyle D3：与 ClickHouse 配置页同构——
+    // 行内主操作 = .op-pub（accent 描边胶囊）；页面唯一 primary 仍是「新建连接」。
     const wrapper = await mountWith2()
     const btns = wrapper.findAll('.set-current')
-    expect(btns[0].classes()).not.toContain('btn-primary') // 当前行禁用且次级
     expect(btns[0].attributes('disabled')).toBeDefined()
+    expect(btns[0].classes()).toContain('op-pub')
+    expect(btns[0].classes()).not.toContain('btn-primary')
+    expect(btns[1].classes()).toContain('op-pub')
     expect(btns[1].classes()).not.toContain('btn-primary')
-    expect(btns[1].classes()).toContain('btn-secondary')
   })
 })
 
