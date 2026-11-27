@@ -11,6 +11,7 @@ import type {
   MigrationBackupProgressEvent,
   MigrationCompleteEvent,
   MigrationHistoryCleanupPreview,
+  MigrationHistoryDetail,
   MigrationHistoryItem,
   MigrationStreamEvent,
   MigrationTableProgressEvent,
@@ -111,6 +112,11 @@ export function importDatabase(payload: ImportPayload) {
 
 export function getMigrationHistory() {
   return api.get<MigrationHistoryItem[]>('/database/history')
+}
+
+/** 单条迁移历史（含逐表明细，db-migration-history-detail）：历史行展开入口按需拉取。 */
+export function getMigrationHistoryDetail(id: number) {
+  return api.get<MigrationHistoryDetail>(`/database/history/${id}`)
 }
 
 /** 清理影响预览（只读）：库内总数 / 将删除 / 将保留（按库内真实总数计算，不受列表 100 条上限影响）。 */

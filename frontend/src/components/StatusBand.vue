@@ -3,8 +3,12 @@
   <div v-if="status" class="status-band db-migration-status-band" role="status">
     <span class="band-seg band-active">
       <span class="band-label">当前活动库</span>
-      <span class="badge badge-neutral">{{ activeTypeLabel }}</span>
+      <span class="lp-tag tech">{{ activeTypeLabel }}</span>
       <span class="band-value">{{ status.active?.name || '未配置' }}</span>
+    </span>
+    <span class="band-seg band-conns">
+      <span class="band-label">可用连接</span>
+      <span class="band-value">{{ connections.length }}</span>
     </span>
     <span v-if="status.pending_restart" class="band-seg band-restart">⚠ 切换待重启生效，注意迁移方向</span>
     <span v-if="migration?.in_progress" class="band-seg band-lock">
@@ -22,8 +26,9 @@ import { formatDateTime } from '@/utils/format'
 import type { DbConnection, DbStatus, MigrationState } from '@/types/database'
 
 /**
- * 迁移页状态带（design D9 / tasks 6.1）：集中展示迁移决策所需核心事实——
- * 当前活动库（类型+名称）、切换待重启警示、迁移锁进行中（源 → 目标 + 写锁 + 开始时间）。
+ * 迁移页状态带（design D9 / tasks 6.1；db-migration-page-restyle 补「可用连接」段）：
+ * 集中展示迁移决策所需核心事实——当前活动库（技术标签+名称）、可用连接数（发起判据同源）、
+ * 切换待重启警示、迁移锁进行中（源 → 目标 + 写锁 + 开始时间）。
  *
  * 纯展示组件、数据经 props 传入：宿主页面本就拉取 status/connections（活动库名、
  * 迁移卡 G8 前置与源预选同源），锁态由页面 5s 轮询刷新；组件内不自拉可避免与页面
@@ -76,17 +81,18 @@ const targetLabel = computed(() => connLabel(props.migration?.target_id ?? null)
 .band-value {
   font-weight: 600;
 }
+/* 待重启警示：主题 warning token（db-migration-page-restyle，弃 antd 黄硬编码） */
 .band-restart {
-  color: #ad6800;
-  background: #fffbe6;
-  border: 1px solid #ffe58f;
+  color: var(--warning);
+  background: oklch(65% 0.15 85 / 10%);
+  border: 1px solid oklch(65% 0.15 85 / 30%);
   border-radius: 6px;
   padding: 2px 10px;
   font-size: 12px;
 }
 .band-lock {
   color: oklch(45% 0.13 210);
-  background: oklch(56% 0.16 210 / 8%);
+  background: var(--accent-bg);
   border: 1px solid oklch(56% 0.16 210 / 30%);
   border-radius: 6px;
   padding: 2px 10px;
@@ -95,7 +101,7 @@ const targetLabel = computed(() => connLabel(props.migration?.target_id ?? null)
 }
 .band-lock-tag {
   font-weight: 600;
-  color: var(--danger, #ff4d4f);
+  color: var(--danger);
   white-space: nowrap;
 }
 .band-flow {

@@ -169,6 +169,8 @@ COLUMN_MIGRATIONS = [
     ("install_task", "cancel_requested_at", "DATETIME"),
     ("ps_db_migration_log", "duration_seconds", "FLOAT"),
     ("ps_db_migration_log", "started_at", "DATETIME"),
+    # db-migration-history-detail：成功迁移的逐表明细 JSON（[{name, columns, rows, kind}]）
+    ("ps_db_migration_log", "tables_detail", "TEXT"),
     ("relay_gateways", "openresty_prefix", "VARCHAR(255)"),
     ("relay_gateways", "last_pushed_nodes", "TEXT"),
     ("relay_gateways", "last_pushed_at", "DATETIME"),

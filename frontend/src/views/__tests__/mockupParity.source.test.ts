@@ -1452,3 +1452,91 @@ describe('mockup-parity：数据库管理（database-management-page-restyle，�
     }
   })
 })
+
+describe('mockup-parity · 数据迁移页控制台改版（db-migration-page-restyle，2026-11-27）', () => {
+  const view = (f: string) => readFileSync(resolve(process.cwd(), 'src/views', f), 'utf-8')
+  const comp = (f: string) => readFileSync(resolve(process.cwd(), 'src/components', f), 'utf-8')
+  const card = () => comp('DbMigrationCard.vue')
+  const hist = () => comp('DbMigrationHistoryCard.vue')
+  const band = () => comp('StatusBand.vue')
+
+  it('mig-① 迁移任务卡/历史卡挂 l5-card + mig-cardhead 卡头（标题+副注）', () => {
+    expect(card()).toContain('mig-cardhead')
+    expect(card()).toContain('迁移任务')
+    expect(card()).toContain('单向快照替换：先备份源库，再清空目标库写入')
+    expect(hist()).toContain('mig-cardhead')
+    expect(hist()).toContain('历史迁移记录')
+    expect(hist()).toContain('仅当前活动库的记录；切换数据库后从零开始记录')
+    expect(css).toMatch(/\.mig-cardhead \{/)
+  })
+
+  it('mig-② 历史表 grid-table 解剖：数值 scroll（禁 max-content）+ # 序号列 + 外置 ListPager', () => {
+    expect(hist()).toContain('grid-table')
+    expect(hist()).toContain('table-container')
+    expect(hist()).toContain(':scroll="{ x: 981 }"')
+    expect(hist()).not.toContain("x: 'max-content'")
+    expect(hist()).toContain("{ title: '#', key: 'index', width: 45 }")
+    expect(hist()).toContain(':pagination="false"')
+    expect(hist()).toContain('<ListPager')
+  })
+
+  it('mig-③ 历史状态列语义胶囊（禁 a-tag 回流）', () => {
+    expect(hist()).toContain('pill-run')
+    expect(hist()).toContain('pill-stop')
+    expect(hist()).not.toContain('a-tag')
+  })
+
+  it('mig-④ 进度面板 mono 阶段徽标 + 自绘进度条（禁 emoji 与硬编码色驱动）', () => {
+    expect(card()).toContain('MIGRATING')
+    expect(card()).toContain('BACKUP')
+    expect(card()).not.toContain('📦')
+    expect(card()).not.toContain('🔄')
+    expect(card()).not.toContain('stroke-color')
+    expect(css).toMatch(/\.mig-progress \{/)
+  })
+
+  it('mig-⑤ 页内 a-alert 清退（锁横幅删除；弹窗/横幅走主题 .alert 族）', () => {
+    expect(card()).not.toContain('<a-alert')
+    expect(view('DbMigrationPage.vue')).not.toContain('<a-alert')
+    expect(view('DbMigrationPage.vue')).toContain('alert alert-warning')
+    expect(card()).toContain('alert-error')
+    expect(hist()).not.toContain('<a-alert')
+  })
+
+  it('mig-⑥ StatusBand 可用连接段 + lp-tag tech + warn 段 token 色（禁 antd 黄硬编码）', () => {
+    expect(band()).toContain('可用连接')
+    expect(band()).toContain('lp-tag tech')
+    expect(band()).not.toContain('#ad6800')
+    expect(band()).not.toContain('#fffbe6')
+    expect(band()).not.toContain('#ffe58f')
+  })
+
+  it('mig-⑦ 连接不足禁用面：超时下拉与日志勾选随发起按钮一并禁用', () => {
+    expect(card()).toMatch(/timeout-select[\s\S]{0,200}:disabled="migrating \|\| !canStartMigration"/)
+    expect(card()).toMatch(/migrateForm\.includeLogs[\s\S]{0,200}:disabled="migrating \|\| !canStartMigration"/)
+  })
+
+  it('mig-⑧ 详情抽屉单实现共享组件（禁 a-descriptions 与内联第二份抽屉）', () => {
+    const drawer = () => comp('DbMigrationDetailDrawer.vue')
+    expect(card()).not.toContain('a-descriptions')
+    expect(drawer()).not.toContain('a-descriptions')
+    expect(drawer()).toContain('mig-desc')
+    expect(css).toMatch(/\.mig-desc \{/)
+    for (const f of [card(), hist()]) {
+      expect(f).toContain('<DbMigrationDetailDrawer')
+    }
+    expect(card()).not.toContain('title="迁移详情"')
+  })
+
+  it('mig-⑨ 历史行展开触达：整行可点 + chevron 纯指示器 + 失败胶囊悬停披露（expand-affordance）', () => {
+    // 受控展开键 + customRow 行点击（本版 antd-vue 原生 expandRowByClick 首次切换后失效——design D1a 实证换道）
+    expect(hist()).toContain(':expanded-row-keys="expandedKeys"')
+    expect(hist()).toContain(':custom-row="onRowClick"')
+    expect(hist()).toContain(':expand-icon')
+    expect(hist()).toContain('chevronDown')
+    // 失败原因悬停披露：胶囊 title 复用展开区同一转译函数
+    expect(hist()).toMatch(
+      /:title="record\.status === 'failed' \? translateMigrationError\(record\.error_message\) : undefined"/,
+    )
+  })
+})

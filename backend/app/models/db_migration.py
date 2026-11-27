@@ -26,6 +26,7 @@ class DbMigrationLog(Base):
     tables_count = Column(Integer, nullable=True)
     backup_path = Column(String(500), nullable=True)
     error_message = Column(Text, nullable=True)
+    tables_detail = Column(Text, nullable=True)  # 成功迁移的逐表明细 JSON（[{name, columns, rows, kind}]）；失败/旧记录为 NULL
     started_at = Column(DateTime, nullable=True)  # 迁移开始时间，旧记录为 NULL
     duration_seconds = Column(Float, nullable=True)  # 迁移耗时（秒），旧记录为 NULL
     created_at = Column(DateTime, default=datetime.utcnow)

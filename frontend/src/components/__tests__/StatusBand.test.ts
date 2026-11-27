@@ -48,12 +48,19 @@ function mountBand(status: DbStatus | null, migration: MigrationState | null = m
 }
 
 describe('StatusBand 迁移页状态带（组 6）', () => {
-  it('常态：展示当前活动库的类型与名称', () => {
+  it('常态：展示当前活动库的类型与名称（类型用 lp-tag tech 技术标签）', () => {
     const wrapper = mountBand(statusShape())
     expect(wrapper.find('.status-band').exists()).toBe(true)
     expect(wrapper.text()).toContain('当前活动库')
-    expect(wrapper.text()).toContain('SQLite')
+    expect(wrapper.find('.lp-tag.tech').exists()).toBe(true)
+    expect(wrapper.find('.lp-tag.tech').text()).toBe('SQLite')
     expect(wrapper.text()).toContain('本地 SQLite')
+  })
+
+  it('可用连接段：展示连接注册表连接数（发起判据同源）', () => {
+    const wrapper = mountBand(statusShape())
+    expect(wrapper.text()).toContain('可用连接')
+    expect(wrapper.text()).toContain('2')
   })
 
   it('待重启：pending_restart 时显示「切换待重启生效，注意迁移方向」警示', () => {

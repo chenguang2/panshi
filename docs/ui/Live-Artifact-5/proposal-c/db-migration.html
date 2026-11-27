@@ -80,6 +80,13 @@
 .hist-expand .err { color: var(--danger); }
 .hist-path { font-family: var(--font-mono); font-size: 11.5px; color: var(--fg); }
 .hist-copy { margin-left: 8px; }
+/* 行展开触达（db-migration-history-expand-affordance 裁决）：chevron 纯指示器 + 整行可点；
+   指示器 muted → 行悬停转 accent，展开态旋转 180°（data-open=1） */
+.l5-table tbody tr { cursor: pointer; }
+.v-chevron { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 24px; border-radius: var(--radius-sm); color: var(--muted); cursor: pointer; transition: color .12s, background .12s; }
+.l5-table tbody tr:hover .v-chevron { color: var(--accent); background: var(--accent-bg); }
+.v-chevron[data-open="1"], .v-chevron.open { color: var(--accent); }
+.v-chevron[data-open="1"] svg, .v-chevron.open svg { transform: rotate(180deg); }
 
 /* 样张注记 */
 .mig-annot { font-size: 11px; color: var(--muted); margin: 26px 0 8px 2px; line-height: 1.6; }
@@ -254,13 +261,15 @@
       <h3>历史迁移记录</h3>
       <span class="mig-sub">仅当前活动库的记录；切换数据库后从零开始记录</span>
       <div class="mig-head-actions">
+        <!-- 列表为最近 100 条（后端返回上限），达上限时实现侧在条数旁附「仅显示最近 100 条」披露；
+             清理弹窗预览数字取服务端真实总数（非本列表已加载条数） -->
         <span class="ph-lite"><b>6</b> 条</span>
         <button class="btn btn-secondary btn-sm">清理历史</button>
       </div>
     </div>
-    <div class="l5-table-wrap"><table class="l5-table" style="min-width:1070px"><colgroup><col style="width:45px"><col style="width:300px"><col style="width:84px"><col style="width:96px"><col style="width:92px"><col style="width:96px"><col style="width:156px"><col style="width:156px"></colgroup><thead><tr><th class="c-c">#</th><th class="resizable">迁移方向</th><th class="resizable">模式</th><th class="resizable">状态</th><th class="resizable">表数量</th><th class="resizable">时长</th><th class="resizable">开始时间</th><th class="resizable">完成时间</th></tr></thead><tbody>
+    <div class="l5-table-wrap"><table class="l5-table" style="min-width:1033px"><colgroup><col style="width:52px"><col style="width:45px"><col style="width:276px"><col style="width:84px"><col style="width:96px"><col style="width:88px"><col style="width:92px"><col style="width:150px"><col style="width:150px"></colgroup><thead><tr><th class="c-c"></th><th class="c-c">#</th><th class="resizable">迁移方向</th><th class="resizable">模式</th><th class="resizable">状态</th><th class="resizable">表数量</th><th class="resizable">时长</th><th class="resizable">开始时间</th><th class="resizable">完成时间</th></tr></thead><tbody>
       <tr>
-        <td class="c-c"><span class="c-idx">1</span></td>
+        <td class="c-c"><span class="v-chevron" data-open="0"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></td><td class="c-c"><span class="c-idx">1</span></td>
         <td class="nw"><span class="hist-flow"><span class="lp-tag">本机 SQLite（开发）</span><span class="hist-arrow">→</span><span class="lp-tag">生产 PG</span></span></td>
         <td class="nw"><span class="c-dim">替换</span></td>
         <td class="nw"><span class="pill pill-run"><span class="dot"></span>成功</span></td>
@@ -270,7 +279,7 @@
         <td class="nw"><span class="c-mono">2025/11/26 10:23:15</span></td>
       </tr>
       <tr>
-        <td class="c-c"><span class="c-idx">2</span></td>
+        <td class="c-c"><span class="v-chevron" data-open="0"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></td><td class="c-c"><span class="c-idx">2</span></td>
         <td class="nw"><span class="hist-flow"><span class="lp-tag">生产 PG</span><span class="hist-arrow">→</span><span class="lp-tag">本机 SQLite（开发）</span></span></td>
         <td class="nw"><span class="c-dim">替换</span></td>
         <td class="nw"><span class="pill pill-run"><span class="dot"></span>成功</span></td>
@@ -280,25 +289,27 @@
         <td class="nw"><span class="c-mono">2025/11/20 16:05:39</span></td>
       </tr>
       <tr class="hist-expand-row">
-        <td class="c-c"><span class="c-idx">3</span></td>
+        <td class="c-c"><span class="v-chevron" data-open="0"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></td><td class="c-c"><span class="c-idx">3</span></td>
         <td class="nw"><span class="hist-flow"><span class="lp-tag">本机 SQLite（开发）</span><span class="hist-arrow">→</span><span class="lp-tag">预发 PG</span></span></td>
         <td class="nw"><span class="c-dim">替换</span></td>
-        <td class="nw"><span class="pill pill-stop"><span class="dot"></span>失败</span></td>
+        <td class="nw"><span class="pill pill-stop" title="失败原因（悬停即见）：目标库连接失败：连接被拒绝（host 192.168.100.91:5432）"><span class="dot"></span>失败</span></td>
         <td class="nw"><span class="c-mono">-</span></td>
         <td class="nw"><span class="c-mono">3.1 秒</span></td>
         <td class="nw"><span class="c-mono">2025/11/18 09:12:03</span></td>
         <td class="nw"><span class="c-mono">2025/11/18 09:12:06</span></td>
       </tr>
       <tr class="hist-expand-row">
-        <td colspan="8">
+        <td colspan="9">
           <div class="hist-expand">
             <div><span class="lbl">失败原因：</span><span class="err">目标库连接失败：连接被拒绝（host 192.168.100.91:5432）</span></div>
             <div><span class="lbl">备份路径：</span><code class="hist-path">./data/backups/migration_local_sqlite_to_pg_uat_20251118_091203.zip</code><button class="btn btn-secondary btn-sm hist-copy">复制</button></div>
+          <!-- db-migration-history-detail：成功迁移的逐表明细已随历史记录持久化，has_detail 行可回看详情（760 共享抽屉） -->
+          <div><button class="btn btn-secondary btn-sm">查看迁移详情</button></div>
           </div>
         </td>
       </tr>
       <tr>
-        <td class="c-c"><span class="c-idx">4</span></td>
+        <td class="c-c"><span class="v-chevron" data-open="0"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></td><td class="c-c"><span class="c-idx">4</span></td>
         <td class="nw"><span class="hist-flow"><span class="lp-tag">本机 SQLite（开发）</span><span class="hist-arrow">→</span><span class="lp-tag">生产 PG</span></span></td>
         <td class="nw"><span class="c-dim">替换</span></td>
         <td class="nw"><span class="pill pill-run"><span class="dot"></span>成功</span></td>
@@ -308,7 +319,7 @@
         <td class="nw"><span class="c-mono">2025/11/12 14:40:54</span></td>
       </tr>
       <tr>
-        <td class="c-c"><span class="c-idx">5</span></td>
+        <td class="c-c"><span class="v-chevron" data-open="0"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></td><td class="c-c"><span class="c-idx">5</span></td>
         <td class="nw"><span class="hist-flow"><span class="lp-tag">生产 PG</span><span class="hist-arrow">→</span><span class="lp-tag">本机 SQLite（开发）</span></span></td>
         <td class="nw"><span class="c-dim">替换</span></td>
         <td class="nw"><span class="pill pill-run"><span class="dot"></span>成功</span></td>
@@ -318,7 +329,7 @@
         <td class="nw"><span class="c-mono">2025/11/05 09:03:38</span></td>
       </tr>
       <tr>
-        <td class="c-c"><span class="c-idx">6</span></td>
+        <td class="c-c"><span class="v-chevron" data-open="0"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></td><td class="c-c"><span class="c-idx">6</span></td>
         <td class="nw"><span class="hist-flow"><span class="lp-tag">本机 SQLite（开发）</span><span class="hist-arrow">→</span><span class="lp-tag">预发 PG</span></span></td>
         <td class="nw"><span class="c-dim">替换</span></td>
         <td class="nw"><span class="pill pill-run"><span class="dot"></span>成功</span></td>

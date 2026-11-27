@@ -666,3 +666,94 @@ async def test_retired_sync_migrate_endpoint_returns_json_404(async_authed_clien
     assert resp.headers["content-type"].startswith("application/json")
     assert "<html" not in resp.text.lower()
     assert resp.json()["detail"] == "Not Found"
+
+
+class TestMigrationHistoryDetail:
+    """迁移历史明细持久化与单条端点（openspec db-migration-history-detail）。
+
+    成功迁移把 SSE complete 事件的逐表明细落库（tables_detail JSON 文本列）；
+    列表只带 has_detail 标记不内联明细；明细经 GET /database/history/{id} 按需读取。
+    """
+
+    DETAIL = [
+        {"name": "ps_cluster", "columns": 12, "rows": 18, "kind": "business"},
+        {"name": "sys_audit_log", "columns": 8, "rows": 120, "kind": "audit_log"},
+        {"name": "install_task", "columns": 7, "rows": 4, "kind": "task_log"},
+    ]
+
+    async def test_record_migration_log_persists_detail(self, async_authed_client, isolated_session):
+        from app.services import db_migration_service
+
+        async with isolated_session() as s:
+            await db_migration_service.record_migration_log(
+                s,
+                "sqlite_to_postgres",
+                "local_sqlite",
+                "prod_pg",
+                status="success",
+                tables_count=3,
+                tables_detail=self.DETAIL,
+            )
+        resp = await async_authed_client.get("/api/v1/database/history")
+        assert resp.status_code == 200
+        row = resp.json()[0]
+        # 列表只带标记，不内联明细（载荷不随明细膨胀）
+        assert row["has_detail"] is True
+        assert "tables" not in row
+        resp = await async_authed_client.get(f"/api/v1/database/history/{row['id']}")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["tables"] == self.DETAIL
+        assert data["tables_count"] == 3
+
+    async def test_failed_and_legacy_rows_have_no_detail(self, async_authed_client, isolated_session):
+        from app.models.db_migration import DbMigrationLog
+
+        async with isolated_session() as s:
+            # 旧记录形态：不写 tables_detail（失败腿/存量行同形）
+            s.add(
+                DbMigrationLog(
+                    direction="sqlite_to_postgres",
+                    source_connection="legacy_src",
+                    target_connection="prod_pg",
+                    mode="replace",
+                    status="failed",
+                )
+            )
+            await s.commit()
+        resp = await async_authed_client.get("/api/v1/database/history")
+        row = next(r for r in resp.json() if r["source_connection"] == "legacy_src")
+        assert row["has_detail"] is False
+        resp = await async_authed_client.get(f"/api/v1/database/history/{row['id']}")
+        assert resp.status_code == 200
+        assert resp.json()["tables"] == []
+
+    async def test_detail_endpoint_404_is_json(self, async_authed_client):
+        # 兜底路由会吞掉未匹配路径返回 index.html（AGENTS #34）：必须断言 JSON 404
+        resp = await async_authed_client.get("/api/v1/database/history/999999")
+        assert resp.status_code == 404
+        body = resp.json()
+        assert isinstance(body.get("detail"), str)
+
+    async def test_corrupted_detail_json_tolerated(self, async_authed_client, isolated_session):
+        from app.models.db_migration import DbMigrationLog
+
+        async with isolated_session() as s:
+            s.add(
+                DbMigrationLog(
+                    direction="sqlite_to_postgres",
+                    source_connection="corrupt_src",
+                    target_connection="prod_pg",
+                    mode="replace",
+                    status="success",
+                    tables_count=5,
+                    tables_detail="{bad json",
+                )
+            )
+            await s.commit()
+        resp = await async_authed_client.get("/api/v1/database/history")
+        row = next(r for r in resp.json() if r["source_connection"] == "corrupt_src")
+        assert row["has_detail"] is True
+        resp = await async_authed_client.get(f"/api/v1/database/history/{row['id']}")
+        assert resp.status_code == 200
+        assert resp.json()["tables"] == []

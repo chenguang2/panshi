@@ -5,27 +5,25 @@
       description="在 SQLite 与 PostgreSQL 之间单向快照迁移，支持实时进度、进行中状态恢复与迁移历史管理；迁移期间全局写暂停，请避开业务高峰。"
     >
     </PageHeader>
-    <!-- 切换成功后的重启指引横幅：固定展示直至用户关闭或刷新（文案复用 DatabaseManagement 待重启指引） -->
-    <a-alert
-      v-if="showRestartGuide"
-      class="restart-guide-banner"
-      type="warning"
-      show-icon
-      closable
-      @close="dismissRestartGuide"
-    >
-      <template #message>
+    <!-- 切换成功后的重启指引横幅（主题 .alert 族，db-migration-page-restyle）：固定展示直至用户关闭或刷新 -->
+    <div v-if="showRestartGuide" class="alert alert-warning restart-guide-banner">
+      <span class="alert-icon"><StrokeIcon name="warning" :size="14" /></span>
+      <div class="alert-content">
         切换待重启生效，当前页面数据仍来自旧库；请按提示完成后端重启（开发环境运行
         <code>develop/linux/start.sh</code>，生产环境执行 <code>sh stop.sh; sh start.sh</code>）。
-      </template>
-    </a-alert>
+      </div>
+      <button class="restart-banner-close" aria-label="关闭" @click="dismissRestartGuide">&times;</button>
+    </div>
     <StatusBand :status="status" :migration="runningMigration" :connections="connections" />
     <DbMigrationCard
       :connections="connections"
-      :active-db-name="activeDbName"
       :active-conn-id="activeConnId"
       @switch-connection="goSwitchTarget"
+      @migrated="onMigrated"
     />
+    <!-- 历史迁移记录独立卡（db-migration-page-restyle 拆分）：自持加载/分页/清理；
+         迁移完成后经 migrated → refresh 联动刷新 -->
+    <DbMigrationHistoryCard ref="historyCard" :connections="connections" :active-db-name="activeDbName" />
     <!-- 迁移完成后就地切换（9.2）：共享切换确认弹窗，预选迁移目标连接 -->
     <SwitchConnectionModal
       v-model:open="switchModalOpen"
@@ -40,7 +38,9 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
 import PageHeader from '@/components/PageHeader.vue'
+import StrokeIcon from '@/components/StrokeIcon.vue'
 import DbMigrationCard from '@/components/DbMigrationCard.vue'
+import DbMigrationHistoryCard from '@/components/DbMigrationHistoryCard.vue'
 import StatusBand from '@/components/StatusBand.vue'
 import SwitchConnectionModal from '@/components/SwitchConnectionModal.vue'
 import { getDatabaseStatus, getRunningTasks, listConnections, switchDatabase } from '@/api/database'
@@ -53,6 +53,9 @@ const activeConnId = ref('')
 /** 状态带数据：status 失败（含 403）时为 null → 状态带整条隐藏 */
 const status = ref<DbStatus | null>(null)
 const runningMigration = ref<MigrationState | null>(null)
+
+/** 历史卡引用：迁移完成后 refresh 联动（migrated 事件接线） */
+const historyCard = ref<InstanceType<typeof DbMigrationHistoryCard> | null>(null)
 
 /** 状态带锁态轮询：迁移起止后状态带随之刷新（读多写少接口，开销可忽略） */
 let _bandPollTimer: ReturnType<typeof setInterval> | null = null
@@ -93,6 +96,11 @@ onUnmounted(() => {
     _bandPollTimer = null
   }
 })
+
+/** 迁移完成（SSE 完成或轮询检测到翻转）：历史卡即时重拉 */
+function onMigrated(): void {
+  void historyCard.value?.refresh()
+}
 
 // ── 9.2 迁移完成后就地切换：本页弹共享切换确认弹窗（预选迁移目标连接），
 //    替代原「跳转数据库管理页再找连接」的纯导航行为 ──
@@ -151,11 +159,33 @@ function dismissRestartGuide(): void {
   flex-direction: column;
   gap: 20px;
 }
-/* 重启指引横幅中的命令以代码样式呈现（同 DatabaseManagement 重启提示） */
-.restart-guide-banner code {
+/* 重启指引横幅：主题 .alert 解剖（图标/内容/关闭），命令以代码样式呈现 */
+.restart-guide-banner {
+  margin-bottom: 0;
+}
+.restart-guide-banner .alert-content code {
   padding: 1px 6px;
   border-radius: 4px;
   background: rgba(0, 0, 0, 0.06);
   font-size: 12px;
+}
+.restart-banner-close {
+  align-self: center;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1;
+}
+.restart-banner-close:hover {
+  background: var(--bg);
+  color: var(--fg);
 }
 </style>

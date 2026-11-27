@@ -4,7 +4,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent } from 'vue'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
-import { message, Alert } from 'ant-design-vue'
+import { message } from 'ant-design-vue'
 
 // Mock the database api module（页面壳拉取 status/connections/running-tasks；DbMigrationCard 一并消费迁移相关函数）
 const mocks = {
@@ -77,7 +77,7 @@ function seedAuth(permissions: string[] = [], role = 'admin') {
   localStorage.setItem('token', 'test-token')
 }
 
-// DbMigrationCard 用桩组件替换（组件自身行为由 DbMigrationCard.test.ts 覆盖）
+// DbMigrationCard / DbMigrationHistoryCard 用桩组件替换（组件自身行为由各自 test 覆盖）
 const DbMigrationCardStub = defineComponent({
   name: 'DbMigrationCard',
   props: {
@@ -85,11 +85,29 @@ const DbMigrationCardStub = defineComponent({
     activeDbName: { type: String, default: '未配置' },
     activeConnId: { type: String, default: '' },
   },
-  emits: ['switch-connection'],
+  emits: ['switch-connection', 'migrated'],
   template: '<div class="db-migration-card-stub">{{ activeDbName }}</div>',
 })
 
+/** 历史卡桩：记录 refresh 调用次数（expose 契约验证） */
+const DbMigrationHistoryCardStub = defineComponent({
+  name: 'DbMigrationHistoryCard',
+  props: {
+    connections: { type: Array, default: () => [] },
+    activeDbName: { type: String, default: '未配置' },
+  },
+  setup() {
+    const refreshCalls = (globalThis as any).__histRefreshCalls__ as number[]
+    const refresh = () => {
+      refreshCalls.push(1)
+    }
+    return { refresh, refreshCalls }
+  },
+  template: '<div class="db-migration-history-card-stub" data-test="history-card">{{ refreshCalls.length }}</div>',
+})
+
 async function mountPage() {
+  ;(globalThis as any).__histRefreshCalls__ = []
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -101,9 +119,10 @@ async function mountPage() {
   await router.push('/')
   const DbMigrationPage = (await import('../DbMigrationPage.vue')).default
   const wrapper = mount(DbMigrationPage, {
-    // AAlert 注册真实组件（生产经 main.ts 全局注册）：重启指引横幅用 message 插槽 + closable，
-    // 断言依赖真实渲染（message 文案与关闭图标）
-    global: { plugins: [router], components: { AAlert: Alert }, stubs: { DbMigrationCard: DbMigrationCardStub } },
+    global: {
+      plugins: [router],
+      stubs: { DbMigrationCard: DbMigrationCardStub, DbMigrationHistoryCard: DbMigrationHistoryCardStub },
+    },
   })
   await flushPromises()
   await flushPromises()
@@ -125,11 +144,14 @@ describe('DbMigrationPage 页面壳', () => {
     expect(wrapper.text()).toContain('数据迁移')
   })
 
-  it('连接列表与活动库名经 props 下传（页面壳拉取一次 status/connections）', async () => {
+  it('连接列表与活动库名经 props 下传（迁移卡取 connections/activeConnId；历史卡取 connections/activeDbName）', async () => {
     const { wrapper } = await mountPage()
     const card = wrapper.findComponent({ name: 'DbMigrationCard' })
     expect((card.props('connections') as any[]).map((c) => c.id)).toEqual(['conn_1', 'conn_2'])
-    expect(card.props('activeDbName')).toBe('本地库')
+    expect(card.props('activeConnId')).toBe('conn_1')
+    const histCard = wrapper.findComponent({ name: 'DbMigrationHistoryCard' })
+    expect((histCard.props('connections') as any[]).map((c) => c.id)).toEqual(['conn_1', 'conn_2'])
+    expect(histCard.props('activeDbName')).toBe('本地库')
     expect(mocks.listConnections).toHaveBeenCalledTimes(1)
     expect(mocks.getStatus).toHaveBeenCalledTimes(1)
   })
@@ -204,7 +226,7 @@ describe('DbMigrationPage 页面壳', () => {
     expect(wrapper.find('.restart-guide-banner').exists()).toBe(false)
   })
 
-  it('重启指引横幅可关闭，关闭后不再显示（保留至用户关闭或刷新）', async () => {
+  it('重启指引横幅为主题 warning 横幅（.alert 族），可关闭且关闭后不再显示（保留至用户关闭或刷新）', async () => {
     const { wrapper } = await mountPage()
     const card = wrapper.findComponent({ name: 'DbMigrationCard' })
     ;(card.vm as any).$emit('switch-connection', conn({ id: 'conn_2' }))
@@ -212,10 +234,23 @@ describe('DbMigrationPage 页面壳', () => {
     mocks.switchDatabase.mockResolvedValue({ data: { message: 'ok' } })
     await wrapper.find('.switch-confirm-btn').trigger('click')
     await flushPromises()
-    expect(wrapper.find('.restart-guide-banner').exists()).toBe(true)
-    await wrapper.find('.restart-guide-banner .ant-alert-close-icon').trigger('click')
+    const banner = wrapper.find('.restart-guide-banner')
+    expect(banner.exists()).toBe(true)
+    expect(banner.classes()).toContain('alert-warning')
+    expect(banner.find('.alert-content').exists()).toBe(true)
+    expect(banner.find('.ant-alert').exists()).toBe(false)
+    await banner.find('.restart-banner-close').trigger('click')
     await nextTick()
     expect(wrapper.find('.restart-guide-banner').exists()).toBe(false)
+  })
+
+  it('迁移卡发出 migrated 事件 → 调历史卡 refresh（迁移完成后历史即时刷新接线）', async () => {
+    const { wrapper } = await mountPage()
+    expect(mocks.getHistory).not.toHaveBeenCalled() // 历史由历史卡自持（桩下不发请求）
+    const card = wrapper.findComponent({ name: 'DbMigrationCard' })
+    ;(card.vm as any).$emit('migrated')
+    await nextTick()
+    expect((globalThis as any).__histRefreshCalls__.length).toBe(1)
   })
 
   // ── 组 6：迁移页状态带挂载（tasks 6.2） ──

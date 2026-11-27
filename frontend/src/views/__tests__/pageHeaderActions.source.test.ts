@@ -42,6 +42,7 @@ const PAGES: Array<[string, string]> = [
   ['EdgeClient.vue', 'edge-client.html'],
   ['EdgeImport.vue', 'edge-import.html'],
   ['DatabaseManagement.vue', 'database-management.html'],
+  ['DbMigrationPage.vue', 'db-migration.html'],
 ]
 
 function read(file: string): string {

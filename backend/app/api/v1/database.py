@@ -472,6 +472,8 @@ async def migrate_database_stream(
                             backup_path=backup_path,
                             duration_seconds=duration,
                             started_at=started_at,
+                            # 完成事件的逐表明细落库（db-migration-history-detail）：历史行可回看明细
+                            tables_detail=migration_result.get("tables") or None,
                         )
                         log_audit(log_db, user=current_user, action="migrate_database", resource="database", detail=f"迁移 {body.source_id} → {body.target_id}（{tables_count} 张表）")
                 else:
@@ -716,11 +718,15 @@ async def migration_history(
             "backup_path": log.backup_path,
             "error_message": log.error_message,
             "duration_seconds": log.duration_seconds,
+            # 明细是否可回看（db-migration-history-detail）：列表不内联明细数组，按需走单条端点
+            "has_detail": bool(log.tables_detail),
             "started_at": log.started_at.isoformat() if log.started_at else None,
             "created_at": log.created_at.isoformat() if log.created_at else None,
         }
         for log in logs
     ]
+
+
 
 
 @router.get("/history/cleanup-preview")
@@ -789,6 +795,45 @@ async def delete_migration_history(
     return {"deleted": 1, "remaining": remaining}
 
 
+def _parse_tables_detail(raw: str | None) -> list[dict]:
+    """解析明细 JSON；损坏/半截写容错为空列表（不炸端点，design D1）。"""
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+        return parsed if isinstance(parsed, list) else []
+    except (ValueError, TypeError):
+        return []
+
+
+@router.get("/history/{log_id}")
+async def migration_history_detail(
+    log_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_db_admin('db_migration')),
+):
+    """单条迁移历史（含逐表明细，db-migration-history-detail）：列表按需拉取的懒加载端点。"""
+    _require_migration_feature()
+    result = await db.execute(select(DbMigrationLog).where(DbMigrationLog.id == log_id))
+    log = result.scalars().first()
+    if log is None:
+        raise HTTPException(status_code=404, detail="迁移记录不存在")
+    return {
+        "id": log.id,
+        "direction": log.direction,
+        "source_connection": log.source_connection,
+        "target_connection": log.target_connection,
+        "mode": log.mode,
+        "status": log.status,
+        "tables_count": log.tables_count,
+        "backup_path": log.backup_path,
+        "error_message": log.error_message,
+        "duration_seconds": log.duration_seconds,
+        "has_detail": bool(log.tables_detail),
+        "tables": _parse_tables_detail(log.tables_detail),
+        "started_at": log.started_at.isoformat() if log.started_at else None,
+        "created_at": log.created_at.isoformat() if log.created_at else None,
+    }
 def _direction_label(source, target) -> str:
     return f"{source.type}_to_{target.type}"
 

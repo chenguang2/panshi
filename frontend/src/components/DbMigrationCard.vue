@@ -1,65 +1,16 @@
 <template>
-  <div class="card db-migration-card">
-    <div class="card-header">
-      <button
-        class="btn btn-secondary btn-sm migrate-refresh-btn"
-        @click="loadMigrationState"
-        :disabled="migrationStateLoading"
-      >
-        {{ migrationStateLoading ? '刷新中…' : '刷新' }}
-      </button>
-    </div>
-    <div class="card-body">
-      <!-- 迁移进行中横幅（API 恢复；断开实时进度后由 5s 轮询恢复展示） -->
-      <a-alert
-        v-if="runningMigration.in_progress"
-        type="warning"
-        show-icon
-        class="migration-lock-alert"
-        :message="`数据库迁移进行中${runningMigration.source_id && runningMigration.target_id ? '：' + getConnectionName(runningMigration.source_id) + ' → ' + getConnectionName(runningMigration.target_id) : ''}`"
-        :description="runningMigration.started_at ? '开始时间：' + formatTime(runningMigration.started_at) : ''"
-      />
-      <!-- 迁移进度（从 API 恢复，非 SSE 实时） -->
-      <div
-        v-if="runningMigration.in_progress && !migrating && runningMigration.progress"
-        class="migration-progress-detail"
-      >
-        <div v-if="runningMigration.progress.phase === 'backup'" class="progress-phase">
-          <span class="phase-label">📦 备份中</span>
-          <a-progress
-            :percent="
-              runningMigration.progress.backup_total > 0
-                ? Math.round((runningMigration.progress.backup_done / runningMigration.progress.backup_total) * 100)
-                : 0
-            "
-            :stroke-color="'#1890ff'"
-          />
-          <span class="progress-text"
-            >{{ runningMigration.progress.backup_done }} / {{ runningMigration.progress.backup_total }} 张表</span
-          >
-        </div>
-        <div v-else-if="runningMigration.progress.phase === 'migrating'" class="progress-phase">
-          <span class="phase-label">🔄 迁移中</span>
-          <a-progress
-            :percent="
-              runningMigration.progress.total_tables > 0
-                ? Math.round((runningMigration.progress.table_index / runningMigration.progress.total_tables) * 100)
-                : 0
-            "
-            :stroke-color="'#52c41a'"
-          />
-          <span class="progress-text">
-            表 {{ runningMigration.progress.table_index }} / {{ runningMigration.progress.total_tables }}
-            <span v-if="runningMigration.progress.current_table">：{{ runningMigration.progress.current_table }}</span>
-            <span v-if="runningMigration.progress.total_rows > 0"
-              >（{{ runningMigration.progress.copied_rows?.toLocaleString() }} /
-              {{ runningMigration.progress.total_rows?.toLocaleString() }} 行）</span
-            >
-            <a-tag v-if="runningMigration.progress.skipped" color="orange" style="margin-left: 4px">已跳过</a-tag>
-          </span>
-        </div>
+  <div class="l5-card db-migration-card">
+    <div class="mig-cardhead">
+      <h3>迁移任务</h3>
+      <span class="mig-sub">单向快照替换：先备份源库，再清空目标库写入</span>
+      <div class="mig-head-actions">
+        <button class="tool-btn migrate-refresh-btn" @click="loadMigrationState" :disabled="migrationStateLoading">
+          <StrokeIcon name="rotate" :size="12" />
+          {{ migrationStateLoading ? '刷新中…' : '刷新' }}
+        </button>
       </div>
-
+    </div>
+    <div class="mig-body">
       <!-- 主区两栏（design D9）：左 = 一体化流向面板（方案 A 定稿），右 = 固定风险与说明面板 -->
       <div class="migrate-layout">
         <div class="migrate-form-col">
@@ -127,7 +78,7 @@
                 id="migrate-timeout-select"
                 v-model.number="migrateForm.timeout"
                 class="form-input flow-select timeout-select"
-                :disabled="migrating"
+                :disabled="migrating || !canStartMigration"
               >
                 <option :value="60">1 分钟</option>
                 <option :value="180">3 分钟</option>
@@ -136,7 +87,7 @@
                 <option :value="1800">30 分钟</option>
               </select>
               <label class="checkbox-label">
-                <input type="checkbox" v-model="migrateForm.includeLogs" />
+                <input type="checkbox" v-model="migrateForm.includeLogs" :disabled="migrating || !canStartMigration" />
                 <span>包含日志数据</span>
               </label>
               <button
@@ -169,50 +120,48 @@
         </aside>
       </div>
 
-      <div v-if="migrating" class="migrate-progress">
-        <div v-if="migrationProgress.phase === 'backup'" class="progress-section">
-          <div class="progress-header">正在备份源库…</div>
-          <a-progress
-            :percent="
-              migrationProgress.backupTotal > 0
-                ? Math.round((migrationProgress.backupDone / migrationProgress.backupTotal) * 100)
-                : 0
-            "
-            status="active"
-          />
-          <span class="progress-text">表 {{ migrationProgress.backupDone }} / {{ migrationProgress.backupTotal }}</span>
+      <!-- 统一进度面板（db-migration-page-restyle）：SSE 实时态与 API 恢复态同构解剖；
+           锁定事实由状态带 lock 段承载，卡片内不再另立锁横幅 -->
+      <div v-if="progressView" class="mig-progress">
+        <div class="progress-head">
+          <span class="phase">{{ progressView.phase === 'backup' ? 'BACKUP' : 'MIGRATING' }}</span>
+          <template v-if="progressView.skeleton">
+            {{ progressView.live ? '正在准备迁移…' : '迁移进行中…' }}
+          </template>
+          <template v-else-if="progressView.phase === 'backup'">正在备份源库…</template>
+          <template v-else>正在迁移数据 · 表 {{ progressView.tableIndex }} / {{ progressView.totalTables }}</template>
         </div>
-        <div v-else-if="migrationProgress.phase === 'migrating'" class="progress-section">
-          <div class="progress-header">
-            正在迁移数据… 表 {{ migrationProgress.tableIndex }} / {{ migrationProgress.totalTables }}
-          </div>
-          <a-progress
-            :percent="
-              migrationProgress.totalTables > 0
-                ? Math.round((migrationProgress.tableIndex / migrationProgress.totalTables) * 100)
-                : 0
-            "
-            status="active"
-          />
-          <div class="progress-detail">
-            <span v-if="migrationProgress.currentTable" class="progress-table">
-              当前表：<strong>{{ migrationProgress.currentTable }}</strong>
-              <template v-if="migrationProgress.skipped">（跳过：表不存在）</template>
+        <div v-if="!progressView.skeleton" class="bar" :class="{ ok: progressView.phase === 'backup' }">
+          <i :style="{ width: progressView.percent + '%' }"></i>
+        </div>
+        <div class="progress-meta">
+          <template v-if="!progressView.skeleton && progressView.phase === 'backup'">
+            <span
+              >已备份 <b>{{ progressView.backupDone }}</b> / <b>{{ progressView.backupTotal }}</b> 张表</span
+            >
+          </template>
+          <template v-else-if="!progressView.skeleton">
+            <span v-if="progressView.currentTable">
+              当前表：<b>{{ progressView.currentTable }}</b
+              ><template v-if="progressView.skipped">（跳过：表不存在）</template>
             </span>
-            <span v-if="migrationProgress.totalRows > 0" class="progress-rows">
-              已迁移 {{ migrationProgress.copiedRows.toLocaleString() }} /
-              {{ migrationProgress.totalRows.toLocaleString() }} 行
+            <span v-if="progressView.totalRows > 0">
+              已迁移 <b>{{ progressView.copiedRows.toLocaleString() }}</b> /
+              <b>{{ progressView.totalRows.toLocaleString() }}</b> 行
             </span>
-          </div>
+          </template>
+          <template v-else-if="!progressView.live">
+            <span>进度暂未上报，可稍后点「刷新」查看最新状态</span>
+          </template>
+          <span v-if="progressStartedAt" class="mig-time">{{ formatDateTime(progressStartedAt) }} 起</span>
         </div>
-        <div v-else class="progress-section">
-          <a-progress :percent="0" status="active" />
-          <span class="progress-text">正在准备迁移…</span>
-        </div>
-        <div class="migrate-cancel">
-          <a-button danger size="small" @click="handleCancelMigration"> 断开实时进度 </a-button>
+        <div v-if="migrating" class="progress-foot">
+          <button class="btn btn-danger btn-sm migrate-disconnect-btn" @click="handleCancelMigration">
+            断开实时进度
+          </button>
         </div>
       </div>
+
       <!-- 迁移结果摘要条：完成后只占一行，明细收进抽屉（避免 22+ 张表明细把页面撑长） -->
       <div v-if="migrateResult" class="migrate-result-bar">
         <div class="result-main">
@@ -231,153 +180,18 @@
           </button>
         </div>
       </div>
-
-      <!-- 迁移详情抽屉：表明细在抽屉内滚动，不再撑长主页面 -->
-      <a-drawer v-model:open="migrateDetailOpen" title="迁移详情" placement="right" :width="760">
-        <a-descriptions :column="2" size="small" bordered class="migrate-desc">
-          <a-descriptions-item label="源数据库">{{ getConnectionName(migrateForm.sourceId) }}</a-descriptions-item>
-          <a-descriptions-item label="目标数据库">{{ migrateTargetName }}</a-descriptions-item>
-          <a-descriptions-item label="迁移表数">{{ migrateResult?.tables_migrated ?? '-' }}</a-descriptions-item>
-          <a-descriptions-item label="耗时">{{
-            migrateElapsed !== null ? migrateElapsed + ' 秒' : '-'
-          }}</a-descriptions-item>
-          <a-descriptions-item label="备份路径" :span="2">
-            <span class="backup-path">{{ migrateResult?.backup_path || '未生成备份' }}</span>
-          </a-descriptions-item>
-        </a-descriptions>
-
-        <div v-if="migrateResult?.tables?.length" class="migrate-table-detail">
-          <div class="next-steps-title">
-            表明细（共 {{ migrateResult.tables.length }} 张：业务表 {{ businessTables.length }} · 审计与导入日志
-            {{ auditLogTables.length }} · 任务日志 {{ taskLogTables.length }}）
-          </div>
-          <div class="migrate-table-group">
-            <div class="group-label">业务表（{{ businessTables.length }}）</div>
-            <a-table
-              :data-source="businessTables"
-              :columns="migrateTableColumns"
-              row-key="name"
-              :pagination="false"
-              :scroll="{ y: 320 }"
-              size="small"
-              class="migrate-detail-table"
-            />
-          </div>
-          <div v-if="auditLogTables.length" class="migrate-table-group">
-            <div class="group-label">审计与导入日志（{{ auditLogTables.length }}）</div>
-            <a-table
-              :data-source="auditLogTables"
-              :columns="migrateTableColumns"
-              row-key="name"
-              :pagination="false"
-              :scroll="{ y: 200 }"
-              size="small"
-              class="migrate-detail-table"
-            />
-          </div>
-          <div v-if="taskLogTables.length" class="migrate-table-group">
-            <div class="group-label">任务日志（{{ taskLogTables.length }}）</div>
-            <a-table
-              :data-source="taskLogTables"
-              :columns="migrateTableColumns"
-              row-key="name"
-              :pagination="false"
-              :scroll="{ y: 200 }"
-              size="small"
-              class="migrate-detail-table"
-            />
-          </div>
-          <div v-if="!auditLogTables.length && !taskLogTables.length" class="migrate-log-hint">
-            本次迁移未包含日志表（如需一并迁移日志数据，请勾选「包含日志数据」后重新执行）
-          </div>
-        </div>
-
-        <div class="next-steps">
-          <div class="next-steps-title">迁移成功，按以下步骤启用新数据库：</div>
-          <ol class="next-steps-list">
-            <li>
-              在「连接列表」中找到 <strong>{{ migrateTargetName }}</strong
-              >，点击「设为当前」
-            </li>
-            <li>在确认弹窗中点击「确认切换」，然后手动重启后端服务生效</li>
-            <li>重启后刷新页面，「当前数据库」卡片应显示新数据库</li>
-          </ol>
-        </div>
-      </a-drawer>
-      <!-- 迁移历史 -->
-      <div v-if="migrationHistory.length > 0" class="migration-history-section">
-        <div class="history-header">
-          <h4>历史迁移记录</h4>
-          <span class="history-count">{{ migrationHistory.length }} 条</span>
-          <span v-if="historyCapped" class="history-cap-hint">仅显示最近 {{ HISTORY_PAGE_LIMIT }} 条</span>
-          <button class="btn btn-secondary btn-sm history-cleanup-btn" @click="openCleanupModal">清理历史</button>
-        </div>
-        <a-table
-          :data-source="pagedHistory"
-          :columns="historyColumns"
-          row-key="id"
-          :pagination="historyPagination"
-          :scroll="{ x: 'max-content' }"
-          @change="handleHistoryTableChange"
-          size="middle"
-          class="migration-history-table"
-        >
-          <template #bodyCell="{ record, column }">
-            <template v-if="column.key === 'direction'">
-              <span class="history-flow">
-                <span class="flow-node flow-source" :title="connLabel(record.source_connection)">{{
-                  connLabel(record.source_connection)
-                }}</span>
-                <span class="flow-arrow">→</span>
-                <span class="flow-node flow-target" :title="connLabel(record.target_connection)">{{
-                  connLabel(record.target_connection)
-                }}</span>
-              </span>
-            </template>
-            <template v-else-if="column.key === 'mode'">
-              <span class="history-mode">{{ record.mode === 'replace' ? '替换' : record.mode }}</span>
-            </template>
-            <template v-else-if="column.key === 'status'">
-              <a-tag :color="record.status === 'success' ? 'green' : record.status === 'failed' ? 'red' : 'default'">
-                {{ historyStatusLabel(record.status) }}
-              </a-tag>
-            </template>
-            <template v-else-if="column.key === 'tables_count'">
-              <span class="history-tables">{{ record.tables_count ?? '-' }}</span>
-            </template>
-            <template v-else-if="column.key === 'duration'">
-              <span class="history-time">{{ formatDuration(record.duration_seconds) }}</span>
-            </template>
-            <template v-else-if="column.key === 'started_at'">
-              <span class="history-time">{{ formatStartTime(record) }}</span>
-            </template>
-            <template v-else-if="column.key === 'created_at'">
-              <span class="history-time">{{ record.created_at ? formatDateTime(record.created_at) : '-' }}</span>
-            </template>
-          </template>
-          <template #expandedRowRender="{ record }">
-            <div class="history-expand">
-              <!-- 失败原因仅失败行展示（spec：成功行展开无失败原因段落）；备份路径恒占位（行高一致） -->
-              <div v-if="record.status === 'failed'" class="history-expand-row">
-                <span class="history-expand-label">失败原因：</span>
-                <span class="history-error-text">{{ translateMigrationError(record.error_message) || '-' }}</span>
-              </div>
-              <div class="history-expand-row">
-                <span class="history-expand-label">备份路径：</span>
-                <code class="history-backup-path">{{ record.backup_path || '-' }}</code>
-                <button
-                  v-if="record.backup_path"
-                  class="btn btn-secondary btn-sm copy-path-btn"
-                  @click="copyBackupPath(record.backup_path)"
-                >
-                  复制
-                </button>
-              </div>
-            </div>
-          </template>
-        </a-table>
-      </div>
     </div>
+
+    <!-- 迁移详情共享抽屉（db-migration-history-detail D4）：与历史回看共用唯一实现，数据经视图模型传入 -->
+    <DbMigrationDetailDrawer
+      v-model:open="migrateDetailOpen"
+      :source-name="getConnectionName(migrateForm.sourceId)"
+      :target-name="migrateTargetName"
+      :tables-count="migrateResult?.tables_migrated ?? null"
+      :duration-text="migrateElapsed !== null ? migrateElapsed + ' 秒' : '-'"
+      :backup-path="migrateResult?.backup_path || ''"
+      :tables="migrateResult?.tables || []"
+    />
   </div>
 
   <!-- 确认开始迁移弹窗（design D2：替代勾选框直发；「开始迁移」触发，弹窗内确认后才发起） -->
@@ -399,7 +213,11 @@
           <strong>{{ confirmTargetName }}</strong>
           <span class="confirm-conn-meta">{{ confirmTargetMeta }}</span>
         </div>
-        <a-alert :type="showClearWarning ? 'error' : 'info'" show-icon :message="clearWarningText" />
+        <!-- 清空覆盖警告（主题 .alert 族；无法判定空库时保守恒显 error，spec 保守恒显契约不变） -->
+        <div class="alert" :class="showClearWarning ? 'alert-error' : 'alert-info'">
+          <span class="alert-icon"><StrokeIcon name="warning" :size="14" /></span>
+          <div class="alert-content">{{ clearWarningText }}</div>
+        </div>
         <ul class="confirm-notes">
           <li>迁移前自动备份源库（备份保留最近 10 份，超量自动清理）</li>
           <li>迁移期间所有写操作暂被锁定，完成后自动恢复</li>
@@ -412,98 +230,32 @@
       </div>
     </div>
   </div>
-
-  <!-- 迁移历史清理 Modal：保留最近 N 条，其余删除（预览数字来自服务端真实总数） -->
-  <div class="modal-overlay" :style="{ display: cleanupModal.open ? 'flex' : 'none' }">
-    <div class="modal" style="max-width: 520px">
-      <div class="modal-header">
-        <h2>清理迁移历史</h2>
-        <button class="modal-close" @click="closeCleanupModal">&times;</button>
-      </div>
-      <div class="modal-body">
-        <div class="cleanup-form">
-          <span>保留最近</span>
-          <a-input-number
-            v-model:value="cleanupModal.keepLast"
-            :min="1"
-            :max="cleanupKeepMax"
-            :disabled="cleanupModal.submitting"
-            style="width: 120px"
-            @change="refreshCleanupPreview"
-          />
-          <span>条记录，其余全部删除</span>
-        </div>
-        <div class="cleanup-preview">
-          <span v-if="cleanupModal.previewing">正在计算影响范围…</span>
-          <template v-else-if="cleanupModal.preview">
-            <template v-if="cleanupModal.preview.will_delete > 0">
-              库内共 <b>{{ cleanupModal.preview.total }}</b> 条，将删除
-              <b class="cleanup-danger">{{ cleanupModal.preview.will_delete }}</b> 条，保留
-              <b>{{ cleanupModal.preview.will_keep }}</b> 条
-            </template>
-            <template v-else> 库内共 {{ cleanupModal.preview.total }} 条，按当前保留条数无需清理 </template>
-          </template>
-          <span v-else class="text-muted">—</span>
-        </div>
-        <a-alert
-          type="warning"
-          show-icon
-          message="删除不可撤销"
-          :description="`仅影响当前活动库（${activeDbName}）的迁移历史，不影响业务数据、审计日志与已生成的备份文件。`"
-        />
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" :disabled="cleanupModal.submitting" @click="closeCleanupModal">取消</button>
-        <button
-          class="btn btn-danger cleanup-confirm-btn"
-          :disabled="cleanupModal.submitting || !cleanupModal.preview || cleanupModal.preview.will_delete === 0"
-          @click="handleCleanup"
-        >
-          {{ cleanupModal.submitting ? '清理中…' : '确认清理' }}
-        </button>
-      </div>
-    </div>
-  </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
-import type { TablePaginationConfig } from 'ant-design-vue'
-import { formatDateTime, parseBackendDate } from '@/utils/format'
-import { paginationProps } from '@/composables/usePagination'
-import { PAGE_SIZE_TABLE } from '@/constants'
-import {
-  migrateDatabaseStream,
-  cleanupMigrationHistory,
-  getMigrationHistory,
-  getMigrationHistoryCleanupPreview,
-  getRunningTasks,
-} from '@/api/database'
-import type {
-  DbConnection,
-  MigrateResult,
-  MigrationCompleteEvent,
-  MigrationHistoryCleanupPreview,
-  MigrationHistoryItem,
-  MigrationState,
-} from '@/types/database'
+import { formatDateTime } from '@/utils/format'
+import StrokeIcon from '@/components/StrokeIcon.vue'
+import DbMigrationDetailDrawer from '@/components/DbMigrationDetailDrawer.vue'
+import { migrateDatabaseStream, getRunningTasks } from '@/api/database'
+import type { DbConnection, MigrateResult, MigrationCompleteEvent, MigrationState } from '@/types/database'
 
 // 连接列表/名称解析经 props 传入（不建 store、不复制实现——design D4）；
 // 切换确认弹窗归连接注册表域，经 switch-connection 事件交由宿主打开。
+// 迁移完成经 migrated 事件通知宿主（历史卡 refresh 接线，db-migration-page-restyle）。
 const props = withDefaults(
   defineProps<{
     connections: DbConnection[]
-    /** 当前活动库名（清理弹窗提示用），由宿主页面传入避免重复拉取 status */
-    activeDbName?: string
     /** 当前活动连接 ID（G8 前置 + 源预选用，取自 GET /database/status 的 active.id） */
     activeConnId?: string
   }>(),
-  { activeDbName: '未配置', activeConnId: '' },
+  { activeConnId: '' },
 )
 
 const emit = defineEmits<{
   (e: 'switch-connection', connection: DbConnection): void
+  (e: 'migrated'): void
 }>()
 
 const migrating = ref(false)
@@ -525,179 +277,8 @@ const runningMigration = ref<MigrationState>({
 })
 const migrationStateLoading = ref(false)
 
-// Migration history
-const migrationHistory = ref<MigrationHistoryItem[]>([])
-const historyLoading = ref(false)
-/** 后端列表单页上限（GET /database/history 固定 limit=100）：达上限时提示"仅显示最近 100 条" */
-const HISTORY_PAGE_LIMIT = 100
-const historyCapped = computed(() => migrationHistory.value.length >= HISTORY_PAGE_LIMIT)
-
-// ── 迁移历史分页（客户端全量数组本地切片，参照 UserList 的 page/pageSize refs + change 写回模式；
-//    分页配置统一走 paginationProps 工厂，默认每页 PAGE_SIZE_TABLE） ──
-const historyPage = ref(1)
-const historyPageSize = ref(PAGE_SIZE_TABLE)
-const pagedHistory = computed(() =>
-  migrationHistory.value.slice(
-    (historyPage.value - 1) * historyPageSize.value,
-    historyPage.value * historyPageSize.value,
-  ),
-)
-const historyPagination = computed(() =>
-  paginationProps({ page: historyPage.value, pageSize: historyPageSize.value, total: migrationHistory.value.length }),
-)
-
-function handleHistoryTableChange(pagination: TablePaginationConfig): void {
-  historyPage.value = pagination.current || 1
-  if (pagination.pageSize) historyPageSize.value = pagination.pageSize
-}
-
-/** 清理弹窗：保留最近 N 条，其余删除（预览数字由服务端按库内真实总数计算） */
-const CLEANUP_DEFAULT_KEEP = 10
-const cleanupModal = reactive<{
-  open: boolean
-  keepLast: number
-  preview: MigrationHistoryCleanupPreview | null
-  previewing: boolean
-  submitting: boolean
-}>({
-  open: false,
-  keepLast: CLEANUP_DEFAULT_KEEP,
-  preview: null,
-  previewing: false,
-  submitting: false,
-})
-
-const cleanupKeepMax = computed(() => Math.max(cleanupModal.preview?.total ?? 1, 1))
-
-/** 取后端 detail（如迁移期间的 503 写锁提示），取不到时用 fallback。 */
-function errDetail(err: unknown, fallback: string): string {
-  const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
-  return typeof detail === 'string' && detail.trim() ? detail : fallback
-}
-
-function openCleanupModal(): void {
-  cleanupModal.keepLast = CLEANUP_DEFAULT_KEEP
-  cleanupModal.preview = null
-  cleanupModal.open = true
-  void refreshCleanupPreview()
-}
-
-function closeCleanupModal(): void {
-  if (cleanupModal.submitting) return
-  cleanupModal.open = false
-}
-
-async function refreshCleanupPreview(): Promise<void> {
-  if (!Number.isFinite(cleanupModal.keepLast) || cleanupModal.keepLast < 1) {
-    cleanupModal.preview = null
-    return
-  }
-  cleanupModal.previewing = true
-  try {
-    const res = await getMigrationHistoryCleanupPreview(cleanupModal.keepLast)
-    cleanupModal.preview = res.data
-  } catch (err: unknown) {
-    cleanupModal.preview = null
-    message.error(errDetail(err, '计算清理影响失败'))
-  } finally {
-    cleanupModal.previewing = false
-  }
-}
-
-async function handleCleanup(): Promise<void> {
-  if (!cleanupModal.preview || cleanupModal.preview.will_delete === 0) return
-  cleanupModal.submitting = true
-  try {
-    const res = await cleanupMigrationHistory(cleanupModal.keepLast)
-    message.success(`已清理 ${res.data.deleted} 条迁移历史`)
-    cleanupModal.open = false
-    await loadMigrationHistory()
-  } catch (err: unknown) {
-    message.error(errDetail(err, '清理失败，请稍后重试'))
-  } finally {
-    cleanupModal.submitting = false
-  }
-}
-
 function getConnectionName(connId: string): string {
   return props.connections.find((c) => c.id === connId)?.name || connId
-}
-
-// 迁移历史用友好标签：连接名（SQLite 文件名 / PG 地址），连接已删除时回退原始 ID
-function connLabel(connId: string): string {
-  const c = props.connections.find((x) => x.id === connId)
-  if (!c) return connId
-  const detail =
-    c.type === 'sqlite'
-      ? (c.path || '').split('/').pop() || ''
-      : c.display_address || (c.host ? `${c.host}${c.port ? ':' + c.port : ''}` : '')
-  return detail ? `${c.name}（${detail}）` : c.name
-}
-
-const historyColumns = [
-  { title: '迁移方向', key: 'direction' },
-  { title: '模式', key: 'mode', width: 90 },
-  { title: '状态', key: 'status', width: 90 },
-  { title: '表数量', key: 'tables_count', width: 90, align: 'right' as const },
-  { title: '时长', key: 'duration', width: 100, align: 'right' as const },
-  { title: '开始时间', key: 'started_at', width: 160 },
-  { title: '完成时间', key: 'created_at', width: 160 },
-]
-
-// 后端仅产 success/failed（design D1：删除永不命中的 cancelled 死映射）
-function historyStatusLabel(status: string): string {
-  const labels: Record<string, string> = { success: '成功', failed: '失败' }
-  return labels[status] || status
-}
-
-/**
- * 迁移失败原因中文分类转译（design D4 / 文案表，复用连接测试分类器思路）：
- * 可识别的英文异常转中文短语，无法分类的原始错误加「迁移失败：」前缀。
- */
-function translateMigrationError(raw: string | null | undefined): string {
-  if (!raw || !raw.trim()) return ''
-  const low = raw.toLowerCase()
-  if (low.includes('connection refused')) return '连接被拒绝（数据库服务未启动或端口错误）'
-  if (low.includes('authentication') || (low.includes('password') && low.includes('failed'))) return '用户名或密码错误'
-  if (low.includes('does not exist') && low.includes('database')) return '数据库不存在'
-  if (low.includes('timeout') || low.includes('timed out')) return '连接超时'
-  return `迁移失败：${raw}`
-}
-
-/** 历史行展开的备份路径复制（navigator.clipboard + 轻提示） */
-async function copyBackupPath(path: string): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(path)
-    message.success('已复制')
-  } catch {
-    message.error('复制失败，请手动复制')
-  }
-}
-
-function formatDuration(seconds: number | null | undefined): string {
-  if (seconds == null) return '-'
-  if (seconds < 60) return `${seconds} 秒`
-  const m = Math.floor(seconds / 60)
-  const s = Math.round(seconds % 60)
-  if (m < 60) return s > 0 ? `${m} 分 ${s} 秒` : `${m} 分`
-  const h = Math.floor(m / 60)
-  return `${h} 时 ${m % 60} 分`
-}
-
-// 开始时间：优先后端记录值；旧记录无 started_at 时回退「完成时间 − 时长」推导，均无则 '-'
-function formatStartTime(record: MigrationHistoryItem): string {
-  if (record.started_at) return formatDateTime(record.started_at)
-  if (record.created_at && record.duration_seconds != null) {
-    const end = parseBackendDate(record.created_at).getTime()
-    if (!Number.isNaN(end)) {
-      return formatDateTime(new Date(end - record.duration_seconds * 1000).toISOString())
-    }
-  }
-  return '-'
-}
-
-function formatTime(iso: string): string {
-  return formatDateTime(iso)
 }
 
 const migrateForm = reactive({
@@ -767,6 +348,106 @@ function openSwitchForMigrateTarget() {
   if (migrateTargetConnection.value) emit('switch-connection', migrateTargetConnection.value)
 }
 
+// ── 统一进度面板视图（db-migration-page-restyle）：SSE 实时态优先，其次 API 恢复态；
+//    阶段未上报 / 恢复态 progress 缺失 → skeleton 骨架行（不渲染假进度条） ──
+interface ProgressViewModel {
+  phase: 'backup' | 'migrating'
+  /** 骨架行：只渲染阶段徽标 + 提示文案，不渲染进度条 */
+  skeleton: boolean
+  /** SSE 本地实时流（显示「断开实时进度」） */
+  live: boolean
+  percent: number
+  tableIndex: number
+  totalTables: number
+  currentTable: string
+  copiedRows: number
+  totalRows: number
+  skipped: boolean
+  backupDone: number
+  backupTotal: number
+}
+
+const EMPTY_VIEW: ProgressViewModel = {
+  phase: 'migrating',
+  skeleton: true,
+  live: false,
+  percent: 0,
+  tableIndex: 0,
+  totalTables: 0,
+  currentTable: '',
+  copiedRows: 0,
+  totalRows: 0,
+  skipped: false,
+  backupDone: 0,
+  backupTotal: 0,
+}
+
+const progressView = computed<ProgressViewModel | null>(() => {
+  if (migrating.value) {
+    const p = migrationProgress
+    if (p.phase === 'backup') {
+      return {
+        ...EMPTY_VIEW,
+        phase: 'backup',
+        skeleton: false,
+        live: true,
+        percent: p.backupTotal > 0 ? Math.round((p.backupDone / p.backupTotal) * 100) : 0,
+        backupDone: p.backupDone,
+        backupTotal: p.backupTotal,
+      }
+    }
+    if (p.phase === 'migrating') {
+      return {
+        ...EMPTY_VIEW,
+        skeleton: false,
+        live: true,
+        percent: p.totalTables > 0 ? Math.round((p.tableIndex / p.totalTables) * 100) : 0,
+        tableIndex: p.tableIndex,
+        totalTables: p.totalTables,
+        currentTable: p.currentTable,
+        copiedRows: p.copiedRows,
+        totalRows: p.totalRows,
+        skipped: p.skipped,
+      }
+    }
+    // 流已建立、阶段未上报（准备中）：骨架行
+    return { ...EMPTY_VIEW, live: true }
+  }
+  const rm = runningMigration.value
+  if (!rm.in_progress) return null
+  const p = rm.progress
+  if (!p) return { ...EMPTY_VIEW }
+  if (p.phase === 'backup') {
+    return {
+      ...EMPTY_VIEW,
+      phase: 'backup',
+      skeleton: false,
+      percent: p.backup_total > 0 ? Math.round((p.backup_done / p.backup_total) * 100) : 0,
+      backupDone: p.backup_done,
+      backupTotal: p.backup_total,
+    }
+  }
+  return {
+    ...EMPTY_VIEW,
+    skeleton: false,
+    percent: p.total_tables > 0 ? Math.round((p.table_index / p.total_tables) * 100) : 0,
+    tableIndex: p.table_index,
+    totalTables: p.total_tables,
+    currentTable: p.current_table,
+    copiedRows: p.copied_rows,
+    totalRows: p.total_rows,
+    skipped: p.skipped,
+  }
+})
+
+/** 进度面板起始时间：SSE 态用本地发起时刻，恢复态用后端 started_at */
+const progressStartedAt = computed(() => {
+  if (migrating.value) {
+    return migrateStartedAt.value === null ? null : new Date(migrateStartedAt.value).toISOString()
+  }
+  return runningMigration.value.started_at
+})
+
 // ── 确认开始迁移弹窗（design D2）：弹窗要素 = 源/目标标识与地址、清空警告（空库降级）、
 //    备份源库与 10 份保留、写锁影响、超时摘要；取消不发起 ──
 const confirmModal = reactive({ open: false })
@@ -808,7 +489,7 @@ const showClearWarning = computed(() => true)
 const clearWarningText = computed(() => {
   const target = `${confirmTargetName.value}（${connAddress(confirmTargetConnection.value)}）`
   return showClearWarning.value
-    ? `目标库 ${target} 现有数据将被清空覆盖，不可撤销。`
+    ? `目标库已有数据：本次迁移为替换模式，目标库 ${target} 现有数据将被清空覆盖，不可撤销。`
     : `目标库 ${target} 为空，迁移将直接写入该库。`
 })
 
@@ -926,8 +607,8 @@ function startMigrationStream(): void {
       migrateElapsed.value =
         migrateStartedAt.value === null ? null : Math.round((Date.now() - migrateStartedAt.value) / 1000)
       message.success(`迁移完成，共迁移 ${data.tables_migrated} 张表`)
-      getMigrationHistory()
-      loadMigrationHistory()
+      // 历史卡刷新改由宿主接线（migrated 事件 → DbMigrationHistoryCard.refresh）
+      emit('migrated')
       migrating.value = false
     },
     onError: (msg) => {
@@ -940,41 +621,18 @@ function startMigrationStream(): void {
   migrationController.value = sseController
 }
 
-const migrateTableColumns = [
-  { title: '表名', dataIndex: 'name', key: 'name' },
-  { title: '字段数', dataIndex: 'columns', key: 'columns' },
-  { title: '迁移行数', dataIndex: 'rows', key: 'rows' },
-]
-
-/** 迁移明细按表类型分三组（kind 由后端标记），让用户分清业务表与两类日志表 */
-const businessTables = computed(() =>
-  (migrateResult.value?.tables || []).filter((t) => t.kind !== 'audit_log' && t.kind !== 'task_log'),
-)
-const auditLogTables = computed(() => (migrateResult.value?.tables || []).filter((t) => t.kind === 'audit_log'))
-const taskLogTables = computed(() => (migrateResult.value?.tables || []).filter((t) => t.kind === 'task_log'))
-
 async function loadMigrationState() {
   const wasInProgress = runningMigration.value.in_progress
   migrationStateLoading.value = true
   try {
     const res = await getRunningTasks()
     runningMigration.value = res.data.migration
-    // 迁移刚结束时自动刷新历史记录
+    // 迁移刚结束（轮询检测到进行中 → 空闲翻转）：历史卡刷新经宿主接线
     if (wasInProgress && !res.data.migration.in_progress) {
-      loadMigrationHistory()
+      emit('migrated')
     }
   } finally {
     migrationStateLoading.value = false
-  }
-}
-
-async function loadMigrationHistory() {
-  historyLoading.value = true
-  try {
-    const res = await getMigrationHistory()
-    migrationHistory.value = res.data
-  } finally {
-    historyLoading.value = false
   }
 }
 
@@ -995,7 +653,6 @@ let _migrationPollTimer: ReturnType<typeof setInterval> | null = null
 
 onMounted(() => {
   loadMigrationState()
-  loadMigrationHistory()
   _migrationPollTimer = setInterval(loadMigrationState, 5000)
 })
 
@@ -1015,11 +672,7 @@ defineExpose({
   migrating,
   migrateDetailOpen,
   runningMigration,
-  cleanupModal,
   confirmModal,
-  businessTables,
-  auditLogTables,
-  taskLogTables,
   handleMigrate,
   confirmStartMigration,
   loadMigrationState,
@@ -1027,18 +680,12 @@ defineExpose({
 </script>
 
 <style scoped>
-/* 卡片头仅剩刷新按钮（h3 已移除，与 PageHeader 单标题）：按钮靠右 */
-.migrate-refresh-btn {
-  margin-left: auto;
-}
-
 /* ── 数据迁移 · 两栏布局（design D9）+ 一体化流向面板（方案 A 定稿） ── */
 .migrate-layout {
   display: flex;
   /* 拉伸：风险面板与左栏（流向面板）等高（用户裁决） */
   align-items: stretch;
   gap: 20px;
-  padding-bottom: 8px;
 }
 .migrate-form-col {
   flex: 1 1 auto;
@@ -1091,14 +738,19 @@ defineExpose({
   margin-top: 4px;
 }
 .unit-label {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--muted);
   letter-spacing: 0.04em;
+  line-height: 1.5;
   user-select: none;
 }
 .flow-select {
   width: 100%;
+  /* 设计 .mig-select 密度：32px 高 / 12.5px 字号 / 10-28px 内距（db-migration-page-restyle 量测对齐） */
+  height: 32px;
+  padding: 0 28px 0 10px;
+  font-size: 12.5px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1123,18 +775,14 @@ defineExpose({
 .flow-panel:hover .flow-chip svg {
   transform: translateX(2px);
 }
-/* 危险徽签（替换模式语义陈述） */
+/* 危险徽签（替换模式语义陈述）：设计为裸警示文本（无底/无边/11.5px/400） */
 .danger-note {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11.5px;
+  font-weight: 400;
   color: var(--danger, #ff4d4f);
-  background: oklch(55% 0.18 28 / 8%);
-  border: 1px solid oklch(55% 0.18 28 / 30%);
-  border-radius: var(--radius-md, 6px);
-  padding: 3px 10px;
 }
 .danger-note svg {
   flex-shrink: 0;
@@ -1154,7 +802,7 @@ defineExpose({
   flex-shrink: 0;
 }
 .timeout-select {
-  width: 150px;
+  width: 132px;
   flex: 0 0 auto;
 }
 .checkbox-label {
@@ -1171,6 +819,9 @@ defineExpose({
   height: 14px;
   accent-color: var(--accent);
   cursor: pointer;
+}
+.checkbox-label input[type='checkbox']:disabled {
+  cursor: not-allowed;
 }
 .migrate-btn {
   margin-left: auto;
@@ -1189,42 +840,32 @@ defineExpose({
   text-decoration: none;
 }
 
-/* 风险与说明固定面板 */
+/* 风险与说明固定面板（设计 .risk-panel/.risk-title/.risk-list 密度：11px 标题、12.5px 列表、
+   原生 disc 项目符、行高 1.6） */
 .risk-panel {
   flex: 0 0 35%;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg, 8px);
-  padding: 14px 16px;
+  padding: 12px 14px 14px;
 }
 .risk-panel-title {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--muted);
-  text-transform: uppercase;
   letter-spacing: 0.04em;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 .risk-list {
   margin: 0;
-  padding: 0;
-  list-style: none;
+  padding-left: 16px;
+  list-style: disc;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  font-size: 12px;
+  gap: 6px;
+  font-size: 12.5px;
   line-height: 1.6;
   color: var(--muted);
-}
-.risk-list li {
-  position: relative;
-  padding-left: 14px;
-}
-.risk-list li::before {
-  content: '·';
-  position: absolute;
-  left: 2px;
-  font-weight: 700;
 }
 .risk-list .risk-danger {
   color: var(--danger, #ff4d4f);
@@ -1275,41 +916,13 @@ defineExpose({
   }
 }
 
-.migrate-progress {
+/* 进度面板：解剖单点在 style.css 的 .mig-progress（卡片内只管落位与间距） */
+.mig-progress {
   margin-top: 16px;
   max-width: 640px;
 }
-.migrate-cancel {
-  margin-top: 12px;
-}
-.progress-section {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.progress-header {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text);
-}
-.progress-text {
-  font-size: 13px;
-  color: var(--muted);
-}
-.progress-detail {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 13px;
-  color: var(--muted);
-}
-.progress-table strong {
-  color: var(--text);
-}
-.progress-rows {
-  font-variant-numeric: tabular-nums;
-}
-/* 迁移结果摘要条：完成后只占一行，明细在抽屉里 */
+
+/* 迁移结果摘要条：success token 化（db-migration-page-restyle，弃 antd 绿硬编码） */
 .migrate-result-bar {
   margin-top: 16px;
   display: flex;
@@ -1318,9 +931,9 @@ defineExpose({
   gap: 12px;
   flex-wrap: wrap;
   padding: 10px 14px;
-  border: 1px solid #b7eb8f;
-  border-radius: 6px;
-  background: #f6ffed;
+  border: 1px solid oklch(55% 0.15 145 / 28%);
+  border-radius: var(--radius-lg, 8px);
+  background: oklch(55% 0.15 145 / 8%);
 }
 .result-main {
   display: flex;
@@ -1332,10 +945,10 @@ defineExpose({
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
-  background: #52c41a;
+  background: var(--success);
   color: #fff;
   font-size: 12px;
   flex-shrink: 0;
@@ -1347,67 +960,16 @@ defineExpose({
 .result-meta {
   font-size: 12px;
   color: var(--muted);
+  font-family: var(--font-mono);
 }
 .result-actions {
   display: flex;
   gap: 8px;
   flex-shrink: 0;
 }
-.migrate-desc {
-  margin-bottom: 16px;
-}
-.next-steps {
-  margin-top: 12px;
-  padding: 12px 16px;
-  border: 1px solid var(--border, #e5e7eb);
-  border-radius: 6px;
-  background: var(--card-bg, #fff);
-}
-.next-steps-title {
-  font-size: 13px;
-  font-weight: 600;
-  margin-bottom: 8px;
-}
-.next-steps-list {
-  margin: 0;
-  padding-left: 20px;
-  font-size: 13px;
-  color: var(--muted);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
 
-/* ── 迁移详情 ── */
-.migrate-table-detail {
-  margin-top: 12px;
-}
-.migrate-table-group {
-  margin-top: 12px;
-}
-.group-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--muted);
-  margin-bottom: 6px;
-}
-.migrate-log-hint {
-  margin-top: 12px;
-  padding: 8px 12px;
-  border-radius: 6px;
-  background: #fafafa;
-  border: 1px solid #f0f0f0;
-  font-size: 12px;
-  color: var(--muted);
-}
-.migrate-detail-table {
-  margin-top: 6px;
-}
-.backup-path {
-  color: var(--muted);
-  font-family: monospace;
-  font-size: 12px;
-}
+/* 迁移详情抽屉已提取为共享组件 DbMigrationDetailDrawer（db-migration-history-detail D4），
+   抽屉解剖样式随组件走；本卡只保留结果条与确认弹窗。 */
 
 /* ── 确认开始迁移弹窗 ── */
 .confirm-conn-row {
@@ -1436,201 +998,5 @@ defineExpose({
   display: flex;
   flex-direction: column;
   gap: 4px;
-}
-
-/* ── 迁移锁警告 ── */
-.migration-lock-alert {
-  margin-bottom: 12px;
-}
-
-/* ── 迁移进度详情（API 恢复） ── */
-.migration-progress-detail {
-  margin-bottom: 12px;
-  padding: 12px 16px;
-  background: #fafafa;
-  border-radius: 6px;
-  border: 1px solid #f0f0f0;
-}
-.progress-phase {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.phase-label {
-  font-weight: 600;
-  font-size: 13px;
-}
-.migration-progress-detail .progress-text {
-  font-size: 12px;
-  color: #666;
-}
-
-/* ── 迁移历史 ── */
-.migration-history-section {
-  margin-top: 24px;
-}
-.history-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-  padding-left: 10px;
-  border-left: 3px solid oklch(56% 0.16 210);
-}
-.history-header h4 {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-}
-.history-count {
-  font-size: 12px;
-  line-height: 1;
-  color: var(--muted);
-  background: oklch(56% 0.16 210 / 8%);
-  border: 1px solid oklch(56% 0.16 210 / 18%);
-  border-radius: 999px;
-  padding: 3px 9px;
-}
-.history-cap-hint {
-  font-size: 12px;
-  color: var(--muted);
-}
-.history-cleanup-btn {
-  margin-left: auto;
-}
-
-/* ── 迁移历史清理弹窗 ── */
-.cleanup-form {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--fg);
-}
-.cleanup-preview {
-  margin: 12px 0;
-  font-size: 13px;
-  color: var(--muted);
-  min-height: 20px;
-}
-.cleanup-preview b {
-  color: var(--fg);
-}
-.cleanup-preview .cleanup-danger {
-  color: var(--danger, #ff4d4f);
-}
-.history-flow {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.flow-node {
-  font-family: monospace;
-  font-size: 12px;
-  padding: 2px 8px;
-  border-radius: 6px;
-  white-space: nowrap;
-}
-.flow-source {
-  background: oklch(55% 0.01 250 / 8%);
-  color: var(--muted);
-}
-.flow-target {
-  background: oklch(56% 0.16 210 / 12%);
-  color: oklch(45% 0.13 210);
-  font-weight: 600;
-}
-.history-arrow,
-.flow-arrow {
-  color: var(--muted);
-  font-size: 12px;
-}
-.history-mode {
-  font-size: 12px;
-  color: var(--muted);
-  background: oklch(55% 0.01 250 / 8%);
-  border-radius: 4px;
-  padding: 2px 8px;
-}
-.history-tables {
-  font-family: monospace;
-  font-weight: 600;
-}
-.history-time {
-  font-family: monospace;
-  font-size: 12px;
-  color: var(--muted);
-}
-
-/* ── 历史行展开：失败原因与备份路径（design D4） ── */
-.history-expand {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 4px 8px;
-}
-.history-expand-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  flex-wrap: wrap;
-}
-.history-expand-label {
-  color: var(--muted);
-}
-.history-error-text {
-  color: var(--danger, #ff4d4f);
-  line-height: 1.6;
-}
-.history-backup-path {
-  font-family: var(--font-mono, monospace);
-  font-size: 12px;
-  color: var(--fg);
-  background: oklch(55% 0.01 250 / 6%);
-  border-radius: 4px;
-  padding: 2px 8px;
-  word-break: break-all;
-}
-.copy-path-btn {
-  flex-shrink: 0;
-}
-.migration-history-table :deep(.ant-table) {
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-}
-.migration-history-table :deep(.ant-table-thead > tr > th) {
-  background: oklch(56% 0.16 210 / 10%);
-  border-bottom: 2px solid var(--accent);
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 12px 8px;
-  white-space: nowrap;
-}
-.migration-history-table :deep(.ant-table-thead > tr > th::before) {
-  display: none !important;
-}
-.migration-history-table :deep(.ant-table-tbody > tr > td) {
-  padding: 12px 8px;
-  font-size: 13px;
-  white-space: nowrap;
-  background: transparent !important;
-  border-bottom: 1px solid var(--border) !important;
-}
-.migration-history-table :deep(.ant-table-tbody > tr:last-child > td) {
-  border-bottom: none !important;
-}
-.migration-history-table :deep(.ant-table-tbody > tr:hover > td) {
-  background: oklch(97% 0.005 250 / 60%) !important;
-}
-.migration-history-table :deep(.ant-table-pagination) {
-  background: var(--bg) !important;
-  margin: 0 !important;
-  padding: 12px 16px !important;
-  border-top: 1px solid var(--border) !important;
 }
 </style>

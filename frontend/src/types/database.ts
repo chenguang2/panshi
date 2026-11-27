@@ -89,8 +89,15 @@ export interface MigrationHistoryItem {
   backup_path?: string
   error_message?: string
   duration_seconds?: number | null
+  /** 明细可回看（db-migration-history-detail）：成功迁移持久化了逐表明细，列表不内联数组 */
+  has_detail?: boolean
   started_at?: string | null
   created_at?: string | null
+}
+
+/** 单条迁移历史（GET /database/history/{id}）：完整记录 + 解析后的逐表明细（db-migration-history-detail）。 */
+export interface MigrationHistoryDetail extends MigrationHistoryItem {
+  tables: MigrateTableDetail[]
 }
 
 /** 迁移历史清理预览：按库内真实总数计算（列表接口只返回最近 100 条）。 */

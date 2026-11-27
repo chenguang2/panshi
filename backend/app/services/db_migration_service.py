@@ -7,6 +7,7 @@ Design (see openspec/changes/support-postgres-database/design.md D3):
 - Reset sequences after migration (PG setval; SQLite auto max+1).
 """
 
+import json
 import logging
 import threading
 from collections.abc import Callable
@@ -449,8 +450,13 @@ async def record_migration_log(
     error_message: str = "",
     duration_seconds: float | None = None,
     started_at: datetime | None = None,
+    tables_detail: list[dict] | None = None,
 ) -> None:
-    """Persist a migration operation record to the active database."""
+    """Persist a migration operation record to the active database.
+
+    tables_detail：成功迁移的逐表明细（SSE complete 事件的 tables 数组），TEXT-JSON 列
+    必须显式序列化（PG 严格类型，AGENTS #48）；失败/旧记录不传（NULL）。
+    """
     db.add(
         DbMigrationLog(
             direction=direction,
@@ -462,6 +468,7 @@ async def record_migration_log(
             tables_count=tables_count,
             backup_path=backup_path or None,
             error_message=error_message or None,
+            tables_detail=json.dumps(tables_detail, ensure_ascii=False) if tables_detail else None,
             duration_seconds=duration_seconds,
             started_at=started_at,
         )

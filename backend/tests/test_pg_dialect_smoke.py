@@ -519,3 +519,44 @@ def test_static_resource_rebind_write_path(global_engine_client, cluster):
         json={"delete_db": True, "delete_edge": False},
     )
     assert deleted.status_code in (200, 204), deleted.text
+
+
+def test_migration_history_tables_detail_json_round_trip(global_engine_client):
+    """TEXT-JSON 明细列 round-trip（db-migration-history-detail，风险类别 2/3）。
+
+    服务层显式 json.dumps 写入 ↔ 端点 json.loads 读回；PG 严格类型下漏序列化
+    （直接绑 dict/list）在写入即报 expected str, got dict——SQLite 弱类型掩盖。
+    """
+    import asyncio
+
+    from app.core.database import AsyncSessionLocal
+    from app.services import db_migration_service
+
+    detail = [
+        {"name": "ps_cluster", "columns": 12, "rows": 18, "kind": "business"},
+        {"name": "sys_audit_log", "columns": 8, "rows": 120, "kind": "audit_log"},
+    ]
+
+    async def _write():
+        async with AsyncSessionLocal() as s:
+            await db_migration_service.record_migration_log(
+                s,
+                "sqlite_to_postgres",
+                "smoke_detail_src",
+                "smoke_detail_tgt",
+                status="success",
+                tables_count=2,
+                tables_detail=detail,
+            )
+
+    asyncio.run(_write())
+
+    listed = global_engine_client.get("/api/v1/database/history")
+    assert listed.status_code == 200, listed.text
+    row = next(r for r in listed.json() if r["source_connection"] == "smoke_detail_src")
+    assert row["has_detail"] is True
+    assert "tables" not in row
+
+    resp = global_engine_client.get(f"/api/v1/database/history/{row['id']}")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["tables"] == detail

@@ -31,15 +31,8 @@ vi.mock('ant-design-vue', async (importOriginal) => {
 
 const antStubs = {
   'a-table': aTableStub,
-  'a-button': { template: '<button @click="$emit(\'click\')"><slot /></button>' },
-  'a-input-number': { template: '<input type="number" />' },
-  'a-tag': { template: '<span class="ant-tag"><slot /></span>' },
-  'a-progress': { props: ['percent'], template: '<div class="ant-progress">{{ percent }}%</div>' },
-  'a-alert': { props: ['message'], template: '<div class="ant-alert"><slot />{{ message }}</div>' },
   // 抽屉按 AntDV 语义惰性渲染：关闭时不渲染内容（保证"明细不默认铺在页面上"可被断言）
   'a-drawer': { props: ['open'], template: '<div class="ant-drawer" v-if="open"><slot /></div>' },
-  'a-descriptions': { template: '<div class="ant-descriptions"><slot /></div>' },
-  'a-descriptions-item': { props: ['label'], template: '<div class="ant-desc-item"><slot /></div>' },
   // 「去新建连接」router-link（10.2）：无路由环境下的链接桩
   'router-link': { props: ['to'], template: '<a class="router-link-stub" :data-to="String(to)"><slot /></a>' },
 }
@@ -136,9 +129,9 @@ describe('DbMigrationCard', () => {
     const timeoutSelect = wrapper.findAll('select').find((n) => (n.element as HTMLSelectElement).value === '300')
     expect(timeoutSelect).toBeDefined()
     expect(wrapper.find('.migrate-btn').exists()).toBe(true)
-    // 挂载即拉取进行中状态与历史
+    // 挂载即拉取进行中状态（历史改由 DbMigrationHistoryCard 自持，本卡不再拉历史）
     expect(mocks.getRunningTasks).toHaveBeenCalled()
-    expect(mocks.getHistory).toHaveBeenCalled()
+    expect(mocks.getHistory).not.toHaveBeenCalled()
   })
 
   // ── 组 3：迁移发起高危确认 ──
@@ -197,8 +190,10 @@ describe('DbMigrationCard', () => {
     expect(text).toContain('/data/panshi.db')
     expect(text).toContain('PG 库')
     expect(text).toContain('localhost:5432/panshi')
-    // 清空覆盖警告（不可撤销）
+    // 清空覆盖警告（不可撤销）——主题 .alert 族（.alert-error），非 a-alert
     expect(text).toContain('将被清空覆盖，不可撤销')
+    expect(wrapper.find('.migrate-confirm-modal .alert-error').exists()).toBe(true)
+    expect(wrapper.find('.migrate-confirm-modal .ant-alert').exists()).toBe(false)
     // 备份源库 + 保留 10 份
     expect(text).toContain('自动备份源库')
     expect(text).toContain('保留最近 10 份')
@@ -272,12 +267,16 @@ describe('DbMigrationCard', () => {
 
   // ── 既有交互（随确认弹窗流改写） ──
 
-  it('可用连接不足 2 个：发起按钮禁用，提示带当前数量与「去新建连接」直达入口（10.2）', async () => {
+  it('可用连接不足 2 个：发起按钮/超时下拉/日志勾选整体禁用，提示带当前数量与「去新建连接」直达入口（10.2）', async () => {
     seedAuth(['database_management'])
     seedDefaultMocks()
     const wrapper = await mountCard({ connections: [conn()] })
     const btn = wrapper.find('.migrate-btn')
     expect(btn.attributes('disabled')).toBeDefined()
+    // 表单整体不可用态（设计样张 is-disabled）：超时下拉与日志勾选一并禁用
+    const timeoutSelect = wrapper.findAll('select').find((n) => (n.element as HTMLSelectElement).value === '300')
+    expect((timeoutSelect!.element as HTMLSelectElement).disabled).toBe(true)
+    expect(wrapper.find('.control-line .checkbox-label input').attributes('disabled')).toBeDefined()
     const hint = wrapper.find('.migrate-insufficient-hint')
     expect(hint.exists()).toBe(true)
     expect(hint.text()).toContain('发起迁移需要 2 个连接，当前 1 个')
@@ -296,7 +295,8 @@ describe('DbMigrationCard', () => {
   it('SSE 进度展示：迁移中显示当前表与行数，完成后显示结果条', async () => {
     const wrapper = await mountCard()
     await confirmAndStart(wrapper)
-    // 进行中：超时下拉禁用（SSE 回调尚未触发）
+    // 进行中：统一进度面板呈 MIGRATING 阶段徽标，超时下拉禁用（SSE 回调尚未触发）
+    expect(wrapper.find('.mig-progress .phase').text()).toBe('MIGRATING')
     const timeoutSelect = wrapper.findAll('select').find((n) => (n.element as HTMLSelectElement).value === '300')
     expect((timeoutSelect!.element as HTMLSelectElement).disabled).toBe(true)
     // SSE 完成后恢复可用 + 结果条出现（手动驱动捕获到的回调，确定性等待）
@@ -308,6 +308,9 @@ describe('DbMigrationCard', () => {
       total_rows: 100,
       skipped: false,
     })
+    await nextTick()
+    expect(wrapper.text()).toContain('表 1 / 22')
+    expect(wrapper.text()).toContain('sys_user')
     sseCapture!.onComplete!({ message: '迁移完成，共迁移 22 张表', tables_migrated: 22, tables: [], backup_path: '' })
     await flushPromises()
     expect((timeoutSelect!.element as HTMLSelectElement).disabled).toBe(false)
@@ -367,7 +370,7 @@ describe('DbMigrationCard', () => {
     expect(mocks.migrateDatabaseStream).toHaveBeenCalledTimes(1)
   })
 
-  it('running-tasks 恢复：进行中显示横幅（源→目标）与可恢复进度，不提供二次发起', async () => {
+  it('running-tasks 恢复：统一进度面板（MIGRATING 徽标 + 可恢复进度 + 元信息），无独立锁横幅，不提供二次发起', async () => {
     // 形状取自真实 GET /database/running-tasks 响应（progress 结构对齐 types/database.ts MigrationProgress）
     mocks.getRunningTasks.mockResolvedValue({
       data: {
@@ -392,11 +395,14 @@ describe('DbMigrationCard', () => {
       },
     })
     const wrapper = await mountCard()
-    expect(wrapper.text()).toContain('数据库迁移进行中')
-    expect(wrapper.text()).toContain('本地库 → PG 库')
-    // API 恢复的进度明细（非 SSE 实时）
+    // 锁定事实由状态带承载（页面级），卡片内不再渲染锁警告横幅
+    expect(wrapper.text()).not.toContain('数据库迁移进行中')
+    // API 恢复态与 SSE 实时态同构：统一进度面板
+    expect(wrapper.find('.mig-progress').exists()).toBe(true)
+    expect(wrapper.find('.mig-progress .phase').text()).toBe('MIGRATING')
     expect(wrapper.text()).toContain('表 3 / 22')
     expect(wrapper.text()).toContain('ps_route')
+    expect(wrapper.text()).toContain('120')
     // 防二次启动：进行中时点击发起被拦截（不弹确认窗）
     const vm = wrapper.vm as any
     vm.migrateForm.sourceId = 'conn_1'
@@ -406,6 +412,20 @@ describe('DbMigrationCard', () => {
     await nextTick()
     expect(vm.confirmModal.open).toBe(false)
     expect(mocks.migrateDatabaseStream).not.toHaveBeenCalled()
+  })
+
+  it('running-tasks 恢复且 progress 缺失：骨架行（阶段徽标 + 提示），不渲染假进度条', async () => {
+    mocks.getRunningTasks.mockResolvedValue({
+      data: {
+        migration: { in_progress: true, source_id: 'conn_1', target_id: 'conn_2', started_at: null, progress: null },
+        tasks: [],
+      },
+    })
+    const wrapper = await mountCard()
+    expect(wrapper.find('.mig-progress').exists()).toBe(true)
+    expect(wrapper.find('.mig-progress .phase').text()).toBe('MIGRATING')
+    expect(wrapper.find('.mig-progress .bar').exists()).toBe(false)
+    expect(wrapper.text()).toContain('进度暂未上报')
   })
 
   // ── 组 4：断开监视语义 ──
@@ -425,7 +445,7 @@ describe('DbMigrationCard', () => {
     expect(vm.migrating).toBe(false)
   })
 
-  it('断开后轮询恢复进行中展示（running-tasks 仍 in_progress → 横幅与恢复进度回归）（4.1）', async () => {
+  it('断开后轮询恢复进行中展示（running-tasks 仍 in_progress → 统一进度面板回归）（4.1）', async () => {
     mocks.migrateDatabaseStream.mockImplementation(() => new AbortController())
     const wrapper = await mountCard()
     await confirmAndStart(wrapper)
@@ -435,7 +455,7 @@ describe('DbMigrationCard', () => {
       .trigger('click')
     await flushPromises()
     // 断开后本地 SSE 视图退出
-    expect(wrapper.find('.migrate-progress').exists()).toBe(false)
+    expect(wrapper.find('.mig-progress').exists()).toBe(false)
     // 轮询（loadMigrationState）发现后台迁移仍在进行 → 横幅恢复
     mocks.getRunningTasks.mockResolvedValue({
       data: {
@@ -462,37 +482,23 @@ describe('DbMigrationCard', () => {
     const vm = wrapper.vm as any
     await vm.loadMigrationState()
     await flushPromises()
-    expect(wrapper.text()).toContain('数据库迁移进行中')
+    expect(wrapper.find('.mig-progress').exists()).toBe(true)
+    expect(wrapper.find('.mig-progress .phase').text()).toBe('MIGRATING')
     expect(wrapper.text()).toContain('表 5 / 22')
-  })
-
-  it('历史状态映射不含「已取消」死映射（4.2）', async () => {
-    mocks.getHistory.mockResolvedValue({
-      data: [
-        {
-          id: 1,
-          source_connection: 'conn_1',
-          target_connection: 'conn_2',
-          mode: 'replace',
-          status: 'cancelled',
-          tables_count: 0,
-          created_at: '2026-09-16T02:00:00',
-        },
-      ],
-    })
-    const wrapper = await mountCard()
-    expect(wrapper.text()).not.toContain('已取消')
-    expect(wrapper.text()).toContain('cancelled')
   })
 
   // ── 组 10：布局与信息层级 ──
 
-  it('卡片头不再有「数据迁移」h3 双标题，仅保留刷新按钮（10.2）', async () => {
+  it('卡片头控制台化：h3「迁移任务」+ 副注，刷新按钮在卡头动作区（l5-card + mig-cardhead）', async () => {
     const wrapper = await mountCard()
-    expect(wrapper.find('.card-header h3').exists()).toBe(false)
-    expect(wrapper.text()).not.toContain('数据迁移')
-    const refreshBtn = wrapper.findAll('button').find((b) => b.text().includes('刷新'))
+    const head = wrapper.find('.mig-cardhead')
+    expect(head.exists()).toBe(true)
+    expect(head.find('h3').text()).toBe('迁移任务')
+    expect(head.text()).toContain('单向快照替换：先备份源库，再清空目标库写入')
+    const refreshBtn = head.findAll('button').find((b) => b.text().includes('刷新'))
     expect(refreshBtn).toBeTruthy()
+    // 外壳接控制台语言：卡片根节点挂 l5-card（保留 .db-migration-card 页面私有钩子）
+    expect(wrapper.find('.l5-card.db-migration-card').exists()).toBe(true)
   })
 
   it('静态资源提示移入风险面板末条，独立 a-alert 移除（10.2）', async () => {
@@ -565,7 +571,7 @@ describe('DbMigrationCard', () => {
     expect(vm.migrateDetailOpen).toBe(true)
   })
 
-  it('迁移详情把日志表与非日志表分开显示（分组数据来自后端 kind 标记）', async () => {
+  it('迁移完成明细下传共享抽屉（tables 原样透传，分组在抽屉内）', async () => {
     mocks.migrateDatabaseStream.mockImplementation((_s: string, _t: string, options: any) => {
       options.onComplete?.({
         message: '迁移完成，共迁移 22 张表',
@@ -582,22 +588,25 @@ describe('DbMigrationCard', () => {
       return new AbortController()
     })
     const wrapper = await mountCard()
-    const vm = wrapper.vm as any
     await confirmAndStart(wrapper)
-
-    expect(vm.businessTables.map((t: any) => t.name)).toEqual(['sys_user', 'ps_route'])
-    expect(vm.auditLogTables.map((t: any) => t.name)).toEqual(['sys_audit_log', 'ps_import_log'])
-    expect(vm.taskLogTables.map((t: any) => t.name)).toEqual(['install_task'])
 
     const detailBtn = wrapper.findAll('button').find((b) => b.text().includes('查看迁移详情'))
     await detailBtn!.trigger('click')
-    await flushPromises()
-    expect(wrapper.text()).toContain('业务表（2）')
-    expect(wrapper.text()).toContain('审计与导入日志（2）')
-    expect(wrapper.text()).toContain('任务日志（1）')
+    await nextTick()
+    const drawer = wrapper.findComponent({ name: 'DbMigrationDetailDrawer' })
+    expect(drawer.exists()).toBe(true)
+    expect(drawer.props('open')).toBe(true)
+    expect(drawer.props('tablesCount')).toBe(22)
+    expect((drawer.props('tables') as any[]).map((t) => t.name)).toEqual([
+      'sys_user',
+      'ps_route',
+      'sys_audit_log',
+      'ps_import_log',
+      'install_task',
+    ])
   })
 
-  it('未勾选「包含日志数据」时不显示日志表分组，并给出提示', async () => {
+  it('未勾选「包含日志数据」时抽屉仅收到业务表明细（分组豁免提示在抽屉内）', async () => {
     mocks.migrateDatabaseStream.mockImplementation((_s: string, _t: string, options: any) => {
       options.onComplete?.({
         message: '迁移完成，共迁移 18 张表',
@@ -613,220 +622,11 @@ describe('DbMigrationCard', () => {
     await nextTick()
     await confirmAndStart(wrapper)
 
-    expect(vm.auditLogTables.length + vm.taskLogTables.length).toBe(0)
     const detailBtn = wrapper.findAll('button').find((b) => b.text().includes('查看迁移详情'))
     await detailBtn!.trigger('click')
-    await flushPromises()
-    expect(wrapper.text()).toContain('业务表（1）')
-    expect(wrapper.text()).not.toContain('审计与导入日志（0）')
-    expect(wrapper.text()).toContain('本次迁移未包含日志表')
-  })
-
-  describe('迁移历史清理', () => {
-    // 形状取自真实 GET /database/history 响应（2026-09-30 curl 实测）
-    function historyRows(count: number) {
-      return Array.from({ length: count }, (_, i) => ({
-        id: i + 1,
-        direction: 'sqlite_to_postgres',
-        source_connection: 'local_sqlite',
-        target_connection: 'prod_pg',
-        mode: 'replace',
-        status: 'success',
-        tables_count: 22,
-        created_at: '2026-09-16T02:00:00',
-      }))
-    }
-
-    it('弹窗按服务端真实总数预览，确认后调用清理并刷新历史', async () => {
-      mocks.getHistory.mockResolvedValue({ data: historyRows(3) })
-      mocks.getCleanupPreview.mockResolvedValue({ data: { total: 96, will_delete: 86, will_keep: 10 } })
-      mocks.cleanupHistory.mockResolvedValue({ data: { deleted: 86, remaining: 10 } })
-      const wrapper = await mountCard()
-
-      const openBtn = wrapper.findAll('button').find((b) => b.text().includes('清理历史'))
-      expect(openBtn).toBeTruthy()
-      await openBtn!.trigger('click')
-      await flushPromises()
-
-      // 预览按服务端总数（96）而非已加载条数（3）计算
-      expect(mocks.getCleanupPreview).toHaveBeenCalledWith(10)
-      const preview = wrapper.find('.cleanup-preview').text()
-      expect(preview).toContain('96')
-      expect(preview).toContain('将删除')
-      expect(preview).toContain('86')
-
-      const confirm = wrapper.find('.cleanup-confirm-btn')
-      expect(confirm.attributes('disabled')).toBeUndefined()
-      await confirm.trigger('click')
-      await flushPromises()
-
-      expect(mocks.cleanupHistory).toHaveBeenCalledWith(10)
-      expect(mocks.getHistory).toHaveBeenCalledTimes(2) // 初次加载 + 清理后刷新
-      expect((wrapper.vm as any).cleanupModal.open).toBe(false)
-    })
-
-    it('无需清理时禁用确认按钮', async () => {
-      mocks.getHistory.mockResolvedValue({ data: historyRows(3) })
-      mocks.getCleanupPreview.mockResolvedValue({ data: { total: 3, will_delete: 0, will_keep: 3 } })
-      const wrapper = await mountCard()
-
-      const openBtn = wrapper.findAll('button').find((b) => b.text().includes('清理历史'))
-      await openBtn!.trigger('click')
-      await flushPromises()
-
-      expect(wrapper.find('.cleanup-preview').text()).toContain('无需清理')
-      expect(wrapper.find('.cleanup-confirm-btn').attributes('disabled')).toBe('')
-    })
-
-    it('历史条数达后端单页上限时提示仅显示最近 100 条', async () => {
-      mocks.getHistory.mockResolvedValue({ data: historyRows(100) })
-      const wrapper = await mountCard()
-
-      expect(wrapper.find('.history-cap-hint').exists()).toBe(true)
-      expect(wrapper.find('.history-cap-hint').text()).toContain('100')
-    })
-  })
-
-  describe('迁移历史分页（paginationProps 工厂 + 客户端切片）', () => {
-    function historyRowsFor(count: number) {
-      return Array.from({ length: count }, (_, i) => ({
-        id: i + 1,
-        direction: 'sqlite_to_postgres',
-        source_connection: 'local_sqlite',
-        target_connection: 'prod_pg',
-        mode: 'replace',
-        status: 'success',
-        tables_count: 22,
-        created_at: '2026-09-16T02:00:00',
-      }))
-    }
-
-    it('分页走共享工厂：默认每页 PAGE_SIZE_TABLE、页大小选项含 100、showTotal 为「共 X 条」', async () => {
-      mocks.getHistory.mockResolvedValue({ data: historyRowsFor(25) })
-      const wrapper = await mountCard()
-
-      const table = wrapper.findComponent(aTableStub)
-      expect(table.exists()).toBe(true)
-      const pag = table.props('pagination') as any
-      expect(pag.pageSize).toBe(PAGE_SIZE_TABLE)
-      expect(pag.current).toBe(1)
-      expect(pag.total).toBe(25)
-      expect(pag.pageSizeOptions).toContain('100')
-      expect(pag.showTotal(25)).toBe('共 25 条')
-    })
-
-    it('客户端切片：25 条时首页渲染 20 行，翻页事件写回页码后渲染剩余 5 行', async () => {
-      mocks.getHistory.mockResolvedValue({ data: historyRowsFor(25) })
-      const wrapper = await mountCard()
-
-      expect(wrapper.find('.migration-history-table').findAll('.ant-table-row')).toHaveLength(20)
-      const page2 = wrapper.findAll('.ant-pagination-item').find((li) => li.text() === '2')
-      expect(page2).toBeTruthy()
-      await page2!.trigger('click')
-      await flushPromises()
-      expect(wrapper.find('.migration-history-table').findAll('.ant-table-row')).toHaveLength(5)
-    })
-  })
-
-  describe('迁移历史行展开（组 5：失败原因可见）', () => {
-    function failedRow(overrides: Record<string, any> = {}) {
-      return {
-        id: 1,
-        source_connection: 'conn_1',
-        target_connection: 'conn_2',
-        mode: 'replace',
-        status: 'failed',
-        tables_count: 0,
-        error_message: 'connection refused connecting to 192.168.100.90:5432',
-        backup_path: 'data/backups/migration_20261031_1402.zip',
-        duration_seconds: 182,
-        created_at: '2026-10-31T06:05:00',
-        ...overrides,
-      }
-    }
-
-    async function expandFirstRow(wrapper: VueWrapper): Promise<void> {
-      const icons = wrapper.findAll('.migration-history-table .ant-table-row-expand-icon')
-      await icons[0].trigger('click')
-      await nextTick()
-    }
-
-    it('所有行均可展开（展开图标占位一致，行高不因展开能力混排）', async () => {
-      mocks.getHistory.mockResolvedValue({
-        data: [failedRow(), failedRow({ id: 2, status: 'success', error_message: null })],
-      })
-      const wrapper = await mountCard()
-      const icons = wrapper.findAll('.migration-history-table .ant-table-row-expand-icon')
-      expect(icons).toHaveLength(2)
-      for (const icon of icons) {
-        expect(icon.classes()).not.toContain('ant-table-row-expand-icon-spaced')
-      }
-    })
-
-    it('失败行展开：失败原因中文转译（失败样式段落）+ 备份路径（等宽 + 复制按钮）', async () => {
-      mocks.getHistory.mockResolvedValue({ data: [failedRow()] })
-      const wrapper = await mountCard()
-      await expandFirstRow(wrapper)
-      const expanded = wrapper.find('.ant-table-expanded-row')
-      expect(expanded.exists()).toBe(true)
-      expect(expanded.text()).toContain('失败原因')
-      expect(expanded.find('.history-error-text').exists()).toBe(true)
-      expect(expanded.find('.history-error-text').text()).toContain('连接被拒绝')
-      expect(expanded.text()).toContain('备份路径')
-      expect(expanded.find('.history-backup-path').text()).toBe('data/backups/migration_20261031_1402.zip')
-      expect(expanded.find('.copy-path-btn').exists()).toBe(true)
-    })
-
-    it('无法分类的失败原因加「迁移失败：」前缀', async () => {
-      mocks.getHistory.mockResolvedValue({ data: [failedRow({ error_message: 'some weird failure' })] })
-      const wrapper = await mountCard()
-      await expandFirstRow(wrapper)
-      expect(wrapper.find('.history-error-text').text()).toBe('迁移失败：some weird failure')
-    })
-
-    it('成功行展开：仅备份路径，无失败原因段落', async () => {
-      mocks.getHistory.mockResolvedValue({
-        data: [failedRow({ id: 2, status: 'success', tables_count: 22, error_message: null })],
-      })
-      const wrapper = await mountCard()
-      await expandFirstRow(wrapper)
-      const expanded = wrapper.find('.ant-table-expanded-row')
-      expect(expanded.exists()).toBe(true)
-      expect(expanded.text()).toContain('备份路径')
-      expect(expanded.find('.history-error-text').exists()).toBe(false)
-      expect(expanded.text()).not.toContain('失败原因')
-    })
-
-    it('备份路径为空：展开显示 - 且无复制按钮', async () => {
-      mocks.getHistory.mockResolvedValue({ data: [failedRow({ backup_path: null })] })
-      const wrapper = await mountCard()
-      await expandFirstRow(wrapper)
-      const expanded = wrapper.find('.ant-table-expanded-row')
-      expect(expanded.find('.history-backup-path').text()).toBe('-')
-      expect(expanded.find('.copy-path-btn').exists()).toBe(false)
-    })
-
-    it('复制按钮：写入剪贴板并提示已复制', async () => {
-      const writeText = vi.fn().mockResolvedValue(undefined)
-      Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
-      const { message } = await import('ant-design-vue')
-      mocks.getHistory.mockResolvedValue({ data: [failedRow()] })
-      const wrapper = await mountCard()
-      await expandFirstRow(wrapper)
-      await wrapper.find('.copy-path-btn').trigger('click')
-      await flushPromises()
-      expect(writeText).toHaveBeenCalledWith('data/backups/migration_20261031_1402.zip')
-      expect(message.success).toHaveBeenCalledWith('已复制')
-    })
-
-    it('迁移方向列：能按 id 匹配 connections 时显示连接名，匹配不到原样展示原始 ID', async () => {
-      mocks.getHistory.mockResolvedValue({
-        data: [failedRow({ source_connection: 'conn_1', target_connection: 'conn_deleted_xyz' })],
-      })
-      const wrapper = await mountCard()
-      const firstRow = wrapper.find('.migration-history-table .ant-table-row')
-      expect(firstRow.text()).toContain('本地库')
-      expect(firstRow.text()).toContain('conn_deleted_xyz')
-    })
+    await nextTick()
+    const drawer = wrapper.findComponent({ name: 'DbMigrationDetailDrawer' })
+    expect((drawer.props('tables') as any[]).map((t) => t.kind)).toEqual(['business'])
+    expect(drawer.props('backupPath')).toBe('')
   })
 })
